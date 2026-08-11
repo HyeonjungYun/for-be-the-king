@@ -1,0 +1,2 @@
+- [For be the King — project facts](project_for-be-the-king.md) — spatial/structural facts + open level-design questions for the extraction crawler GDD
+- [Adversarial review mode](feedback_adversarial-review-mode.md) — when asked for adversarial review, skip Q&A and go straight to prioritized blunt findings

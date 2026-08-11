@@ -1,0 +1,552 @@
+# Entity Registry — For be the King (가제)
+#
+# 여러 GDD가 공유하는 **사실(값)의 단일 소유처**.
+# 여기 등록된 값을 다른 문서가 다르게 쓰면 그것은 충돌이며, 등록하지 않고 먼저 해소한다.
+#
+# Created: 2026-08-11
+# Supersedes: design/archive/dungeonking-2026-07/entities.yaml (base 600 · 12~16인 · 캐릭터 레벨 18 전제 — 무효)
+#
+# 규칙
+#   source        이 값을 확정한 문서. 값을 바꾸려면 여기부터 고친다
+#   referenced_by 이 값을 쓰는 문서들. 새 GDD가 참조하면 여기에 추가한다
+#   derived_from  다른 등록값에서 계산된 파생값. 원천이 바뀌면 같이 바뀐다
+#   status        active | deprecated
+#
+# ⚠️ 미정값은 등록하지 않는다. 파일 하단 `pending:` 섹션에 모아둔다.
+
+constants:
+
+  # ─── 이동 · 공간 ───────────────────────────────────────────
+
+  - name: base_move_speed
+    type: constant
+    status: active
+    value: 340
+    unit: cm/s
+    source: design/gdd/game-concept.md            # § 공간 "확정 수치 (2026-08-11)"
+    referenced_by:
+      - design/gdd/movement-camera.md             # 공식 1 base · Tuning Knobs
+    note: >
+      LoL 라이즈 기준값. 층 크기·세션 시간 예산이 전부 여기서 파생된다.
+      movement-camera.md가 "사실상 고정값"으로 명시 — 바꾸면 § 공간 전체를 재계산해야 한다.
+
+  - name: floor_size
+    type: constant
+    status: active
+    value: "280 x 280"
+    unit: m
+    source: design/gdd/game-concept.md
+    referenced_by:
+      - design/art/art-bible.md                   # Section 6② MVP 무대
+      - design/gdd/movement-camera.md
+    note: 78,400 m². 소환사의 협곡(15,000×15,000 유닛) 대비 약 3.5배. 1 LoL 유닛 = 1 UE 유닛(cm) 고정.
+
+  - name: players_per_floor
+    type: constant
+    status: active
+    value: 30
+    unit: players
+    source: design/gdd/game-concept.md
+    referenced_by:
+      - design/art/art-bible.md
+      - design/gdd/movement-camera.md
+    note: 2026-08-11에 100 → 30 하향 확정. 4개 층 = 총 120 동접.
+
+  - name: floor_count
+    type: constant
+    status: active
+    value: 4
+    unit: floors
+    source: design/gdd/game-concept.md
+    referenced_by:
+      - design/art/art-bible.md
+    note: MVP는 1층(평민 민가)만 구현. 2~4층은 Tier 3.
+
+  - name: house_count_mvp
+    type: constant
+    status: active
+    value: 3
+    unit: houses
+    source: design/gdd/game-concept.md
+    referenced_by:
+      - design/art/art-bible.md
+    note: 모듈 재조합으로 제작.
+
+  - name: house_count_final
+    type: constant
+    status: active
+    value: 5
+    unit: houses
+    source: design/gdd/game-concept.md            # § 공간 "집 개수"
+    referenced_by: []
+    note: >
+      30명 ÷ 6(집당 적정 교전 인원 5~8명)의 역산치.
+      Open Questions에 남아 있던 "약 10개"는 100명 시절 잔재였고 2026-08-11에 정정됨.
+
+  - name: floor_traversal_time
+    type: constant
+    status: active
+    value: 82
+    unit: seconds
+    source: design/gdd/game-concept.md
+    derived_from: [floor_size, base_move_speed]
+    referenced_by: []
+    note: 280 ÷ 3.4. 세션 시간 예산(§ Core Loop Session-Level)의 기초.
+
+  - name: floor_diagonal_traversal_time
+    type: constant
+    status: active
+    value: 116
+    unit: seconds
+    source: design/gdd/game-concept.md
+    derived_from: [floor_size, base_move_speed]
+    referenced_by: []
+
+  - name: house_spacing
+    type: constant
+    status: active
+    value: 125
+    unit: m
+    source: design/gdd/game-concept.md
+    derived_from: [floor_size, house_count_final]
+    referenced_by: []
+    note: 280 ÷ √5. 집 간 이동 ≈ 37초(÷ 3.4 m/s)는 추가 파생치.
+
+  - name: player_density_baseline
+    type: constant
+    status: active
+    value: 2613
+    unit: m² per player
+    source: design/gdd/game-concept.md            # § 공간 "밀도 검증"
+    derived_from: [floor_size, players_per_floor]
+    referenced_by:
+      - design/gdd/movement-camera.md
+    note: 78,400 ÷ 30.
+
+  # ─── 카메라 (movement-camera.md 소유) ──────────────────────
+
+  - name: camera_target_arm_length
+    type: constant
+    status: active
+    value: 2600
+    unit: cm (UE units)
+    source: design/gdd/movement-camera.md         # § Core Rule 8
+    referenced_by:
+      - design/gdd/game-concept.md
+      - design/art/art-bible.md
+    note: 화면 가로 30 m 역산. `bDoCollisionTest = false` 필수 — 켜두면 건물에 카메라가 당겨진다.
+
+  - name: camera_fov
+    type: constant
+    status: active
+    value: 60
+    unit: degrees
+    source: design/gdd/movement-camera.md
+    referenced_by:
+      - design/gdd/game-concept.md
+    note: 좁은 FOV = 납작한 원근. 아트바이블 원칙 ①과 정합.
+
+  - name: camera_pitch
+    type: constant
+    status: active
+    value: -60
+    unit: degrees (world absolute)
+    source: design/gdd/movement-camera.md
+    referenced_by:
+      - design/gdd/game-concept.md                # Visual Identity Anchor — 근사 표기("약 −60°")
+      - design/art/art-bible.md
+    note: game-concept.md는 근사치로만 언급. movement-camera.md가 정확값의 소유자.
+
+  - name: camera_visible_screen_area
+    type: constant
+    status: active
+    value: 585
+    unit: m² (화면 30 m × 19.5 m)
+    source: design/gdd/movement-camera.md
+    derived_from: [camera_target_arm_length, camera_fov, camera_pitch]
+    referenced_by:
+      - design/gdd/game-concept.md                # § 공간 밀도 검증 (2026-08-11 재계산 반영 완료)
+    note: >
+      동시 가시 인원 = 585 ÷ 2,613 ≈ 0.22명.
+      이전 문서의 "1.9명"은 시야 반경 40 m라는 근거 없는 가정에서 나온 값이었고 폐기됨.
+
+  - name: radar_radius
+    type: constant
+    status: active
+    value: 22.5
+    unit: m
+    source: design/gdd/game-concept.md            # § 정보 · 탐지
+    derived_from: [camera_visible_screen_area]
+    referenced_by:
+      - design/art/art-bible.md                   # Section 7 ⑦
+    note: 화면 가로 절반(15 m) × 1.5. 감지 대상은 파티원 · 탈출 타워 · 루팅 가능 상자뿐 (적 · 몬스터 제외).
+
+  # ─── 네트워크 ──────────────────────────────────────────────
+
+  - name: move_packet_send_rate
+    type: constant
+    status: active
+    value: 30
+    unit: Hz
+    source: design/gdd/movement-camera.md         # § Core Rule 10
+    referenced_by:
+      - docs/engine-reference/unreal/modules/networking.md
+    note: >
+      🔴 현재 코드는 `S1Player.h:48` `MOVE_PACKET_SEND_DELAY = 0.2f` (5 Hz) — 미반영.
+      30 Hz 기준 대역폭: 클라 수신 278 kbps · 서버 업로드 8.4 Mbps · 초당 Send 26,100회.
+
+  - name: remote_proxy_interp_duration
+    type: constant
+    status: active
+    value: 66
+    unit: ms
+    source: design/gdd/movement-camera.md         # 공식 6a
+    derived_from: [move_packet_send_rate]
+    referenced_by: []
+    note: >
+      패킷 간격(33 ms)의 **2배**. 1배면 1 ms 지연에도 끊기고, 3배 이상이면 항상 뒤처진다.
+      Source 엔진류 표준(interpolation delay = 1~2× update rate)과 일치.
+      ⚠️ 전송 주기를 바꾸면 이 값도 같이 바꿔야 한다 — 독립 노브가 아니다.
+
+  - name: teleport_threshold
+    type: constant
+    status: active
+    value: 250
+    unit: cm
+    source: design/gdd/movement-camera.md         # 공식 6b
+    referenced_by: []
+    note: >
+      `dash_speed_max(1360) × jitter_tolerance_window(150 ms)` = 204 cm, 여유 포함 250 cm.
+      정상 대시는 틱당 45 cm에 불과해 절대 스냅되지 않는다.
+      🔴 코드에 `TELEPORT_THERESHOLD = 250.0f` 하드코딩 존재 (`S1Player.h:50`) — 값은 일치하나 config 이전 필요.
+
+  - name: server_validation_margin
+    type: constant
+    status: active
+    value: 1.15
+    source: design/gdd/movement-camera.md         # 공식 7a
+    referenced_by: []
+    note: >
+      `Δ거리 ÷ Δ시간 ≤ effective_move_speed(player) × 1.15`.
+      🔴 **전역 상수 340을 쓰면 안 된다** — 이속 장비를 낀 플레이어(최대 510)가 정상 이동으로 오탐 차단된다.
+      Δ시간은 서버 수신 타임스탬프 실측차를 쓴다 (1/30 고정 가정 금지).
+
+  # ─── 세션 · 손실 ───────────────────────────────────────────
+
+  - name: session_length
+    type: constant
+    status: active
+    value: 1800
+    unit: seconds
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: 30분 개인별 체류 타이머. 만료 시 자동 사망 + **전량 소멸**(가방 드랍 없음).
+
+  - name: escape_gauge_duration
+    type: constant
+    status: active
+    value: 60
+    unit: seconds
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: 인원 무관 고정. 구역 이탈 시 역행, 1명이라도 남으면 계속 충전, 완충 시 구역 전원 탈출.
+
+  - name: spawn_invulnerability_duration
+    type: constant
+    status: active
+    value: 3
+    unit: seconds
+    source: design/gdd/game-concept.md            # § 스폰 보호
+    referenced_by:
+      - design/gdd/movement-camera.md
+    note: 진입 직후. **이동 또는 공격 시 즉시 해제.** 소유는 전투 시스템 — 이동은 관여하지 않는다.
+
+  - name: loot_bag_lifetime
+    type: constant
+    status: active
+    value: 10
+    unit: minutes
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: >
+      **PvP · 몬스터 사망 시에만** 적용. 타이머 만료 사망은 가방 자체가 생성되지 않는다.
+      두 죽음이 서로 다른 목표를 담당한다 — PvP = 회수 판타지, 타이머 = 확정적 인플레 싱크.
+
+  - name: gold_retention_on_death
+    type: constant
+    status: active
+    value:
+      keep_pct: 30
+      lost_pct: 70
+    unit: percent
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: >
+      **P5의 유일한 예외** — 골드는 사망해도 30%가 항상 유지된다. 없으면 빈털터리에서 회복 경로가 막힌다.
+      나머지 70%의 운명은 사망 종류에 따라 다르다: PvP = 가방 드랍(루팅 가능) / 타이머 만료 = 소멸.
+
+  - name: warehouse_capacity_formula
+    type: constant
+    status: active
+    value: "equipment_slot_count * 5"
+    unit: slots
+    source: design/gdd/game-concept.md            # § 성장 · 손실 #창고
+    referenced_by: []
+    note: >
+      부위 무관 — 무기만 채워도 된다. 예비 세트 약 5벌이 의도된 천장.
+      **인구 순환의 실질적 브레이크**다. 상한이 없으면 예비 만렙 세트를 무한 축적해 티어 강등이 영구 상쇄된다.
+      ⚠️ `equipment_slot_count` 미확정 — pending 참조.
+
+  # ─── 접근 · 사회 ───────────────────────────────────────────
+
+  - name: floor_tier_access
+    type: constant
+    status: active
+    value:
+      floor1: "모든 유저"
+      floor2: "2티어 이상"
+      floor3: "3티어 이상"
+      floor4: "4티어만"
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: 게이팅은 "자기 티어 이하는 자유, 초과는 차단". 티어 판정 = 착용 아이템 레벨 총합.
+
+  - name: tier_gap_party_size_limit
+    type: constant
+    status: active
+    value:
+      tier4_floor1: 0     # 추가 파티원 수 (본인 제외)
+      tier4_floor2: 1
+      tier4_floor3: 2
+      tier4_floor4: 3
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: >
+      "파티 내 최고 티어 기준, 입장 시 1회 검사."
+      ⚠️ **4티어 예시 하나만 명시돼 있다.** 타 티어 조합의 일반화 공식은 미정 — pending 참조.
+
+  # ─── 시각 (art-bible 소유) ─────────────────────────────────
+
+  - name: gameplay_three_colors
+    type: constant
+    status: active
+    value:
+      ally: "#3987E5"
+      enemy_player: "#D95926"
+      monster: "#199E70"
+    source: design/art/art-bible.md               # Section 4 ①
+    referenced_by:
+      - design/gdd/game-concept.md
+    note: >
+      색맹 검증 통과 (ΔE 9.4 최악 / 20.9 정상).
+      **목숨이 걸린 정보이므로 다른 용도로 절대 재사용 금지** — art-bible 자체 명시.
+
+  # ─── 성능 예산 (technical-preferences 소유) ────────────────
+
+  - name: draw_call_budget
+    type: constant
+    status: active
+    value: 3000
+    unit: draw calls / frame
+    source: .claude/docs/technical-preferences.md   # GDD 아님 — 프로젝트 설정 문서
+    referenced_by:
+      - design/art/art-bible.md                     # §8 ⑤ "예산 3000의 약 14%"
+    note: 두 문서가 이미 동일 수치를 공유 중. 등록해 드리프트를 막는다.
+
+  - name: client_memory_budget
+    type: constant
+    status: active
+    value:
+      ram_gb: 6
+      vram_gb: 4
+    source: .claude/docs/technical-preferences.md
+    referenced_by:
+      - design/art/art-bible.md                     # §8 ③ 텍스처 예산 역산 근거
+    note: art-bible이 "게임 월드 텍스처 하드목표 1.2~1.5 GB"를 이 예산에서 역산했다.
+
+
+formulas:
+
+  - name: effective_move_speed
+    type: formula
+    status: active
+    source: design/gdd/movement-camera.md         # 공식 1 — ⭐ 크로스시스템
+    referenced_by:
+      - design/gdd/movement-camera.md
+    expression: "clamp((base_move_speed + flat_ms_bonus) * (1 + sum(percent_ms_bonus_i)), ms_min_ratio * base, ms_max_ratio * base)"
+    variables:
+      - { name: base_move_speed,    value: 340,        unit: cm/s }
+      - { name: flat_ms_bonus,      range: [0, 85],    unit: cm/s }
+      - { name: percent_ms_bonus_i, range: [0, 0.15],  note: 아이템당. 가산 스택 }
+      - { name: ms_min_ratio,       value: 0.5 }
+      - { name: ms_max_ratio,       value: 1.5 }
+    output_range: [170, 510]
+    unit: cm/s
+    note: >
+      **가산 후 1회 곱** — 곱연산이면 아이템 5개 × +20%가 1.2^5 ≈ 2.49배로 폭주해 무한 카이팅을 유발한다.
+      `flat_ms_bonus` 상한 85는 base 600 시절의 150(=25%)을 340 기준 25%로 재계산한 값.
+      🔴 **서버 이동 검증(공식 7)이 이 값을 플레이어별로 계산해야 한다.** 전역 상수 340을 쓰면 오탐 차단.
+      장비 · 스킬 GDD 작성 시 보너스 공급원으로서 referenced_by에 자신을 추가할 것.
+
+  - name: dash_kinematics
+    type: formula
+    status: active
+    source: design/gdd/movement-camera.md         # 공식 3 — ⭐ 크로스시스템 (스킬이 참조)
+    referenced_by:
+      - design/gdd/movement-camera.md
+    expression: "dash_duration = dash_dist / dash_speed ; dash_pos(t) = start + normalize(dash_dir) * dash_speed * t"
+    variables:
+      - { name: dash_dist,     range: [200, 800],   unit: cm,   note: 공간값 — base 무관. 아카이브 값 유지 }
+      - { name: dash_speed,    range: [450, 1360],  unit: cm/s, note: base 상대 개념 — 1.33x~4x 비율 유지 }
+      - { name: dash_duration, range: [0.15, 0.4],  unit: s,    note: **실제 제약은 이 값** }
+    note: >
+      ⚠️ (dist, speed)는 자유 조합이 아니다. 항상 duration이 0.15~0.4 s 안에 들어와야 한다.
+      `dash_speed` 상한 1,360은 서버 검증 예외 윈도우(공식 7b)의 상한과 연동된다 — 넘기려면 서버 협의 필요.
+      🔴 **스킬 시스템은 대시 실행 *전에* 서버에 캐스트를 통지해야 한다.** 안 하면 서버가 대시를 거부한다.
+
+
+items:
+
+  - name: item_rarity_tiers
+    type: item
+    status: active
+    value:
+      common:    { color: "#9AA0A6", shape: "직사각" }
+      rare:      { color: "#199E70", shape: "모서리 깎임" }
+      epic:      { color: "#3987E5", shape: "육각",  fx: "미세 발광" }
+      legendary: { color: "#E66767", shape: "별형",  fx: "발광 + 파티클" }
+    source: design/art/art-bible.md               # Section 4 ②
+    referenced_by:
+      - design/gdd/game-concept.md
+    note: >
+      🔴 **색만으로는 구분 불가** (색맹 ΔE 6.5, WARN 구간) → **형태 이중부호화 필수.**
+      색만 쓰는 UI · 문서 작성 금지.
+      **공식 등급명은 일반 · 희귀 · 영웅 · 전설 뿐이다.** "매우 희귀" 같은 서술적 표현을 쓰면
+      드랍 테이블에서 등급 오해가 생긴다 (2026-08-11 game-concept.md § 공간을 공식 명칭으로 정렬함).
+
+
+# ──────────────────────────────────────────────────────────────
+# 미정 — 확정되면 위로 옮긴다
+# ──────────────────────────────────────────────────────────────
+
+pending:
+
+  - name: equipment_slot_count
+    owner: systems-designer
+    blocks: [warehouse_capacity_formula]
+    urgency: 최우선
+    note: 창고 용량(부위 × 5)이 여기 종속. 여러 시스템이 대기 중.
+
+  - name: cc_resistance_cap
+    owner: systems-designer
+    urgency: 전투 GDD 작성 전
+    note: >
+      🔴 `실효 CC 시간 = 기본 지속시간 × (1 − CC저항력)` 는 저항력 1.0에서 **완전 면역**이 된다.
+      아카이브 데미지 완화는 `armor/(armor+K)` 점근 곡선이었고 "완전 무적 불가"가 명시적 목표였다.
+      P1과 정면 충돌 — 클램프 / 점근 곡선 / 부여량 제한 중 택1 필요.
+
+  - name: base_stats_naked
+    owner: systems-designer
+    urgency: 전투 GDD 작성 전
+    note: 맨몸(장비 0개) 기본 스탯. 아카이브엔 정의 없음 — 레벨업이 채워주던 몫이라 안 보이던 구멍.
+
+  - name: soft_cc_slow_cap
+    owner: systems-designer
+    note: "추격이 조금 더 쉬워지는 수준"이라는 정성적 서술만 존재.
+
+  - name: hard_cc_base_duration
+    owner: systems-designer
+    note: "4인 합 5초" 목표치만 확정. 개별 스킬 수치 없음.
+
+  - name: warehouse_gold_penalty_pct
+    owner: economy-designer
+    note: "일정 % 차감"만 확정. 고정액이면 역진세가 되므로 % 여야 한다.
+
+  - name: guild_buyback_rules
+    owner: economy-designer
+    urgency: 경제 설계 시
+    note: 🔴 **골드의 유일한 소스인데 규칙이 없다.** 싱크만 있고 파세트가 없는 상태.
+
+  - name: escape_tower_zone_radius
+    owner: game-designer
+    note: 미정.
+
+  - name: escape_alert_radius
+    owner: game-designer
+    note: 미정. **탈출존 캠핑 지배전략의 억제 레버**로 지목됨.
+
+  - name: escape_gauge_decay_rate
+    owner: game-designer
+    note: 구역 이탈 시 역행 속도.
+
+  - name: tier_power_ratio
+    owner: systems-designer
+    note: 3~4배 상한만 언급.
+
+  - name: solitary_path_decay_curve
+    owner: systems-designer
+    note: 앵커 2점만 확정 (같은 티어 100% · 3단계 아래 10%). 곡선 형태 미정.
+
+  - name: party_size_limit_formula
+    owner: systems-designer
+    note: 4티어 예시 하나만 존재. 타 티어 조합의 일반화 공식 없음.
+
+  - name: aoe_max_targets
+    owner: systems-designer
+    note: 미정.
+
+  - name: floor_item_pool
+    owner: economy-designer
+    note: Tier 3.
+
+  - name: reference_resolution
+    owner: 본인
+    note: >
+      AC-30(화면 가로 30 m 검증)이 뷰포트 종횡비에 의존한다.
+      "해상도 1920×1080에서 30 m" 형태로 고정해야 결정적 테스트가 된다.
+
+  - name: validation_skip_semantics
+    owner: 본인
+    note: >
+      공식 7a의 `Δt < 16.6 ms` "검증 제외"가 **패킷 폐기**인지
+      **위치는 갱신하되 속도 검사만 생략**인지 불명확. AC-23이 후자로 가정하고 작성됨.
+
+
+# ──────────────────────────────────────────────────────────────
+# 폐기 — 아카이브에서 무효가 된 것
+# ──────────────────────────────────────────────────────────────
+
+deprecated:
+
+  - name: effective_move_speed (구버전)
+    was: "base=600 · flat 상한 150 · output [300, 900]"
+    reason: base_move_speed 600 → 340 전면 재계산. 현행은 base=340 · flat 상한 85 · output [170, 510].
+
+  - name: dash_kinematics.dash_speed (구버전)
+    was: "800–2400 cm/s"
+    reason: >
+      base 재계산으로 450–1360 cm/s (동일 배율 1.33x~4x 유지).
+      **부분 폐기** — `dash_dist`(200–800)·`dash_duration`(0.15–0.4 s)은 base 무관값이라 그대로 유효.
+
+  - name: cc_duration_dr
+    was: "DR_multiplier = max(DR_floor, DR_factor ^ stack_count), 창 15 s, 바닥 25%"
+    reason: >
+      반복 이력 기반 지수 감쇠 → **CC 저항력 스탯**(반복 무관 선형 완화)으로 메커니즘 자체가 교체됨.
+      🔴 주의 — 체인 CC 방지 책임은 이 공식이 아니라
+      **"하드 CC = 무기 부위 전용, 캐릭터당 1개"라는 구조적 제약**이 넘겨받았다.
+      감쇠 곡선 튜닝 문제에서 **아이템화 문제**로 성격이 바뀌었다.
+
+  - name: damage_dealt / crit_damage / attack_speed_stacking
+    status: 판단 보류 (폐기 아님)
+    reason: >
+      공식 자체는 캐릭터 레벨을 변수로 갖지 않아 살아남는다.
+      다만 스탯을 "장비 **/ 성장** 공동 공급"으로 전제했는데 성장이 사라졌으므로,
+      `K_mitigation=100` · `as_max_ratio=2.5×` 같은 상수를 재검증해야 한다.
+      combat-system.md 작성 시 등록.
+
+  - name: input_buffer_window / target_acquisition_leniency
+    status: 등록 보류 (폐기 아님)
+    reason: >
+      값(150 ms / 30 px)은 유효할 가능성이 높으나 `design/gdd/input-system.md`가 아직 없어
+      source 경로가 무효하다. 해당 GDD 작성 시 등록.
+      단 `target_acquisition_leniency` 30 px는 카메라가 확정된 지금 실측 재검증 권장.

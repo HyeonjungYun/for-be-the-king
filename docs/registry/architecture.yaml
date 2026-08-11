@@ -1,0 +1,248 @@
+# Architecture Decision Registry
+#
+# PURPOSE: Single source of truth for key architectural stances that all ADRs
+# must agree on. Skills check this before writing new ADRs to detect conflicts
+# at authoring time — before stories are created against contradictory decisions.
+#
+# RULES:
+#   - Register a stance when it constrains how OTHER systems must be built.
+#     An internal implementation detail that affects only one ADR does not need
+#     to be registered.
+#   - Never delete entries — set status: superseded_by: ADR-NNNN instead.
+#   - When a stance changes: update the entry, set revised: to today's date,
+#     add a comment with the old value, and run /architecture-review to check
+#     what ADRs are now invalidated.
+#   - adr: is the authoritative source. All other ADRs that depend on this
+#     stance list themselves in referenced_by.
+#
+# WRITTEN BY: /architecture-decision (Phase 5 — after ADR is approved)
+# READ BY:    /architecture-decision (Step 2 — before authoring begins)
+#             /architecture-review (Phase 4 — cross-ADR conflict baseline)
+#             /create-stories (to embed architectural constraints in stories)
+#             /dev-story (to check implementation against accepted stances)
+#
+# SEARCH PATTERNS (for skills using Grep):
+#   All state owners:       Grep pattern="^  - state:" path="docs/registry/architecture.yaml"
+#   Who owns player_health: Grep pattern="state: player_health"
+#   All signal contracts:   Grep pattern="pattern: signal"
+#   Budget for combat:      Grep pattern="system: combat"
+#   All forbidden patterns: Grep pattern="^  - pattern:" (forbidden_patterns section)
+#   Superseded entries:     Grep pattern="status: superseded"
+
+version: 1
+last_updated: ""
+
+# ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
+# Who is the authoritative owner of each piece of shared game state.
+# Conflicts: two ADRs claiming to own the same state = data race / authority bug.
+#
+# Register state when it is READ or WRITTEN by more than one system.
+# Internal-only state (never accessed by another system) does not need to be registered.
+#
+# Required fields: state, owner_system, adr, interface, referenced_by[], added
+# interface: how other systems access this state (read-only property, method call,
+#   signal, shared resource, etc.) — this is the contract other ADRs depend on.
+
+state_ownership:
+  - state: character_attributes
+    status: active
+    owner_system: combat-system   # ASC-on-Character (UDungeonKingAttributeSet)
+    adr: docs/architecture/adr-0002-gas-adoption.md
+    interface: "GAS AttributeSet on Character ASC (health/armor/magic_resist/attack/crit/attack_speed/move_speed). 타 시스템은 GameplayEffect로만 변경, 직접 쓰기 금지."
+    write_access: server-only-via-gameplay-effect
+    referenced_by:
+      - docs/architecture/adr-0002-gas-adoption.md
+      - docs/gdd/combat-system.md
+    added: 2026-07-19
+    revised: ""
+    note: "로드아웃(장착 장비=스킬)은 ASC 아닌 외부 권위(PlayerState/GameState)가 소유 — ASC는 리스폰 시 소멸하므로 어빌리티를 매 스폰 재부여받음."
+  - state: cc_authority
+    status: active
+    owner_system: combat-system
+    adr: docs/architecture/adr-0002-gas-adoption.md
+    interface: "CC(Stun/Root/Slow/Silence) = Duration GameplayEffect + State.* GameplayTag. 서버 전용 적용. 이동은 can_move/can_turn, 스킬은 can_cast를 태그로 조회."
+    write_access: server-only
+    referenced_by:
+      - docs/architecture/adr-0002-gas-adoption.md
+      - docs/gdd/combat-system.md
+      - docs/gdd/movement-camera.md
+    added: 2026-07-19
+    revised: ""
+
+# Example:
+#
+# state_ownership:
+#   - state: player_health
+#     status: active           # active | superseded_by: ADR-NNNN
+#     owner_system: health-system
+#     adr: docs/architecture/adr-0001-health-system.md
+#     interface: "HealthComponent.current_health (read-only float, range 0–max_health)"
+#     write_access: health-system-only   # only owner can write; others read
+#     referenced_by:
+#       - docs/architecture/adr-0001-health-system.md
+#       - docs/architecture/adr-0003-combat-system.md   # reads to apply damage
+#       - docs/architecture/adr-0007-ui-system.md       # reads to display HUD
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── INTERFACE CONTRACTS ──────────────────────────────────────────────────────
+# How systems are required to communicate with each other.
+# Conflicts: one ADR expects signal, another expects direct call = integration bug.
+#
+# Register a contract when the communication pattern between two systems is
+# explicitly decided in an ADR and other systems must follow the same pattern.
+#
+# pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
+
+interfaces:
+  - contract: fow_relevancy_decision
+    status: active
+    pattern: direct_call      # 백본별 어댑터가 시야 시스템의 단일 판정 함수를 호출
+    producer: vision-system   # 시야/릴러번시 (#13)
+    consumers:
+      - networking-layer      # 백본 어댑터(Iris filter / RepGraph node)가 판정 결과로 relevancy 결정
+    adr: docs/architecture/adr-0001-netcode-replication-backbone.md
+    signal_signature: "ShouldReplicateActorToConnection(Actor, Connection) -> bool (서버권위, LOS/방-차폐 포함)"
+    referenced_by:
+      - docs/architecture/adr-0001-netcode-replication-backbone.md
+    added: 2026-07-18
+    revised: ""
+    note: "백본(Iris vs RepGraph)은 PoC 미확정이나, relevancy 판정을 시야 시스템 뒤로 캡슐화한다는 계약은 백본 선택과 무관하게 확정."
+
+# Example:
+#
+# interfaces:
+#   - contract: damage_delivery
+#     status: active
+#     pattern: signal          # how the producer notifies consumers
+#     producer: combat-system
+#     consumers:
+#       - health-system        # receives damage_dealt signal, applies to health
+#       - ui-system            # receives damage_dealt signal, shows damage number
+#       - audio-system         # receives damage_dealt signal, plays SFX
+#     adr: docs/architecture/adr-0003-combat-system.md
+#     signal_signature: "damage_dealt(amount: float, target: Node, is_crit: bool)"
+#     referenced_by:
+#       - docs/architecture/adr-0003-combat-system.md
+#       - docs/architecture/adr-0001-health-system.md
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── PERFORMANCE BUDGETS ──────────────────────────────────────────────────────
+# Frame time allocations per system, against a defined total frame budget.
+# Conflicts: allocations that sum to more than the total budget = unshippable.
+#
+# Register a budget when an ADR explicitly claims a frame time allocation.
+# The registry lets /architecture-review verify the total doesn't exceed the target.
+
+performance_budgets: []
+
+# Example:
+#
+# performance_budgets:
+#   - target_fps: 60
+#     total_frame_budget_ms: 16.6
+#     platform: PC             # PC | Console | Mobile | All
+#     adr: docs/architecture/adr-0000-performance-targets.md
+#     added: 2026-03-26
+#     revised: ""
+#
+#   - system: combat
+#     status: active
+#     budget_ms: 2.0
+#     adr: docs/architecture/adr-0003-combat-system.md
+#     notes: "Includes physics queries, hitbox evaluation, and damage calculation"
+#     referenced_by:
+#       - docs/architecture/adr-0003-combat-system.md
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── API DECISIONS ───────────────────────────────────────────────────────────
+# Which engine APIs are chosen for which purpose across the project.
+# Conflicts: two ADRs using different APIs for the same purpose = inconsistent
+# implementation that breaks when one system expects the other's API.
+#
+# Register an API decision when the choice is non-obvious and other ADRs might
+# make a different choice for the same purpose without knowing this was decided.
+
+api_decisions:
+  - purpose: combat_ability_framework
+    status: active
+    api: GAS (Gameplay Ability System — UAbilitySystemComponent/UAttributeSet/UGameplayAbility/UGameplayEffect/FGameplayTag)
+    not: custom ability/attribute components   # explicitly banned for this purpose
+    adr: docs/architecture/adr-0002-gas-adoption.md
+    reason: "능력 기반 클래스리스 장비=스킬 게임. 어트리뷰트·데미지·CC·어빌리티·쿨다운·자원·태그·예측을 검증된 프레임워크로 일괄. 커스텀 재구현은 GAS 재발명."
+    details: "ASC on Character(FoW relevancy). 데미지=서버 전용 ExecutionCalculation. 예측=발동/코스트/쿨다운/캐스트큐만(데미지·크리·CC·사망은 서버 전용). Push Model 필수(Iris 대비). 모듈=GameplayAbilities/GameplayTags/GameplayTasks."
+    referenced_by:
+      - docs/architecture/adr-0002-gas-adoption.md
+      - docs/gdd/combat-system.md
+    added: 2026-07-19
+    revised: ""
+
+# Example:
+#
+# api_decisions:
+#   - purpose: physics_raycast
+#     status: active
+#     api: PhysicsServer3D.space_get_direct_state()
+#     not: RayCast3D node     # explicitly banned for this purpose
+#     adr: docs/architecture/adr-0002-physics-architecture.md
+#     reason: "Direct server calls avoid per-frame node overhead; 3× faster in profiling"
+#     referenced_by:
+#       - docs/architecture/adr-0002-physics-architecture.md
+#       - docs/architecture/adr-0003-combat-system.md
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── FORBIDDEN PATTERNS ──────────────────────────────────────────────────────
+# Architecture anti-patterns explicitly banned by accepted ADRs.
+# When writing a new ADR, check this list — if the proposed approach matches
+# a forbidden pattern, it must be reworked before the ADR can be Accepted.
+#
+# Register a pattern when an ADR explicitly bans it AND other ADRs might
+# unknowingly use it (i.e., it's a tempting but wrong approach for this project).
+
+forbidden_patterns:
+  - pattern: client_side_fow_masking
+    status: active
+    description: "전장의 안개(FoW)를 클라이언트 시각 마스킹(안개 오버레이·액터 숨김)으로 구현 금지.
+      시야 밖 액터는 서버가 애초에 리플리케이트하지 않아야 한다(서버권위 relevancy 컬링).
+      HUD·미니맵·렌더 레이어는 이미 서버가 보낸 액터만 그린다 — 클라가 받은 액터를 숨기는 방식 금지."
+    why: "클라가 시야 밖 액터 데이터를 받으면 메모리 스니핑/월핵으로 노출된다. 풀루팅 익스트랙션에서
+      위치 정보 유출은 치명적 치트 벡터. FoW는 시각 효과가 아니라 안티치트 근간이다."
+    adr: docs/architecture/adr-0001-netcode-replication-backbone.md
+    added: 2026-07-18
+  - pattern: predict_authoritative_gameplay
+    status: active
+    description: "데미지 크기·크리티컬 결과·CC 적용/지속·사망(킬) 확정을 클라이언트 예측 금지.
+      GAS 예측은 어빌리티 발동·코스트·쿨다운·캐스트 큐/몽타주 시작에만 한정. 이 결과값들은
+      서버 전용 계산 후 리플리케이트만."
+    why: "풀루팅 PvP에서 예측된 킬이 서버에서 뒤집히면 오사망 연출·조기 루팅자격·잘못된 익스트랙션 상태 등
+      심각한 UX/경제 문제. 크리 RNG 클라 예측은 서버와 desync + 치트 벡터. 안티치트·공정성 근간."
+    adr: docs/architecture/adr-0002-gas-adoption.md
+    added: 2026-07-19
+
+# Example:
+#
+# forbidden_patterns:
+#   - pattern: autoload_singleton_coupling
+#     status: active
+#     description: "Systems must not directly reference Autoload singletons by name.
+#       Use dependency injection or signals instead."
+#     why: "Tight coupling to Autoloads makes systems untestable in isolation and
+#       creates hidden dependencies that break when Autoload load order changes."
+#     adr: docs/architecture/adr-0001-health-system.md
+#     added: 2026-03-26
+#
+#   - pattern: direct_cross_system_state_write
+#     status: active
+#     description: "A system must never write to state owned by another system.
+#       Use signals or method calls on the owner instead."
+#     why: "Direct state writes create race conditions and break the state
+#       ownership model. The owning system must be the sole writer."
+#     adr: docs/architecture/adr-0000-architecture-principles.md
+#     added: 2026-03-26

@@ -1,0 +1,285 @@
+# Game World Entity Registry
+#
+# PURPOSE: Single source of truth for all named game-world facts that appear
+# in more than one document. Skills check this before writing new content to
+# detect cross-doc inconsistencies at authoring time.
+#
+# RULES:
+#   - Only register facts that cross system boundaries. Internal-only facts
+#     (a formula used in one GDD only) do NOT need to be registered.
+#   - Never delete entries — set status: deprecated instead.
+#   - When a value changes: update the value, set revised: to today's date,
+#     and add a comment with the old value and which GDD changed it.
+#   - source: is the authoritative GDD — the one that "owns" this fact.
+#     Other GDDs that reference it list themselves in referenced_by.
+#   - When a new GDD references an existing entry, append its path to
+#     referenced_by. Do not create a duplicate entry.
+#
+# WRITTEN BY: /design-system (Phase 5 — after GDD sections are approved)
+#             /consistency-check (when resolving conflicts)
+# READ BY:    /design-system (Phase 2 — before authoring begins, and after
+#               Section C/D writes to conflict-check new entities/formulas)
+#             /consistency-check (primary input — grep-first, GDD-second)
+#             /review-all-gdds (Phase 1 — baseline for Phase 2 checks)
+#             /architecture-review (data structure and interface validation)
+#
+# SEARCH PATTERNS (for skills using Grep):
+#   All entity names:        Grep pattern="^  - name:" path="design/registry/entities.yaml"
+#   Specific entity:         Grep pattern="  - name: goblin" path="design/registry/entities.yaml"
+#   All items:               Grep pattern="^  - name:" path="design/registry/entities.yaml" (items section)
+#   What combat.md owns:     Grep pattern="source: design/gdd/combat.md"
+#   What inventory.md uses:  Grep pattern="referenced_by.*inventory"
+#   All gold values:          Grep pattern="value_gold:"
+#   Deprecated entries:      Grep pattern="status: deprecated"
+#
+# FORMAT: YAML. Consistent indentation is critical for grep reliability.
+#   Sections: entities | items | formulas | constants
+#   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
+
+version: 1
+last_updated: 2026-07-18
+
+# ─── ENTITIES ────────────────────────────────────────────────────────────────
+# Named game-world objects: enemies, NPCs, characters, factions, bosses.
+# Register an entity here when it appears in more than one GDD — e.g., an
+# enemy defined in combat.md that also drops items listed in inventory.md.
+#
+# Required fields: name, status, source, referenced_by, added
+# Attribute fields: any key stats that could appear in another GDD
+#   (health, damage, drops, faction, etc.)
+
+entities: []
+
+# Example (remove when first real entry is added):
+#
+# entities:
+#   - name: goblin
+#     status: active              # active | deprecated
+#     source: design/gdd/combat.md
+#     referenced_by:
+#       - design/gdd/combat.md
+#       - design/gdd/inventory.md
+#     health: 40
+#     damage: 8
+#     drops:
+#       - item: goblin_arm        # must match an entry in items section
+#         qty: 1
+#         drop_rate: 0.8          # 0.0–1.0
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── ITEMS ───────────────────────────────────────────────────────────────────
+# Named collectables, equipment, consumables, crafting materials, currency.
+# Register an item when its name or value appears in more than one GDD.
+#
+# Required fields: name, status, source, referenced_by, added
+# Attribute fields: value_gold, weight, stackable, category, and any stat
+#   modifiers that another system (e.g., economy, crafting) might reference.
+
+items: []
+
+# Example:
+#
+# items:
+#   - name: goblin_arm
+#     status: active
+#     source: design/gdd/combat.md   # drop defined in combat GDD
+#     referenced_by:
+#       - design/gdd/combat.md
+#       - design/gdd/inventory.md    # inventory GDD lists its weight/stack rules
+#       - design/gdd/economy.md      # economy GDD references its sell price
+#     value_gold: 5
+#     weight: 1
+#     stackable: true
+#     category: crafting_material
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── FORMULAS ────────────────────────────────────────────────────────────────
+# Named calculations with defined variables and output ranges.
+# Register a formula when its output feeds into another system's input,
+# or when another GDD references it by name.
+#
+# Required fields: name, status, source, referenced_by, variables[],
+#   output_range[min, max], added
+# Optional: expression (the actual formula), notes
+
+formulas:
+  - name: input_buffer_window
+    status: active
+    source: design/gdd/input-system.md
+    referenced_by:
+      - design/gdd/input-system.md
+    variables:
+      - buffer_window
+      - t_input
+      - t_state_clear
+    output_range: [0, 1]   # bool: 버퍼 or 드롭
+    expression: "buffered = 0 <= (t_state_clear - t_input) <= buffer_window"
+    notes: "buffer_window 기본 150ms(안전범위 100-250ms). 입력이 소유·계약 정의, 실제 소비(실행)는 전투/스킬 시스템. 캐스팅 락 길이와 함께 튜닝."
+    added: 2026-07-18
+    revised: ""
+  - name: target_acquisition_leniency
+    status: active
+    source: design/gdd/input-system.md
+    referenced_by:
+      - design/gdd/input-system.md
+    variables:
+      - base_leniency
+      - target_screen_radius
+      - cursor_to_target_dist
+    output_range: [0, 1]   # bool: acquirable, 최근접 선택
+    expression: "acquirable = (cursor_to_target_dist <= target_screen_radius + base_leniency)"
+    notes: "base_leniency 기본 30px(안전범위 0-60px). RMB 기본공격/타겟형 LMB 확정의 커서 타게팅 관용 반경. 전투/스킬 타게팅이 참조."
+    added: 2026-07-18
+    revised: ""
+  - name: effective_move_speed
+    status: active
+    source: design/gdd/movement-camera.md
+    referenced_by:
+      - design/gdd/movement-camera.md
+    variables:
+      - base_move_speed
+      - flat_ms_bonus
+      - percent_ms_bonus_i
+      - ms_min_ratio
+      - ms_max_ratio
+    output_range: [300, 900]   # cm/s, base_move_speed=600 기준 [0.5x, 1.5x] 하드클램프
+    expression: "clamp((base_move_speed + flat_ms_bonus) * (1 + sum(percent_ms_bonus_i)), ms_min_ratio*base_move_speed, ms_max_ratio*base_move_speed)"
+    notes: "base_move_speed 기본 600cm/s(=CMC MaxWalkSpeed). 장비 이동속도 보너스는 가산 스택 후 최종 1회 곱(곱연산 폭주 방지) + 하드캡(0.5~1.5x). 장비/성장 시스템이 flat_ms_bonus/percent_ms_bonus를 공급 → 그 GDD들이 referenced_by에 추가될 것. 캡은 PvP 카이팅 억제 + 넷코드 예측 안정성. Slow CC(combat D5)는 percent_ms_bonus에 음수항으로 편입, 동시 Slow는 비가산(최댓값만)."
+    added: 2026-07-18
+    revised: 2026-07-18   # was referenced_by movement-only; combat-system.md added Slow as input source
+  - name: damage_dealt
+    status: active
+    source: design/gdd/combat-system.md
+    referenced_by:
+      - design/gdd/combat-system.md
+    variables:
+      - base_damage
+      - defense_stat
+      - K_mitigation
+    output_range: [1, 999999]   # min_damage 바닥 1; 상한은 base_damage에 종속(무한)
+    expression: "damage_dealt = base_damage * (1 - defense_stat/(defense_stat + K_mitigation)) ; floor min_damage=1"
+    notes: "점감 곡선 완화(armor/(armor+K), K=100 기본). physical→armor, magic→magic_resist. 완전무적 불가(점근). 장비/성장이 armor·magic_resist·base_damage 범위를 이 곡선 기준으로 잡아야 함. 스킬이 ApplyDamage로 참조. min_damage 바닥 1(0딜 교착 방지)."
+    added: 2026-07-18
+    revised: ""
+  - name: crit_damage
+    status: active
+    source: design/gdd/combat-system.md
+    referenced_by:
+      - design/gdd/combat-system.md
+    variables:
+      - crit_chance
+      - crit_multiplier
+    output_range: [0, 3]   # crit_multiplier 배율 범위(1.0~3.0), 기본 1.75
+    expression: "effective_base = base_damage * (crit_roll ? crit_multiplier : 1.0) ; 그 뒤 damage_dealt 완화 적용(pre-mitigation crit)"
+    notes: "크리는 완화 이전 적용(크리빌드가 방어 무시 방지). crit_multiplier 기본 1.75. 장비/성장이 crit_chance·crit_multiplier 공급."
+    added: 2026-07-18
+    revised: ""
+  - name: attack_speed_stacking
+    status: active
+    source: design/gdd/combat-system.md
+    referenced_by:
+      - design/gdd/combat-system.md
+    variables:
+      - base_attack_speed
+      - percent_as_bonus_i
+      - as_min_ratio
+      - as_max_ratio
+    output_range: [0, 5]   # eff_as clamp [0.5x, 2.5x] of base(0.5~2.0/s)
+    expression: "effective_attack_speed = clamp(base_attack_speed*(1+sum(percent_as_bonus_i)), as_min_ratio*base, as_max_ratio*base) ; attack_windup = max(150ms, 0.5*1/eff_as)"
+    notes: "effective_move_speed와 동일 패턴(가산% + 캡 0.5~2.5x). windup floor 150ms=input_buffer_window 정합. 장비/성장이 percent_as_bonus 공급."
+    added: 2026-07-18
+    revised: ""
+  - name: cc_duration_dr
+    status: active
+    source: design/gdd/combat-system.md
+    referenced_by:
+      - design/gdd/combat-system.md
+    variables:
+      - base_cc_duration
+      - DR_factor
+      - DR_max_stacks
+      - DR_floor
+      - DR_window
+    output_range: [0.25, 1]   # DR_multiplier 범위(base 대비 비율)
+    expression: "effective_cc_duration = base_cc_duration * max(DR_floor, DR_factor^min(stacks, DR_max_stacks))"
+    notes: "하드CC(Stun/Root/Silence)만 DR, Slow 제외. DR_factor 0.5^n, floor 0.25, window 15s. 체인스턴 락 방지. 스킬이 CC 적용 시 반드시 통과. 향후 tenacity 스탯 생기면 장비도 참조."
+    added: 2026-07-18
+    revised: ""
+  - name: dash_kinematics
+    status: active
+    source: design/gdd/movement-camera.md
+    referenced_by:
+      - design/gdd/movement-camera.md
+    variables:
+      - dash_dir
+      - dash_dist
+      - dash_speed
+      - dash_duration
+    output_range: [0, 0]   # N/A (운동학 계약; dash_duration=dash_dist/dash_speed, 권장 0.15-0.4s)
+    expression: "dash_duration = dash_dist / dash_speed ; dash_pos(t) = start + normalize(dash_dir)*dash_speed*t"
+    notes: "이동 시스템은 RequestDash(dir,dist,speed) API/실행만 소유. dash_dist/dash_speed 값은 스킬 시스템이 결정(스킬별) → 스킬 GDD가 referenced_by에 추가될 것. CMC 최우선 오버라이드 후 Walking 복귀·스냅 보정. 벽 충돌 시 조기 종료."
+    added: 2026-07-18
+    revised: ""
+
+# Example:
+#
+# formulas:
+#   - name: damage_formula
+#     status: active
+#     source: design/gdd/combat.md
+#     referenced_by:
+#       - design/gdd/combat.md
+#       - design/gdd/progression.md   # progression GDD scales attack variable
+#     variables:
+#       - attack
+#       - defense
+#       - crit_chance
+#       - crit_multiplier
+#     output_range: [0, 999]
+#     expression: "max(0, attack - defense) * (1 + crit_chance * crit_multiplier)"
+#     notes: "Output feeds into health-system damage intake. Min is 0 (armour
+#       can absorb all damage). Max is uncapped in formula but tuning knob
+#       damage_cap in combat.md clamps at 999."
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── CONSTANTS ───────────────────────────────────────────────────────────────
+# Named numerical values referenced across multiple systems.
+# Register a constant when it is defined in one GDD but another GDD must
+# agree with it (e.g., gold carry limit defined in economy but checked in
+# inventory, or base inventory slots defined in inventory but displayed in HUD).
+#
+# Required fields: name, status, source, referenced_by, value, unit, added
+
+constants: []
+
+# Example:
+#
+# constants:
+#   - name: gold_carry_limit
+#     status: active
+#     source: design/gdd/economy.md
+#     referenced_by:
+#       - design/gdd/economy.md
+#       - design/gdd/inventory.md   # inventory enforces the carry limit
+#       - design/gdd/ui.md          # HUD displays current gold vs limit
+#     value: 9999
+#     unit: gold
+#     added: 2026-03-26
+#     revised: ""
+#
+#   - name: base_inventory_slots
+#     status: active
+#     source: design/gdd/inventory.md
+#     referenced_by:
+#       - design/gdd/inventory.md
+#       - design/gdd/progression.md  # progression unlocks additional slots
+#     value: 20
+#     unit: slots
+#     added: 2026-03-26
+#     revised: ""
