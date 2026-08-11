@@ -1,0 +1,53 @@
+# For be the King — .gitignore
+#
+# 원칙: 소스 · 에셋 · 의존성 · 문서는 추적한다. 빌드 산출물과 IDE 캐시는 제외한다.
+# 13.5 GB 중 약 285 MB만 추적된다 (Content 130 + Libraries 153 + 소스·문서 ~10).
+
+# ── Unreal Engine ──────────────────────────────────────
+S1/Binaries/
+S1/Intermediate/
+S1/Saved/
+S1/DerivedDataCache/
+S1/Build/
+S1/Backup/
+
+# protoc 생성 헤더 — 원본은 Server/Libraries에 있고 재생성 가능
+S1/Source/ProtobufCore/Include/
+
+# ── Visual Studio ──────────────────────────────────────
+.vs/
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.vcxproj.user
+*.suo
+*.user
+
+# ── C++ 빌드 산출물 ────────────────────────────────────
+[Xx]64/
+[Xx]86/
+[Ww]in32/
+*.obj
+*.pch
+*.ipch
+*.ilk
+*.pdb
+*.idb
+*.exe
+*.tlog
+*.lastbuildstate
+*.log
+
+# ── 서버 빌드 결과 ─────────────────────────────────────
+Server/Binaries/
+# ⚠️ Server/Libraries 는 추적한다 (protobuf 21.12 버전 고정 — 2026-08-11 결정)
+#    "다른 PC에서 클론했더니 안 빌드됨"이 153 MB보다 비싸다
+
+# ── 프로젝트 규칙 (.claude/docs/directory-structure.md) ──
+production/session-state/active.md
+production/session-logs/
+
+# ── OS ─────────────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+.DS_Store
