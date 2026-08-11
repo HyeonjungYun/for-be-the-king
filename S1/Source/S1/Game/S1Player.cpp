@@ -24,17 +24,20 @@ AS1Player::AS1Player()
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	// Configure character movement
-	GetCharacterMovement()->bOrientRotationToMovement = true;
+	// Facing follows the cursor, not the movement direction. This is what makes strafing
+	// work Б─■ you back away with WASD while still aiming at whoever is chasing you.
+	// See design/gdd/movement-camera.md Core Rule 3.
+	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
 
-	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
-	// instead of recompiling to adjust them
-	GetCharacterMovement()->JumpZVelocity = 500.f;
-	GetCharacterMovement()->AirControl = 0.35f;
-	GetCharacterMovement()->MaxWalkSpeed = 500.f;
+	// 340 cm/s = Ryze's base move speed in League. Floor size (280m), traversal time (82s)
+	// and the whole session budget are derived from this number Б─■ see game-concept.md б╖ ЙЁ╣Й╟└.
+	GetCharacterMovement()->MaxWalkSpeed = 340.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
+
+	// Ground only Б─■ no jump (MVP decision, 2026-08-11). Jumping reads poorly from a
+	// top-down camera and would force the server's move validation to handle the Z axis.
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
@@ -187,9 +190,9 @@ void AS1Player::SetDestInfo(const Protocol::PosInfo& Info)
 
 	ResetInterpolation(Info.state());
 
-	// Dest©║ цжа╬ ╩Себ ╨╧╩Г
+	// DestО©╫О©╫ О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫
 	DestInfo->CopyFrom(Info);
 
-	// ╩Себ╦╦ ╧ы╥н юШ©К
+	// О©╫О©╫О©╫б╦О©╫ О©╫ы╥О©╫ О©╫О©╫О©╫О©╫
 	SetMoveState(Info.state());
 }
