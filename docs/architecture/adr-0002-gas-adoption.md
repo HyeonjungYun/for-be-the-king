@@ -1,10 +1,73 @@
 # ADR-0002: GAS(Gameplay Ability System) 채택 — 전투·스킬 primitive 구현 기반
 
 ## Status
-Proposed
+**Rejected (2026-08-11)** — 아래 § Rejection 참조. Accepted에 도달한 적 없음(계속 Proposed였음).
 
 ## Date
-2026-07-19
+2026-07-19 (제안) · **2026-08-11 (기각)**
+
+---
+
+## Rejection — 2026-08-11
+
+> **GAS를 채택하지 않는다.** 아래 본문은 기각 근거 보존을 위해 원문 그대로 남긴다.
+> 본문의 전제 대부분이 무효이므로 **구현 지침으로 읽지 말 것.**
+
+### 무효가 된 전제
+
+이 ADR은 **ADR-0001(UE 리플리케이션 백본)에 의존**하도록 작성되었다(`Depends On: ADR-0001`).
+그런데 이 프로젝트는 **UE 리플리케이션을 전혀 쓰지 않는다.** 서버는 별도 프로세스의
+**자체 C++ IOCP 서버 + Protobuf/TCP**다. ADR-0001이 함께 기각되면서 이 ADR의 토대가 사라졌다.
+
+무효 항목 — §Decision 1(FoW relevancy) · 8(예측 범위) · 9(ReplicationMode Mixed/Minimal) ·
+10(Push Model) · §Risks R-GAS-Iris · R-FoW · R-DualPredict. **결정 11개 중 5개가 순수 UE 네트워킹.**
+
+### 기각 사유
+
+**1. GAS의 절반이 UE 리플리케이션이다.**
+`UAbilitySystemComponent`는 ReplicationMode · `FScopedPredictionWindow` · PredictionKey ·
+AttributeSet RepNotify에 깊게 묶여 있다. UE 서버가 없으면 ASC는 항상 standalone으로 돌고
+**예측 시스템은 대응할 서버가 없어 아무 일도 하지 않는다.** 절반을 켜놓고 못 쓴다.
+
+**2. 스킬을 두 번, 다른 패러다임으로 쓰게 된다.** ← 결정적
+
+```
+서버(권위)   순수 C++ 클래스로 스킬 판정
+클라(GAS)    UGameplayAbility + UGameplayEffect 로 같은 스킬
+             ↑ 같은 로직, 완전히 다른 표현 방식 → 어긋나면 디싱크
+```
+
+솔로 개발 + **서버는 사용자 소유 / 클라는 에이전트 소유**(`technical-preferences.md`
+§ 작업 소유권 경계)라 두 구현의 저자까지 갈린다. 최악의 조합이다.
+
+**3. 클라가 실제로 할 일에 비해 과잉이다.**
+권위가 서버에 있으므로 클라의 몫은 `입력 → 스킬 사용 패킷 → 결과 수신 → 애니메이션·VFX·쿨다운 UI`
+뿐이다. `UGameplayAbility`의 진짜 값어치인 "예측 실행 + 서버 확인/롤백"의 인프라가 없다.
+
+**4. 장비→스킬 결속(USP)도 GAS가 필요 없다.**
+`GiveAbility`/`ClearAbility`가 맞아 보이지만 **그것도 서버가 권위**다. 클라는 "지금 내 Q는
+화염구다"만 알면 되고 `TMap<슬롯, 스킬데이터>` 하나로 충분하다.
+
+**5. 비용이 남는 기간에 비해 크다.** 학습 1~2주(가용 12주 중) · MVP 스킬 2~3개 규모.
+GAS의 구조적 이점은 스킬 수십 개 규모에서 나온다.
+
+### 채택 대안
+
+| | |
+| ---- | ---- |
+| ❌ **GAS 전체** | ASC · GameplayAbility · GameplayEffect · AttributeSet — 미사용 |
+| ✅ **GameplayTags 모듈 단독** | GAS 없이 사용 가능. CC 상태 · 면역 · 태그 쿼리에 유용 |
+| ❌ **GameplayCue** | GAS 의존이라 사용 불가 → Niagara 직접 호출로 대체 |
+| ✅ **공유 스킬 데이터 테이블** | 서버·클라가 같은 정의를 읽는다. **로직은 서버에만**, 클라는 연출만 재생 |
+
+**정식 구현 ADR(ADR-0003)은 전투 시스템 GDD 작성 시점에 함께 쓴다.** 지금은 앵커가 될 GDD가 없다.
+
+### 이 기각이 되살아나는 조건
+
+- 스킬이 **30개 이상**으로 늘고, 버프/디버프 상호작용이 태그 없이 관리 불가해질 때
+- 또는 서버를 UE Dedicated Server로 갈아탈 때 (= 프로젝트 정체성 변경)
+
+---
 
 ## Engine Compatibility
 

@@ -1,10 +1,40 @@
 # ADR-0001: 넷코드 리플리케이션 백본 — Iris vs ReplicationGraph 실측 비교 후 채택
 
 ## Status
-Proposed
+**Rejected (2026-08-11)** — 전제 무효. Accepted에 도달한 적 없음.
 
 ## Date
-2026-07-18
+2026-07-18 (제안) · **2026-08-11 (기각)**
+
+---
+
+## Rejection — 2026-08-11
+
+> **질문 자체가 이 프로젝트에 성립하지 않는다.** 아래 본문은 기록 보존용이며
+> **구현 지침으로 읽지 말 것.**
+
+이 ADR은 **"UE 리플리케이션 백본으로 Iris를 쓸까 ReplicationGraph를 쓸까"** 를 묻는다.
+그런데 이 프로젝트는 **UE 리플리케이션을 전혀 쓰지 않는다.**
+
+```
+S1/        Unreal Engine 5.8 — 순수 클라이언트. 리플리케이션 미사용
+Server/    자체 C++ IOCP 서버 — 별도 프로세스, UE와 무관
+통신       Protobuf over TCP, PacketGenerator가 양측 핸들러 자동 생성
+```
+
+Iris도 ReplicationGraph도 **UE Dedicated Server를 전제**한다. 여기엔 UE 서버가 없다.
+`bUseIris` · `ReplicationDriverClassName` · `UNetObjectGridFilter` 전부 적용 대상이 없다.
+
+**대체 문서**: `docs/engine-reference/unreal/modules/networking.md` (프로젝트 전용으로 교체됨, 2026-08-10)
+
+### 연쇄 영향
+
+- **ADR-0002(GAS 채택)** 가 이 ADR에 `Depends On`으로 묶여 있었다 → **함께 기각** (2026-08-11)
+- Phase 0-B PoC 게이트(16 NetConnection 부하 실측)는 **소멸**.
+  대체 검증은 `production/roadmap.md` **SV-1**(Room JobQueue Flush P95 < 16.6ms) ·
+  **SV-5**(대역폭 실측)가 넘겨받았다
+
+---
 
 ## Engine Compatibility
 

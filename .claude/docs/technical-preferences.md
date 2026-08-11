@@ -216,8 +216,18 @@ TEST(Session, 동시_Send가_큐를_깨뜨리지_않는다)
 - **Language/Code Specialist**: ue-blueprint-specialist (Blueprint graphs) or unreal-specialist (C++)
 - **Shader Specialist**: unreal-specialist (no dedicated shader specialist — primary covers materials)
 - **UI Specialist**: ue-umg-specialist (UMG widgets, CommonUI, input routing, widget styling)
-- **Additional Specialists**: ue-gas-specialist (Gameplay Ability System, attributes, gameplay effects), ue-replication-specialist (property replication, RPCs, client prediction, netcode)
-- **Routing Notes**: Invoke primary for C++ architecture and broad engine decisions. Invoke Blueprint specialist for Blueprint graph architecture and BP/C++ boundary design. Invoke GAS specialist for all ability and attribute code. Invoke replication specialist for any multiplayer or networked systems. Invoke UMG specialist for all UI implementation.
+- **Additional Specialists**: ~~ue-gas-specialist~~ · ~~ue-replication-specialist~~ — **둘 다 이 프로젝트에 해당 없음** (아래 참조)
+- **Routing Notes**: Invoke primary for C++ architecture and broad engine decisions. Invoke Blueprint specialist for Blueprint graph architecture and BP/C++ boundary design. Invoke UMG specialist for all UI implementation.
+
+> 🔴 **호출하지 말 것 — 2건** (2026-08-11 확정)
+>
+> | 전문가 | 이유 |
+> |---|---|
+> | **ue-gas-specialist** | **GAS 미채택** (`ADR-0002` Rejected). 어빌리티·어트리뷰트는 서버 C++ 권위 + 공유 데이터 테이블로 구현한다. 클라는 연출만 재생 |
+> | **ue-replication-specialist** | **UE 리플리케이션 미사용** (`ADR-0001` Rejected). 넷코드는 자체 IOCP 서버 + Protobuf/TCP이며 **🔴 사용자 소유 영역**이다 |
+>
+> 넷코드 질문은 전문가에게 넘기지 말고 § 작업 소유권 경계의 **제안 형식**으로 사용자에게 전달한다.
+> `GameplayTags` 모듈은 GAS 없이 단독 사용 가능하므로 허용 — unreal-specialist가 담당한다.
 
 ### File Extension Routing
 
