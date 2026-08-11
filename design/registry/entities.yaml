@@ -445,6 +445,23 @@ constants:
       🔴 이전 개정(5/800)의 "풀장비는 맨몸의 5~10배 DPS"는 **HP도 함께 오른다는 점을 빠뜨린
       잘못된 계산**이었다. 폐기하고 ②의 배율 관계를 쓸 것.
 
+  - name: soft_cc_slow_cap
+    type: constant
+    status: active
+    value: 0.40
+    unit: 비율
+    source: design/gdd/movement-camera.md         # 공식 1 active_slow · 공식 7c
+    referenced_by:
+      - design/gdd/movement-camera.md
+      - design/gdd/game-concept.md
+    note: >
+      **단일 소스 감속 상한.** 여러 감속이 동시에 걸려도 `active_slow = max(slow_i)` — 합산하지 않는다.
+      340 → **204 cm/s**.
+      🔴 **50%가 산술적 천장이다** — `ms_min_ratio 0.5 × 340 = 170`이라 그 이상은 클램프에 먹혀 무의미.
+      그 아래 40%를 고른 이유 ① 여유 34 cm/s를 남겨 향후 감속 소스를 추가할 자리 확보
+      ② **소프트 CC가 사실상 루트가 되는 것을 방지** — 하드 CC는 무기 부위 1개로 제한되지만
+      소프트 CC는 **부위 제한이 없어 5부위 전부** 가능하다. 강하면 하드 CC 제약이 무의미해진다.
+
   - name: resistance_max
     type: constant
     status: active
@@ -501,19 +518,23 @@ formulas:
     source: design/gdd/movement-camera.md         # 공식 1 — ⭐ 크로스시스템
     referenced_by:
       - design/gdd/movement-camera.md
-    expression: "clamp((base_move_speed + flat_ms_bonus) * (1 + sum(percent_ms_bonus_i)), ms_min_ratio * base, ms_max_ratio * base)"
+    expression: "clamp((base_move_speed + flat_ms_bonus) * (1 + sum(percent_ms_bonus_i)) * (1 - active_slow), ms_min_ratio * base, ms_max_ratio * base)"
     variables:
       - { name: base_move_speed,    value: 340,        unit: cm/s }
       - { name: flat_ms_bonus,      range: [0, 85],    unit: cm/s }
       - { name: percent_ms_bonus_i, range: [0, 0.15],  note: 아이템당. 가산 스택 }
+      - { name: active_slow,        range: [0, 0.40],  note: "소프트 CC. max(slow_i) — 합산 아님. 🔴 별도 곱셈항" }
       - { name: ms_min_ratio,       value: 0.5 }
       - { name: ms_max_ratio,       value: 1.5 }
-    output_range: [170, 510]
+    output_range: [170, 510]        # 하드 클램프. 실사용 범위는 [204, 510]
     unit: cm/s
     note: >
       **가산 후 1회 곱** — 곱연산이면 아이템 5개 × +20%가 1.2^5 ≈ 2.49배로 폭주해 무한 카이팅을 유발한다.
       `flat_ms_bonus` 상한 85는 base 600 시절의 150(=25%)을 340 기준 25%로 재계산한 값.
       🔴 **서버 이동 검증(공식 7)이 이 값을 플레이어별로 계산해야 한다.** 전역 상수 340을 쓰면 오탐 차단.
+      🔴 **`active_slow`는 반드시 별도 곱셈항이다** (2026-08-11 신설). `(1 + Σpct − slow)`로 가산에
+      섞으면 속도 장비를 낀 플레이어가 감속에 면역처럼 작동한다 —
+      맨몸 340→204인데 속도템 510은 `340×(1+0.5−0.4)=374`로 **감속 전 base보다 빨라진다.**
       장비 · 스킬 GDD 작성 시 보너스 공급원으로서 referenced_by에 자신을 추가할 것.
 
   - name: dash_kinematics
@@ -558,10 +579,6 @@ items:
 # ──────────────────────────────────────────────────────────────
 
 pending:
-
-  - name: soft_cc_slow_cap
-    owner: systems-designer
-    note: "추격이 조금 더 쉬워지는 수준"이라는 정성적 서술만 존재.
 
   - name: hard_cc_base_duration
     owner: systems-designer
