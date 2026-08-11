@@ -285,6 +285,37 @@ constants:
       **P5의 유일한 예외** — 골드는 사망해도 30%가 항상 유지된다. 없으면 빈털터리에서 회복 경로가 막힌다.
       나머지 70%의 운명은 사망 종류에 따라 다르다: PvP = 가방 드랍(루팅 가능) / 타이머 만료 = 소멸.
 
+  - name: equipment_slots
+    type: constant
+    status: active
+    value:
+      count: 5
+      list: [무기, 투구, 갑옷, 신발, 장신구]
+      key_mapping:
+        무기:   [Shift, Q]      # 2키 — 하드 CC는 이 부위 전용
+        투구:   [E]
+        갑옷:   [R]
+        신발:   [Z]
+        장신구: [X]
+    source: 2026-08-11 결정 (사용자)
+    referenced_by:
+      - design/gdd/game-concept.md
+      - production/roadmap.md              # P1.5 결속 슬롯 수
+    note: >
+      **무기가 2키를 갖는다.** 익스트랙션에서 가장 값나가는 전리품이 무기이므로,
+      무기 하나를 바꾸면 스킬 2개가 동시에 바뀌어 "들고 나갈까"의 갈등(P5)이 무거워진다.
+      하드 CC는 무기 부위 전용이라는 규칙과도 부합한다.
+
+  - name: warehouse_capacity
+    type: constant
+    status: active
+    value: 25
+    unit: slots
+    derived_from: [equipment_slots]
+    source: design/gdd/game-concept.md
+    referenced_by: []
+    note: 부위 5개 × 5 = 25칸. 예비 세트 약 5벌이 의도된 천장.
+
   - name: warehouse_capacity_formula
     type: constant
     status: active
@@ -295,7 +326,7 @@ constants:
     note: >
       부위 무관 — 무기만 채워도 된다. 예비 세트 약 5벌이 의도된 천장.
       **인구 순환의 실질적 브레이크**다. 상한이 없으면 예비 만렙 세트를 무한 축적해 티어 강등이 영구 상쇄된다.
-      ⚠️ `equipment_slot_count` 미확정 — pending 참조.
+      ✅ **확정: 5부위 × 5 = 25칸** (2026-08-11). `equipment_slots` 참조.
 
   # ─── 접근 · 사회 ───────────────────────────────────────────
 
@@ -324,6 +355,27 @@ constants:
     note: >
       "파티 내 최고 티어 기준, 입장 시 1회 검사."
       ⚠️ **4티어 예시 하나만 명시돼 있다.** 타 티어 조합의 일반화 공식은 미정 — pending 참조.
+
+  - name: reference_resolution
+    type: constant
+    status: active
+    value: "1920 x 1080"
+    source: 2026-08-11 결정 (사용자)
+    referenced_by:
+      - design/gdd/movement-camera.md              # AC-30
+    note: Steam 하드웨어 설문 1위. 아트바이블 VRAM 예산(4 GB)도 1080p 기준으로 산정됨.
+
+  - name: validation_skip_semantics
+    type: constant
+    status: active
+    value: "position_updated_speed_check_skipped"
+    source: 2026-08-11 결정 (사용자)
+    referenced_by:
+      - design/gdd/movement-camera.md              # 공식 7a · AC-23
+    note: >
+      `Δt < 16.6 ms` 패킷은 **위치는 갱신하되 속도 검사만 생략**한다.
+      폐기하면 프레임이 튄 정상 유저의 이동이 버려져 끊겨 보인다.
+      건너뛰어도 다음 정상 간격 패킷에서 **누적 거리로 잡힌다.**
 
   # ─── 시각 (art-bible 소유) ─────────────────────────────────
 
@@ -431,12 +483,6 @@ items:
 
 pending:
 
-  - name: equipment_slot_count
-    owner: systems-designer
-    blocks: [warehouse_capacity_formula]
-    urgency: 최우선
-    note: 창고 용량(부위 × 5)이 여기 종속. 여러 시스템이 대기 중.
-
   - name: cc_resistance_cap
     owner: systems-designer
     urgency: 전투 GDD 작성 전
@@ -499,17 +545,6 @@ pending:
     owner: economy-designer
     note: Tier 3.
 
-  - name: reference_resolution
-    owner: 본인
-    note: >
-      AC-30(화면 가로 30 m 검증)이 뷰포트 종횡비에 의존한다.
-      "해상도 1920×1080에서 30 m" 형태로 고정해야 결정적 테스트가 된다.
-
-  - name: validation_skip_semantics
-    owner: 본인
-    note: >
-      공식 7a의 `Δt < 16.6 ms` "검증 제외"가 **패킷 폐기**인지
-      **위치는 갱신하되 속도 검사만 생략**인지 불명확. AC-23이 후자로 가정하고 작성됨.
 
 
 # ──────────────────────────────────────────────────────────────

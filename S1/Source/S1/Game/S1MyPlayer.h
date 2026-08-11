@@ -34,6 +34,24 @@ protected:
 
 	void Look(const FInputActionValue& Value);
 
+	/**
+	 * Turns the character toward the cursor every frame, independently of where it is
+	 * moving. This separation is the whole point of the control scheme — you retreat with
+	 * WASD while keeping your aim on whoever is chasing you.
+	 * Formula 2 in design/gdd/movement-camera.md.
+	 */
+	void UpdateCursorFacing(float DeltaTime);
+
+protected:
+
+	/** 0 snaps instantly. Higher converges faster. movement-camera.md Tuning Knobs (safe range 0-40). */
+	UPROPERTY(EditAnywhere, Category = "Movement|Facing")
+	float FaceInterpSpeed = 20.f;
+
+	/** A cursor nearer than this leaves facing alone — there is no direction at the origin. */
+	UPROPERTY(EditAnywhere, Category = "Movement|Facing")
+	float CursorDeadRadius = 25.f;
+
 public:
 
 	UFUNCTION(BlueprintCallable, Category = "Input")

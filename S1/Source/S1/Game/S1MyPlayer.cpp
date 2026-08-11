@@ -17,18 +17,40 @@
 
 AS1MyPlayer::AS1MyPlayer()
 {
-	// Create a camera boom (pulls in towards the player if there is a collision)
+	// Fixed top-down camera. See design/gdd/movement-camera.md Core Rule 8.
+	// TargetArmLength 2600 + FOV 60 gives a ~30m wide view, matching the density
+	// budget in game-concept.md (0.22 players visible on average in the open field).
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f;
-	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->TargetArmLength = 2600.0f;
 
-	// Create a follow camera
+	// The camera never rotates. Zooming or rotating would let players buy information,
+	// which breaks Pillar 4 ("information is the most expensive resource").
+	CameraBoom->SetUsingAbsoluteRotation(true);
+	CameraBoom->SetRelativeRotation(FRotator(-60.0f, 0.0f, 0.0f));
+	CameraBoom->bUsePawnControlRotation = false;
+	CameraBoom->bInheritPitch = false;
+	CameraBoom->bInheritYaw = false;
+	CameraBoom->bInheritRoll = false;
+
+	// Defaults to true. Leaving it on makes the boom pull in near walls and rooftops,
+	// which yanks the visible area around. Level geometry is single-storey by design
+	// (game-concept.md, the kingdom's buildings broke apart as they fell), so nothing
+	// should ever sit between the camera and the player.
+	CameraBoom->bDoCollisionTest = false;
+
+	// Formula 4 â€” absorbs server snapback and stops the camera feeling robotic.
+	// 170cm is 0.5s of travel at 340cm/s; the old 300cm was tuned for 600cm/s.
+	CameraBoom->bEnableCameraLag = true;
+	CameraBoom->CameraLagSpeed = 10.0f;
+	CameraBoom->CameraLagMaxDistance = 170.0f;
+
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+	FollowCamera->FieldOfView = 60.0f;
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
+	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
 
@@ -47,7 +69,18 @@ void AS1MyPlayer::BeginPlay()
 				Subsystem->AddMappingContext(CurrentContext, 0);
 			}
 		}
+
+		// Aiming is done with the cursor, so it has to be visible and free to move around
+		// the viewport. The default game input mode captures and hides it, which would
+		// leave UpdateCursorFacing() reading a position the player cannot see.
+		PC->bShowMouseCursor = true;
+		PC->SetInputMode(FInputModeGameAndUI()
+			.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways)
+			.SetHideCursorDuringCapture(false));
 	}
+
+	// TODO: cursor and input mode belong on a player controller, not the pawn. Move this
+	// when AS1PlayerController exists â€” the project has no C++ controller class yet.
 }
 
 void AS1MyPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -55,18 +88,23 @@ void AS1MyPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
 
-		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		// Jump is unbound â€” the game is ground-only (movement-camera.md Core Rule 5).
+		// The DoJumpStart/DoJumpEnd wrappers below are left in place because Blueprints
+		// may still reference them; removing them would break BP compilation.
+		// EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+		// EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Move);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AS1MyPlayer::Move);
 
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Look);
-
-		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Look);
+		// Look is unbound. It feeds AddControllerYawInput, and nothing reads control
+		// rotation any more â€” the camera holds an absolute rotation and DoMove uses world
+		// axes. Leaving it bound would silently drift the control rotation and confuse
+		// anyone who later tries to read it.
+		// Aim is handled by UpdateCursorFacing() instead.
+		// EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Look);
+		// EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Look);
 	}
 	else
 	{
@@ -78,7 +116,9 @@ void AS1MyPlayer::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Send ÆÇÁ¤
+	UpdateCursorFacing(DeltaTime);
+
+	// Send ï¿½ï¿½ï¿½ï¿½
 	bool ForceSendPacket = false;
 
 	if (LastDesiredInput != DesiredInput)
@@ -87,7 +127,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		LastDesiredInput = DesiredInput;
 	}
 
-	// State Á¤º¸
+	// State ï¿½ï¿½ï¿½ï¿½
 	if (DesiredInput == FVector2D::Zero())
 		SetMoveState(Protocol::MOVE_STATE_IDLE);
 	else
@@ -101,7 +141,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 
 		Protocol::C_MOVE MovePkt;
 
-		// ÇöÀç À§Ä¡ Á¤º¸
+		// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
 		{
 			Protocol::PosInfo* Info = MovePkt.mutable_info();
 			Info->CopyFrom(*PlayerInfo);
@@ -131,21 +171,64 @@ void AS1MyPlayer::Look(const FInputActionValue& Value)
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
 }
 
+void AS1MyPlayer::UpdateCursorFacing(float DeltaTime)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC == nullptr)
+		return;
+
+	FVector RayOrigin, RayDirection;
+	if (PC->DeprojectMousePositionToWorld(RayOrigin, RayDirection) == false)
+		return;
+
+	// Intersect the cursor ray with the plane the character stands on, solved directly
+	// rather than with GetHitResultUnderCursor. A trace returns nothing when the cursor
+	// sits over a hole or past the edge of the level, and facing would freeze exactly
+	// when the player is most likely to be looking somewhere dangerous.
+	if (FMath::Abs(RayDirection.Z) < UE_KINDA_SMALL_NUMBER)
+		return;
+
+	const FVector Location = GetActorLocation();
+	const double Distance = (Location.Z - RayOrigin.Z) / RayDirection.Z;
+	if (Distance <= 0.0)
+		return;
+
+	FVector ToCursor = (RayOrigin + RayDirection * Distance) - Location;
+	ToCursor.Z = 0.0;
+
+	// Directly on top of the character there is no meaningful direction, and sub-pixel
+	// mouse jitter would spin the character. Hold the previous yaw.
+	if (ToCursor.SizeSquared() < FMath::Square(CursorDeadRadius))
+		return;
+
+	const float TargetYaw = static_cast<float>(ToCursor.Rotation().Yaw);
+
+	float NewYaw = TargetYaw;
+	if (FaceInterpSpeed > 0.f)
+	{
+		const FRotator Current(0.0, GetActorRotation().Yaw, 0.0);
+		const FRotator Target(0.0, TargetYaw, 0.0);
+		NewYaw = static_cast<float>(FMath::RInterpTo(Current, Target, DeltaTime, FaceInterpSpeed).Yaw);
+	}
+
+	SetActorRotation(FRotator(0.0, NewYaw, 0.0));
+
+	// The server receives this, so what the player aims at and what other clients see
+	// stay the same thing.
+	DesiredYaw = NewYaw;
+}
+
 void AS1MyPlayer::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr)
 	{
-		// find out which way is forward
-		const FRotator Rotation = GetController()->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
+		// World axes, not control rotation. The camera is bolted to a fixed yaw
+		// (movement-camera.md Core Rule 8), so screen-up is always world +X and W always
+		// means the same direction no matter where the character is facing.
+		// Reading control rotation here is what would tie movement to aim and kill strafing.
+		const FVector ForwardDirection = FVector::ForwardVector;
+		const FVector RightDirection = FVector::RightVector;
 
-		// get forward vector
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-
-		// get right vector 
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		// add movement 
 		AddMovementInput(ForwardDirection, Forward);
 		AddMovementInput(RightDirection, Right);
 
@@ -154,14 +237,11 @@ void AS1MyPlayer::DoMove(float Right, float Forward)
 			FVector2D MovementVector = FVector2D(Right, Forward);
 			DesiredInput = MovementVector;
 
-			DesiredMoveDirection = FVector::ZeroVector;
-			DesiredMoveDirection += ForwardDirection * MovementVector.Y;
-			DesiredMoveDirection += RightDirection * MovementVector.X;
+			DesiredMoveDirection = ForwardDirection * MovementVector.Y + RightDirection * MovementVector.X;
 			DesiredMoveDirection.Normalize();
 
-			const FVector Location = GetActorLocation();
-			FRotator Rotator = UKismetMathLibrary::FindLookAtRotation(Location, Location + DesiredMoveDirection);
-			DesiredYaw = Rotator.Yaw;
+			// DesiredYaw is deliberately not touched here. Facing comes from the cursor,
+			// never from the movement direction â€” see UpdateCursorFacing().
 		}
 	}
 }

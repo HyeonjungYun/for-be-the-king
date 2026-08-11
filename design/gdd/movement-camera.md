@@ -725,8 +725,8 @@ DummyClient·2클라는 "그 순수함수가 실제 패킷 파이프라인에 �
 | 질문 | 소유 | 목표 시점 | 현재 상태 |
 |---|---|---|---|
 | 🔴 **소프트 CC를 서버 검증에 어떻게 반영하나** | 본인 | **P1 착수 전** | 공식 7a는 `effective_move_speed`를 쓰는데 **공식 1에 감속 항이 없다.** 소프트 CC는 별도 공식이라 서버가 둘을 합친 "현재 실효 이동속도"를 알아야 한다. 모르면 감속 걸린 플레이어가 정상 이동해도 통과하는 구멍이 생긴다 |
-| 🔴 **기준 해상도** | 본인 | AC-30 실행 전 | AC-30(화면 가로 30 m 검증)이 뷰포트 종횡비에 의존한다. **"해상도 1920×1080에서 30 m"** 로 고정해야 결정적 테스트가 된다 |
-| 🔴 **`Δt < 16.6ms` "검증 제외"의 의미** | 본인 | P0 구현 전 | **패킷 폐기**인지 **위치는 갱신하되 속도 검사만 생략**인지 미정. AC-23이 후자로 가정하고 작성됨 |
+| ~~기준 해상도~~ | — | ✅ **확정 2026-08-11** | **1920×1080.** Steam 하드웨어 설문 1위이고 아트바이블 VRAM 예산(4 GB)도 1080p 기준으로 산정됨. AC-30은 이 해상도에서 측정한다 |
+| ~~`Δt < 16.6ms` "검증 제외"의 의미~~ | — | ✅ **확정 2026-08-11** | **위치는 갱신하되 속도 검사만 생략한다.** 패킷을 폐기하면 프레임이 튄 정상 유저의 이동이 버려져 끊겨 보인다. **속도 검사를 건너뛰어도 다음 정상 간격 패킷에서 누적 거리로 잡힌다** |
 | `face_interp_speed` 즉시(0) vs 보간(20) | game-designer | 플레이테스트 | 기본 20 제안. **"손은 겨눈다"의 정밀도와 직결** |
 | `pawn_collision` on/off 최종 | game-designer | 플레이테스트 | 기본 on. 몸싸움 vs 통과 |
 | 넉백·강제이동 세부 규약 | 전투 담당 | 전투 GDD 작성 시 | 전투 소유, 이동은 양보. 서버 검증 예외 처리 방식은 공식 7b 참조 |
@@ -747,11 +747,11 @@ DummyClient·2클라는 "그 순수함수가 실제 패킷 파이프라인에 �
 
 | 위치 | 현재 | 설계값 | 소유 |
 |---|---|---|---|
-| `S1Player.cpp:28` | `bOrientRotationToMovement = true` | **false** — strafe가 성립 안 함 | 에이전트 |
-| `S1Player.cpp:35` | `MaxWalkSpeed = 500.f` | **340** | 에이전트 |
-| `S1MyPlayer.cpp:23` | `TargetArmLength = 400.f` | **2600** | 에이전트 |
-| `S1MyPlayer.cpp:24` | `bUsePawnControlRotation = true` | **false** | 에이전트 |
-| — | `bDoCollisionTest` 미설정 (기본 true) | **false** | 에이전트 |
+| ~~`S1Player.cpp:30`~~ | ~~`bOrientRotationToMovement = true`~~ | ✅ **false 적용 완료** | 에이전트 |
+| ~~`S1Player.cpp:35`~~ | ~~`MaxWalkSpeed = 500.f`~~ | ✅ **340 적용 완료** | 에이전트 |
+| ~~`S1MyPlayer.cpp:25`~~ | ~~`TargetArmLength = 400.f`~~ | ✅ **2600 적용 완료** | 에이전트 |
+| ~~`S1MyPlayer.cpp:24`~~ | ~~`bUsePawnControlRotation = true`~~ | ✅ **false + 절대회전 −60° + bInherit* false 적용 완료** | 에이전트 |
+| ~~`bDoCollisionTest`~~ | ~~미설정 (기본 true)~~ | ✅ **false 적용 완료** + FOV 60 · 카메라 lag(10 / 170cm) · **점프 바인딩 해제** | 에이전트 |
 | `S1Player.h:48` | `MOVE_PACKET_SEND_DELAY = 0.2f` (5 Hz) | **1/30** (30 Hz) | 🔴 사용자 |
 | `S1Player.h:50` | `TELEPORT_THERESHOLD = 250.0f` 하드코딩 | 값은 일치. **config 이전 필요** | 🔴 사용자 |
 | `ServerPacketHandler.cpp:83` | TODO 주석만, 검증 0줄 | **공식 7 구현** | 🔴 사용자 |
