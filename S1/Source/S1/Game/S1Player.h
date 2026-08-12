@@ -42,10 +42,14 @@ public:
 	Protocol::PosInfo* GetPlayerInfo() { return PlayerInfo; };
 
 protected:
-	class Protocol::PosInfo* PlayerInfo; // ÇöÀç À§Ä¡
-	class Protocol::PosInfo* DestInfo; // ¸ñÀûÄ¡
+	class Protocol::PosInfo* PlayerInfo; // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡
+	class Protocol::PosInfo* DestInfo; // ï¿½ï¿½ï¿½ï¿½Ä¡
 
-	const float MOVE_PACKET_SEND_DELAY = 0.2f;
+	// 30Hz. movement-camera.md Core Rule 10, entities.yaml move_packet_send_rate.
+	// The server's validation margin (1.15) and min_delta_t (16.6ms = half of this)
+	// are both derived from a 33ms interval â€” they mean nothing at the old 5Hz.
+	// InterpDuration for remote proxies also reads this value, so both move together.
+	const float MOVE_PACKET_SEND_DELAY = 1.f / 30.f;
 	const float IDLE_SNAP_DURATION = 0.1f;
 	const float TELEPORT_THERESHOLD = 250.0f;
 

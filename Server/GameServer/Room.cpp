@@ -2,6 +2,12 @@
 #include "Room.h"
 #include "Player.h"
 
+namespace
+{
+	constexpr double VALIDATION_MARGIN = 1.15;	// validation_margin
+	constexpr double MAX_BUDGET_SEC = 0.5;	// min_delta_t = 0.5 * 33ms
+}
+
 RoomRef GRoom = make_shared<Room>();
 
 Room::Room()
@@ -28,6 +34,14 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 	// 입장 사실을 신입 플레이어에게 알린다.
 	if (auto player = dynamic_pointer_cast<Player>(object))
 	{
+		player->lastMoveUs = Utils::NowMicroseconds();
+
+		// 진단용
+		cout << "[SPAWN] id=" << player->objectInfo->object_id()
+			<< " pos=(" << player->posInfo->x()
+			<< ", " << player->posInfo->y()
+			<< ", " << player->posInfo->z() << ")" << endl;
+
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(success);
 
@@ -122,14 +136,68 @@ bool Room::HandleLeavePlayer(PlayerRef player)
 void Room::HandleMove(Protocol::C_MOVE pkt)
 {
 	const uint64 objectId = pkt.info().object_id();
-	if (_objects.find(objectId) == _objects.end())
+	
+	auto findIt = _objects.find(objectId);
+	if (findIt == _objects.end())
 		return;
 
 	// 적용
-	PlayerRef player = dynamic_pointer_cast<Player>(_objects[objectId]);
-	player->posInfo->CopyFrom(pkt.info());
+	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+	if (player == nullptr)
+		return;
 
-	// 이동
+	// 서버 이동 검증
+	const uint64 nowUs = Utils::NowMicroseconds();
+	bool rejected = (player->lastMoveUs == 0);
+
+	if (rejected == false)
+	{
+		const double deltaSec = static_cast<double>(nowUs - player->lastMoveUs) / 1000000.0;
+
+		const double ceiling = player->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN;
+
+		player->moveBudget += ceiling * deltaSec;
+
+		const double maxBudget = ceiling * MAX_BUDGET_SEC;
+		if (player->moveBudget > maxBudget)
+			player->moveBudget = maxBudget;
+
+		// XY 평면 거리만 본다.
+		const double dx = static_cast<double>(pkt.info().x()) - player->posInfo->x();
+		const double dy = static_cast<double>(pkt.info().y()) - player->posInfo->y();
+		const double distance = std::sqrt(dx * dx + dy * dy);
+
+		if (distance > player->moveBudget)
+		{
+			rejected = true;
+
+			cout << "[MOVE REJECT] id=" << objectId
+				<< " dist=" << distance
+				<< " budget=" << player->moveBudget
+				<< " dt=" << deltaSec << endl;
+		}
+		else
+		{
+			player->moveBudget -= distance;
+		}
+	}
+	
+	if (rejected)
+	{
+		// 검증 실패 - posInfo를 갱신하지 않고 마지막 유효 위치를 되돌려 보낸다.
+			// 브로캐스트 X
+		Protocol::S_MOVE snapbackPkt;
+		snapbackPkt.mutable_info()->CopyFrom(*player->posInfo);
+
+		SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(snapbackPkt);
+		if (auto session = player->session.lock())
+			session->Send(sendBuffer);
+		
+		return;
+	}
+
+	// 검증 통과, 이동
+	player->posInfo->CopyFrom(pkt.info());
 	{
 		Protocol::S_MOVE movePkt;
 		{
@@ -144,9 +212,9 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 
 void Room::UpdateTick()
 {
-	cout << "Update Room" << endl;
-	// TODO: 0.1초 경과했으면, UpdateTick()
-
+	//cout << "Update Room" << endl;
+	
+	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
 }
 

@@ -80,9 +80,16 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	if (room == nullptr)
 		return false;
 
-	// TODO : 도착한 패킷이 진짜 플레이어 본인에게서 온 것인지 Validation 체크
+	const uint64 realId = player->objectInfo->object_id();
+	if (pkt.info().object_id() != realId)
+	{
+		// 클라가 S_ENTER_GAME 을 처리했다면 0 이 아닌 제 id 를 보낸다.
+		cout << "[ID MISMATCH] claimed=" << pkt.info().object_id()
+			<< " actual=" << realId << endl;
+	}
+	pkt.mutable_info()->set_object_id(realId);
 
-	GRoom->DoAsync(&Room::HandleMove, pkt);
+	room->DoAsync(&Room::HandleMove, pkt);
 
 	return true;
 }

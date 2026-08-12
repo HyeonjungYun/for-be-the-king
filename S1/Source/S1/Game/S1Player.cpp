@@ -168,7 +168,9 @@ void AS1Player::SetPlayerInfo(const Protocol::PosInfo& Info)
 {
 	if (PlayerInfo->object_id() != 0)
 	{
-		assert(PlayerInfo->object_id() == Info.object_id());
+		ensureMsgf(PlayerInfo->object_id() == Info.object_id(),
+			TEXT("SetPlayerInfo: object_id mismatch (have %llu, got %llu)"),
+			PlayerInfo->object_id(), Info.object_id());
 	}
 
 	// TODO
@@ -183,9 +185,15 @@ void AS1Player::SetPlayerInfo(const Protocol::PosInfo& Info)
 
 void AS1Player::SetDestInfo(const Protocol::PosInfo& Info)
 {
+	// Was assert(PlayerInfo->set_object_id() == ...) — a setter called with no argument.
+	// It never showed up because <cassert>'s assert compiles to nothing under NDEBUG,
+	// so the broken expression was never parsed outside a Debug build.
+	// ensureMsgf runs in Development too, and logs instead of halting.
 	if (PlayerInfo->object_id() != 0)
 	{
-		assert(PlayerInfo->set_object_id() == Info.object_id());
+		ensureMsgf(PlayerInfo->object_id() == Info.object_id(),
+			TEXT("SetDestInfo: object_id mismatch (have %llu, got %llu)"),
+			PlayerInfo->object_id(), Info.object_id());
 	}
 
 	ResetInterpolation(Info.state());
