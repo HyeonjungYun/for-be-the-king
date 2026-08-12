@@ -5,7 +5,7 @@
 namespace
 {
 	constexpr double VALIDATION_MARGIN = 1.15;	// validation_margin
-	constexpr double MAX_BUDGET_SEC = 0.5;	// min_delta_t = 0.5 * 33ms
+	constexpr double MAX_BUDGET_SEC = 0.5;
 }
 
 RoomRef GRoom = make_shared<Room>();
@@ -153,6 +153,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	if (rejected == false)
 	{
 		const double deltaSec = static_cast<double>(nowUs - player->lastMoveUs) / 1000000.0;
+		player->lastMoveUs = nowUs;
 
 		const double ceiling = player->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN;
 
