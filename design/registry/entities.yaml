@@ -220,6 +220,21 @@ constants:
       정상 대시는 틱당 45 cm에 불과해 절대 스냅되지 않는다.
       🔴 코드에 `TELEPORT_THERESHOLD = 250.0f` 하드코딩 존재 (`S1Player.h:50`) — 값은 일치하나 config 이전 필요.
 
+  - name: move_budget_max_sec
+    type: constant
+    status: active
+    value: 0.5
+    unit: s
+    source: design/gdd/movement-camera.md         # 공식 7a — 이동 예산 모델
+    referenced_by:
+      - design/gdd/movement-camera.md
+    note: >
+      이동 예산 상한 = `상한속도 × 0.5`. 340 기준 **170 cm**.
+      **치팅 이득이 0인 이유**: 0.5초 정지 후 1.7m 순간이동이 가능하지만, 반복하면 평균
+      `170cm ÷ 0.5s = 340 cm/s` 로 걸어간 것과 같다.
+      🔴 **올리면** 순간이동 허용 거리가 비례해 늘고, **내리면** 도착 지터를 못 흡수해 오탐이 난다.
+      실측 지터가 ±35%(27~59ms)이므로 0.25 미만으로 내리지 말 것.
+
   - name: server_validation_margin
     type: constant
     status: active
@@ -642,6 +657,17 @@ deprecated:
     reason: >
       base 재계산으로 450–1360 cm/s (동일 배율 1.33x~4x 유지).
       **부분 폐기** — `dash_dist`(200–800)·`dash_duration`(0.15–0.4 s)은 base 무관값이라 그대로 유효.
+
+  - name: server_speed_validation_instantaneous
+    was: "Δ거리 ÷ Δ시간 ≤ effective_move_speed(player) × 1.15"
+    reason: >
+      🔴 **2026-08-11 실측으로 반증.** "서버 실측 타임스탬프로 재면 지연 변동이 분모에서 상쇄된다"는
+      근거가 틀렸다. 패킷이 일찍 도착해도 그 안에 담긴 이동량은 줄지 않으므로, 클라 시뮬레이션 간격
+      (분자)과 서버 도착 간격(분모)이 어긋난 비율이 그대로 오차가 된다.
+      실측: 클라 46ms 주기 · 서버 도착 27~59ms(±35%) → 15.6cm 이동이 **578 cm/s** 로 계산되어
+      정상 걷기가 거부됨(`speed=464.5 dt=0.0269 dist=12.51`).
+      **대체**: 이동 예산 모델 (`move_budget_max_sec`). 순간값이 아니라 누적량을 보므로 지터에 둔감하다.
+      `min_delta_t`(16.6ms)도 함께 폐기 — 나눗셈이 사라져 불필요.
 
   - name: cc_duration_dr
     was: "DR_multiplier = max(DR_floor, DR_factor ^ stack_count), 창 15 s, 바닥 25%"

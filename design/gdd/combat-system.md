@@ -1,0 +1,558 @@
+# 전투 시스템 (Combat System)
+
+> **Status**: In Design — 초안 (섹션별 사용자 검토 대기)
+> **Author**: systems-designer (agent) — 사용자 검토 전
+> **Last Updated**: 2026-08-11
+> **Implements Pillar**: **P1**(숫자가 곧 힘이다 — 다구대일 성립) · **P2**(힘은 손에 든 것에서만) · **P5**(얻는 순간 잃을 것이 생긴다)
+> **Engine Framing**: 순수 로직 명세 — **UE 비의존.** 판정·수치의 권위는 **서버 C++**(`Server/GameServer/`, 🔴 사용자 소유)가 갖는다. UE 5.8 클라이언트(`S1/`)는 결과 패킷을 받아 애니메이션·VFX·쿨다운 UI만 재생한다.
+
+> **Quick reference** — Layer: `Feature` · Priority: `Tier 1 (MVP, P1 Phase)` · Key deps: `이동 & 카메라` · `입력` · `네트워킹 & 서버` · (역방향) `스킬` · `아이템 & 장비` · `인벤토리 & 사망 처리`
+
+> **계승**: `design/archive/dungeonking-2026-07/combat-system.md`에서 **공식 5/6 · 핵심 규칙 6/8 · 엣지케이스 14/16**이 생존한다고 평가됨(`production/session-state/active.md` 2026-08-11 분석). 이 문서는 그 분석을 실제로 적용한 결과이며, **아래 3개 파손 요인을 전부 제거했다.**
+> ① GAS 전역 참조 7곳 — 전부 서버 C++ 권위 + 공유 데이터 테이블 서술로 교체
+> ② D4 `cc_duration_dr`(반복 이력 지수감쇠) — **폐기.** 저항력 스탯(`cc_effective_duration`, 반복 무관 선형+상한)으로 대체, 체인CC 방지 책임은 "하드 CC = 무기 전용, 캐릭터당 1개"라는 아이템화 규칙으로 이관
+> ③ "성장" 전제 소실 — D1(데미지)·D3(공격속도)가 "장비+성장 공동 공급"을 전제했던 것을 **100% 장비 공급**으로 재서술. 맨몸 기본 스탯(공격 10·HP 500·공속 1.0)을 상수로 확정 반영
+
+> ⚠️ **ADR 미인용**: `ADR-0001`(넷코드 백본)·`ADR-0002`(GAS 채택) 둘 다 **2026-08-11 Rejected**(`docs/architecture/adr-0001-*.md`, `adr-0002-*.md`). 이 문서는 두 ADR을 인용하지 않는다. 대체 아키텍처는 `production/roadmap.md` §8 결정 0 — **서버 C++ 권위 + 서버·클라 공유 스킬/아이템 데이터 테이블**, 클라는 연출만 재생.
+
+> 🔴 **작업 소유권**: 이 시스템도 경계를 가로지른다.
+> **판정 로직(데미지·크리·CC·사망 확정) 서버 구현** = 🔴 **사용자** (`Server/GameServer/`) · **클라 연출(애니메이션·VFX·데미지 넘버·CC 아이콘)** = 에이전트 (`S1/Source/S1/Game/`, `S1Player.h/.cpp` 제외 — 현재 다른 작업 진행 중).
+> 이 문서는 서버 판정 로직을 **구현하지 않는다.** "무엇을 계산해야 하는가"를 스펙으로 기술한다. 서버 코드 변경이 필요해지면 `.claude/docs/technical-preferences.md` § 작업 소유권 경계의 제안 형식(파일·줄번호 → 현재 코드 → 바꿀 코드 → 왜 → 검증 → 빌드 순서)으로 전달한다.
+
+---
+
+## Overview
+
+전투 시스템은 이 게임의 전투 primitive — **평타(우클릭)·데미지 적용·체력/방어 어트리뷰트·하드/소프트 CC·CC 저항력·서버권위 히트판정·사망 확정**— 을 제공하는 Feature 계층이다. 스킬 시스템(#8)과 장비-스킬 결속(#9)이 정의하는 6키 스킬도 자신의 효과를 이 primitive를 통해 해소한다 — 전투가 데미지·체력·CC의 **단일 권위**다. 평타는 커서 아래 유효 대상에 우클릭 시 장착 무기 기준으로 발동하며, 데미지는 공격력과 방어력(`armor`/`magic_resist`) 어트리뷰트로 계산되어 **점근 곡선**(완전 무적 불가)으로 완화된다. CC는 **하드**(스턴·루트·넉백·공중띄우기 — 무기 부위 전용, 캐릭터당 1개)와 **소프트**(감속·회복감소·공격불가 — 부위 무관, 강도는 최대값만 중첩)로 나뉘고, 모든 CC의 **지속시간**은 저항력 스탯으로 최대 40%까지만 경감된다(완전 면역 불가). 체력이 0에 도달하면 전투는 `OnDied` 이벤트만 방출하고 종결한다 — **가방 드랍·루팅·전량소멸 같은 사망 이후 처리는 인벤토리 & 사망 처리 시스템(#11)의 소관**이며, 전투는 그 경계를 넘지 않는다. 모든 판정은 서버 권위이며, **레벨업이 없는 이 게임에서(P2) 전투 스탯의 100%가 장비에서 온다** — 맨몸(장비 0개)은 공격력 10·HP 500·공속 1.0이라는 명시적 하한이다. 이 primitive가 없으면 스킬·몬스터AI·사망/루팅 등 어떤 전투 파생 시스템도 성립하지 않는다.
+
+## Player Fantasy
+
+**"한 방 한 방이 판돈이다."** 전투의 판타지는 **대가가 걸린 교전의 긴장**이다. 풀루팅 익스트랙션이라 지면 반입물 전부를 잃는다 — 그래서 모든 평타, 모든 체력 한 칸이 무겁다. 플레이어는 우클릭으로 정확히 대상을 물고, 체력을 자원처럼 아끼며, 상대의 CC를 읽고 대응한다.
+
+**그리고 이 게임에서 "강함"은 스탯이 아니라 숫자다.** P2가 캐릭터 성장을 금지했으므로 전투에서 개인의 스탯 차이는 오직 장비에서만 난다 — 두 맨몸은 완전히 동일하다. 대신 P1("숫자가 곧 힘이다")이 전투 결과를 강하게 지배한다: 이 문서의 §Formulas가 수치로 보이듯, 동급 장비의 4인이 1인을 포위하면 승부는 사실상 결정된다. **여기서 오는 판타지는 두 방향이다** — 다수 쪽은 "머릿수가 곧 승리"라는 확신을, 소수·솔로 쪽은 "숫자를 상대로 버티려면 정보(P4)와 포지셔닝으로 애초에 그 싸움 자체를 피해야 한다"는 절박함을 느낀다. 이 게임의 전투는 정정당당한 결투가 아니라 **함정과 매복, 그리고 도망칠 타이밍의 게임**이다.
+
+**레퍼런스**: League of Legends 교전의 read-and-punish 심리전, Dark and Darker의 "이 싸움을 걸까 말까"의 무게.
+**안티 레퍼런스**: 평타가 대상에 안 꽂히는 부정확함, 소수가 다수를 정면으로 이기는 것이 흔한 결과(P1 위반), 서버-클라 불일치로 "분명 피했는데 맞은" 억울함.
+
+## Detailed Design
+
+### Core Rules
+
+**1. 평타(기본공격)** — RMB로 커서 아래 적대 대상 획득(입력 시스템의 `target_acquisition_leniency` 관용 반경 — 아카이브값 30px, `movement-camera.md` Open Questions에 이미 "카메라 확정 후 재검증 필요"로 등재됨. 이 문서는 재확정하지 않는다). 대상 락 → `attack_windup`(공식 C3, 공속 기반) → **즉시 히트**(대상이 사거리·LoS 유효 시 데미지 적용, 투사체 없음 — 아카이브 계승, 재검증 안 됨 § Open Questions). windup 중 대상이 사거리 이탈·LoS 상실·사망 시 **취소**(쿨다운 미소모). **이동 중 평타 허용** — 정지 강제 없음(strafe 전투, `movement-camera.md` Player Fantasy "몸은 도망치고 손은 겨눈다"와 직결).
+
+> 🔴 **기본 공격 사거리(`attack_range`)는 미확정이다.** 무기가 부위별로 정의해야 하는 값이지만, 무기가 없는 맨몸 상태도 평타가 가능해야 하므로(첫 몬스터 사냥의 유일한 수단) **맨몸 기본 사거리가 반드시 필요**하다. 레지스트리에 이 값이 없다 — § Open Questions 참조.
+
+**2. 데미지 타입 2종** — `physical`/`magic`. 완화는 각각 `armor`/`magic_resist`(공식 C1). 무기가 평타의 데미지 타입을 결정하며, 맨몸 평타는 `physical`로 취급한다(맨손 타격). 데미지는 공격력 기반 − 완화.
+
+**3. 치명타** — `crit_chance` 확률로 `crit_multiplier` 배 데미지(공식 C2), **완화 이전에 적용**(크리빌드가 방어를 무시하지 못하게). 맨몸 `crit_chance` = **0**(`base_stats_naked`에 크리 항목이 없음 — 이 문서는 이를 "크리는 100% 장비 공급 스탯"으로 해석한다. 🔴 명시적으로 등록된 값은 아니다).
+
+**4. 체력 · 사망** — `health` 어트리뷰트(맨몸 500). 0 도달 시 **`OnDied(instigator, victim, cause)` 이벤트 방출** 후 `Dead` 상태로 전이. 전투는 **"사망 확정"까지만** 담당한다 — 가방 드랍·10분 루팅 창·골드 30%/70% 분배·전량소멸은 **전부 인벤토리 & 사망 처리 시스템(#11) 소관**이며 이 문서는 그 규칙을 정의하지 않는다(`game-concept.md` § 두 종류의 죽음 참조).
+
+> 🔴 **두 종류의 죽음 중 전투가 관여하는 것은 하나뿐이다.** `game-concept.md`는 PvP·몬스터 사망과 타이머 만료 사망을 구분한다. **타이머 만료 사망은 전투 데미지로 발생하지 않는다** — `health`가 0이 되는 경로가 아니라 탈출 & 체류 타이머 시스템이 직접 캐릭터를 종료시키는 별도 경로다. 따라서 **`OnDied`는 오직 전투(PvP·몬스터)로 인한 사망에서만 발생**하며, 타이머 만료는 이 이벤트를 거치지 않는다. 두 경로를 하나로 합치면 인벤토리 시스템이 "왜 이번엔 가방이 안 생기지"를 구분할 수 없게 된다.
+
+> **리스폰은 존재하지 않는다.** `Dead`는 종결 상태다 — 이 게임에는 전장 내 부활이 없다. 죽은 캐릭터는 베이스캠프로 돌아가 새로운 30분 세션(새 진입)을 시작할 뿐이며, 이는 전투가 아니라 **세이브 & 영속성 / 베이스캠프 시스템** 소관이다.
+
+**5. 상태이상(CC) — 하드/소프트 재정의 (2026-08-11 `game-concept.md` 기준, 아카이브와 분류 다름)**
+
+| 구분 | 종류 | 장착 부위 | 캐릭터당 |
+|---|---|---|---|
+| **하드 CC** | 스턴 · 루트 · 넉백 · 공중띄우기 | **무기 전용** | **1개** |
+| **소프트 CC** | 이동감속 · 회복감소 · 공격불가 | **제한 없음** | 제한 없음 |
+
+| CC | 이동 | 회전 | 평타 | 스킬 | 강도 중첩 | 지속시간 |
+|---|---|---|---|---|---|---|
+| `Stun`(하드) | ✗ | ✗ | ✗ | ✗ | — | `cc_effective_duration`, **가산**(§ 하드 CC 중첩) |
+| `Root`(하드) | ✗ | ✓ | ✓ | ✓ | — | 〃 |
+| `Knockback`(하드) | 강제 변위(공식 C6) | ✗(변위 중) | ✗ | ✗ | — | 〃 |
+| `Launch/공중띄우기`(하드) | ✗ | ✗ | ✗ | ✗ | — | 〃 (Z축 없음 — 이 게임엔 공중 상태가 물리적으로 없다. `movement-camera.md` Rule 5 "지상 전용". 순수 상태이상으로 취급, 기능은 Stun과 동일) |
+| `Slow`(소프트) | 감속(공식 C5, `active_slow`) | ✓ | ✓ | ✓ | **최대값만**(합산 금지) | `cc_effective_duration`, **소스별 독립** |
+| `HealReduction`(소프트) | ✓ | ✓ | ✓ | ✓ | 🔴 미정 | `cc_effective_duration` |
+| `AttackDisable/공격불가`(소프트) | ✓ | ✓ | ✗ | ✗ | — | `cc_effective_duration` |
+
+> 🔴 **아카이브의 `Silence`를 계승하지 않았다.** 아카이브 Silence는 스킬만 막고 평타는 허용했다. 이 게임의 `game-concept.md`가 소프트 CC로 명시한 "공격 불가"는 **평타·스킬 둘 다 차단**한다고 이 문서가 해석했다 — 게임컨셉 원문이 세부를 명시하지 않아 **이 문서의 설계 판단**이다. § Open Questions에 확인 요청으로 등재.
+
+**6. CC 저항력 적용 지점** — `resistance` 스탯(맨몸 0, 상한 1.0)은 **모든 CC(하드·소프트 불문)의 지속시간**에 `cc_effective_duration`(공식 C4)로 적용된다. **강도(감속 %, 넉백 거리)에는 적용되지 않는다** — 강도는 소프트 CC의 `active_slow` 상한(40%, `soft_cc_slow_cap`)과 넉백의 거리 경감(공식 C6)이 각자 별도로 담당한다. 저항력은 **CC가 적용되는 순간의 스냅샷 값**을 쓴다 — CC 지속 중 장비를 교체해 저항력이 바뀌어도 이미 걸린 CC의 잔여시간은 재계산되지 않는다(§ Edge Cases).
+
+**7. 히트판정(서버권위)** — 평타 = 타겟락 후 windup 종료 시점에 서버가 사거리·LoS 재검증. 스킬 궤적·범위 판정은 **스킬 시스템 소관**이며, 스킬은 전투가 제공하는 `ApplyDamage(instigator, target, base, type, bCanCrit)` · `ApplyCC(instigator, target, ccType, baseDuration)` · `ApplyKnockback(instigator, target, dir, baseDist, speed)` API를 호출해 자신의 효과를 해소한다. 서버가 캐스트 창·좌표·사거리를 재검증한다(안티치트).
+
+**8. 공격속도** — `attack_speed`(맨몸 1.0/s) 어트리뷰트가 `attack_windup`+후딜을 결정(공식 C3).
+
+**9. 팀 · 적대 판정 (MVP 범위 축소)** — **MVP에는 파티 시스템이 없다**(`game-concept.md` § MVP 무대 "파티 제외"). 따라서 MVP 범위에서 **자신을 제외한 모든 플레이어 + 모든 몬스터가 적대**다. 아카이브 Rule 8의 "파티원=아군, friendly fire 없음"은 **Tier 2(파티 시스템 도입)까지 이 시스템에 존재하지 않는다.** 아군 개념·배신 토글은 파티 시스템 GDD가 담당한다. 이 문서는 MVP 동안 그 규칙을 정의하지 않는다.
+
+**10. 🔴 서버 권위 경계 — 무엇을 서버가 계산하고 클라가 무엇을 표시만 하는가**
+
+| 서버가 계산·확정 (권위) | 클라가 표시만 (연출) |
+|---|---|
+| 대상 사거리·LoS 재검증 | 로컬 windup 애니메이션 시작(입력 즉시 반응 — 예측) |
+| `mitigation_pct`·`damage_dealt`(공식 C1) | 데미지 넘버 팝업 |
+| `crit_roll`·크리 여부(공식 C2) | 크리 시각 강조(색·크기) |
+| CC 적용 여부·`cc_effective_duration`(공식 C4) | CC 아이콘·지속시간 게이지 |
+| `active_slow` 집계(공식 C5) → 이동 시스템에 공급 | 감속 시 이동 애니메이션 속도 조정(이동 시스템이 계산한 속도를 그대로 재생) |
+| 넉백 궤적(공식 C6) | 넉백 이동 애니메이션·VFX |
+| `health` 감소·사망 판정 | 체력바 갱신·사망 연출(래그돌 등) |
+| `OnDied` 발생 | 사망 UI(킬로그 등, HUD 소관) |
+
+> **클라가 데미지·크리·CC 적용 여부를 스스로 계산해 화면에 반영하는 것은 금지된다.** 클라가 할 수 있는 유일한 "예측"은 **내 windup 애니메이션을 입력 즉시 재생하는 것**뿐이다(체감 반응성) — 실제 히트 확정은 서버 결과 패킷 수신 후에만 확정 연출(데미지 넘버 등)로 전환한다. 이 원칙은 `movement-camera.md` Core Rule 9(로컬 이동 예측)과 대칭적이지만, **전투는 "예측 후 서버가 정정"이 아니라 "로컬 애니메이션만 예측, 결과는 항상 서버 대기"**라는 점이 다르다 — 이동과 달리 전투 결과를 잘못 예측해 되돌리면(예: 크리인 줄 알고 화려한 이펙트를 틀었다가 취소) 체감 손실이 이동 스냅백보다 크다.
+
+**11. 이동 시스템과의 인터페이스** — 전투가 매 틱 `can_move`/`can_turn` 플래그를 이동 시스템에 공급한다(하드 CC 표 참조). 넉백은 전투가 계산한 외부 속도가 이동 입력에 우선한다(`movement-camera.md` Edge Cases "외부 권위"). **넉백 실행에는 대시와 동일한 순서 계약이 적용된다** — 전투는 넉백을 실행하기 *전에* 서버(이동 검증 계층)에 `moveException`을 등록해야 한다(`movement-camera.md` 공식 7b가 "대시 · 넉백"을 명시적으로 함께 다룬다). 이 등록 없이 넉백 변위를 직접 대입하면 다음 위치 패킷이 정상 속도 상한 검사에 걸려 스냅백된다.
+
+### States and Transitions
+
+| State | Entry | Exit | Behavior |
+|---|---|---|---|
+| `Alive/Idle` | 스폰 · CC 없음 | 평타 입력 / 피격 / CC 적용 / 사망 | 대기 |
+| `Attacking` | RMB 대상 락 | windup 완료(히트) / 취소(대상 무효 / Stun) | windup → 즉시 히트 → 후딜. 이동 병행 가능 |
+| `Dead` | `health` = 0 | 없음(종결 상태 — 리스폰 없음) | `OnDied` 방출, 입력·전투 비활성. 사망 이후 처리는 인벤토리&사망 시스템 |
+
+> CC는 배타 상태가 아니라 **동시 적용 가능한 상태이상 태그**의 집합이다(`Alive/Idle`·`Attacking` 위에 오버레이). 하드 CC 발동 시 `Attacking`은 즉시 취소된다(공식 없이 즉시 — 쿨다운 미소모).
+
+### Interactions with Other Systems
+
+| System | Direction | Interface (in/out) | 소유 경계 |
+|---|---|---|---|
+| 입력 시스템 | ← 전투 의존 | RMB 평타 명령 + 커서 대상(leniency) in | 입력=캡처, 전투=판정 |
+| 이동 & 카메라 | 전투 → 이동 (하드, 역방향) | `can_move`/`can_turn` out · 넉백 외부속도 out · `moveException` 등록 요청 out | CC·넉백 권위=전투, 실행=이동 |
+| 네트워킹 & 서버 | 전투 → 넷코드 | 서버 판정 결과 브로드캐스트, relevancy | 권위=서버 |
+| 스킬 시스템 | ↔ | `ApplyDamage`/`ApplyCC`/`ApplyKnockback` API out(제공) + `can_cast` out; 스킬이 이 API로 자신의 효과를 해소 | primitive=전투, 어빌리티=스킬 |
+| 장비 & 아이템 | 장비 → 전투 (역방향) | 어트리뷰트 공급(`attack_damage`·`armor`·`magic_resist`·`crit_chance`·`crit_multiplier`·`percent_as_bonus`·`resistance`·`max_hp`·`attack_range`) | 스탯 소유=장비. **성장 소유 없음(P2)** |
+| 인벤토리 & 사망 처리 | 전투 → 사망 (역방향) | `OnDied(instigator, victim, cause)` out | 확정=전투, 결과(드랍·루팅)=사망 시스템 |
+| 몬스터 AI | 적AI → 전투 (역방향) | AI가 평타/스킬로 전투 primitive 사용 | AI 판단=적AI |
+| HUD | 전투 → HUD | 체력·데미지 넘버·CC 아이콘 데이터 out | 전투=데이터, HUD=렌더 |
+| 탈출 & 체류 타이머 | 없음(경계만 명시) | **타이머 만료 사망은 전투를 거치지 않는다** — `OnDied` 미발생 | 전투는 이 경로에 관여하지 않는다 |
+| 파티 시스템 | — | **MVP 미존재.** Tier 2 도입 시 Rule 9(팀/적대 판정) 재작성 필요 | Tier 2 |
+
+> **양방향 정합성 확인**: `movement-camera.md`는 이미 "전투 → 이동(`can_move`/`can_turn` 공급)"과 "전투 → 이동(넉백 외부속도)"을 자신의 § Dependencies에 명시해 두었다. 이 문서의 § Dependencies가 그 반대쪽 서술이다 — **일치한다.**
+
+## Formulas
+
+> **명명 원칙**: `cc_effective_duration`은 `design/registry/entities.yaml`에 이미 등록된 공식이며, 이 문서는 그 **소유·적용 권위**(전투 시스템)를 서술할 뿐 값을 바꾸지 않는다. 나머지 공식(C1·C2·C3·C5·C6·C7)은 이 문서가 **신규 등록을 제안**한다 — 최종 응답의 "레지스트리에 추가되어야 할 목록" 참조.
+
+---
+
+### C1. `damage_dealt` — 최종 데미지 (⭐ 크로스시스템, 장비가 `armor`/`magic_resist` 공급)
+
+**완화 모델 근거(아카이브 계승)**: 플랫 차감(저스탯에 방어 무효 체감)·무보정%(스택 시 완전 무적) 양극단을 피하기 위해 **점근 곡선** `armor/(armor+K)`를 유지한다. 방어력이 아무리 높아도 `mitigation_pct`는 1에 점근할 뿐 도달하지 않는다 — **완전 무적 불가**가 구조적으로 보장된다.
+
+`mitigation_pct = defense_stat / (defense_stat + K_mitigation)`
+`damage_dealt = base_damage × (1 − mitigation_pct)`
+
+| 변수 | 타입 | 범위 | 설명 |
+|---|---|---|---|
+| `base_damage` | float | ≥ 0 | 완화 전 데미지. 평타는 장비 `attack_damage`(맨몸 **10**), 스킬은 스킬 자체 정의값 |
+| `defense_stat` | float | [0, ∞), 실사용 0–300(잠정) | `physical`→`armor`, `magic`→`magic_resist`. **맨몸 0.** 100% 장비 공급 |
+| `K_mitigation` | const | 기본 **100**, 범위 50–150 | 완화 곡선 기울기. `defense=K`일 때 정확히 50% 감소. 🔴 아이템 방어구 수치 미확정 — 잠정 계승값(§ Open Questions) |
+| `mitigation_pct` | float | [0, 1) | 점근 상한 |
+| `damage_dealt` | float | (0, base_damage] (바닥은 `min_damage`, § Edge Cases) | 최종 적용 데미지 |
+
+**출력 범위**: `(0, base_damage]`. `min_damage`(기본 1) 바닥 적용.
+**예시**: 맨몸 평타(base=10, armor=0) → mitigation=0 → **damage=10**. → `500 ÷ 10 = 50초`(레지스트리 `base_stats_naked` "맨몸 vs 맨몸 50초"와 **정확히 일치**, 교차검증 통과).
+장비 armor=100(=K) → mitigation=0.5 → **damage=5**. armor=300 → mitigation=0.75 → **damage=2.5**.
+
+---
+
+### C2. `crit_damage` — 치명타 (⭐ 크로스시스템)
+
+크리는 **완화 이전(pre-mitigation)** 적용 → 크리빌드가 방어를 완전히 무시하지 못하되, 완화 후 곱하는 것보다 기댓값이 크다(방어 무시 성향은 유지).
+
+`effective_base = base_damage × (crit_roll ? crit_multiplier : 1.0)`
+`damage_dealt = effective_base × (1 − mitigation_pct)`
+
+| 변수 | 타입 | 범위 | 설명 |
+|---|---|---|---|
+| `crit_chance` | float | [0, 1], **맨몸 0** | 100% 장비 공급 스탯. 🔴 이 값은 `base_stats_naked`에 등록돼 있지 않음 — 이 문서의 추론(§ Open Questions) |
+| `crit_roll` | bool | {0,1} | `random(0,1) < crit_chance` — 서버 시드 |
+| `crit_multiplier` | float | [1.0, 3.0], 기본 **1.75** | 장비 어트리뷰트. 아카이브 계승, 재검증 필요 |
+
+**출력 범위**: `(0, base_damage × crit_multiplier]`.
+**예시**: base=10, armor=100(mit 0.5), crit_chance=0.25, mult=1.75 → 비크리 **5**, 크리 **8.75**(기댓값 대비 25% 확률로 1.75배).
+
+---
+
+### C3. `effective_attack_speed` — 공격속도 · windup/후딜
+
+공속 보너스는 **가산% 후 최종 1회 곱 + 하드캡**(`effective_move_speed`와 동일 패턴 — 폭주 방지·서버 검증 일관성).
+
+`effective_attack_speed = clamp(base_attack_speed × (1 + Σ percent_as_bonus_i), as_min_ratio × base, as_max_ratio × base)`
+`attack_interval = 1 / effective_attack_speed`
+`attack_windup = max(windup_floor_ms, windup_ratio × attack_interval)`
+`attack_recovery = attack_interval − attack_windup`
+
+| 변수 | 타입 | 범위 | 설명 |
+|---|---|---|---|
+| `base_attack_speed` | const | **1.0** 회/초 | 레지스트리 `base_stats_naked.attack_speed`. **캐릭터 상수** — 무기가 아니라 몸에 귀속(이 문서의 해석. 무기별 고유 기본 공속을 둘지는 아이템 설계 소관) |
+| `percent_as_bonus_i` | float | 0.00–? (아이템당) | 100% 장비 공급. 🔴 개별 상한 미정 — `flat_ms_bonus`(이동)처럼 하드캡이 필요할 수 있음 |
+| `as_min_ratio` / `as_max_ratio` | const | **0.5× / 2.5×** | 아카이브 계승 하드캡. 재검증 필요 |
+| `windup_ratio` | const | **0.5** | interval 중 히트 전 비중 |
+| `windup_floor_ms` | const | **150 ms** | 최소 windup. 입력 버퍼 윈도우와 정합 예정(입력 시스템 GDD 미작성 — `entities.yaml` deprecated 섹션에 `input_buffer_window` 150ms가 "등록 보류(폐기 아님)"로 대기 중) |
+
+**출력 범위**: `attack_interval ∈ [0.4s, 2.0s]`(base=1.0 기준), `attack_windup ≥ 150ms`.
+**예시**: base=1.0, 보너스 없음 → interval **1000ms** → windup **500ms** → 후딜 **500ms**.
++40% 공속 → eff=1.4 → interval 714ms → windup **357ms**.
+상한 2.5× → eff=2.5 → interval 400ms → windup **200ms**(여전히 floor 150ms 위 — **현재 파라미터에서는 floor가 실질적으로 발동하지 않는다.** `windup_ratio×attack_interval < windup_floor_ms`가 되려면 `attack_interval < 300ms`, 즉 `eff_as > 3.33`이 필요한데 하드캡 2.5가 이를 막는다. 🔴 무기별로 `base_attack_speed`가 1.0보다 높게 설계되면(예: 단검류 1.5) floor가 실제로 의미를 갖기 시작한다 — 아이템 설계 시 참고).
+
+---
+
+### C4. `cc_effective_duration` — CC 실효 지속시간 (레지스트리 기존 공식, 이 문서가 적용 권위를 서술)
+
+> **출처**: `design/registry/entities.yaml` (source: `design/gdd/game-concept.md`). 값을 바꾸지 않는다.
+
+`cc_effective_duration = cc_base_duration × (1 − resistance × resistance_max_reduction)`
+
+| 변수 | 타입 | 범위 | 설명 |
+|---|---|---|---|
+| `cc_base_duration` | float | [0, 5.0]s | 개별 스킬/무기가 정의. 🔴 `hard_cc_base_duration`은 registry `pending:`에 등재 — "4인 합 5초" 목표치만 확정, 개별값 없음 |
+| `resistance` | float | [0, 1.0] | **CC 적용 순간의 스냅샷**(§ Core Rule 6). 장비 100% 공급, 맨몸 0 |
+| `resistance_max_reduction` | const | **0.4** | registry 확정값 |
+
+**출력 범위**: `[0.6 × base, 1.0 × base]` — 최대 저항이어도 60%는 반드시 걸린다.
+**예시**: 1초 CC — 저항 0 → **1.00초**, 저항 0.5 → **0.80초**, 저항 1.0 → **0.60초**.
+
+> **이 문서의 적용 범위 확장(설계 판단, 🔴 확인 필요)**: `game-concept.md` 원문은 하드/소프트를 구분하지 않고 "CC 체계" 전체 섹션에 이 공식을 배치했다. 이 문서는 이를 **하드·소프트 CC의 지속시간 모두에 균일 적용**하는 것으로 해석한다 — 소프트 CC의 "강도"(감속 %)에는 적용되지 않고 오직 "얼마나 오래 걸리는가"에만 적용된다. 강도는 C5(감속)·C6(넉백거리)가 별도로 캡을 갖는다.
+
+#### 🔴 하드 CC 중첩 — "합 5초"의 실제 메커니즘 (신규 설계, 아카이브에 전례 없음)
+
+`game-concept.md`의 "4인 합 5초"·"5초는 상한이 아니다(8인=10초)"는 **여러 공격자가 순차적으로 하드 CC를 적용할 때 지속시간이 가산된다**는 것을 전제로 한 산술이다(DR 없이는 다른 방식으로 이 숫자가 안 나온다). 이 문서는 다음 모델을 제안한다.
+
+```
+전투는 대상별로 "하드 CC 구간 목록"을 유지한다.
+각 하드 CC 적용 = [적용시각, 적용시각 + cc_effective_duration) 구간 하나를 목록에 추가.
+목록의 구간들이 겹치면 합집합으로 병합(겹치는 시간을 이중으로 세지 않음).
+대상은 "목록의 합집합에 포함된 시간" 동안만 하드 CC 상태(제어 불가).
+동시에 여러 구간이 활성이면, 그 순간 가장 제약이 강한 CC 타입의 규칙(표 참조)을 적용
+  (예: Root 구간과 Stun 구간이 겹치면 그 겹침 구간은 Stun 규칙 — 평타도 막힘).
+```
+
+**비중첩 순차 적용(가장 흔한 케이스, "합 5초"의 근거)**: 4명이 서로 다른 시각에 각 1.25초씩 하드 CC를 걸면 합집합 = 5초. **중첩 적용**: 2명이 동시에 걸면 겹치는 시간만큼 총합이 5초보다 짧아진다(합집합이 산술 합보다 작거나 같음) — 즉 **동시 적용은 순차 적용보다 비효율적**이며, 이는 의도된 결과다(무의미한 CC 낭비를 막되, 완전히 막지는 않는다 — 시스템이 아니라 플레이어 조율의 영역, P3와 일치).
+
+> 🔴 **이 중첩 모델은 이 문서의 제안이며 game-concept.md에 명시되어 있지 않다.** "합 5초"라는 목표 수치와 모순되지 않는 가장 단순한 해석이지만, **서버 구현 가능성을 technical-director/사용자와 확인해야 한다** — 구간 목록 관리는 DR 곱셈 하나보다 상태가 많다.
+
+---
+
+### C5. `active_slow` 집계 — 소프트 CC 강도 (전투가 계산해 이동 시스템에 공급)
+
+> **소유 경계**: 강도값 자체와 클램프 곱셈은 `movement-camera.md` 공식 1·7c의 소유다. 이 문서는 **"활성 감속원 목록을 관리하고 최대값을 뽑아 공급하는" 전투측 책임**만 정의한다.
+
+`active_slow = max(slow_magnitude_i for i in 활성 Slow 인스턴스)`, 각 `slow_magnitude_i ≤ soft_cc_slow_cap`
+
+| 변수 | 타입 | 범위 | 설명 |
+|---|---|---|---|
+| `slow_magnitude_i` | float | [0, **0.40**] | 소스(스킬)별 강도. registry `soft_cc_slow_cap` 상한 |
+| `active_slow` | float | [0, 0.40] | **합산 아님, 최대값 하나만.** 각 인스턴스는 자신의 `cc_effective_duration`으로 개별 만료 |
+
+**출력 범위**: `[0, 0.40]`. 이동 시스템의 `effective_move_speed`(공식 1) `(1 − active_slow)` 항으로 직접 소비됨.
+**예시**: 대상에게 {0.20, 0.30, 0.40, 0.15} 감속 4개가 동시에 걸림 → `active_slow = 0.40`. 강한 감속(0.40) 소스가 먼저 만료되면, 남은 것 중 최대인 0.30으로 즉시 재계산.
+
+> **서버가 이 값의 유일한 권위다.** `movement-camera.md` 공식 7c: "클라가 보고하는 값을 신뢰하지 않는다." 전투(서버)가 매 이동 검증 시점에 대상의 활성 감속 목록에서 즉시 재계산해 공급해야 하며, 지연 없이 최신 상태여야 한다(§ Edge Cases — 감속 만료 경계 프레임).
+
+---
+
+### C6. `knockback_kinematics` — 넉백 운동학 (신규, ⭐ 크로스시스템 — 이동 검증 예외창과 연동)
+
+`dash_kinematics`(movement-camera.md 공식 3)와 같은 형태이나, **자기 주도 이동이 아니라 전투가 대상에게 강제하는 변위**라는 점이 다르다. 저항력은 **거리**를 줄인다(속도는 불변이므로 지속시간도 비례해 줄어든다).
+
+`effective_knockback_dist = base_knockback_dist × (1 − resistance × resistance_max_reduction)`
+`knockback_duration = effective_knockback_dist / knockback_speed`
+`knockback_pos(t) = start_pos + normalize(dir) × knockback_speed × t`, `0 ≤ t ≤ knockback_duration`
+
+| 변수 | 타입 | 범위 | 설명 |
+|---|---|---|---|
+| `base_knockback_dist` | float | 🔴 미정 | 스킬/무기 정의. `hard_cc_base_duration`처럼 개별값 미확정 |
+| `knockback_speed` | float | 🔴 미정, 제안: `dash_kinematics`와 동일 범위(450–1360 cm/s) | 이동 검증 예외창(공식 7b) 재사용을 위해 대시와 같은 상한 준수 권장 |
+| `resistance` | float | [0, 1.0] | 스냅샷(§ Core Rule 6) |
+| `effective_knockback_dist` | float | `[0.6×base, 1.0×base]` | 저항 최대치여도 60% 변위는 발생 |
+
+**출력 범위**: 벽 충돌 시 조기 종료 가능(§ Edge Cases, `movement-camera.md` 대시 벽 충돌 규약 재사용).
+**예시**: base_dist=300cm, speed=800cm/s, 저항 0 → eff_dist=300cm, duration=0.375s. 저항 1.0 → eff_dist=180cm(×0.6), duration=0.225s — **거리와 시간이 함께 짧아진다**(저항이 높을수록 "덜 튕겨나가고 덜 묶인다").
+
+> 🔴 **순서 계약**: 전투는 넉백을 대상에게 대입하기 *전에* 이동 검증 계층에 `moveException = {maxSpeed: knockback_speed, expiresAt: now + knockback_duration}`을 등록해야 한다(`movement-camera.md` 공식 7b, 대시와 동일 메커니즘 재사용). 이 문서 § Dependencies에 반영.
+
+---
+
+### C7. `ttk` — 교전 시간 진단 공식 (내부 검증 도구, 레지스트리 등록 불필요)
+
+> 🔴 **아카이브 D6 버그 수정.** 아카이브는 `TTK_avg = effective_health / dps_avg`로 정의했으나 `effective_health = health/(1−mit)`이고 `dps_avg`에 이미 `(1−mit)` 항이 들어있어 **완화가 두 번 적용된다.** 아카이브 자신의 예시(`health=500, dps≈55.4 → TTK≈9.0s`)를 검산하면 `500/55.4=9.03`으로 **`health/dps_avg`를 쓴 결과**이지 `effective_health/dps_avg`(=13.5초)가 아니다 — 공식 정의와 자체 예시가 모순이었다. 이 문서는 **정의를 실제로 맞게 고친다.**
+
+`dps_avg = base_damage × (1 − mitigation_pct) × (1 + crit_chance × (crit_multiplier − 1)) × effective_attack_speed`
+`TTK = health / dps_avg`
+
+(`effective_health = health / (1 − mitigation_pct)`는 **별도 진단 지표**로만 쓴다 — "이 빌드는 방어력 덕에 명목 500HP가 유효 750HP와 같다"는 **빌드 비교용**이지, `dps_avg`와 함께 나눗셈에 넣으면 안 된다.)
+
+**출력 범위**: `(0, ∞)`. **예시(교차검증)**: 맨몸(health=500, base=10, mit=0, crit=0, as=1.0) → `dps_avg=10` → `TTK=50초`. **레지스트리 값과 정확히 일치.**
+
+#### C7a. 다구대일 검증 (P1 수치 검증 — 이 문서가 신규로 계산)
+
+동급 장비(맨몸 기준, armor=0)에서 N명이 1명을 동시 집중공격할 때:
+
+`TTK_target(N) = health / (N × dps_individual)`
+
+| N (공격자 수) | `TTK_target` | 그동안 표적이 가하는 피해 | 표적 1인의 피해 비중(공격자 총 HP 대비) |
+|---|---|---|---|
+| 1 (1v1 대조군) | 50초(대칭 — 승부 불명, 참고용) | — | — |
+| 2 | **25초** | 250 (공격자 1명 HP의 50%) | 250/1000 = **12.5%** |
+| 4 | **12.5초** | 125 (공격자 1명 HP의 25%) | 125/2000 = **6.25%** |
+| 8 | **6.25초** | 62.5 (공격자 1명 HP의 12.5%) | 62.5/4000 = **3.1%** |
+
+> **일반형**: `TTK_target(N) = 500 / (N × 10) = 50/N`(초) — **N에 반비례.** 표적은 자신을 공격하는 여러 명 중 평타 특성상(범위기 없음) **한 명에게만** 반격할 수 있으므로, 표적이 죽기 전까지 입힐 수 있는 피해는 상대 진영 총 HP의 극히 일부에 불과하다.
+>
+> **이것이 P1("숫자가 곧 힘이다")의 산술적 근거다.** 이 게임의 데미지 모델에 "공격자가 많을수록 개인 기여가 줄어드는" 메커니즘(광역 데미지 상한, 인원비례 방어 보정 등)이 전혀 없다 — 설계 테스트("인원수에 반비례해 강해지는 장치 → 넣지 않는다")가 요구하는 그대로다. 여기에 **하드 CC 총량도 인원에 비례**(4인=5초, 8인=10초)해 표적의 반격 기회가 추가로 줄어드는 것까지 더하면, 다구대일에서 소수가 이기는 경로는 이 primitive만으로는 사실상 없다.
+>
+> 🔴 **이 표는 "동급 장비"만 검증한다.** `game-concept.md`가 명시한 목표 수치(고티어 1명 vs 저티어 4명 → **4명 승률 55~65%**, 풀세트 솔로 vs 동티어 4명 → **솔로 승률 45~55%**)는 티어 격차·"고독한 길" 장비 계열을 전제하며, 둘 다 **Tier 3 소관**(티어 게이팅·고독한 길 시스템 미설계)이라 이 문서에서 검증할 수 없다. 이 문서가 지금 보장하는 것은 **더 근본적인 층위** — "동급 조건에서 숫자가 곧 힘"이라는 기계적 사실뿐이다.
+>
+> ⚠️ **주의**: 이 계산은 "정적·전원 명중·논스톱" 이상화 모델이다. 실전에서는 포지셔닝(회피·시야 차단·지형)이 3순위 실력축으로 이 결과를 완화할 수 있다 — 그것이 바로 "숫자를 상대로는 애초에 그 싸움을 피해야 한다"는 § Player Fantasy의 근거다. 표는 **"싸움이 실제로 붙었을 때"의 기계적 하한선**이다.
+
+#### C7b. 🔴 30초 교전 목표와 장비 스케일 상한(1.67×)의 해석 — 레지스트리 충돌 후보
+
+`game-concept.md`의 `DPS배율 = 1.67 × HP배율`(풀장비 vs 풀장비 30초 목표 역산)은 **원문 수식이 `armor`/`magic_resist`를 변수로 포함하지 않는다** — `(500 × HP배율) ÷ (10 × DPS배율) = 30초`는 명목(mitigation 이전) `attack_damage`와 `health`만으로 계산됐다.
+
+그런데 `armor`/`magic_resist`는 **별도로 존재하는, 100% 장비 공급 스탯**이다(`base_stats_naked`에 명시). 장비가 HP·공격력과 **별도로** 방어력도 올린다면, 실제 TTK는 `C7`의 `dps_avg`에 `(1−mitigation_pct)` 항이 추가로 곱해져 **30초보다 길어진다** — 명목 배율 관계(1.67×)를 정확히 지켜도 실제 교전은 목표보다 늘어질 수 있다.
+
+**교차검증으로 관계식 자체는 정합함을 확인**: 맨몸(mit=0) TTK=50초, `50÷30=1.667`— `game-concept.md`의 "맨몸은 30초 목표의 1.7배"라는 서술과 정확히 일치한다. 즉 **armor를 0으로 고정하는 한** 1.67× 관계는 내적으로 완전히 일관적이다.
+
+**이 문서는 다음 두 해석 중 하나를 확정해야 하는 미결로 남긴다** (경제/아이템 설계 착수 전 확정 필요):
+
+| 옵션 | 내용 | 트레이드오프 |
+|---|---|---|
+| **A** | 방어구(투구·갑옷 등)는 `armor`/`magic_resist`를 **부여하지 않는다.** HP·공격력만 장비가 스케일한다 | 가장 단순, `game-concept.md` 원문과 완전 정합. 다만 "방어력 0/0"이 `base_stats_naked`에 왜 있는지 설명이 약해짐(몬스터·보스 전용 스탯으로 재정의하면 해소) |
+| **B** | 방어구도 `armor`/`magic_resist`를 부여한다. 이 경우 **`C7`(실효 TTK) 기준으로 30초를 다시 역산**해, `DPS배율` 예산에서 방어력 기여분을 뺀 나머지만 순수 HP/공격력 스케일에 배정해야 한다 | 방어 스탯이 의미를 가짐. 아이템 설계가 한 단계 더 복잡해짐(HP·공격력·방어력 세 축을 동시에 30초 예산 안에서 배분) |
+
+> 🔴 **이것은 `entities.yaml`의 기존 값을 바꾸는 것이 아니라, 그 값이 명시하지 않은 것(armor의 역할)을 확정하는 문제다.** 값 자체(1.67×)는 그대로 두고 해석만 정한다. **경제 설계(§9 골드/아이템) 착수 전 game-designer 확정 필요** — 최종 응답 "다른 GDD와 충돌하는 지점"에 등재.
+
+---
+
+## Edge Cases
+
+### 평타 · 판정
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| 이미 사망한 대상에 데미지 | 무시(이중 사망·`OnDied` 재발 없음) | 사망은 종결 상태 |
+| 동시 치사(서로 같은 서버 틱에 죽임) | 양쪽 사망, 각자 `OnDied` 발생, victim별 instigator 별도 기록 | 상호 확정, 서버 결정론 |
+| 오버킬(데미지 > 잔여 체력) | `health` 0으로 클램프, `OnDied` 정확히 1회 | 단일 사망 |
+| windup 중 **Stun**(신규 CC 적용) | 평타 즉시 취소, 히트 없음, 쿨다운 미소모 | Stun은 행동 봉쇄 |
+| windup 중 **Root** | 평타 지속, 정상 타격 | Root ≠ Stun(CC표) |
+| windup 중 **Knockback**(변위 시작) | 평타 즉시 취소(넉백 중 이동 자체가 불가하므로 windup 유지 무의미) | Knockback 표(이동 ✗ 항목) |
+| windup 중 대상 사망/사거리 이탈/LoS 상실 | 평타 취소, 재타겟 필요 | 타겟락 유효성 상실 |
+| `AttackDisable`(공격불가) 중 평타 시도 | 대상 획득 자체가 차단(락온 불가) | CC표 |
+| 파티원 대상 평타 시도 | 🔴 **해당 없음 — MVP는 파티가 없어 전원 적대다.** Tier 2에서 재정의 | Rule 9 |
+
+### 데미지 · 크리 · 공격속도
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| 고방어로 데미지가 1 미만으로 수렴 | `min_damage`(기본 1) 바닥 적용 | 무한 교착(0딜) 방지 |
+| 크리티컬이 `base_damage=0`인 효과에 적용 | 0(곱연산 결과 0) | — |
+| `effective_attack_speed`가 상한(2.5×) 초과 시도 | 클램프 | 공식 C3 하드캡 |
+| `effective_attack_speed`가 하한(0.5×) 미만 시도(강한 공속감소 스킬 등) | 클램프 | 공식 C3 하드캡 |
+
+### 하드 CC
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| 서로 다른 두 공격자가 하드 CC를 **동시에** 적용 | 구간 합집합 — 겹치는 시간은 중복 카운트 안 됨(§ 공식 C4 중첩 모델) | 동시 적용 비효율화(의도) |
+| 서로 다른 두 공격자가 하드 CC를 **순차로**(비중첩) 적용 | 지속시간 산술 합산 | "4인 합 5초"의 근거 |
+| 하드 CC 지속 중 이동 시스템이 `can_move=false` 미수신(패킷 유실 등) | 🔴 서버 영역 — 이 문서는 실패 모드를 정의만 함: **서버가 재전송하거나, 다음 위치 검증에서 즉시 거부**(치터가 이 창을 노려 이동하는 것을 방지). 세부 구현은 사용자 협의 | 안티치트 |
+| 5인 이상 협공(파티 인원 제한 우회) | **시스템으로 막지 않는다.** `game-concept.md`가 명시적으로 "운영 대응 영역"으로 지정(P3와 일치) | § 알려진 한계 — 5초는 상한이 아니다 |
+| CC 면역 대상(최상위 보스 등) | 면역 태그가 `cc_effective_duration` 계산 자체를 우회(0으로 강제, 저항력 공식 미적용) | § 아래 레지스트리 충돌 후보 참조 |
+| `Launch`(공중띄우기) 중 이동 시스템의 Z축 상태 | 없음 — 순수 상태이상. 캐릭터의 world Z는 변하지 않는다(`movement-camera.md` Rule 5 "지상 전용"과 충돌 방지) | 물리적 공중이 아니라 연출+제어봉쇄만 |
+
+> 🔴 **레지스트리 충돌 후보 — 보스 CC 면역이 `resistance_max`(1.0)와 모순 가능성.** `game-concept.md`는 "보스형 몬스터 — 등급에 따라 고정 저항, 상위 보스일수록 높음"이라 서술하는데, 상한을 명시하지 않는다. 반면 `entities.yaml`의 `resistance_max`는 **1.0을 예외 없이** 상한으로 등록했다(경감 40%가 최대). **문자 그대로 읽으면 어떤 보스도 40% 초과 CC 경감을 가질 수 없다.** 이 문서는 다음으로 해소를 제안한다 — **완전 면역이 필요한 보스는 `resistance`를 1.0 초과로 올리지 않고, 대신 별도의 "CC 면역 태그"(아카이브 계승 개념, 저항력 공식을 우회하는 boolean)를 부여한다.** `resistance_max=1.0`은 전 개체에 예외 없이 유지된다. 🔴 **game-designer 확인 필요** — 최종 응답에 등재.
+
+### 소프트 CC
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| 4개의 서로 다른 감속이 동시에 걸림 | `active_slow = max(...)`, 합산 아님 | 공식 C5, `soft_cc_slow_cap` |
+| 감속 소스가 서로 다른 시각에 만료 | 매 순간 남은 활성 소스 중 최대값으로 즉시 재계산 | 공식 C5 |
+| 감속 적용/해제 경계에 걸친 서버 이동 검증 패킷 | **관대하게 통과**(감속 미반영) — `movement-camera.md` 공식 7c가 이미 이 규약을 소유 | 오탐(정상 유저 스냅백)이 치팅 실익보다 훨씬 비쌈 |
+| 회복감소(`HealReduction`) 대상에게 힐 효과 적용 시도 | 🔴 **힐 시스템 자체가 미설계**(스킬 시스템 소관, archive Open Q "힐 primitive 소유 미정"도 이어짐). 이 문서는 감소 메커니즘의 존재만 예약하고 구체 수치·적용식은 정의하지 않는다 | § Open Questions |
+| `AttackDisable` 중 스킬 시전 시도 | `can_cast=false`로 즉시 차단 | CC표 |
+
+### 저항력 · CC 일반
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| CC 지속 중 장비 교체로 저항력 변경 | **재계산하지 않는다.** 적용 순간 스냅샷 유지 | § Core Rule 6 — "장비 교체로 진행 중인 CC를 실시간으로 짧게 만드는" 악용 방지 |
+| 저항력 1.0(상한)인 대상에게 CC 적용 | `cc_effective_duration = base × 0.6` — **여전히 걸린다.** 0이 되지 않음 | P1 정합(완전 면역 불가) |
+| `cc_base_duration=0`인 효과(순간 효과) | `cc_effective_duration=0` — 저항력 무관하게 지속시간 없는 즉발 효과로 취급 | 곱연산 자명해 |
+
+### 넉백
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| 넉백이 벽에 충돌 | 스윕이 벽면에서 정지, **조기 종료**(관통 없음), 잔여 변위 취소 | `movement-camera.md` 대시 벽 충돌 규약 재사용 |
+| 넉백이 다른 폰에 충돌 | 폰 블로킹 정지(밀치기 없음), 조기 종료 | 폰 관통·연쇄 밀치기 방지 |
+| 넉백 중 대상에게 새 하드 CC(예: Stun) 적용 | 넉백의 남은 변위는 취소, 즉시 Stun 상태로 전이 | 새 CC가 이전 CC의 물리 상태를 덮어씀(중첩 모델의 "가장 제약이 강한 규칙" 원칙과 일치) |
+| `moveException` 등록 없이 넉백 변위 대입(순서 위반) | 다음 위치 패킷이 정상 상한 검사에 걸려 **거부·스냅백** | `movement-camera.md` § Edge Cases "스킬이 서버 통지 없이 RequestDash 호출"과 동일 패턴 |
+
+### 사망 · 서버 권위
+
+| 상황 | 처리 | 근거 |
+|---|---|---|
+| instigator가 히트 확정 전 접속 종료 | 서버가 데미지·`OnDied` 정상 처리, instigator=해당 id로 기록 | 서버 결정론 |
+| 같은 서버 틱에 다중 데미지원이 한 대상을 타격 | 서버 수신 순서로 순차 적용, `health` 순차 감소 | 서버 결정론 |
+| 타이머 만료로 인한 강제 사망 | 🔴 **전투 시스템 미관여.** `OnDied` 미발생. 탈출 & 체류 타이머 시스템이 직접 처리 | § Core Rule 4 |
+| 클라가 서버 결과 패킷 없이 자체적으로 "죽었다"고 판단해 사망 연출 재생 | **금지.** § Core Rule 10 서버 권위 경계 위반 | 서버-클라 불일치 방지 |
+
+## Dependencies
+
+| System | 방향 | 성격 | 인터페이스 |
+|---|---|---|---|
+| 입력 시스템 | 전투 → 의존 | **하드** | RMB 평타 명령 + 커서 대상(leniency, 재검증 대기값) |
+| 이동 & 카메라 | 전투 ↔ 이동 | **하드** | out: `can_move`/`can_turn`·넉백 외부속도·`moveException` 등록 요청 / in: 위치·facing(사거리 판정용) |
+| 네트워킹 & 서버 | 전투 → 넷코드 | **하드** | 서버 판정 결과 브로드캐스트. 권위=서버 |
+| 스킬 시스템 | 스킬 → 전투 | 역방향(**하드**) | `ApplyDamage`/`ApplyCC`/`ApplyKnockback` 호출, `can_cast` 소비 |
+| 장비 & 아이템 | 장비 → 전투 | 역방향(**하드**) | 어트리뷰트 공급(`attack_damage`·`armor`·`magic_resist`·`crit_chance`·`crit_multiplier`·`percent_as_bonus`·`resistance`·`max_hp`·`attack_range`) |
+| 인벤토리 & 사망 처리 | 전투 → 사망 | 역방향(**하드**) | `OnDied(instigator, victim, cause)` 공급. 가방 드랍 등 결과는 전투 소관 아님 |
+| 몬스터 AI | 적AI → 전투 | 역방향(**하드**) | AI가 평타/스킬로 전투 primitive 사용 |
+| HUD | HUD → 전투 | 소프트 | 체력·데미지 넘버·CC 아이콘 데이터 |
+| 탈출 & 체류 타이머 | 없음 | **경계만** | 타이머 만료 사망은 전투를 우회 — `OnDied` 미발생 명시 |
+| 파티 시스템(Tier 2) | — | 없음(MVP) | Rule 9는 파티 도입 시 재작성 필요 |
+
+### 🔴 이동 시스템이 이미 전투에 요구한 것 — 확인됨
+
+`movement-camera.md` § Dependencies는 이미 "전투 → 이동: `can_move`/`can_turn` 공급, 넉백 등 외부 속도 공급"을 명시했고, § Interactions에는 "CC 상태의 권위와 저항력 계산(`cc_effective_duration`)은 전투 시스템 소유"라고 적어두었다. 이 문서의 § Core Rule 6·11과 **정확히 대칭**이다 — 신규 모순 없음.
+
+### 🔴 이 문서가 새로 추가하는 순서 계약
+
+```
+잘못된 순서:  전투가 넉백 변위를 직접 대입 → 다음 위치 패킷이 정상 속도상한 검사에 걸림 → 거부·스냅백
+올바른 순서:  전투 → moveException 등록(공식 7b 재사용) → 넉백 변위 대입 → 서버 통과
+```
+
+`movement-camera.md` 공식 7b는 이미 "대시 · 넉백"을 함께 다루도록 설계돼 있었다(§ 근거: "서버가 이미 그 이동의 파라미터를 알고 승인했다"는 공통점) — **이 문서는 그 설계를 실제로 소비하는 첫 시스템이다.**
+
+### 하위 의존 미설계 확인
+
+**스킬 · 장비 & 아이템 · 인벤토리 & 사망 처리 · 몬스터 AI · HUD · 파티** 전부 미설계다. 각 GDD 작성 시 "depends on 전투"를 명시해야 한다(`systems-index.md` Dependency Map과 일치).
+
+## Tuning Knobs
+
+| 파라미터 | 기본값 | 안전 범위 | ↑ 높이면 | ↓ 낮추면 |
+|---|---|---|---|---|
+| `K_mitigation` | 100 | 50–150 | 방어 가치↓·TTK↓ | 방어 가치↑·TTK↑ |
+| `crit_multiplier` | 1.75 | 1.0–3.0 | 크리빌드 폭딜·분산↑ | 크리 무의미화 |
+| `windup_ratio` | 0.5 | 0–1 | 느린 히트·카운터 여지↑ | 즉발·반응 어려움 |
+| `windup_floor_ms` | 150 | 100–250 | 평타 하한 느림 | 초고속 평타(입력버퍼 충돌 위험) |
+| `as_min_ratio` / `as_max_ratio` | 0.5× / 2.5× | 0.4–0.6 / 2.0–3.0 | 공속 성장폭↑ | 공속 성장 제한 |
+| `min_damage` | 1 | 1–5 | 고방어도 확실히 아픔 | 0딜 교착 위험 |
+| `hard_cc_base_duration`(개별) | — | 🔴 미정, "4인 합 5초" 총량만 확정 | 무기당 강력한 CC 1개 | 짧은 CC 여러 무기에 분산 |
+| `base_knockback_dist` / `knockback_speed` | — | 🔴 미정, 속도는 `dash_speed`(450–1360) 범위 준수 권장 | 강한 넉백·군중제어감 | 약한 넉백 |
+| `attack_range`(맨몸 기본) | — | 🔴 미정 | 원거리 유리 | 근접 강제, 밀집전 유도 |
+| `percent_as_bonus_i` 개별 상한 | — | 🔴 미정 | 공속 아이템 가치↑, 폭주 위험 | 공속 아이템 무가치화 |
+
+> **상호작용 주의**: `K_mitigation` × `base_damage`가 실질 TTK(공식 C7)를 결정한다. `crit_chance`(장비) × `crit_multiplier`가 폭딜 분산을 결정한다. `resistance_max_reduction`(0.4, registry 확정 — 이 문서는 변경 권한 없음) × 하드 CC 개별 지속시간이 체인CC 체감을 결정한다.
+>
+> **하드코딩 금지**: 모든 노브는 외부 config(서버 쪽은 데이터 테이블, `.claude/docs/coding-standards.md` "게임플레이 값은 데이터 주도")에서 로드한다.
+
+## Visual/Audio Requirements
+
+| 요소 | 요구 | 소유 |
+|---|---|---|
+| 히트 피드백 | 피격 시 히트 플래시·임팩트 VFX·타격 SFX — 서버 결과 패킷 수신 후 재생(§ Core Rule 10) | 애니메이션/VFX |
+| 데미지 넘버 | 수치 팝업(크리 색·크기 강조) | HUD |
+| 데미지 타입 구분 | physical/magic 시각 구분 | VFX |
+| CC 시각 | Stun/Root/Knockback/Launch/Slow/HealReduction/AttackDisable 별 VFX + 아이콘 | VFX/HUD |
+| 평타 모션 | 무기별 windup→히트 애님. **입력 즉시 로컬 재생**(체감 반응성), 실제 히트 확정은 서버 대기(§ Core Rule 10) | 애니메이션 |
+| 넉백 모션 | 강제 변위 애니메이션 — 이동 시스템의 원격 프록시 재생 규약(`movement-camera.md` 공식 6) 재사용 | 애니메이션 |
+| 사망 연출 | 래그돌/디졸브는 **인벤토리 & 사망 처리 시스템** 소유 | 사망 시스템 |
+| 서버-클라 불일치 | 클라 예측(로컬 windup 애니메이션)이 서버 결과와 다를 경우 최소한의 보정 — **화려한 연출 예측 금지**(§ Core Rule 10) | 전투/VFX |
+
+**아트바이블 제약** (`design/art/art-bible.md`): ① 실루엣 우선 — CC 아이콘·히트 VFX가 캐릭터 실루엣을 가리면 삭제(원칙 ③). 게임플레이 3색(`#3987E5`/`#D95926`/`#199E70`)은 **재사용 금지** — 데미지 타입 색상은 별도로 정의할 것.
+
+## UI Requirements
+
+| 정보 | 위치 | 갱신 | 조건 |
+|---|---|---|---|
+| 체력바(본인·대상) | HUD | 실시간 | 체력 변화 시(서버 결과 수신 후) |
+| 데미지 넘버 | 월드공간 팝업 | 히트 확정 시 | 크리 시각 구분 |
+| CC 상태 아이콘 | 대상/본인 | CC 적용·해제 | 하드/소프트 시각 구분 필요(제어 불가 여부가 다르므로) |
+
+> 📌 **UX Flag**: 전투 HUD(체력바·데미지 넘버·CC 아이콘)는 `/ux-design`으로 `design/ux/hud.md` 작성 대상. `systems-index.md`의 HUD(#15) 항목과 연결.
+
+## Acceptance Criteria
+
+**태그**: `[Logic]` 순수 함수 단위테스트로 지금 작성 가능 · `[Integration]` 서버-클라 또는 DummyClient 필요 · `[보류: X]` X 미설계로 현재 검증 불가 · `[서버]` 🔴 사용자 구현 검증용 체크리스트(에이전트가 대신 통과 못 시킴)
+
+### 평타 (Rule 1)
+
+1. **GIVEN** RMB 홀드·커서가 적 대상 leniency 이내, **WHEN** RMB 클릭, **THEN** 대상 락온·평타 시퀀스 시작. `[Logic]`
+2. **GIVEN** windup 중 대상이 사거리+LoS 유지, **WHEN** windup 경과, **THEN** 즉시(지연 0) 데미지 판정. `[Logic]`
+3. **GIVEN** windup 중, **WHEN** 대상 `health=0`, **THEN** 평타 취소·데미지 없음. `[Logic]`
+4. **GIVEN** windup 중, **WHEN** 대상 사거리 이탈, **THEN** 평타 취소. `[Logic]`
+5. **GIVEN** windup 중 이동 입력, **WHEN** 캐릭터 이동, **THEN** windup 미취소·정상 타격(strafe 전투). `[Logic]`
+
+### 데미지 · 크리 (Rule 2·3, C1·C2)
+
+6. **GIVEN** 맨몸 평타(base=10·armor=0), **WHEN** 적용, **THEN** 최종 데미지 정확히 **10**. `[Logic]` — 레지스트리 "맨몸 vs 맨몸 50초" 교차검증
+7. **GIVEN** base=10·armor=100·K=100, **WHEN** 적용, **THEN** 최종 **5**. `[Logic]`
+8. **GIVEN** armor=0, **WHEN** base=10 적용, **THEN** 최종 **10**(무감쇄). `[Logic]`
+9. **GIVEN** armor 초고값, **WHEN** base=10 적용, **THEN** 계산값 < 1이어도 `min_damage=1` 고정. `[Logic]`
+10. **GIVEN** base=10·크리 발동·mult=1.75·armor=100, **WHEN** 계산, **THEN** effective_base **17.5** 선산출 후 완화 → 최종 **8.75**(비크리 5 대비 증가). `[Logic]`
+11. **GIVEN** 맨몸(crit_chance=0), **WHEN** 평타 100회, **THEN** 크리 발생 0회. `[Logic]` — § Open Questions의 "맨몸 크리 0" 추론 검증용
+
+### 공격속도 (C3)
+
+12. **GIVEN** base_as=1.0·Σ%=0, **WHEN** 계산, **THEN** eff_as=1.0 → interval 1000ms → windup 500ms. `[Logic]`
+13. **GIVEN** eff_as가 2.5×base 초과 시도, **WHEN** 계산, **THEN** 2.5×로 클램프. `[Logic]`
+14. **GIVEN** eff_as가 0.5×base 미만 시도, **WHEN** 계산, **THEN** 0.5×로 클램프. `[Logic]`
+
+### 사망 (Rule 4)
+
+15. **[보류: 인벤토리&사망]** **GIVEN** `health=0` 도달, **WHEN** 피해 직후, **THEN** `OnDied(instigator,victim,cause)` 정확히 1회.
+16. **GIVEN** 잔여 5·피해 500, **WHEN** 적용, **THEN** `health` 음수 없이 0 클램프·`OnDied` 1회. `[Logic]`
+17. **GIVEN** 이미 `health=0`, **WHEN** 추가 피해, **THEN** 무시(변화 없음). `[Logic]`
+18. **GIVEN** 타이머 만료로 인한 강제 사망, **WHEN** 발생, **THEN** `OnDied`가 **발생하지 않는다**(전투 미관여 확인). `[보류: 탈출&타이머]`
+
+### CC — 하드 (Rule 5·6, C4)
+
+19. **GIVEN** Stun, **WHEN** 이동/회전/평타/스킬 입력, **THEN** 전부 차단(`can_move`/`can_turn`/`can_cast`=false). `[Logic]`
+20. **GIVEN** Root, **WHEN** 입력, **THEN** 이동만 차단·회전/평타/스킬 정상. `[Logic]`
+21. **GIVEN** windup 중, **WHEN** Stun 적용, **THEN** 평타 즉시 취소·쿨다운 미소모. `[Logic]`
+22. **GIVEN** windup 중, **WHEN** Root 적용, **THEN** windup 지속·정상 타격. `[Logic]`
+23. **GIVEN** 저항력 0·`cc_base_duration`=1.0s, **WHEN** 적용, **THEN** `cc_effective_duration`=1.00s. `[Logic]`
+24. **GIVEN** 저항력 1.0·`cc_base_duration`=1.0s, **WHEN** 적용, **THEN** `cc_effective_duration`=**0.60s**(완전 면역 아님). `[Logic]` — AC-5(game-concept) 대응
+25. **GIVEN** 4명이 비중첩 순차로 각 1.25초 하드 CC 적용(저항 0), **WHEN** 합산, **THEN** 총 행동불능 = **정확히 5.0초**. `[Logic]` — `game-concept.md` AC-5 직접 검증
+26. **GIVEN** 2명이 완전히 동시에 각 1.25초 하드 CC 적용, **WHEN** 합집합 계산, **THEN** 총 행동불능 = **1.25초**(가산 아님, 겹침 검증). `[Logic]` — § 공식 C4 중첩 모델 검증
+
+### CC — 소프트 (C5)
+
+27. **GIVEN** base_move_speed 340·Slow 40%, **WHEN** 계산, **THEN** `active_slow=0.40` → 이동 204cm/s. `[Logic]` — `movement-camera.md` AC-13과 연동
+28. **GIVEN** 서로 다른 감속 4개(20/30/40/15%) 동시 적용, **WHEN** `active_slow` 계산, **THEN** **0.40**(최대값 1개, 합산 아님). `[Logic]` — `game-concept.md` AC-6 직접 검증
+29. **GIVEN** `AttackDisable` 적용 중, **WHEN** 평타/스킬 시도, **THEN** 둘 다 차단·이동/회전은 정상. `[Logic]`
+
+### 다구대일 검증 (P1, C7a)
+
+30. **GIVEN** 맨몸 스탯 4명이 맨몸 1명을 동시 집중공격(armor=0 전원), **WHEN** 전투 시뮬레이션, **THEN** `TTK_target` = **12.5초 ±5%**, 표적이 가한 총 피해 ≤ 공격자 합산 HP의 **10%**. `[보류: 몬스터AI 또는 시뮬레이션 하네스]` — `game-concept.md` "다구대일 검증" 요구사항 직접 대응
+31. **GIVEN** 위와 동일 조건 8명, **WHEN** 계산, **THEN** `TTK_target` = **6.25초 ±5%**. `[Logic]`(공식 자체는 시뮬레이션 없이 검증 가능)
+
+### 넉백 (C6)
+
+32. **GIVEN** base_dist=300·speed=800·저항=0, **WHEN** 계산, **THEN** duration=**0.375s**, 최종 변위=**300cm**. `[Logic]`
+33. **GIVEN** 동일 조건 저항=1.0, **WHEN** 계산, **THEN** 변위=**180cm**(×0.6), duration=**0.225s**. `[Logic]`
+34. **GIVEN** 넉백이 벽에 충돌, **WHEN** 스윕 판정, **THEN** 벽면에서 조기 종료·관통 없음. `[Logic]`
+35. **[서버]** **GIVEN** 넉백 적용, **WHEN** `moveException` 등록 없이 위치 대입, **THEN** 다음 검증 패킷이 거부되는지 확인(순서 계약 회귀 테스트).
+
+### 서버 권위·팀 (Rule 8·10)
+
+36. **[보류: 넷코드]** **GIVEN** 클라 히트 요청, **WHEN** 서버가 사거리/LoS 재검증 실패, **THEN** 서버 히트 거부·클라 미반영.
+37. **GIVEN** MVP(파티 없음), **WHEN** 임의의 두 플레이어가 서로 평타, **THEN** 항상 유효 대상으로 락온됨(아군 보호 로직 부재 확인). `[Logic]`
+38. **하드코딩 없음**: **GIVEN** `K_mitigation`·`crit_multiplier`·`min_damage`·`windup_floor_ms`가 config, **WHEN** 재컴파일 없이 변경, **THEN** 즉시 반영. `[Config]`
+
+## Open Questions
+
+| 질문 | 소유 | 목표 시점 | 현재 상태 |
+|---|---|---|---|
+| 🔴 **맨몸 기본 공격 사거리** — `attack_range` | game-designer | P1 프로토타입 착수 전 | 레지스트리에 없음. 이 문서는 값을 제안하지 않는다 |
+| 🔴 **30초 목표 ↔ 1.67× 배율의 armor 해석**(공식 C7b, 옵션 A/B) | game-designer + economy-designer | 아이템 & 장비 GDD 착수 전 | **미결 — 확정 필요** |
+| 🔴 **보스 CC 면역과 `resistance_max=1.0`의 관계** | game-designer | 몬스터 AI GDD 착수 전 | 이 문서는 "면역 태그 별도 부여"를 제안(§ Edge Cases) — 확인 필요 |
+| 🔴 **하드 CC 중첩(합집합) 모델의 서버 구현 가능성** | technical-director / 사용자 | P1 착수 전 | 이 문서의 신규 제안 — 검증 안 됨 |
+| 소프트 CC "공격불가"가 평타까지 막는지 | game-designer | P1 착수 전 | 이 문서는 "막는다"로 해석(아카이브 Silence보다 넓음) — 확인 필요 |
+| `K_mitigation` 최종값 | economy-designer + PT | 아이템 방어구 수치 설계 시 | 잠정 계승값 100 |
+| `crit_chance`/`crit_multiplier` 최종 분포(등급별) | economy-designer | 아이템 설계 시 | 미정 |
+| `hard_cc_base_duration`(개별 스킬) | systems-designer | P1.5 스킬 콘텐츠 확정 시 | registry `pending:`에 이미 등재. "4인 합 5초" 총량만 확정 |
+| `base_knockback_dist`/`knockback_speed`(개별 스킬) | systems-designer | P1.5 스킬 콘텐츠 확정 시 | 신규 pending 후보(§ 최종 응답) |
+| `percent_as_bonus_i` 개별 상한 | economy-designer | 아이템 설계 시 | 미정 — 폭주 방지 캡 필요 여부 |
+| 회복감소(`HealReduction`) 메커니즘 및 힐 primitive 소유 | game-designer | 스킬 시스템 GDD 시 | 아카이브 Open Q "힐 primitive 소유 미정" 그대로 승계 |
+| 평타 즉시히트(투사체 없음) 유지 여부 | game-designer + PT | 전투 프로토타입("30초 교전 손맛" 결정 시) | 아카이브 계승, 재확인 안 됨 |
+| `target_acquisition_leniency` 재검증 | game-designer | P1 프로토타입 | `movement-camera.md` Open Questions에 이미 등재(카메라 확정 후 재검증 필요) — 중복 소유 아님, 참조만 |
+| 파티/배신 도입 시 Rule 9 재작성 | game-designer | Tier 2 | 확정된 설계 없음(파티 시스템 GDD 대기) |

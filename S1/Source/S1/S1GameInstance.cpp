@@ -170,15 +170,18 @@ void US1GameInstance::HandleMove(const Protocol::S_MOVE& MovePkt)
 
 	const uint64 ObjectId = MovePkt.info().object_id();
 	AS1Player** FindActor = Players.Find(ObjectId);
+
 	if (FindActor == nullptr)
 		return;
 
 	AS1Player* Player = (*FindActor);
-	if (Player->IsMyPlayer())
-		return;
-
 	const Protocol::PosInfo& Info = MovePkt.info();
-	
-	//Player->SetPlayerInfo(Info);
+
+	if (Player->IsMyPlayer())
+	{
+		Player->SetPlayerInfo(Info);
+		return;
+	}
+
 	Player->SetDestInfo(Info);
 }
