@@ -9,6 +9,7 @@
 #include <tchar.h>
 #include "Job.h"
 #include "Room.h"
+#include "ServerStats.h"
 
 enum
 {
@@ -56,6 +57,12 @@ int main()
 	//DoWorkerJob(service);
 
 	GRoom->DoAsync(&Room::UpdateTick);
+
+	while (true)
+	{
+		this_thread::sleep_for(10s);
+		GStats.Dump(service->GetCurrentSessionCount());
+	}
 
 
 	GThreadManager->Join();

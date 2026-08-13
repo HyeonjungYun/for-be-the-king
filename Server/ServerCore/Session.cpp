@@ -2,6 +2,7 @@
 #include "Session.h"
 #include "SocketUtils.h"
 #include "Service.h"
+#include "ServerStats.h"
 
 /*--------------
 	Session
@@ -238,6 +239,7 @@ void Session::ProcessRecv(int32 numOfBytes)
 		Disconnect(L"Recv 0");
 		return;
 	}
+	GStats.AddRecvBytes(numOfBytes);
 
 	if (_recvBuffer.OnWrite(numOfBytes) == false)
 	{
@@ -270,6 +272,7 @@ void Session::ProcessSend(int32 numOfBytes)
 		Disconnect(L"Send 0");
 		return;
 	}
+	GStats.AddSentBytes(numOfBytes);
 
 	// ������ �ڵ忡�� ������
 	OnSend(numOfBytes);

@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "JobQueue.h"
 #include "GlobalQueue.h"
+#include "ServerStats.h"
+#include "Utils.h"
 
 /*--------------
 	JobQueue
@@ -38,8 +40,14 @@ void JobQueue::Execute()
 		_jobs.PopAll(OUT jobs);
 
 		const int32 jobCount = static_cast<int32>(jobs.size());
+
+		const uint64 flushStartUs = Utils::NowMicroseconds();
+
 		for (int32 i = 0; i < jobCount; i++)
 			jobs[i]->Execute();
+
+		if (jobCount > 0)
+			GStats.RecordFlush(Utils::NowMicroseconds() - flushStartUs);
 
 		// 남은 일감이 0개라면 종료
 		if (_jobCount.fetch_sub(jobCount) == jobCount)
