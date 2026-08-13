@@ -2,12 +2,9 @@
 
 #define WIN32_LEAN_AND_MEAN // 거의 사용되지 않는 내용을 Windows 헤더에서 제외합니다.
 
-using BotSessionRef = std::shared_ptr<BotSession>;
-
 #include "Protocol.pb.h"
 #include "Enum.pb.h"
 #include "Struct.pb.h"
-#include "Utils.h"
 
 #ifdef _DEBUG
 #pragma comment(lib, "ServerCore\\Debug\\ServerCore.lib")
@@ -18,3 +15,4 @@ using BotSessionRef = std::shared_ptr<BotSession>;
 #endif
 
 #include "CorePch.h"
+#include "Utils.h"

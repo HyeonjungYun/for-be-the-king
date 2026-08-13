@@ -87,7 +87,7 @@
     <ClInclude Include="BufferReader.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="..\GameServer\Utils.h">
+    <ClInclude Include="Utils.h">
       <Filter>Utils</Filter>
     </ClInclude>
   </ItemGroup>
@@ -155,7 +155,7 @@
     <ClCompile Include="BufferReader.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="..\GameServer\Utils.cpp">
+    <ClCompile Include="Utils.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
   </ItemGroup>
