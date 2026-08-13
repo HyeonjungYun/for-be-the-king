@@ -212,6 +212,10 @@ P8    Tier 3                     2027~
 |---|---|---|---|
 | ~~P0-1~~ | ✅ **완료 08-11** — 이동 예산 모델 + 스냅백 + `object_id` 위조 차단. 음성 테스트 통과(5.88배 핵 → 1.167배) | 사용자 | — |
 | P0-2 | GoogleTest 도입 + 동시성 스트레스 3종 | 🔴 사용자 | 2일 |
+
+> 📄 **제안서**: `production/server-tasks/2026-08-13-googletest.md`
+> 프로젝트 셋업 · 단위 테스트 3파일 · 스트레스 3종 · 커버리지 측정.
+> 🔴 **`ServerCoreTests` 에 ServerCore 프로젝트 참조 필수** (겸사겸사 GameServer·DummyClient 에도 권장)
 | ~~P0-3~~ | ✅ **완료 08-13** — `ServerStats` (Flush 히스토그램 · 바이트 카운터 · WorkingSet). 10초 주기 자동 덤프 + PASS/FAIL 판정 | 사용자 | — |
 | ~~P0-4~~ | ✅ **완료 08-13** — `DummyClient -bots N`. 340cm/s 랜덤 워크 · 스냅백 감지. **30기까지 오탐 0건** | 사용자 | — |
 | P0-5 | `GameSession::OnDisconnected` Room 이탈 누락 → 유령 플레이어 | 🔴 사용자 | 0.5일 |
