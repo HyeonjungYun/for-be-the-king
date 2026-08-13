@@ -17,11 +17,11 @@ RecvWorker::RecvWorker(FSocket* Socket, TSharedPtr<class PacketSession> Session)
 
 RecvWorker::~RecvWorker()
 {
+	Destroy();
 }
 
 bool RecvWorker::Init()
 {
-	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Recv Thread Init")));
 	return true;
 }
 
@@ -39,6 +39,10 @@ uint32 RecvWorker::Run()
 				Session->RecvPacketQueue.Enqueue(Packet);
 			}
 		}
+		else
+		{
+			FPlatformProcess::Sleep(0.001f);
+		}
 	}
 
 	return 0;
@@ -51,6 +55,13 @@ void RecvWorker::Exit()
 void RecvWorker::Destroy()
 {
 	Running = false;
+
+	if (Thread != nullptr)
+	{
+		Thread->Kill(true);
+		delete Thread;
+		Thread = nullptr;
+	}
 }
 
 
@@ -125,6 +136,7 @@ SendWorker::SendWorker(FSocket* Socket, TSharedPtr<class PacketSession> Session)
 
 SendWorker::~SendWorker()
 {
+	Destroy();
 }
 
 bool SendWorker::Init()
@@ -166,6 +178,13 @@ bool SendWorker::SendPacket(SendBufferRef SendBuffer)
 void SendWorker::Destroy()
 {
 	Running = false;
+
+	if (Thread != nullptr)
+	{
+		Thread->Kill(true);
+		delete Thread;
+		Thread = nullptr;
+	}
 }
 
 bool SendWorker::SendDesiredBytes(const uint8* Buffer, int32 Size)

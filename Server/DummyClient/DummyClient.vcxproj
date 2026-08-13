@@ -147,6 +147,7 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BotSession.cpp" />
     <ClCompile Include="ClientPacketHandler.cpp" />
     <ClCompile Include="DummyClient.cpp" />
     <ClCompile Include="Enum.pb.cc">
@@ -167,6 +168,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BotSession.h" />
     <ClInclude Include="ClientPacketHandler.h" />
     <ClInclude Include="Enum.pb.h" />
     <ClInclude Include="pch.h" />

@@ -18,6 +18,8 @@ class S1_API US1GameInstance : public UGameInstance
 	GENERATED_BODY()
 
 public:
+	virtual void Shutdown() override;
+
 	UFUNCTION(BlueprintCallable)
 	void ConnectToGameServer();
 
@@ -50,6 +52,6 @@ public:
 	UPROPERTY(EditAnywhere)
 	TSubclassOf<AS1Player> OtherPlayerClass;
 
-	AS1Player* MyPlayer;
-	TMap<uint64, AS1Player*> Players;
+	TWeakObjectPtr<AS1Player> MyPlayer;
+	TMap<uint64, TWeakObjectPtr<AS1Player>> Players;
 };

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include <atomic>
 #include "Containers/Queue.h"
 #include "S1.h"
 
@@ -51,7 +52,7 @@ private:
 
 protected:
 	FRunnableThread* Thread = nullptr;
-	bool Running = true;
+	std::atomic<bool> Running = true;
 	FSocket* Socket;
 	TWeakPtr<class PacketSession> SessionRef;	
 	// 세션의 큐를 세션에서 직접 받아오면 세션이 종료되었을 때 큐의 포인터가 null이 되므로 세션을 직접 받아와 레퍼런스 카운트를 1 늘려준다
@@ -79,7 +80,7 @@ private:
 
 protected:
 	FRunnableThread* Thread = nullptr;
-	bool Running = true;
+	std::atomic<bool> Running = true;
 	FSocket* Socket;
 	TWeakPtr<class PacketSession> SessionRef;
 };

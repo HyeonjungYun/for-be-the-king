@@ -12,6 +12,13 @@
 #include "S1MyPlayer.h"
 
 
+void US1GameInstance::Shutdown()
+{
+	DisconnectFromGameServer();
+
+	Super::Shutdown();
+}
+
 void US1GameInstance::ConnectToGameServer()
 {
 	Socket = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(TEXT("Stream"), TEXT("Client Socket"));
@@ -51,18 +58,24 @@ void US1GameInstance::ConnectToGameServer()
 
 void US1GameInstance::DisconnectFromGameServer()
 {
-	if (Socket == nullptr || GameServerSession == nullptr)
+	if (Socket == nullptr)
 		return;
 
-	Protocol::C_LEAVE_GAME LeavePkt;
-	SEND_PACKET(LeavePkt);
-
-	/*if (Socket)
+	if (GameServerSession != nullptr)
 	{
-		ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get();
-		SocketSubsystem->DestroySocket(Socket);
-		Socket = nullptr;
-	}*/
+		Protocol::C_LEAVE_GAME LeavePkt;
+		SEND_PACKET(LeavePkt);
+
+		GameServerSession->Disconnect();
+		GameServerSession = nullptr;
+	}
+	
+	ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get();
+	SocketSubsystem->DestroySocket(Socket);
+	Socket = nullptr;
+
+	MyPlayer.Reset();
+	Players.Empty();
 }
 
 void US1GameInstance::HandleRecvPackets()
@@ -92,8 +105,14 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 
 	// 중복 처리 체크
 	const uint64 ObjectId = objectInfo.object_id();
-	if (Players.Find(ObjectId) != nullptr)
-		return;
+	if (TWeakObjectPtr<AS1Player>* Found = Players.Find(ObjectId))
+	{
+		if (Found->IsValid())	// 액터가 살아있으면 중ㅂ고
+			return;
+
+		Players.Remove(ObjectId);
+	}
+
 
 	FVector SpawnLocation(objectInfo.pos_info().x(), objectInfo.pos_info().y(), objectInfo.pos_info().z());
 
@@ -144,11 +163,14 @@ void US1GameInstance::HandleDespawn(uint64 ObjectId)
 
 	// TODO : Despawn
 
-	AS1Player** FindActor = Players.Find(ObjectId);
+	TWeakObjectPtr<AS1Player>* FindActor = Players.Find(ObjectId);
 	if (FindActor == nullptr)
 		return;
 
-	World->DestroyActor(*FindActor);
+	if (AS1Player* Actor = FindActor->Get())
+		World->DestroyActor(FindActor->Get());
+
+	Players.Remove(ObjectId);
 }
 
 void US1GameInstance::HandleDespawn(const Protocol::S_DESPAWN& DespawnPkt)
@@ -169,12 +191,18 @@ void US1GameInstance::HandleMove(const Protocol::S_MOVE& MovePkt)
 		return;
 
 	const uint64 ObjectId = MovePkt.info().object_id();
-	AS1Player** FindActor = Players.Find(ObjectId);
+	TWeakObjectPtr<AS1Player>* FindActor = Players.Find(ObjectId);
 
 	if (FindActor == nullptr)
 		return;
 
-	AS1Player* Player = (*FindActor);
+	AS1Player* Player = (FindActor->Get());
+	if (Player == nullptr)
+	{
+		Players.Remove(ObjectId);
+		return;
+	}
+
 	const Protocol::PosInfo& Info = MovePkt.info();
 
 	if (Player->IsMyPlayer())

@@ -37,7 +37,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->lastMoveUs = Utils::NowMicroseconds();
 
 		// Áø´Ü¿ë
-		cout << "[SPAWN] id=" << player->objectInfo->object_id()
+		wcout << "[SPAWN] id=" << player->objectInfo->object_id()
 			<< " pos=(" << player->posInfo->x()
 			<< ", " << player->posInfo->y()
 			<< ", " << player->posInfo->z() << ")" << endl;
@@ -172,7 +172,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		{
 			rejected = true;
 
-			cout << "[MOVE REJECT] id=" << objectId
+			wcout << "[MOVE REJECT] id=" << objectId
 				<< " dist=" << distance
 				<< " budget=" << player->moveBudget
 				<< " dt=" << deltaSec << endl;
