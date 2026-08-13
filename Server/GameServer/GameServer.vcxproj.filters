@@ -45,9 +45,6 @@
     <ClCompile Include="ServerPacketHandler.cpp">
       <Filter>Main</Filter>
     </ClCompile>
-    <ClCompile Include="Utils.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
     <ClCompile Include="Player.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -88,9 +85,6 @@
     </ClInclude>
     <ClInclude Include="ServerPacketHandler.h">
       <Filter>Main</Filter>
-    </ClInclude>
-    <ClInclude Include="Utils.h">
-      <Filter>Utils</Filter>
     </ClInclude>
     <ClInclude Include="Player.h">
       <Filter>Game</Filter>
