@@ -90,6 +90,9 @@
     <ClInclude Include="Utils.h">
       <Filter>Utils</Filter>
     </ClInclude>
+    <ClInclude Include="ServerStats.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CorePch.cpp">
@@ -156,6 +159,9 @@
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="Utils.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="ServerStats.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
   </ItemGroup>
