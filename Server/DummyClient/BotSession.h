@@ -23,5 +23,7 @@ public:
 	float destY = 0.f;
 };
 
+using BotSessionRef = std::shared_ptr<BotSession>;
+
 extern mutex GBotsLock;
 extern vector<BotSessionRef> GBots;
