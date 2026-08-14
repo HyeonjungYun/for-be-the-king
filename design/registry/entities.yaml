@@ -466,6 +466,104 @@ constants:
       🔴 이전 개정(5/800)의 "풀장비는 맨몸의 5~10배 DPS"는 **HP도 함께 오른다는 점을 빠뜨린
       잘못된 계산**이었다. 폐기하고 ②의 배율 관계를 쓸 것.
 
+  - name: full_gear_effective_hp_cap
+    type: constant
+    status: active
+    value: 2.0
+    unit: 배율
+    source: design/gdd/game-concept.md          # § 장비 스케일 상한
+    referenced_by:
+      - design/gdd/game-concept.md
+      - design/gdd/combat-system.md
+    note: >
+      **풀장비 실효HP 배율 상한.** 2026-08-14 확정. 맨몸 대비 최대 2배.
+      `실효HP배율 = HP배율 × 완화계수`, `완화계수 = (armor + K_mitigation) / K_mitigation`
+      예: `HP 1.4배 × armor 40` = 1.96 · `HP 1.0 × armor 100` = 2.0 · `HP 2.0 × armor 0` = 2.0
+      부위별 배분은 아이템 설계 몫이며, **곱이 2.0 을 넘지 않게** 한다.
+      → 30초 교전을 만족하는 **필요 DPS 배율 = 3.33** (`full_gear_dps_cap`)
+
+      **왜 2배인가 — 이 숫자가 맨몸 ↔ 풀장비 격차를 결정한다**
+
+      | | 시간 |
+      | ---- | ---- |
+      | 맨몸 → 풀장비 킬 | 100초 |
+      | 풀장비 → 맨몸 킬 | 15초 |
+      | 격차 | **6.7배** |
+
+      익스트랙션에서 맨몸은 "다 잃고 재시작한 상태"다. 격차가 크면 재기가 불가능해
+      파산 유저가 이탈하고, 작으면 장비를 모을 이유가 약해진다. 2배는
+      **매복·기습·다구대일로 뒤집을 여지를 남기는** 쪽을 택한 값이다.
+      🔴 3배(격차 15배)·4배(27배)를 검토했고 의도적으로 기각했다. 올리려면 이 표를 다시 볼 것.
+
+  - name: full_gear_dps_cap
+    type: constant
+    status: active
+    value: 3.33
+    unit: 배율
+    source: design/gdd/game-concept.md          # § 장비 스케일 상한
+    referenced_by:
+      - design/gdd/game-concept.md
+      - design/gdd/combat-system.md
+    note: >
+      **풀장비 DPS 배율 상한.** `1.67 × full_gear_effective_hp_cap(2.0)` 에서 유도.
+      맨몸 DPS 10 → 풀장비 최대 **33.3**.
+      🔴 **이 값을 넘기면 교전이 30초보다 짧아진다.** 아이템에 공격력·공속을 붙일 때마다 대조할 것.
+
+  - name: silence_semantics
+    type: constant
+    status: active
+    value: skill_only
+    source: design/gdd/combat-system.md         # § Detailed Rules — 소프트 CC
+    referenced_by:
+      - design/gdd/combat-system.md
+      - design/gdd/game-concept.md
+    note: >
+      **소프트 CC "공격 불가"는 스킬만 차단한다. 평타는 가능.** 2026-08-14 확정.
+      🔴 **명칭 정정**: `game-concept.md` 의 "공격 불가" → **"침묵(Silence)"** 으로 부른다.
+      아카이브(LoL 계승)와 같은 의미이며, 이름이 동작을 정확히 말하게 한다.
+      **왜 평타를 살렸나**: 소프트 CC 는 **부위 제한이 없어 5부위 전부**에 달 수 있다.
+      평타까지 막으면 사실상 무장해제 = 하드 CC 가 되고,
+      **"하드 CC 는 무기 부위 1개"라는 구조적 제약이 옆으로 무너진다.**
+      감속 상한을 40% 로 묶은 것(`soft_cc_slow_cap`)과 같은 논리다.
+      ⚠️ **MVP(스킬 2~3개) 시점에는 효과가 약하다.** 스킬이 늘어나야 값어치가 생기는 CC 다.
+      아이템 설계 시 "지금 약하다"고 강화하지 말 것 — 강화하면 위 제약이 깨진다.
+
+  - name: hard_cc_stack_model
+    type: constant
+    status: active
+    value: max_end_time
+    source: design/gdd/combat-system.md         # § Formulas — 하드 CC 중첩
+    referenced_by:
+      - design/gdd/combat-system.md
+    note: >
+      **하드 CC 중첩 = 최댓값(끝 시각) 방식.** 2026-08-14 확정.
+      `ccEndUs = max(ccEndUs, now + cc_effective_duration)` — 서버 상태는 uint64 하나뿐.
+      새 CC 가 더 늦게 끝나면 **연장**되고, 먼저 끝나면 **씹힌다**. 중간에 풀렸다 걸리는 일은 없다.
+      🔴 **구간 합집합과 결과가 완전히 동일하다** — 겹치면 합쳐지고, 안 겹치면 만료 후 재적용된다.
+      합집합은 상태(구간 vector)만 많으므로 채택하지 않았다.
+      **"4인 합 5초"는 런타임이 아니라 데이터로 지킨다** —
+      `hard_cc_base_duration ≤ 1.25s` 로 아이템을 설계하면 4명이 이어붙여도 5초다.
+      하드 CC 는 무기 부위 1개 + 쿨다운이므로 그 이상 겹칠 수 없다.
+      🔴 **동시에 던지면 겹쳐서 낭비된다(4인 동시 → 약 1.55초).** 이것은 버그가 아니라 의도다 —
+      **실력 표현 축 2순위(쿨다운 시퀀싱)** 가 여기서 작동한다. 순서를 맞출 줄 아는 팀만 5초를 얻는다.
+
+  - name: attack_range_naked
+    type: constant
+    status: active
+    value: 150
+    unit: cm
+    source: design/gdd/combat-system.md         # § Detailed Rules 1 — 평타
+    referenced_by:
+      - design/gdd/combat-system.md
+    note: >
+      **맨몸(무기 0개) 기본 공격 사거리.** 2026-08-14 확정.
+      캐릭터 캡슐 반경 42cm 의 3.5배 — 서로 붙어야 닿는 근접 거리.
+      LoL 근접 챔피언 구간(125~175)과 일치한다.
+      **근접으로 정한 이유**: ① 맨몸은 무기가 없으므로 맨주먹이 자연스럽다
+      ② "무기를 주우면 사거리가 늘어난다"는 체감이 가장 크다
+      ③ **"맨몸은 약하다"(base_stats_naked)를 거리로도 표현**한다 — 수치만이 아니라 간합으로.
+      🔴 무기별 사거리는 아이템 설계 시점에 정한다. 이 값은 하한선 역할을 한다.
+
   - name: soft_cc_slow_cap
     type: constant
     status: active
