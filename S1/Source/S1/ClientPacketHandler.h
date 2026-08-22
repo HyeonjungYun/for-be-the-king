@@ -20,8 +20,21 @@ enum : uint16
 	PKT_S_DESPAWN = 1007,
 	PKT_C_MOVE = 1008,
 	PKT_S_MOVE = 1009,
-	PKT_C_CHAT = 1010,
-	PKT_S_CHAT = 1011,
+	PKT_C_ATTACK = 1010,
+	PKT_S_ATTACK = 1011,
+	PKT_S_ATTACK_CANCEL = 1012,
+	PKT_S_DAMAGE = 1013,
+	PKT_S_CC = 1014,
+	PKT_S_CC_STATE = 1015,
+	PKT_S_DIED = 1016,
+	PKT_C_CHAT = 1017,
+	PKT_S_CHAT = 1018,
+	PKT_C_SKILL = 1019,
+	PKT_C_SKILL_CANCEL = 1020,
+	PKT_S_SKILL_CAST = 1021,
+	PKT_S_SKILL_CANCEL = 1022,
+	PKT_S_SKILL_HIT = 1023,
+	PKT_S_EQUIP_SYNC = 1024,
 };
 
 // Custom Handlers
@@ -32,7 +45,17 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt);
 bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt);
 bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt);
+bool Handle_S_ATTACK(PacketSessionRef& session, Protocol::S_ATTACK& pkt);
+bool Handle_S_ATTACK_CANCEL(PacketSessionRef& session, Protocol::S_ATTACK_CANCEL& pkt);
+bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt);
+bool Handle_S_CC(PacketSessionRef& session, Protocol::S_CC& pkt);
+bool Handle_S_CC_STATE(PacketSessionRef& session, Protocol::S_CC_STATE& pkt);
+bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt);
 bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt);
+bool Handle_S_SKILL_CAST(PacketSessionRef& session, Protocol::S_SKILL_CAST& pkt);
+bool Handle_S_SKILL_CANCEL(PacketSessionRef& session, Protocol::S_SKILL_CANCEL& pkt);
+bool Handle_S_SKILL_HIT(PacketSessionRef& session, Protocol::S_SKILL_HIT& pkt);
+bool Handle_S_EQUIP_SYNC(PacketSessionRef& session, Protocol::S_EQUIP_SYNC& pkt);
 
 class ClientPacketHandler
 {
@@ -47,7 +70,17 @@ public:
 		GPacketHandler[PKT_S_SPAWN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SPAWN>(Handle_S_SPAWN, session, buffer, len); };
 		GPacketHandler[PKT_S_DESPAWN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_DESPAWN>(Handle_S_DESPAWN, session, buffer, len); };
 		GPacketHandler[PKT_S_MOVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MOVE>(Handle_S_MOVE, session, buffer, len); };
+		GPacketHandler[PKT_S_ATTACK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ATTACK>(Handle_S_ATTACK, session, buffer, len); };
+		GPacketHandler[PKT_S_ATTACK_CANCEL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ATTACK_CANCEL>(Handle_S_ATTACK_CANCEL, session, buffer, len); };
+		GPacketHandler[PKT_S_DAMAGE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_DAMAGE>(Handle_S_DAMAGE, session, buffer, len); };
+		GPacketHandler[PKT_S_CC] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CC>(Handle_S_CC, session, buffer, len); };
+		GPacketHandler[PKT_S_CC_STATE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CC_STATE>(Handle_S_CC_STATE, session, buffer, len); };
+		GPacketHandler[PKT_S_DIED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_DIED>(Handle_S_DIED, session, buffer, len); };
 		GPacketHandler[PKT_S_CHAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CHAT>(Handle_S_CHAT, session, buffer, len); };
+		GPacketHandler[PKT_S_SKILL_CAST] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SKILL_CAST>(Handle_S_SKILL_CAST, session, buffer, len); };
+		GPacketHandler[PKT_S_SKILL_CANCEL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SKILL_CANCEL>(Handle_S_SKILL_CANCEL, session, buffer, len); };
+		GPacketHandler[PKT_S_SKILL_HIT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SKILL_HIT>(Handle_S_SKILL_HIT, session, buffer, len); };
+		GPacketHandler[PKT_S_EQUIP_SYNC] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_EQUIP_SYNC>(Handle_S_EQUIP_SYNC, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -59,7 +92,10 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_ENTER_GAME& pkt) { return MakeSendBuffer(pkt, PKT_C_ENTER_GAME); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_LEAVE_GAME& pkt) { return MakeSendBuffer(pkt, PKT_C_LEAVE_GAME); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_MOVE& pkt) { return MakeSendBuffer(pkt, PKT_C_MOVE); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_ATTACK); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_CHAT& pkt) { return MakeSendBuffer(pkt, PKT_C_CHAT); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_SKILL& pkt) { return MakeSendBuffer(pkt, PKT_C_SKILL); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_SKILL_CANCEL& pkt) { return MakeSendBuffer(pkt, PKT_C_SKILL_CANCEL); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

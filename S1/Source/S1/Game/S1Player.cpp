@@ -13,6 +13,8 @@
 #include "InputActionValue.h"
 #include "S1MyPlayer.h"
 #include "S1.h"
+#include "DrawDebugHelpers.h"
+#include "Components/TextRenderComponent.h"
 
 AS1Player::AS1Player()
 {
@@ -97,6 +99,10 @@ void AS1Player::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	TickCc();
+	DrawCombatDebug();
+	TickDamagePopups();
+
 	{
 		FVector Location = GetActorLocation();
 		PlayerInfo->set_x(Location.X);
@@ -146,6 +152,278 @@ void AS1Player::TickRemotePlayer(float DeltaTime)
 
 	if (FrameVelocity.SizeSquared() > 1.f)
 		AddMovementInput(FrameVelocity.GetSafeNormal(), 1.f);
+}
+
+void AS1Player::TickCc()
+{
+	// Remote proxies are moved by hand in TickRemotePlayer (MOVE_None), so walk speed means
+	// nothing to them and StopMovementImmediately would fight the interpolation. Their CC is
+	// visible through the positions the server sends, which are already slowed.
+	if (IsMyPlayer() == false)
+		return;
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (Movement == nullptr)
+		return;
+
+	// Formula C5 — the server aggregates slow sources and sends the max; we only apply it.
+	Movement->MaxWalkSpeed = BaseWalkSpeed * (1.f - ActiveSlow);
+
+	if (CanMove() == false)
+		Movement->StopMovementImmediately();
+}
+
+void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit)
+{
+	CurrentHp = RemainingHp;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+		return;
+
+	// Reuse a finished slot; otherwise grow up to the cap; otherwise steal the oldest.
+	int32 SlotIdx = INDEX_NONE;
+
+	for (int32 i = 0; i < DamagePopups.Num(); i++)
+	{
+		if (DamagePopups[i].bActive == false)
+		{
+			SlotIdx = i;
+			break;
+		}
+	}
+
+	if (SlotIdx == INDEX_NONE)
+	{
+		if (DamagePopups.Num() < DAMAGE_POPUP_MAX)
+		{
+			SlotIdx = DamagePopups.AddDefaulted();
+		}
+		else
+		{
+			float Oldest = TNumericLimits<float>::Max();
+			for (int32 i = 0; i < DamagePopups.Num(); i++)
+			{
+				if (DamagePopups[i].SpawnedAt < Oldest)
+				{
+					Oldest = DamagePopups[i].SpawnedAt;
+					SlotIdx = i;
+				}
+			}
+		}
+	}
+
+	FDamagePopup& Popup = DamagePopups[SlotIdx];
+
+	if (Popup.Text == nullptr)
+	{
+		// Created on demand and registered by hand — components made after BeginPlay do not
+		// exist to the engine until RegisterComponent runs.
+		Popup.Text = NewObject<UTextRenderComponent>(this);
+		Popup.Text->SetupAttachment(RootComponent);
+		Popup.Text->SetHorizontalAlignment(EHTA_Center);
+		Popup.Text->SetVerticalAlignment(EVRTA_TextCenter);
+		Popup.Text->RegisterComponent();
+	}
+
+	Popup.Text->SetText(FText::AsNumber(Damage));
+	Popup.Text->SetTextRenderColor(bIsCrit ? FColor::Yellow : FColor::White);
+	Popup.Text->SetWorldSize(DAMAGE_POPUP_TEXT_SIZE * (bIsCrit ? 1.6f : 1.f));
+	Popup.Text->SetVisibility(true);
+
+	// Fan consecutive hits sideways so two numbers arriving together do not land on top of
+	// each other. Centred on the character: -1.5, -0.5, +0.5, +1.5 spreads.
+	Popup.ScreenOffsetX = ((DamagePopupCount++ % 4) - 1.5f) * DAMAGE_POPUP_SPREAD;
+	Popup.SpawnedAt = World->GetTimeSeconds();
+	Popup.bActive = true;
+}
+
+void AS1Player::TickDamagePopups()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || DamagePopups.Num() == 0)
+		return;
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (PC == nullptr)
+		return;
+
+	FVector CamLoc;
+	FRotator CamRot;
+	PC->GetPlayerViewPoint(CamLoc, CamRot);
+
+	const FMatrix CamMatrix = FRotationMatrix(CamRot);
+	const FVector CamForward = CamMatrix.GetUnitAxis(EAxis::X);
+	const FVector ScreenRight = CamMatrix.GetUnitAxis(EAxis::Y);
+	const FVector ScreenUp = CamMatrix.GetUnitAxis(EAxis::Z);
+
+	// TextRenderComponent draws in its local YZ plane facing local +X (engine source:
+	// TangentZ is (1,0,0)). Point +X back at the camera and keep +Z on screen-up, and the
+	// number reads flat and upright no matter what the camera does.
+	const FRotator FaceCamera = FRotationMatrix::MakeFromXZ(-CamForward, ScreenUp).Rotator();
+
+	const float Now = World->GetTimeSeconds();
+	const FVector ActorLocation = GetActorLocation();
+
+	for (FDamagePopup& Popup : DamagePopups)
+	{
+		if (Popup.bActive == false || Popup.Text == nullptr)
+			continue;
+
+		const float Age = Now - Popup.SpawnedAt;
+
+		if (Age >= DAMAGE_POPUP_SECONDS)
+		{
+			Popup.bActive = false;
+			Popup.Text->SetVisibility(false);
+			continue;
+		}
+
+		const float Alpha = Age / DAMAGE_POPUP_SECONDS;
+
+		// Anchored to the actor so the number travels with a target that keeps running,
+		// and offset along screen axes so the rise and the spread stay independent.
+		const FVector Location = ActorLocation
+			+ ScreenRight * Popup.ScreenOffsetX
+			+ ScreenUp * (DAMAGE_POPUP_BASE_HEIGHT + DAMAGE_POPUP_RISE * Alpha);
+
+		Popup.Text->SetWorldLocation(Location);
+		Popup.Text->SetWorldRotation(FaceCamera);
+	}
+}
+
+void AS1Player::DrawCombatDebug()
+{
+	if (bShowCombatDebug == false)
+		return;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+		return;
+
+	// Laid flat on the ground plane beside the character. From a fixed top-down camera that
+	// reads as a bar above them, and it never overlaps the mesh the way a floating quad would.
+	const FVector Base = GetActorLocation() + FVector(DEBUG_BAR_OFFSET_X, 0.f, 0.f);
+	const FVector Half = FVector(0.f, HEALTH_BAR_WIDTH * 0.5f, 0.f);
+
+	// bPersistentLines=false with LifeTime=-1 draws for exactly one frame, so the bar tracks
+	// the actor instead of leaving a trail behind it.
+	DrawDebugLine(World, Base - Half, Base + Half, FColor(40, 40, 40), false, -1.f, 0, 6.f);
+
+	const float Ratio = (MaxHp > 0)
+		? FMath::Clamp(CurrentHp / static_cast<float>(MaxHp), 0.f, 1.f)
+		: 0.f;
+
+	if (Ratio > 0.f)
+	{
+		DrawDebugLine(World, Base - Half, (Base - Half) + Half * 2.f * Ratio,
+			FColor::Green, false, -1.f, 0, 6.f);
+	}
+
+	// One short tick per active CC, left to right. Colours are arbitrary debug picks — the
+	// art bible's palette rules do not apply to something that never ships.
+	const float Now = World->GetTimeSeconds();
+	int32 Slot = 0;
+
+	auto Mark = [&](bool bActive, FColor Color)
+	{
+		if (bActive == false)
+			return;
+
+		const FVector Start = (Base - Half) + FVector(-16.f, Slot++ * 14.f, 0.f);
+		DrawDebugLine(World, Start, Start + FVector(0.f, 10.f, 0.f), Color, false, -1.f, 0, 8.f);
+	};
+
+	Mark(Now < StunUntil, FColor::Red);
+	Mark(Now < RootUntil, FColor::Orange);
+	Mark(Now < KnockbackUntil, FColor::Magenta);
+	Mark(Now < LaunchUntil, FColor::Purple);
+	Mark(ActiveSlow > 0.f, FColor::Cyan);
+}
+
+void AS1Player::ApplyCcEvent(const Protocol::CcEventInfo& Info, bool bApplied)
+{
+	// Expiry sets the deadline to now; the server is the only thing that extends it.
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	const float Until = bApplied ? (Now + Info.duration_ms() / 1000.f) : Now;
+
+	switch (Info.cc_type())
+	{
+	case Protocol::CC_TYPE_STUN:		StunUntil = Until;		break;
+	case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
+	case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
+	case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
+
+	case Protocol::CC_TYPE_SLOW:
+		// Individual slow sources expire independently on the server, which recomputes the
+		// aggregate. An expiry event here means every source is gone.
+		if (bApplied == false)
+			ActiveSlow = 0.f;
+		else if (Info.magnitude() > ActiveSlow)
+			ActiveSlow = Info.magnitude();
+		break;
+
+	default:
+		// Silence and heal reduction have no movement effect — they are gameplay-only and
+		// will be read by the skill system (P1.5) and healing (P2).
+		break;
+	}
+}
+
+void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	// A snapshot is the whole truth, so start from cleared deadlines. Anything the server
+	// did not list has already expired — merging instead of overwriting would let a single
+	// missed expiry event pin the character in a CC forever.
+	StunUntil = 0.f;
+	RootUntil = 0.f;
+	KnockbackUntil = 0.f;
+	LaunchUntil = 0.f;
+
+	for (const Protocol::CcSlot& Slot : State.slots())
+	{
+		const float Until = Now + Slot.remaining_ms() / 1000.f;
+
+		switch (Slot.cc_type())
+		{
+		case Protocol::CC_TYPE_STUN:		StunUntil = Until;		break;
+		case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
+		case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
+		case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
+
+		default:
+			// Slow arrives as the aggregate below; silence and heal reduction have no
+			// movement effect and are read by the skill and healing systems later.
+			break;
+		}
+	}
+
+	// Formula C5 — the server already took the max across sources. Taking it wholesale is
+	// exactly what fixes partial expiry, which the event path cannot express.
+	SetActiveSlow(State.active_slow());
+}
+
+void AS1Player::SetActiveSlow(float InActiveSlow)
+{
+	ActiveSlow = FMath::Clamp(InActiveSlow, 0.f, 1.f);
+}
+
+bool AS1Player::CanMove() const
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	return Now >= StunUntil && Now >= RootUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
+}
+
+bool AS1Player::CanTurn() const
+{
+	// Root is the exception — it pins you but lets you keep aiming. That distinction is the
+	// whole reason root and stun are separate CC types (combat-system.md Rule 5 table).
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	return Now >= StunUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
 }
 
 void AS1Player::ResetInterpolation(Protocol::MoveState State)

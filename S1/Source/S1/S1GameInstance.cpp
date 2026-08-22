@@ -190,26 +190,132 @@ void US1GameInstance::HandleMove(const Protocol::S_MOVE& MovePkt)
 	if (World == nullptr)
 		return;
 
-	const uint64 ObjectId = MovePkt.info().object_id();
-	TWeakObjectPtr<AS1Player>* FindActor = Players.Find(ObjectId);
-
-	if (FindActor == nullptr)
-		return;
-
-	AS1Player* Player = (FindActor->Get());
-	if (Player == nullptr)
+	for (const Protocol::PosInfo& Info : MovePkt.infos())
 	{
-		Players.Remove(ObjectId);
-		return;
+
+		const uint64 ObjectId = Info.object_id();
+		TWeakObjectPtr<AS1Player>* FindActor = Players.Find(ObjectId);
+
+		if (FindActor == nullptr)
+			continue;
+
+		AS1Player* Player = (FindActor->Get());
+		if (Player == nullptr)
+		{
+			Players.Remove(ObjectId);
+			continue;
+		}
+
+		if (Player->IsMyPlayer())
+		{
+			if (MovePkt.correction())
+				Player->SetPlayerInfo(Info);
+
+			continue;
+		}
+
+		Player->SetDestInfo(Info);
 	}
+}
 
-	const Protocol::PosInfo& Info = MovePkt.info();
+void US1GameInstance::HandleCc(const Protocol::S_CC& CcPkt)
+{
+	if (Socket == nullptr || GameServerSession == nullptr)
+		return;
 
-	if (Player->IsMyPlayer())
+	auto ApplyTo = [this](const Protocol::CcEventInfo& Info, bool bApplied)
+		{
+			TWeakObjectPtr<AS1Player>* FindActor = Players.Find(Info.target_id());
+			if (FindActor == nullptr)
+				return;
+
+			if (AS1Player* Player = FindActor->Get())
+				Player->ApplyCcEvent(Info, bApplied);
+		};
+
+	for (const Protocol::CcEventInfo& Info : CcPkt.applied())
+		ApplyTo(Info, true);
+
+	for (const Protocol::CcEventInfo& Info : CcPkt.expired())
+		ApplyTo(Info, false);
+}
+
+void US1GameInstance::HandleCcState(const Protocol::S_CC_STATE& StatePkt)
+{
+	if (Socket == nullptr || GameServerSession == nullptr)
+		return;
+
+	for (const Protocol::CcStateInfo& State : StatePkt.states())
 	{
-		Player->SetPlayerInfo(Info);
-		return;
-	}
+		TWeakObjectPtr<AS1Player>* FindActor = Players.Find(State.target_id());
+		if (FindActor == nullptr)
+			continue;
 
-	Player->SetDestInfo(Info);
+		if (AS1Player* Player = FindActor->Get())
+			Player->ApplyCcState(State);
+	}
+}
+
+void US1GameInstance::HandleDamage(const Protocol::S_DAMAGE& DamagePkt)
+{
+	if (Socket == nullptr || GameServerSession == nullptr)
+		return;
+
+	for (const Protocol::DamageInfo& Info : DamagePkt.damages())
+	{
+		TWeakObjectPtr<AS1Player>* FindActor = Players.Find(Info.target_id());
+		if (FindActor == nullptr)
+			continue;
+
+		if (AS1Player* Player = FindActor->Get())
+			Player->OnDamaged(Info.damage(), Info.remaining_hp(), Info.is_crit());
+	}
+}
+
+void US1GameInstance::DebugChatCCStun()
+{
+	Protocol::C_CHAT pkt;
+	pkt.set_msg("/stun 3 1250");
+
+	SEND_PACKET(pkt);
+}
+
+void US1GameInstance::DebugChatCCSRoot()
+{
+	Protocol::C_CHAT pkt;
+	pkt.set_msg("/root 3 1250");
+
+	SEND_PACKET(pkt);
+}
+
+void US1GameInstance::DebugChatCCSlow4()
+{
+	Protocol::C_CHAT pkt;
+	pkt.set_msg("/slow 3 5000 0.4");
+
+	SEND_PACKET(pkt);
+}
+
+void US1GameInstance::DebugChatCCSlow3()
+{
+	Protocol::C_CHAT pkt;
+	pkt.set_msg("/slow 3 5000 0.3");
+
+	SEND_PACKET(pkt);
+}
+
+void US1GameInstance::DebugChatCCSlow2()
+{
+	Protocol::C_CHAT pkt;
+	pkt.set_msg("/slow 3 5000 0.2");
+
+	SEND_PACKET(pkt);
+}
+
+void US1GameInstance::DebugChatCCSlow15()
+{
+	Protocol::C_CHAT pkt;
+	pkt.set_msg("/slow 3 5000 0.15");
+
+	SEND_PACKET(pkt);
 }

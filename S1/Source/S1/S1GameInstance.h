@@ -40,6 +40,9 @@ public:
 	void HandleDespawn(const Protocol::S_DESPAWN& DespawnPkt);
 
 	void HandleMove(const Protocol::S_MOVE& MovePkt);
+	void HandleCc(const Protocol::S_CC& CcPkt);
+	void HandleCcState(const Protocol::S_CC_STATE& StatePkt);
+	void HandleDamage(const Protocol::S_DAMAGE& DamagePkt);
 	
 public:
 	// GameServer
@@ -54,4 +57,24 @@ public:
 
 	TWeakObjectPtr<AS1Player> MyPlayer;
 	TMap<uint64, TWeakObjectPtr<AS1Player>> Players;
+
+
+	// 디버그용 테스트 후 삭제
+	UFUNCTION(BlueprintCallable)
+	void DebugChatCCStun();
+
+	UFUNCTION(BlueprintCallable)
+	void DebugChatCCSRoot();
+
+	UFUNCTION(BlueprintCallable)
+	void DebugChatCCSlow4();
+
+	UFUNCTION(BlueprintCallable)
+	void DebugChatCCSlow3();
+
+	UFUNCTION(BlueprintCallable)
+	void DebugChatCCSlow2();
+
+	UFUNCTION(BlueprintCallable)
+	void DebugChatCCSlow15();
 };
