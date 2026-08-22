@@ -426,6 +426,15 @@ bool AS1Player::CanTurn() const
 	return Now >= StunUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
 }
 
+bool AS1Player::CanAttack() const
+{
+	// Deliberately identical to CanTurn: if you can still aim, you can still swing.
+	// Kept as its own function because the two answer different questions and the server
+	// splits them the same way — combat-system.md Rule 5 is free to move one without
+	// dragging the other along.
+	return CanTurn();
+}
+
 void AS1Player::ResetInterpolation(Protocol::MoveState State)
 {
 	InterpStartLocation = GetActorLocation();

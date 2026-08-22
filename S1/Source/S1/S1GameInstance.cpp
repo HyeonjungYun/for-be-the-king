@@ -272,6 +272,14 @@ void US1GameInstance::HandleDamage(const Protocol::S_DAMAGE& DamagePkt)
 	}
 }
 
+void US1GameInstance::HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt)
+{
+	SkillSlots.Reset(EquipPkt.skills_size());
+
+	for (const Protocol::SkillInfo& Info : EquipPkt.skills())
+		SkillSlots.Add(Info);
+}
+
 void US1GameInstance::DebugChatCCStun()
 {
 	Protocol::C_CHAT pkt;
