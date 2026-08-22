@@ -99,6 +99,10 @@ void AS1Player::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Before the PlayerInfo sync below, so the dash displacement rides out on this frame's
+	// C_MOVE instead of lagging a frame behind the visible position.
+	TickDash(DeltaTime);
+
 	TickCc();
 	DrawCombatDebug();
 	TickDamagePopups();
@@ -424,6 +428,47 @@ bool AS1Player::CanTurn() const
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
 	return Now >= StunUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
+}
+
+void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedCms)
+{
+	if (DistCm <= 0.f || SpeedCms <= 0.f)
+		return;
+
+	FVector Flat = Direction;
+	Flat.Z = 0.0;
+
+	if (Flat.Normalize() == false)
+		return;
+
+	DashDirection = Flat;
+	DashRemainingCm = DistCm;
+	DashSpeedCms = SpeedCms;
+}
+
+void AS1Player::TickDash(float DeltaTime)
+{
+	if (DashRemainingCm <= 0.f)
+		return;
+
+	const float Step = FMath::Min(DashSpeedCms * DeltaTime, DashRemainingCm);
+
+	// Swept so the capsule is stopped by geometry rather than tunnelling through it. At
+	// 1200 cm/s a 33ms frame covers 40cm, which is comfortably under the capsule radius —
+	// a non-swept move would put us inside a wall.
+	FHitResult Hit;
+	AddActorWorldOffset(DashDirection * Step, true, &Hit);
+
+	if (Hit.bBlockingHit)
+	{
+		// Ends the moment it hits something (movement-camera.md § Dashing exit conditions).
+		// The server is not told: it validated a speed window, not a distance, so stopping
+		// short is always within what it already allows.
+		DashRemainingCm = 0.f;
+		return;
+	}
+
+	DashRemainingCm -= Step;
 }
 
 bool AS1Player::CanAttack() const
