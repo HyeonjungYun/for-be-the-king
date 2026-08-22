@@ -46,6 +46,7 @@ void SkillTable::Init()
 		def.cooldownMs = 8000;
 		def.canMoveWhileCasting = false;
 		def.shape = SkillShape::Single;
+		def.aimType = SkillAimType::Target;
 		def.rangeCm = 400.f;
 
 		SkillEffect dmg;
@@ -71,6 +72,7 @@ void SkillTable::Init()
 		def.cooldownMs = 6000;
 		def.canMoveWhileCasting = false;
 		def.shape = SkillShape::CircleSelf;
+		def.aimType = SkillAimType::Direction;
 		def.radiusCm = 0.f;
 
 		SkillEffect move;
