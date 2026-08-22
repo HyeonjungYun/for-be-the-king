@@ -10,6 +10,7 @@
 #include "Job.h"
 #include "Room.h"
 #include "ServerStats.h"
+#include "SkillTable.h"
 
 enum
 {
@@ -36,6 +37,7 @@ void DoWorkerJob(ServerServiceRef& service)
 int main()
 {
 	ServerPacketHandler::Init();
+	SkillTable::Init();
 
 	ServerServiceRef service = make_shared<ServerService>(
 		NetAddress(L"127.0.0.1", 7777),
@@ -57,6 +59,8 @@ int main()
 	//DoWorkerJob(service);
 
 	GRoom->DoAsync(&Room::UpdateTick);
+	GRoom->DoAsync(&Room::FlushMoves);
+	GRoom->DoAsync(&Room::FlushCombat);
 
 	while (true)
 	{

@@ -54,7 +54,45 @@ message C_MOVE
 
 message S_MOVE
 {
-	PosInfo info = 1;
+	repeated PosInfo infos = 1;
+	bool correction = 2;
+}
+
+message C_ATTACK
+{
+	uint64 target_id = 1;
+}
+
+message S_ATTACK
+{
+	repeated AttackInfo attacks = 1;
+}
+
+message S_ATTACK_CANCEL
+{
+	repeated uint64 attacker_ids = 1;
+}
+
+message S_DAMAGE
+{
+	repeated DamageInfo damages = 1;
+}
+
+message S_CC
+{
+	repeated CcEventInfo applied = 1;
+	repeated CcEventInfo expired = 2;
+	repeated KnockbackInfo knockbacks = 3;
+}
+
+message S_CC_STATE
+{
+	repeated CcStateInfo states = 1;
+}
+
+message S_DIED
+{
+	repeated DiedInfo deaths = 1;
 }
 
 message C_CHAT
@@ -66,4 +104,36 @@ message S_CHAT
 {
 	uint64 playerId = 1;
 	string msg = 2;
+}
+
+message C_SKILL
+{
+	EquipSlot slot = 1;
+	uint64 target_id = 2;
+	float aim_x = 3;
+	float aim_y = 4;
+}
+
+message C_SKILL_CANCEL
+{
+}
+
+message S_SKILL_CAST
+{
+	repeated SkillCastInfo casts = 1;
+}
+
+message S_SKILL_CANCEL
+{
+	repeated uint64 caster_ids = 1;
+}
+
+message S_SKILL_HIT
+{
+	repeated SkillHitInfo hits = 1;
+}
+
+message S_EQUIP_SYNC
+{
+	repeated SkillInfo skills = 1;
 }

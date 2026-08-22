@@ -37,7 +37,7 @@ void ServerStats::RecordFlush(uint64 micros)
 
 namespace
 {
-	uint64 PercentileUpperUs(const atomic<uint64>* buckets, uint64 total, double p)
+	uint64 PercentileUpperUs(const uint64* buckets, uint64 total, double p)
 	{
 		if (total == 0)
 			return 0;
@@ -47,7 +47,7 @@ namespace
 
 		for (int32 i = 0; i < ServerStats::BUCKET_COUNT; i++)
 		{
-			acc += buckets[i].load();
+			acc += buckets[i];
 			if (acc >= target)
 				return ServerStats::BUCKET_UPPER_US[i];
 		}
@@ -68,10 +68,15 @@ void ServerStats::Dump(int32 sessionCount)
 	const uint64 recvBytes = _recvBytes.exchange(0);
 	const uint64 sentBytes = _sentBytes.exchange(0);
 
-	const uint64 flushTotal = _flushCount.load();
-	const uint64 flushMax = _flushMaxUs.load();
-	const uint64 p95 = PercentileUpperUs(_flushBuckets, flushTotal, 0.95);
-	const uint64 p99 = PercentileUpperUs(_flushBuckets, flushTotal, 0.99);
+	const uint64 flushTotal = _flushCount.exchange(0);
+	const uint64 flushMax = _flushMaxUs.exchange(0);
+
+	uint64 buckets[BUCKET_COUNT];
+	for (int32 i = 0; i < BUCKET_COUNT; i++)
+		buckets[i] = _flushBuckets[i].exchange(0);
+
+	const uint64 p95 = PercentileUpperUs(buckets, flushTotal, 0.95);
+	const uint64 p99 = PercentileUpperUs(buckets, flushTotal, 0.99);
 
 	double recvMbps = 0.0;
 	double sentMbps = 0.0;

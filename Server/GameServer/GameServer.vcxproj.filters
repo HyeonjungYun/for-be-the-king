@@ -19,6 +19,9 @@
     <Filter Include="Game\Object">
       <UniqueIdentifier>{f88b3ea3-206e-4d14-bfba-99d03bcf37cd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Skill">
+      <UniqueIdentifier>{698a4332-f271-4df2-b4ba-0139995b2599}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GameServer.cpp">
@@ -45,9 +48,6 @@
     <ClCompile Include="ServerPacketHandler.cpp">
       <Filter>Main</Filter>
     </ClCompile>
-    <ClCompile Include="Player.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
     <ClCompile Include="Room.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -61,6 +61,12 @@
       <Filter>Game\Object</Filter>
     </ClCompile>
     <ClCompile Include="Object.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="SkillTable.cpp">
+      <Filter>Skill</Filter>
+    </ClCompile>
+    <ClCompile Include="Player.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
   </ItemGroup>
@@ -86,9 +92,6 @@
     <ClInclude Include="ServerPacketHandler.h">
       <Filter>Main</Filter>
     </ClInclude>
-    <ClInclude Include="Player.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClInclude Include="Room.h">
       <Filter>Game</Filter>
     </ClInclude>
@@ -102,6 +105,12 @@
       <Filter>Game\Object</Filter>
     </ClInclude>
     <ClInclude Include="Object.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="SkillTable.h">
+      <Filter>Skill</Filter>
+    </ClInclude>
+    <ClInclude Include="Player.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
   </ItemGroup>
@@ -118,5 +127,6 @@
     <None Include="..\Common\protoc-21.12-win64\bin\GenPackets.bat">
       <Filter>Protocol</Filter>
     </None>
+    <None Include="cpp.hint" />
   </ItemGroup>
 </Project>

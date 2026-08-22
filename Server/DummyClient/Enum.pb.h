@@ -155,6 +155,144 @@ inline bool MoveState_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<MoveState>(
     MoveState_descriptor(), name, value);
 }
+enum DamageType : int {
+  DAMAGE_TYPE_PHYSICAL = 0,
+  DAMAGE_TYPE_MAGIC = 1,
+  DamageType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  DamageType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool DamageType_IsValid(int value);
+constexpr DamageType DamageType_MIN = DAMAGE_TYPE_PHYSICAL;
+constexpr DamageType DamageType_MAX = DAMAGE_TYPE_MAGIC;
+constexpr int DamageType_ARRAYSIZE = DamageType_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DamageType_descriptor();
+template<typename T>
+inline const std::string& DamageType_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, DamageType>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function DamageType_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    DamageType_descriptor(), enum_t_value);
+}
+inline bool DamageType_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, DamageType* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<DamageType>(
+    DamageType_descriptor(), name, value);
+}
+enum CcType : int {
+  CC_TYPE_NONE = 0,
+  CC_TYPE_STUN = 1,
+  CC_TYPE_ROOT = 2,
+  CC_TYPE_KNOCKBACK = 4,
+  CC_TYPE_LAUNCH = 8,
+  CC_TYPE_SLOW = 16,
+  CC_TYPE_HEAL_REDUCTION = 32,
+  CC_TYPE_SILENCE = 64,
+  CcType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  CcType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool CcType_IsValid(int value);
+constexpr CcType CcType_MIN = CC_TYPE_NONE;
+constexpr CcType CcType_MAX = CC_TYPE_SILENCE;
+constexpr int CcType_ARRAYSIZE = CcType_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CcType_descriptor();
+template<typename T>
+inline const std::string& CcType_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, CcType>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function CcType_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    CcType_descriptor(), enum_t_value);
+}
+inline bool CcType_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, CcType* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<CcType>(
+    CcType_descriptor(), name, value);
+}
+enum DeathCause : int {
+  DEATH_CAUSE_NONE = 0,
+  DEATH_CAUSE_PLAYER = 1,
+  DEATH_CAUSE_MONSTER = 2,
+  DeathCause_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  DeathCause_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool DeathCause_IsValid(int value);
+constexpr DeathCause DeathCause_MIN = DEATH_CAUSE_NONE;
+constexpr DeathCause DeathCause_MAX = DEATH_CAUSE_MONSTER;
+constexpr int DeathCause_ARRAYSIZE = DeathCause_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DeathCause_descriptor();
+template<typename T>
+inline const std::string& DeathCause_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, DeathCause>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function DeathCause_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    DeathCause_descriptor(), enum_t_value);
+}
+inline bool DeathCause_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, DeathCause* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<DeathCause>(
+    DeathCause_descriptor(), name, value);
+}
+enum EquipSlot : int {
+  SLOT_NONE = 0,
+  SLOT_WEAPON_PRIMARY = 1,
+  SLOT_WEAPON_SECONDARY = 2,
+  SLOT_HELMET = 3,
+  SLOT_ARMOR = 4,
+  SLOT_BOOTS = 5,
+  SLOT_TRINKET = 6,
+  EquipSlot_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  EquipSlot_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool EquipSlot_IsValid(int value);
+constexpr EquipSlot EquipSlot_MIN = SLOT_NONE;
+constexpr EquipSlot EquipSlot_MAX = SLOT_TRINKET;
+constexpr int EquipSlot_ARRAYSIZE = EquipSlot_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* EquipSlot_descriptor();
+template<typename T>
+inline const std::string& EquipSlot_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, EquipSlot>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function EquipSlot_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    EquipSlot_descriptor(), enum_t_value);
+}
+inline bool EquipSlot_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, EquipSlot* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<EquipSlot>(
+    EquipSlot_descriptor(), name, value);
+}
+enum SlotBindState : int {
+  BIND_UNBOUND = 0,
+  BIND_BOUND = 1,
+  BIND_SHADOWED = 2,
+  SlotBindState_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  SlotBindState_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool SlotBindState_IsValid(int value);
+constexpr SlotBindState SlotBindState_MIN = BIND_UNBOUND;
+constexpr SlotBindState SlotBindState_MAX = BIND_SHADOWED;
+constexpr int SlotBindState_ARRAYSIZE = SlotBindState_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* SlotBindState_descriptor();
+template<typename T>
+inline const std::string& SlotBindState_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, SlotBindState>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function SlotBindState_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    SlotBindState_descriptor(), enum_t_value);
+}
+inline bool SlotBindState_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, SlotBindState* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<SlotBindState>(
+    SlotBindState_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -196,6 +334,31 @@ template <> struct is_proto_enum< ::Protocol::MoveState> : ::std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::MoveState>() {
   return ::Protocol::MoveState_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::DamageType> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::DamageType>() {
+  return ::Protocol::DamageType_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::CcType> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::CcType>() {
+  return ::Protocol::CcType_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::DeathCause> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::DeathCause>() {
+  return ::Protocol::DeathCause_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::EquipSlot> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::EquipSlot>() {
+  return ::Protocol::EquipSlot_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::SlotBindState> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::SlotBindState>() {
+  return ::Protocol::SlotBindState_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE
