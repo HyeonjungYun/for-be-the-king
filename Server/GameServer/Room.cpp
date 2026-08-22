@@ -93,6 +93,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 
 		{
 			player->skillSlots[0].skillId = 1001;
+			player->skillSlots[3].skillId = 3001;
 			player->skillSlots[4].skillId = 2001;
 			player->RefreshBindStates();
 

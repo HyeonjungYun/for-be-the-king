@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "SkillTable.h"
 
 unordered_map<uint32, SkillDef> SkillTable::s_defs;
@@ -81,6 +81,33 @@ void SkillTable::Init()
 		move.speedCms = 1200.f;
 		move.ignoresWalls = false;
 		def.effects.push_back(move);
+
+		s_defs[def.skillId] = def;
+	}
+
+	{
+		SkillDef def;
+		def.skillId = 3001;
+		def.effectId = 3;
+		def.castMs = 0;								// 즉발 — 조준 단계를 거치지 않는다
+		def.cooldownMs = 5000;
+		def.canMoveWhileCasting = false;			// castMs 가 0 이라 의미 없음
+		def.shape = SkillShape::CircleSelf;
+		def.aimType = SkillAimType::SelfArea;			// 내 주위를 벤다. 찍을 것이 없다
+		def.radiusCm = 250.f;
+
+		SkillEffect dmg;
+		dmg.type = SkillEffectType::Damage;
+		dmg.adRatio = 1.2f;							// 단일기(2.0) 보다 낮다 — 광역의 대가
+		dmg.damageType = Protocol::DAMAGE_TYPE_PHYSICAL;
+		def.effects.push_back(dmg);
+
+		SkillEffect slow;
+		slow.type = SkillEffectType::SoftCc;
+		slow.ccType = Protocol::CC_TYPE_SLOW;
+		slow.ccDurationMs = 1500;					// 상한 3000 (S1) 이하
+		slow.ccMagnitude = 0.30f;					// 상한 0.40 (soft_cc_slow_cap) 이하
+		def.effects.push_back(slow);
 
 		s_defs[def.skillId] = def;
 	}

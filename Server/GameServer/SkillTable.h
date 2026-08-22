@@ -16,6 +16,7 @@ enum class SkillShape : uint8
 enum class SkillAimType : uint8
 {
 	None = 0,
+	SelfArea,
 	Target,
 	Direction,
 	Point
