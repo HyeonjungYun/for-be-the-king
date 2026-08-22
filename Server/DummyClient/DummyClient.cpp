@@ -1,13 +1,17 @@
 ﻿#include "pch.h"
 #include <iostream>
+#include <timeapi.h>
 #include "ThreadManager.h"
 #include "Service.h"
 #include "Session.h"
 #include "ClientPacketHandler.h"
 #include "BotSession.h"
 
+#pragma comment(lib, "winmm.lib")
+
 mutex GBotsLock;
 vector<BotSessionRef> GBots;
+std::atomic<uint64> GSentThisWindow{ 0 };
 
 namespace
 {
@@ -15,7 +19,24 @@ namespace
 	constexpr float WANDER_RADIUS = 1000.f; 
 	constexpr float ARRIVE_EPSILON = 20.f;  
 	constexpr int   MOVE_INTERVAL_MS = 33;
+	constexpr int   MOVE_CHAT_MS = 2000;
+
+	constexpr float ATTACK_RANGE = 150.f;
+	constexpr float ATTACK_RANGE_SQ = ATTACK_RANGE * ATTACK_RANGE;
+	constexpr float BOT_STOP_DISTANCE = 120.f;
+	constexpr uint64 ATTACK_INTERVAL_US = 1'000'000;
+	constexpr uint64 REFILL_INTERVAL_US = 1'000'000;
+
+	constexpr uint64 SKILL_TRY_INTERVAL_US = 3'000'000;
+	constexpr uint64 BOT_CAST_HOLD_US = 400'000;
+	constexpr float SKILL_RANGE = 400.f;
+	constexpr float SKILL_RANGE_SQ = SKILL_RANGE * SKILL_RANGE;
+
+	constexpr uint64 DASH_TRY_INTERVAL_US = 5'000'000;
+	constexpr uint64 DASH_CAST_HOLD_US = 100'000;
 }
+atomic<uint64> GAttackSentThisWindow = 0;
+atomic<uint64> GSkillSentThisWindow = 0;
 
 static void TickBots(float deltaTime)
 {
@@ -25,21 +46,78 @@ static void TickBots(float deltaTime)
 		snapshot = GBots;
 	}
 
+	const uint64 nowUs = Utils::NowMicroseconds();
+
 	for (BotSessionRef& bot : snapshot)
 	{
-		if (bot->inGame.load() == false)
+		if (bot->inGame.load() == false || bot->alive.load() == false)
 			continue;
+
+		if (nowUs < bot->hardCcUntilUs.load())
+			continue;
+
+		BotSessionRef target = nullptr;
+		float bestDistSq = FLT_MAX;
+
+		for (BotSessionRef& other : snapshot)
+		{
+			if (other == bot)
+				continue;
+			if (other->inGame.load() == false || other->alive.load() == false)
+				continue;
+
+			const float ox = other->x - bot->x;
+			const float oy = other->y - bot->y;
+			const float distSq = ox * ox + oy * oy;
+
+			//if (distSq < bestDistSq)
+			if (target == nullptr || other->objectId.load() < target->objectId.load())
+			{
+				bestDistSq = distSq;
+				target = other;
+			}
+		}
+
+		if (target != nullptr)
+		{
+			bot->destX = target->x;
+			bot->destY = target->y;
+		}
 
 		const float dx = bot->destX - bot->x;
 		const float dy = bot->destY - bot->y;
 		const float dist = ::sqrtf(dx * dx + dy * dy);
 
-		if (dist < ARRIVE_EPSILON)
+		const bool casting = (nowUs < bot->castUnitlUs);
+		const bool dashing = (nowUs < bot->dashUntilUs.load());
+
+		if (dashing)
 		{
-			bot->destX = bot->x + Utils::GetRandom(-WANDER_RADIUS, WANDER_RADIUS);
-			bot->destY = bot->y + Utils::GetRandom(-WANDER_RADIUS, WANDER_RADIUS);
+			const float step = DASH_SPEED * deltaTime;
+			bot->x += bot->dashDirX * step;
+			bot->y += bot->dashDirY * step;
 		}
-		else
+		else if (casting)
+		{
+
+		}
+		else if (target == nullptr)
+		{
+			if (dist < ARRIVE_EPSILON)
+			{
+				bot->destX = bot->x + Utils::GetRandom(-WANDER_RADIUS, WANDER_RADIUS);
+				bot->destY = bot->y + Utils::GetRandom(-WANDER_RADIUS, WANDER_RADIUS);
+			}
+			else
+			{
+				const float step = BOT_MOVE_SPEED * deltaTime;
+				const float ratio = (step < dist) ? (step / dist) : 1.f;
+
+				bot->x += dx * ratio;
+				bot->y += dy * ratio;
+			}
+		}
+		else if (dist > BOT_STOP_DISTANCE)
 		{
 			const float step = BOT_MOVE_SPEED * deltaTime;
 			const float ratio = (step < dist) ? (step / dist) : 1.f;
@@ -48,18 +126,72 @@ static void TickBots(float deltaTime)
 			bot->y += dy * ratio;
 		}
 
-		Protocol::C_MOVE movePkt;
 		{
-			Protocol::PosInfo* info = movePkt.mutable_info();
-			info->set_object_id(bot->objectId.load());
-			info->set_x(bot->x);
-			info->set_y(bot->y);
-			info->set_z(bot->z);
-			info->set_yaw(0.f);
-			info->set_state(Protocol::MOVE_STATE_RUN);
+			Protocol::C_MOVE pkt;
+			{
+				Protocol::PosInfo* info = pkt.mutable_info();
+				info->set_object_id(bot->objectId.load());
+				info->set_x(bot->x);
+				info->set_y(bot->y);
+				info->set_z(bot->z);
+				info->set_yaw(0.f);
+				info->set_state(Protocol::MOVE_STATE_RUN);
+			}
+
+			bot->Send(ClientPacketHandler::MakeSendBuffer(pkt));
+			++GSentThisWindow;
 		}
 
-		bot->Send(ClientPacketHandler::MakeSendBuffer(movePkt));
+		if (casting == false && dashing == false && nowUs >= bot->nextDashAtUs)
+		{
+			float dirX = (target != nullptr) ? (target->x - bot->x) : dx;
+			float dirY = (target != nullptr) ? (target->y - bot->y) : dy;
+
+			const float len = ::sqrtf(dirX * dirX + dirY * dirY);
+			if (len > 1.f)
+			{
+				dirX /= len;
+				dirY /= len;
+
+				Protocol::C_SKILL dashPkt;
+				dashPkt.set_slot(Protocol::SLOT_BOOTS);
+				dashPkt.set_target_id(0);
+				dashPkt.set_aim_x(bot->x + dirX * DASH_DIST);
+				dashPkt.set_aim_y(bot->y + dirY * DASH_DIST);
+
+				bot->Send(ClientPacketHandler::MakeSendBuffer(dashPkt));
+
+				bot->dashDirX = dirX;
+				bot->dashDirY = dirY;
+				bot->nextDashAtUs = nowUs + DASH_TRY_INTERVAL_US;
+				bot->castUnitlUs = nowUs + DASH_CAST_HOLD_US;
+				++GSkillSentThisWindow;
+			}
+		}
+		else if (target != nullptr && bestDistSq <= SKILL_RANGE_SQ && nowUs >= bot->nextSkillAtUs)
+		{
+			Protocol::C_SKILL skillPkt;
+			skillPkt.set_slot(Protocol::SLOT_WEAPON_PRIMARY);
+			skillPkt.set_target_id(target->objectId.load());
+			skillPkt.set_aim_x(target->x);
+			skillPkt.set_aim_y(target->y);
+
+			bot->Send(ClientPacketHandler::MakeSendBuffer(skillPkt));
+
+			bot->nextSkillAtUs = nowUs + SKILL_TRY_INTERVAL_US;
+			bot->castUnitlUs = nowUs + BOT_CAST_HOLD_US;
+			++GSkillSentThisWindow;
+		}
+		else if (target != nullptr && bestDistSq <= ATTACK_RANGE_SQ && nowUs >= bot->nextAttackAtUs)
+		{
+			Protocol::C_ATTACK attackPkt;
+			attackPkt.set_target_id(target->objectId.load());
+
+			bot->Send(ClientPacketHandler::MakeSendBuffer(attackPkt));
+
+			bot->nextAttackAtUs = nowUs + ATTACK_INTERVAL_US;
+			++GAttackSentThisWindow;
+		}
 	}
 }
 
@@ -76,6 +208,8 @@ int main(int argc, char* argv[])
 		botCount = 1;
 
 	cout << "[BOT] launching " << botCount << " bot(s)" << endl;
+
+	::timeBeginPeriod(1);
 
 	ClientPacketHandler::Init();
 
@@ -98,6 +232,8 @@ int main(int argc, char* argv[])
 	}
 
 	uint64 lastUs = Utils::NowMicroseconds();
+	uint64 lastReportUs = lastUs;
+	uint64 lastRefillUs = lastUs;
 
 	while (true)
 	{
@@ -108,6 +244,46 @@ int main(int argc, char* argv[])
 		lastUs = nowUs;
 
 		TickBots(deltaTime);
+
+		// 죽어서 빠진 자리 채우기
+		if (nowUs - lastRefillUs >= REFILL_INTERVAL_US)
+		{
+			lastRefillUs = nowUs;
+
+			size_t liveCount = 0;
+			{
+				lock_guard<mutex> guard(GBotsLock);
+				liveCount = GBots.size();
+			}
+
+			for (size_t i = liveCount; i < static_cast<size_t>(botCount); i++)
+			{
+				SessionRef session = service->CreateSession();
+				session->Connect();
+			}
+		}
+
+		if (nowUs - lastReportUs >= 10000000)
+		{
+			const double sec = static_cast<double>(nowUs - lastReportUs) / 1000000.0;
+			const uint64 sent = GSentThisWindow.exchange(0);
+			const uint64 attacks = GAttackSentThisWindow.exchange(0);
+			const uint64 skills = GSkillSentThisWindow.exchange(0);
+
+			size_t botCount = 0;
+			{
+				lock_guard<mutex> guard(GBotsLock);
+				botCount = GBots.size();
+			}
+
+			cout << "[BOT] send rate = "
+				<< (botCount > 0 ? sent / sec / botCount : 0.0)
+				<< " Hz/bot  (target 30)"
+				<< "   attacks = " << (attacks / sec) << "/s"
+				<< "   skills = " << (skills / sec) << "/s" << endl;
+
+			lastReportUs = nowUs;
+		}
 	}
 
 	GThreadManager->Join();

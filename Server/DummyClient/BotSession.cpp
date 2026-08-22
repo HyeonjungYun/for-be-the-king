@@ -22,5 +22,14 @@ void BotSession::OnRecvPacket(BYTE* buffer, int32 len)
 void BotSession::OnDisconnected()
 {
 	inGame.store(false);
+	alive.store(false);
+
+	{
+		lock_guard<mutex> guard(GBotsLock);
+
+		BotSessionRef self = static_pointer_cast<BotSession>(GetSessionRef());
+		GBots.erase(remove(GBots.begin(), GBots.end(), self), GBots.end());
+	}
+
 	cout << "[BOT] disconnected id=" << objectId.load() << endl;
 }

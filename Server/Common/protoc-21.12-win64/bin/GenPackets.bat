@@ -3,8 +3,13 @@ pushd %~dp0
 XCOPY /Y /I "../../../Tools/PacketGenerator/Templates" "./Templates"
 
 protoc.exe -I=./ --cpp_out=./ ./Enum.proto
+IF ERRORLEVEL 1 ( echo. & echo *** Enum.proto 컴파일 실패 - 위 에러를 고치세요 *** & PAUSE & EXIT /B 1 )
+
 protoc.exe -I=./ --cpp_out=./ ./Struct.proto
+IF ERRORLEVEL 1 ( echo. & echo *** Struct.proto 컴파일 실패 - 위 에러를 고치세요 *** & PAUSE & EXIT /B 1 )
+
 protoc.exe -I=./ --cpp_out=./ ./Protocol.proto
+IF ERRORLEVEL 1 ( echo. & echo *** Protocol.proto 컴파일 실패 - 위 에러를 고치세요 *** & PAUSE & EXIT /B 1 )
 
 GenPackets.exe --path=./Protocol.proto --output=ClientPacketHandler --recv=S_ --send=C_
 GenPackets.exe --path=./Protocol.proto --output=ServerPacketHandler --recv=C_ --send=S_

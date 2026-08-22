@@ -1,33 +1,69 @@
 #pragma once
 #include "JobQueue.h"
+#include "SkillTable.h"
 
 class Room : public JobQueue
 {
 public:
-	Room();
+			Room();
 	virtual ~Room();
 
-	bool EnterRoom(ObjectRef object, bool randPos = true);
-	bool LeaveRoom(ObjectRef object);
+	bool	EnterRoom(ObjectRef object, bool randPos = true);
+	bool	LeaveRoom(ObjectRef object);
 
-	bool HandleEnterPlayer(PlayerRef player);
-	bool HandleLeavePlayer(PlayerRef player);
-	void HandleMove(Protocol::C_MOVE pkt);
+	bool	HandleEnterPlayer(PlayerRef player);
+	bool	HandleLeavePlayer(PlayerRef player);
+	void	HandleMove(Protocol::C_MOVE pkt);
+	void	HandleAttack(uint64 attackerId, uint64 targetId);
+	void	HandleSkill(uint64 casterId, Protocol::C_SKILL pkt);
+	void	HandleSkillCancel(uint64 casterId);
+	void	ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, uint32 baseDurationMs, float magnitude);
+	void	ResolveAttacks(uint64 nowUs);
+	void	ResolveCasts(uint64 nowUs);
+	void	UpdateCc(uint64 nowUs);
+	void	FlushCcState(uint64 nowUs);
 
 public:
-	void UpdateTick();
+	void	UpdateTick();
+	void	FlushMoves();
+	void	FlushCombat();
 
-	RoomRef GetRoomRef();
-
-private:
-	bool AddObject(ObjectRef object);
-	bool RemoveObject(uint64 objectId);
+	RoomRef	GetRoomRef();
 
 private:
-	void Broadcast(SendBufferRef sendBuffer, uint64 exceptId = 0);
+	bool	AddObject(ObjectRef object);
+	bool	RemoveObject(uint64 objectId);
 
 private:
-	unordered_map<uint64, ObjectRef> _objects;
+	void	Broadcast(SendBufferRef sendBuffer, uint64 exceptId = 0);
+	
+	bool	CancelCast(const CreatureRef& caster);
+
+	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
+	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs);
+	void	ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs);
+
+private:
+	unordered_map<uint64, ObjectRef>	_objects;
+	unordered_set<uint64>				_dirtyMovers;
+
+private:
+	unordered_set<uint64>				_attackers;
+	vector<Protocol::AttackInfo>		_pendingAttacks;
+	vector<uint64>						_pendingAttackCancels;
+
+	unordered_set<uint64>				_casters;
+	vector<Protocol::SkillCastInfo>		_pendingCasts;
+	vector<uint64>						_pendingCastCancels;
+	vector<Protocol::SkillHitInfo>		_pendingSkillHits;
+
+	vector<Protocol::DamageInfo>		_pendingDamages;
+	vector<Protocol::DiedInfo>			_pendingDeaths;
+
+	unordered_set<uint64> _ccTargets;
+	vector<Protocol::CcEventInfo> _pendingCcApplied;
+	vector<Protocol::CcEventInfo> _pendingCcExpired;
+	int32 _ccStateTickCounter = 0;
 };
 
 extern RoomRef GRoom;

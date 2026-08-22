@@ -31,3 +31,10 @@ using GameSessionRef = shared_ptr<class GameSession>;
 #define SEND_PACKET(pkt)													\
 	SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);	\
 	session->Send(sendBuffer);
+
+#define SEND_PACKET_BROADCAST(pkt)											\
+	SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);	\
+	Broadcast(sendBuffer);
+
+#define SEND_PACKET_DECLARATION(pkt)													\
+	SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);	

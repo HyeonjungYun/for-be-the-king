@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[4];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[9];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -40,11 +40,24 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "E\020\002\022\026\n\022PLAYER_TYPE_ARCHER\020\003*_\n\tMoveState"
   "\022\023\n\017MOVE_STATE_NONE\020\000\022\023\n\017MOVE_STATE_IDLE"
   "\020\001\022\022\n\016MOVE_STATE_RUN\020\002\022\024\n\020MOVE_STATE_SKI"
-  "LL\020\003b\006proto3"
+  "LL\020\003*=\n\nDamageType\022\030\n\024DAMAGE_TYPE_PHYSIC"
+  "AL\020\000\022\025\n\021DAMAGE_TYPE_MAGIC\020\001*\254\001\n\006CcType\022\020"
+  "\n\014CC_TYPE_NONE\020\000\022\020\n\014CC_TYPE_STUN\020\001\022\020\n\014CC"
+  "_TYPE_ROOT\020\002\022\025\n\021CC_TYPE_KNOCKBACK\020\004\022\022\n\016C"
+  "C_TYPE_LAUNCH\020\010\022\020\n\014CC_TYPE_SLOW\020\020\022\032\n\026CC_"
+  "TYPE_HEAL_REDUCTION\020 \022\023\n\017CC_TYPE_SILENCE"
+  "\020@*S\n\nDeathCause\022\024\n\020DEATH_CAUSE_NONE\020\000\022\026"
+  "\n\022DEATH_CAUSE_PLAYER\020\001\022\027\n\023DEATH_CAUSE_MO"
+  "NSTER\020\002*\221\001\n\tEquipSlot\022\r\n\tSLOT_NONE\020\000\022\027\n\023"
+  "SLOT_WEAPON_PRIMARY\020\001\022\031\n\025SLOT_WEAPON_SEC"
+  "ONDARY\020\002\022\017\n\013SLOT_HELMET\020\003\022\016\n\nSLOT_ARMOR\020"
+  "\004\022\016\n\nSLOT_BOOTS\020\005\022\020\n\014SLOT_TRINKET\020\006*D\n\rS"
+  "lotBindState\022\020\n\014BIND_UNBOUND\020\000\022\016\n\nBIND_B"
+  "OUND\020\001\022\021\n\rBIND_SHADOWED\020\002b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 452, descriptor_table_protodef_Enum_2eproto,
+    false, false, 993, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -116,6 +129,89 @@ bool MoveState_IsValid(int value) {
     case 1:
     case 2:
     case 3:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DamageType_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[4];
+}
+bool DamageType_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CcType_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[5];
+}
+bool CcType_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 4:
+    case 8:
+    case 16:
+    case 32:
+    case 64:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DeathCause_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[6];
+}
+bool DeathCause_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* EquipSlot_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[7];
+}
+bool EquipSlot_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* SlotBindState_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[8];
+}
+bool SlotBindState_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
       return true;
     default:
       return false;

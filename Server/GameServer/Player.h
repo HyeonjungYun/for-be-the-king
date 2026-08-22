@@ -20,7 +20,6 @@ public:
 public:
 	uint64 lastMoveUs = 0;
 	double moveBudget = 0.0;
-	float activeSlow = 0.f;
 	float moveExceptionSpeed = 0.f;
 	uint64 moveExceptionEndUs = 0;
 };
