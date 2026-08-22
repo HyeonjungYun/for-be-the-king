@@ -61,6 +61,9 @@ protected:
 	/** Pushes the mirrored CC state into the movement component. Called every frame. */
 	void TickCc();
 
+	/** Advances an in-flight dash. Stops dead on a blocking hit — movement-camera.md § Dashing. */
+	void TickDash(float DeltaTime);
+
 	/**
 	 * Debug-only combat readout drawn with DrawDebug*. This exists to verify the P1 loop
 	 * ("3 players kill each other for 10 minutes"), not to ship — the real HUD waits on
@@ -114,6 +117,23 @@ public:
 	bool CanAttack() const;
 
 	/**
+	 * Displacement API the skill system calls — movement-camera.md Formula 3.
+	 *
+	 * 🔴 The client moves the character; the server only opens a speed-validation window
+	 * for the duration (movement-camera.md § Interactions: "이동기 판정=스킬, 위치변경
+	 * 실행=이동"). That is why this is not a prediction to be corrected — within the
+	 * window, this is where the position comes from.
+	 *
+	 * @param Direction  Normalised, XY only.
+	 * @param DistCm     Total travel. Ends early on a wall.
+	 * @param SpeedCms   Must satisfy DistCm / SpeedCms <= 0.4s (skill-system.md S2).
+	 */
+	void RequestDash(const FVector& Direction, float DistCm, float SpeedCms);
+
+	/** True while a dash is travelling. Walk input is ignored throughout. */
+	bool IsDashing() const { return DashRemainingCm > 0.f; }
+
+	/**
 	 * A server-confirmed hit. The client never computes HP or decides whether a hit landed
 	 * (Rule 10) — it only displays what arrived.
 	 */
@@ -135,6 +155,11 @@ protected:
 	float InterpStartYaw = 0.f;
 	float InterpElapsed = 0.f;
 	float InterpDuration = 0.f;
+
+	/** Dash state. Only ever set on the locally controlled player — remotes just interpolate. */
+	FVector DashDirection = FVector::ZeroVector;
+	float DashRemainingCm = 0.f;
+	float DashSpeedCms = 0.f;
 
 	/**
 	 * Server-authoritative CC mirrored as world-time deadlines. These drift a little from

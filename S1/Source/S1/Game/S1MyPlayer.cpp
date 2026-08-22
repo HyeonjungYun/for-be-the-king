@@ -201,9 +201,15 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		// cancelled cast from charging one.
 		StartSlotCooldown(CastingSlot, LocalCastCooldownMs);
 
+		// The displacement lands with the rest of the effect, not at cast start. The server
+		// opened its speed window at the same moment, so the two line up.
+		if (PendingDashDistCm > 0.f)
+			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms);
+
 		CastingSlot = 0;
 		LocalCastEndsAt = 0.f;
 		LocalCastCooldownMs = 0;
+		PendingDashDistCm = 0.f;
 	}
 
 	// Send ����
@@ -243,6 +249,15 @@ void AS1MyPlayer::Tick(float DeltaTime)
 
 void AS1MyPlayer::Move(const FInputActionValue& Value)
 {
+	// A dash owns the character until it finishes — movement-camera.md § Dashing
+	// ("걷기 입력 무시"). Letting walk input through would fight the swept displacement
+	// and put the client somewhere the server's speed window does not cover.
+	if (IsDashing())
+	{
+		DoMove(0.f, 0.f);
+		return;
+	}
+
 	// Hard CC drops the input entirely rather than letting it through and relying on the
 	// server to snap us back — a rejection round trip would show a visible lurch.
 	if (CanMove() == false)
@@ -265,8 +280,7 @@ void AS1MyPlayer::Move(const FInputActionValue& Value)
 		Protocol::C_SKILL_CANCEL CancelPkt;
 		SEND_PACKET(CancelPkt);
 
-		CastingSlot = 0;
-		LocalCastEndsAt = 0.f;
+		AbortCast();
 	}
 
 	// route the input
@@ -432,6 +446,14 @@ void AS1MyPlayer::CancelAiming()
 	AimingSlot = 0;
 }
 
+void AS1MyPlayer::AbortCast()
+{
+	CastingSlot = 0;
+	LocalCastEndsAt = 0.f;
+	LocalCastCooldownMs = 0;
+	PendingDashDistCm = 0.f;
+}
+
 void AS1MyPlayer::OnConfirmPressed()
 {
 	if (AimingSlot == 0)
@@ -463,8 +485,7 @@ void AS1MyPlayer::OnConfirmReleased()
 	Protocol::C_SKILL_CANCEL CancelPkt;
 	SEND_PACKET(CancelPkt);
 
-	CastingSlot = 0;
-	LocalCastEndsAt = 0.f;
+	AbortCast();
 }
 
 void AS1MyPlayer::OnCancelPressed()
@@ -528,6 +549,21 @@ void AS1MyPlayer::FireAimedSkill()
 
 	SEND_PACKET(SkillPkt);
 
+	// Freeze the dash direction now. The server stored the same aim when this packet
+	// arrived, so re-reading the cursor on completion would send the two apart.
+	if (Def != nullptr && Def->HasMovement())
+	{
+		FVector DashDir = FVector(SkillPkt.aim_x(), SkillPkt.aim_y(), 0.f) - GetActorLocation();
+		DashDir.Z = 0.0;
+
+		if (DashDir.Normalize())
+		{
+			PendingDashDirection = DashDir;
+			PendingDashDistCm = Def->MoveDistCm;
+			PendingDashSpeedCms = Def->MoveSpeedCms;
+		}
+	}
+
 	// A cast lives as long as the button is held, so remember which slot is in flight.
 	// Instant skills are done the moment they are sent.
 	if (Def != nullptr && Def->CastMs > 0)
@@ -551,6 +587,12 @@ void AS1MyPlayer::FireAimedSkill()
 		// Instant skills land as they are sent, so the cooldown starts now.
 		if (Def != nullptr)
 			StartSlotCooldown(AimingSlot, Def->CooldownMs);
+
+		if (PendingDashDistCm > 0.f)
+		{
+			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms);
+			PendingDashDistCm = 0.f;
+		}
 	}
 
 	AimingSlot = 0;
@@ -990,6 +1032,12 @@ void AS1MyPlayer::DrawAimIndicator()
 			false, -1.f, 0, 3.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		break;
 	}
+
+	case ES1SkillAimType::SelfArea:
+		// The foot circle drawn above is the entire indicator. Nothing goes at the cursor
+		// because the cursor plays no part in where this lands — but the radius still has
+		// to be visible, which is the whole reason this is not AimType None.
+		break;
 
 	default:
 		break;

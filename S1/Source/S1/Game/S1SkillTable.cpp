@@ -45,9 +45,29 @@ namespace
 			Def.AimType = ES1SkillAimType::Direction;
 			Def.RadiusCm = 0.f;
 
-			// Not in the server table: the dash distance the client needs to draw the
-			// aiming line. Kept in sync with the movement effect's dist_cm over there.
+			// Mirrors the server's movement effect. RangeCm doubles as the aiming line
+			// length, which for a pure dash is the travel distance itself.
+			Def.MoveDistCm = 400.f;
+			Def.MoveSpeedCms = 1200.f;
 			Def.RangeCm = 400.f;
+
+			Defs.Add(Def.SkillId, Def);
+		}
+
+		// [3001] 후려베기 — armour, instant AoE + slow
+		{
+			FS1SkillDef Def;
+			Def.SkillId = 3001;
+			Def.EffectId = 3;
+			Def.CastMs = 0;
+			Def.CooldownMs = 5000;
+			Def.bCanMoveWhileCasting = false;
+
+			// SelfArea, not None: the cursor is irrelevant but the 250cm radius is not —
+			// without it on screen the player is guessing whether anyone is in reach.
+			Def.Shape = ES1SkillShape::CircleSelf;
+			Def.AimType = ES1SkillAimType::SelfArea;
+			Def.RadiusCm = 250.f;
 
 			Defs.Add(Def.SkillId, Def);
 		}

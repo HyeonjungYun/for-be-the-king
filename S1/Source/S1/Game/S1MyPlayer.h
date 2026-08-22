@@ -130,6 +130,13 @@ protected:
 	/** Leaves aiming without firing. Sends nothing — the server never knew. */
 	void CancelAiming();
 
+	/**
+	 * Drops an in-flight cast and everything it was going to do. Used by every cancel
+	 * path, so a cancelled cast leaves no cooldown and no dash — R5's "어떤 흔적도
+	 * 남기지 않는다" has to hold for the queued displacement too.
+	 */
+	void AbortCast();
+
 	/** Slot data for a slot value, or null when the slot is empty or shadowed. */
 	const Protocol::SkillInfo* FindUsableSlot(int32 EquipSlotValue) const;
 
@@ -322,6 +329,15 @@ protected:
 
 	/** Cooldown of the skill in flight, applied when the cast completes rather than starts. */
 	uint32 LocalCastCooldownMs = 0;
+
+	/**
+	 * Dash queued behind an in-flight cast. Direction is frozen at cast time, not read
+	 * again on completion — the server stored the same aim when the packet arrived, so
+	 * swinging the cursor mid-cast must not change where the dash goes.
+	 */
+	FVector PendingDashDirection = FVector::ZeroVector;
+	float PendingDashDistCm = 0.f;
+	float PendingDashSpeedCms = 0.f;
 
 	/**
 	 * Predicted cooldown deadline per slot, in world seconds. Index is EquipSlot - 1.
