@@ -43,6 +43,7 @@ public:
 	void HandleCc(const Protocol::S_CC& CcPkt);
 	void HandleCcState(const Protocol::S_CC_STATE& StatePkt);
 	void HandleDamage(const Protocol::S_DAMAGE& DamagePkt);
+	void HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt);
 	
 public:
 	// GameServer
@@ -57,6 +58,7 @@ public:
 
 	TWeakObjectPtr<AS1Player> MyPlayer;
 	TMap<uint64, TWeakObjectPtr<AS1Player>> Players;
+	TArray<Protocol::SkillInfo> SkillSlots;
 
 
 	// 디버그용 테스트 후 삭제

@@ -107,6 +107,13 @@ public:
 	bool CanTurn() const;
 
 	/**
+	 * Root lets you swing, everything else does not — same set as CanTurn.
+	 * Mirrors Creature::CanAttack server-side (combat-system.md Rule 5 table).
+	 * Silence is not checked here: it blocks skills only, never the basic attack.
+	 */
+	bool CanAttack() const;
+
+	/**
 	 * A server-confirmed hit. The client never computes HP or decides whether a hit landed
 	 * (Rule 10) — it only displays what arrived.
 	 */
