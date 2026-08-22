@@ -13,6 +13,14 @@ enum class SkillShape : uint8
 	CirclePoint
 };
 
+enum class SkillAimType : uint8
+{
+	None = 0,
+	Target,
+	Direction,
+	Point
+};
+
 enum class SkillEffectType : uint8
 {
 	Damage = 0,
@@ -65,6 +73,7 @@ struct SkillDef
 	bool					canMoveWhileCasting = false;
 
 	SkillShape				shape = SkillShape::Single;
+	SkillAimType			aimType = SkillAimType::None;
 	float					rangeCm = 0.f;
 	float					widthCm = 0.f;
 	float					radiusCm = 0.f;
