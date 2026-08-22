@@ -49,9 +49,9 @@ DungeonKing 인덱스(29개)를 그대로 잇지 않는다. **전제가 세 개 
 | 4 | 계정 & 로그인 (inferred) | Core | Tier 1 | Not Started | — | 네트워킹 |
 | 5 | 세이브 & 영속성 (inferred) | Persistence | Tier 1 | Not Started | — | 계정 & 로그인 |
 | 6 | 아이템 & 장비 시스템 | Economy | Tier 1 | Not Started | — | 세이브 & 영속성 |
-| 7 | 전투 시스템 | Gameplay | Tier 1 | Not Started | — | 이동 & 카메라, 네트워킹 |
-| 8 | 스킬 시스템 | Gameplay | Tier 1 | Not Started | — | 전투, 입력 |
-| 9 | **장비-스킬 결속 시스템** ⭐ | Gameplay | Tier 1 | Not Started | — | 스킬, 아이템 & 장비 |
+| 7 | 전투 시스템 | Gameplay | Tier 1 | **Designed** | `design/gdd/combat-system.md` | 이동 & 카메라, 네트워킹 |
+| 8 | 스킬 시스템 | Gameplay | Tier 1 | **Designed** | `design/gdd/skill-system.md` | 전투, 입력 |
+| 9 | **장비-스킬 결속 시스템** ⭐ | Gameplay | Tier 1 | **Designed** | `design/gdd/equipment-skill-binding.md` | 스킬, 아이템 & 장비 |
 | 10 | 몬스터 AI 시스템 | Gameplay | Tier 1 | Not Started | — | 전투, 이동 & 카메라 |
 | 11 | 인벤토리 & 사망 처리 시스템 | Gameplay | Tier 1 | Not Started | — | 아이템 & 장비, 전투, 세이브 & 영속성 |
 | 12 | 레벨 & 맵 시스템 | Gameplay (World) | Tier 1 | Not Started | — | 네트워킹, 이동 & 카메라 |
@@ -238,10 +238,10 @@ DungeonKing 인덱스(29개)를 그대로 잇지 않는다. **전제가 세 개 
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 25 |
-| Design docs started | 1 |
+| Design docs started | 4 |
 | Design docs reviewed | 0 |
 | Design docs approved | 0 |
-| **Tier 1 (MVP) systems designed** | **1 / 16** |
+| **Tier 1 (MVP) systems designed** | **4 / 16** |
 | Tier 2 systems designed | 0 / 3 |
 | Tier 3 systems designed | 0 / 5 |
 
