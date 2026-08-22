@@ -80,7 +80,6 @@ bool RecvWorker::ReceivePacket(TArray<uint8>& OutPacket)
 	{
 		FMemoryReader Reader(HeaderBuffer);
 		Reader << Header;
-		UE_LOG(LogTemp, Log, TEXT("Recv PacketID : %d, PacketSize : %d"), Header.PacketID, Header.PacketSize);
 	}
 
 	// 패킷 헤더 복사

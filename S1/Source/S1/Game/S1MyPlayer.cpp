@@ -8,12 +8,14 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "S1.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "DrawDebugHelpers.h"
 
 AS1MyPlayer::AS1MyPlayer()
 {
@@ -105,6 +107,11 @@ void AS1MyPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		// Aim is handled by UpdateCursorFacing() instead.
 		// EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Look);
 		// EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AS1MyPlayer::Look);
+
+		// Attacking. Binding a null action logs an error every launch, so guard it —
+		// the IA asset may not exist yet and an unbound attack should not be noisy.
+		if (AttackAction)
+			EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AS1MyPlayer::Attack);
 	}
 	else
 	{
@@ -117,6 +124,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	UpdateCursorFacing(DeltaTime);
+	DrawWindupDebug();
 
 	// Send ����
 	bool ForceSendPacket = false;
@@ -155,6 +163,14 @@ void AS1MyPlayer::Tick(float DeltaTime)
 
 void AS1MyPlayer::Move(const FInputActionValue& Value)
 {
+	// Hard CC drops the input entirely rather than letting it through and relying on the
+	// server to snap us back — a rejection round trip would show a visible lurch.
+	if (CanMove() == false)
+	{
+		DoMove(0.f, 0.f);
+		return;
+	}
+
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
@@ -173,6 +189,12 @@ void AS1MyPlayer::Look(const FInputActionValue& Value)
 
 void AS1MyPlayer::UpdateCursorFacing(float DeltaTime)
 {
+	// Stun, knockback and launch freeze facing. Root deliberately does not — being pinned
+	// while still able to aim is the whole difference between the two (Rule 5 table).
+	// Facing is never validated by the server, so this check is the only thing enforcing it.
+	if (CanTurn() == false)
+		return;
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (PC == nullptr)
 		return;
@@ -266,4 +288,83 @@ void AS1MyPlayer::DoJumpEnd()
 {
 	// signal the character to stop jumping
 	StopJumping();
+}
+
+uint64 AS1MyPlayer::AcquireTargetUnderCursor()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC == nullptr)
+		return 0;
+
+	// TODO: Rule 1 allows a 30px leniency radius (target_acquisition_leniency). An exact
+	// cursor hit is unforgiving on small top-down silhouettes — revisit with a sphere
+	// trace once the camera height is locked.
+	FHitResult Hit;
+	if (PC->GetHitResultUnderCursor(ECC_Pawn, false, Hit) == false)
+		return 0;
+
+	AS1Player* Target = Cast<AS1Player>(Hit.GetActor());
+	if (Target == nullptr || Target->IsMyPlayer())
+		return 0;
+
+	return Target->GetPlayerInfo()->object_id();
+}
+
+void AS1MyPlayer::Attack()
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	// The server ignores requests that arrive mid-windup, so sending them is pure noise.
+	if (Now < LocalReadyAt)
+		return;
+
+	const uint64 TargetId = AcquireTargetUnderCursor();
+	if (TargetId == 0)
+		return;
+
+	// Range, cooldown, windup and damage are all decided server-side (Rule 10). The only
+	// thing this packet carries is which object we want to hit — not even our own id,
+	// which the server derives from the session so it cannot be forged.
+	Protocol::C_ATTACK AttackPkt;
+	AttackPkt.set_target_id(TargetId);
+
+	SEND_PACKET(AttackPkt);
+
+	// Predict the windup visual only. If the server rejects the attack — out of range, or
+	// we were stunned in the meantime — the arc still completes and no damage number
+	// follows. That mismatch is acceptable; predicting the *result* would not be.
+	LocalWindupEndsAt = Now + PREDICTED_WINDUP_SECONDS;
+	LocalReadyAt = LocalWindupEndsAt;
+}
+
+void AS1MyPlayer::DrawWindupDebug()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+		return;
+
+	const float Now = World->GetTimeSeconds();
+	if (Now >= LocalWindupEndsAt)
+		return;
+
+	const float Elapsed = PREDICTED_WINDUP_SECONDS - (LocalWindupEndsAt - Now);
+	const float Alpha = FMath::Clamp(Elapsed / PREDICTED_WINDUP_SECONDS, 0.f, 1.f);
+
+	// An arc at the feet rather than a bar overhead — from a fixed top-down camera the
+	// ground plane is the one place nothing else competes for, and it never covers the
+	// character we are trying to aim with.
+	const FVector Center = GetActorLocation() - FVector(0.f, 0.f, 90.f);
+	const int32 Filled = FMath::RoundToInt(WINDUP_ARC_SEGMENTS * Alpha);
+
+	for (int32 i = 0; i < WINDUP_ARC_SEGMENTS; i++)
+	{
+		const float A0 = (2.f * UE_PI) * i / WINDUP_ARC_SEGMENTS;
+		const float A1 = (2.f * UE_PI) * (i + 1) / WINDUP_ARC_SEGMENTS;
+
+		const FVector P0 = Center + FVector(FMath::Cos(A0), FMath::Sin(A0), 0.f) * WINDUP_ARC_RADIUS;
+		const FVector P1 = Center + FVector(FMath::Cos(A1), FMath::Sin(A1), 0.f) * WINDUP_ARC_RADIUS;
+
+		DrawDebugLine(World, P0, P1, (i < Filled) ? FColor::Yellow : FColor(60, 60, 60),
+			false, -1.f, 0, 4.f);
+	}
 }
