@@ -1,4 +1,4 @@
- // Fill out your copyright notice in the Description page of Project Settings.
+Ôªø // Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Network/NetworkWorker.h"
@@ -67,7 +67,7 @@ void RecvWorker::Destroy()
 
 bool RecvWorker::ReceivePacket(TArray<uint8>& OutPacket)
 {
-	// ∆–≈∂ «Ï¥ı ∆ƒΩÃ
+	// Ìå®ÌÇ∑ Ìó§Îçî ÌååÏã±
 	const int32 HeaderSize = sizeof(FPacketHeader);
 	TArray<uint8> HeaderBuffer;
 	HeaderBuffer.AddZeroed(HeaderSize);
@@ -75,17 +75,17 @@ bool RecvWorker::ReceivePacket(TArray<uint8>& OutPacket)
 	if (ReceiveDesiredBytes(HeaderBuffer.GetData(), HeaderSize) == false)
 		return false;
 
-	// ID, Size √ﬂ√‚
+	// ID, Size Ï∂îÏ∂ú
 	FPacketHeader Header;
 	{
 		FMemoryReader Reader(HeaderBuffer);
 		Reader << Header;
 	}
 
-	// ∆–≈∂ «Ï¥ı ∫πªÁ
+	// Ìå®ÌÇ∑ Ìó§Îçî Î≥µÏÇ¨
 	OutPacket = HeaderBuffer;
 
-	// ∆–≈∂ ≥ªøÎ ∆ƒΩÃ
+	// Ìå®ÌÇ∑ ÎÇ¥Ïö© ÌååÏã±
 	TArray<uint8> PayloadBuffer;
 	const int32 PayloadSize = Header.PacketSize - HeaderSize;
 

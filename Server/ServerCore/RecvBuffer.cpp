@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "RecvBuffer.h"
 
 /*--------------
@@ -20,12 +20,12 @@ void RecvBuffer::Clean()
 	int32 dataSize = DataSize();
 	if (dataSize == 0)
 	{
-		// µü ¸¶Ä§ ÀÐ±â+¾²±â Ä¿¼­°¡ µ¿ÀÏÇÑ À§Ä¡¶ó¸é, µÑ ´Ù ¸®¼Â.
+		// ë”± ë§ˆì¹¨ ì½ê¸°+ì“°ê¸° ì»¤ì„œê°€ ë™ì¼í•œ ìœ„ì¹˜ë¼ë©´, ë‘˜ ë‹¤ ë¦¬ì…‹.
 		_readPos = _writePos = 0;
 	}
 	else
 	{
-		// ¿©À¯ °ø°£ÀÌ ¹öÆÛ 1°³ Å©±â ¹Ì¸¸ÀÌ¸é, µ¥ÀÌÅÍ¸¦ ¾ÕÀ¸·Î ¶¥±ä´Ù.
+		// ì—¬ìœ  ê³µê°„ì´ ë²„í¼ 1ê°œ í¬ê¸° ë¯¸ë§Œì´ë©´, ë°ì´í„°ë¥¼ ì•žìœ¼ë¡œ ë•…ê¸´ë‹¤.
 		if (FreeSize() < _bufferSize)
 		{
 			::memcpy(&_buffer[0], &_buffer[_readPos], dataSize);

@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -61,7 +61,7 @@ public:
 	TArray<Protocol::SkillInfo> SkillSlots;
 
 
-	// µð¹ö±×¿ë Å×½ºÆ® ÈÄ »èÁ¦
+	// ë””ë²„ê·¸ìš© í…ŒìŠ¤íŠ¸ í›„ ì‚­ì œ
 	UFUNCTION(BlueprintCallable)
 	void DebugChatCCStun();
 

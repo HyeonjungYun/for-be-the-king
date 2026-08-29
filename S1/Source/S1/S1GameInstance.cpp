@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "S1GameInstance.h"
@@ -23,7 +23,7 @@ void US1GameInstance::ConnectToGameServer()
 {
 	Socket = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(TEXT("Stream"), TEXT("Client Socket"));
 
-	// ¼­¹ö ÂÊ ÁÖ¼Ò ¹Ş¾Æ¿À±â
+	// ì„œë²„ ìª½ ì£¼ì†Œ ë°›ì•„ì˜¤ê¸°
 	FIPv4Address Ip;
 	FIPv4Address::Parse(IpAddress, Ip);
 
@@ -43,7 +43,7 @@ void US1GameInstance::ConnectToGameServer()
 		GameServerSession = MakeShared<PacketSession>(Socket);
 		GameServerSession->Run();
 
-		// TEMP: Lobby¿¡¼­ Ä³¸¯ÅÍ ¼±ÅÃÃ¢ µî
+		// TEMP: Lobbyì—ì„œ ìºë¦­í„° ì„ íƒì°½ ë“±
 		{
 			Protocol::C_LOGIN Pkt;
 			SendBufferRef SendBuffer = ClientPacketHandler::MakeSendBuffer(Pkt);
@@ -103,11 +103,11 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 	if (World == nullptr)
 		return;
 
-	// Áßº¹ Ã³¸® Ã¼Å©
+	// ì¤‘ë³µ ì²˜ë¦¬ ì²´í¬
 	const uint64 ObjectId = objectInfo.object_id();
 	if (TWeakObjectPtr<AS1Player>* Found = Players.Find(ObjectId))
 	{
-		if (Found->IsValid())	// ¾×ÅÍ°¡ »ì¾ÆÀÖÀ¸¸é Áß¤²°í
+		if (Found->IsValid())	// ì•¡í„°ê°€ ì‚´ì•„ìˆìœ¼ë©´ ì¤‘ã…‚ê³ 
 			return;
 
 		Players.Remove(ObjectId);

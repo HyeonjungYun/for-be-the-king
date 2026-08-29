@@ -1,0 +1,40 @@
+; 인코딩 사고 재발 방지
+;
+; MSVC 는 BOM 이 없는 소스를 시스템 코드페이지(한글 Windows = CP949)로 읽는다.
+; 그래서 UTF-8 로 저장해도 BOM 이 없으면 Visual Studio 에서 주석이 깨진다.
+; 반대로 CP949 로 저장하면 git diff · GitHub · 타 로케일 환경에서 깨진다.
+;
+; 양쪽을 모두 만족하는 유일한 형식이 UTF-8 + BOM 이라 여기에 고정한다.
+; Visual Studio 2017+ 와 VS Code 가 이 설정을 따른다.
+;
+; 점검:  python Server/Tools/fix_encoding.py
+
+root = true
+
+[*]
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = false
+
+[*.{cpp,h,hpp,cc,cs}]
+charset = utf-8-bom
+indent_style = tab
+
+[*.py]
+charset = utf-8-bom
+indent_style = space
+indent_size = 4
+
+[*.proto]
+charset = utf-8-bom
+indent_style = tab
+
+[*.{md,json,yml,yaml}]
+charset = utf-8
+indent_style = space
+indent_size = 2
+
+; 서드파티 · 자동 생성물은 제외
+[{**/ProtobufCore/**,**/Backup/**,**/*.pb.cc,**/*.pb.h}]
+charset = unset
+indent_style = unset

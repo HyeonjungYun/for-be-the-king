@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <random>
 
 class Utils
@@ -7,11 +7,11 @@ public:
 	template<typename T>
 	static T GetRandom(T min, T max)
 	{
-		// ½Ãµå°ªÀ» ¾ò±â À§ÇÑ random_device »ı¼º.
+		// ì‹œë“œê°’ì„ ì–»ê¸° ìœ„í•œ random_device ìƒì„±.
 		std::random_device randomDevice;
-		// random_device¸¦ ÅëÇØ ³­¼ö »ı¼º ¿£ÁøÀ» ÃÊ±âÈ­ ÇÑ´Ù.
+		// random_deviceë¥¼ í†µí•´ ë‚œìˆ˜ ìƒì„± ì—”ì§„ì„ ì´ˆê¸°í™” í•œë‹¤.
 		std::mt19937 generator(randomDevice());
-		// ±ÕµîÇÏ°Ô ³ªÅ¸³ª´Â ³­¼ö¿­À» »ı¼ºÇÏ±â À§ÇØ ±Õµî ºĞÆ÷ Á¤ÀÇ.
+		// ê· ë“±í•˜ê²Œ ë‚˜íƒ€ë‚˜ëŠ” ë‚œìˆ˜ì—´ì„ ìƒì„±í•˜ê¸° ìœ„í•´ ê· ë“± ë¶„í¬ ì •ì˜.
 
 		if constexpr (std::is_integral_v<T>)
 		{

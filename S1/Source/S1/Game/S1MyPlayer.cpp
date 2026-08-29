@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Game/S1MyPlayer.h"
@@ -212,7 +212,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		PendingDashDistCm = 0.f;
 	}
 
-	// Send ����
+	// Send 판정
 	bool ForceSendPacket = false;
 
 	if (LastDesiredInput != DesiredInput)
@@ -221,7 +221,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		LastDesiredInput = DesiredInput;
 	}
 
-	// State ����
+	// State 정보
 	if (DesiredInput == FVector2D::Zero())
 		SetMoveState(Protocol::MOVE_STATE_IDLE);
 	else
@@ -235,7 +235,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 
 		Protocol::C_MOVE MovePkt;
 
-		// ���� ��ġ ����
+		// 현재 위치 정보
 		{
 			Protocol::PosInfo* Info = MovePkt.mutable_info();
 			Info->CopyFrom(*PlayerInfo);
