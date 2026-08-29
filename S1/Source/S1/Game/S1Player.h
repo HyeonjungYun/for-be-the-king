@@ -139,6 +139,33 @@ public:
 	 */
 	void OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit);
 
+	/**
+	 * Someone started casting. Everyone sees this, including enemies.
+	 *
+	 * 🔴 All an observer gets is "that one is busy" and whether they are rooted to the spot.
+	 * No skill_id, no cast_ms, no range — the server does not send them
+	 * (skill-system.md B2a). Guessing what is coming is the fight.
+	 */
+	void OnSkillCastStarted(bool bStationary);
+
+	/** The cast ended — completed, cancelled, or interrupted. Observers cannot tell which. */
+	void OnSkillCastEnded();
+
+	/**
+	 * Plays the visual for a skill that landed.
+	 *
+	 * 🔴 Takes effect_id, never skill_id. That is the entire information-asymmetry contract
+	 * (equipment-skill-binding.md B8): observers learn what it looked like, never what it
+	 * was. Keeping skill_id out of the signature makes the leak structurally impossible
+	 * rather than a rule someone has to remember.
+	 *
+	 * Static because the caster may be out of view, or dead, or never have been spawned on
+	 * this client — the effect still has to play at the impact point.
+	 *
+	 * @param Target  The actor hit, or null for an area skill that hit nobody.
+	 */
+	static void PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, AS1Player* Target);
+
 protected:
 	class Protocol::PosInfo* PlayerInfo; // 현재 위치
 	class Protocol::PosInfo* DestInfo; // 목적치
@@ -160,6 +187,13 @@ protected:
 	FVector DashDirection = FVector::ZeroVector;
 	float DashRemainingCm = 0.f;
 	float DashSpeedCms = 0.f;
+
+	/**
+	 * Casting marker shown to everyone. Server-driven, not predicted — this is what other
+	 * players see, so it has to match what the server actually broadcast.
+	 */
+	bool bCastMarkerVisible = false;
+	bool bCastMarkerStationary = false;
 
 	/**
 	 * Server-authoritative CC mirrored as world-time deadlines. These drift a little from
@@ -220,6 +254,15 @@ protected:
 
 	/** Flip the sign if the bar lands below the character instead of above it. */
 	static constexpr float DEBUG_BAR_OFFSET_X = -70.f;
+
+	/** Cast marker ring at the feet. Larger than the windup arc (70) so the two never merge. */
+	static constexpr float CAST_MARKER_RADIUS = 120.f;
+
+	/**
+	 * How long a skill effect stays on screen. Long enough to notice and place, short
+	 * enough that a busy fight does not turn into a pile of overlapping circles.
+	 */
+	static constexpr float EFFECT_LIFETIME_SEC = 0.4f;
 
 	// Cache
 	FVector2D DesiredInput;

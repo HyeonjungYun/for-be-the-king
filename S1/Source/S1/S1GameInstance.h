@@ -44,6 +44,9 @@ public:
 	void HandleCcState(const Protocol::S_CC_STATE& StatePkt);
 	void HandleDamage(const Protocol::S_DAMAGE& DamagePkt);
 	void HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt);
+	void HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt);
+	void HandleSkillCancel(const Protocol::S_SKILL_CANCEL& CancelPkt);
+	void HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt);
 	
 public:
 	// GameServer

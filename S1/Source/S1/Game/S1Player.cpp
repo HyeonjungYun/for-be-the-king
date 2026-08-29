@@ -343,6 +343,30 @@ void AS1Player::DrawCombatDebug()
 	Mark(Now < KnockbackUntil, FColor::Magenta);
 	Mark(Now < LaunchUntil, FColor::Purple);
 	Mark(ActiveSlow > 0.f, FColor::Cyan);
+
+	// 🔴 Everyone sees this, enemies included. It says "busy" and nothing else — no skill,
+	// no remaining time, no range. skill-system.md B2a: the observer's payload is
+	// { caster, is_stationary } and that is deliberately almost nothing.
+	if (bCastMarkerVisible)
+	{
+		const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, 90.f);
+
+		// A ring rather than a gauge. A gauge would leak cast_ms — how long it takes is
+		// exactly what the caster is paying for, and letting enemies read it hands back
+		// the advantage the asymmetry was built to create.
+		DrawDebugCircle(World, Feet, CAST_MARKER_RADIUS, 32,
+			bCastMarkerStationary ? FColor(255, 210, 90) : FColor(150, 190, 255),
+			false, -1.f, 0, 5.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+
+		// Stationary casts get a second ring. That much IS public — the caster is visibly
+		// rooted, so the information is on screen either way and hiding it would only make
+		// the marker misleading.
+		if (bCastMarkerStationary)
+		{
+			DrawDebugCircle(World, Feet, CAST_MARKER_RADIUS * 0.6f, 24, FColor(255, 210, 90),
+				false, -1.f, 0, 3.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		}
+	}
 }
 
 void AS1Player::ApplyCcEvent(const Protocol::CcEventInfo& Info, bool bApplied)
@@ -428,6 +452,72 @@ bool AS1Player::CanTurn() const
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
 	return Now >= StunUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
+}
+
+void AS1Player::OnSkillCastStarted(bool bStationary)
+{
+	bCastMarkerVisible = true;
+	bCastMarkerStationary = bStationary;
+}
+
+void AS1Player::OnSkillCastEnded()
+{
+	bCastMarkerVisible = false;
+}
+
+void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, AS1Player* Target)
+{
+	if (World == nullptr)
+		return;
+
+	// Ground plane, same as every other readout — from a fixed top-down camera it is the one
+	// surface nothing competes for.
+	const FVector Ground(Impact.X, Impact.Y, (Target != nullptr)
+		? Target->GetActorLocation().Z - 90.f
+		: 0.f);
+
+	// 🔴 Branching on effect_id, never skill_id. An observer sees a shape and a colour and
+	// has to infer the rest — that inference is the fight (equipment-skill-binding.md B8).
+	//
+	// DrawDebug rather than Niagara on purpose: what P1.5 has to prove is that hits are
+	// *readable*, not that they are pretty. Effect assets come after the art budget opens.
+	switch (EffectId)
+	{
+	case 1:		// 후려치기 — single target strike
+	{
+		const float Size = 90.f;
+		const FColor Colour(230, 70, 70);
+
+		DrawDebugLine(World, Ground + FVector(-Size, 0.f, 0.f), Ground + FVector(Size, 0.f, 0.f),
+			Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
+		DrawDebugLine(World, Ground + FVector(0.f, -Size, 0.f), Ground + FVector(0.f, Size, 0.f),
+			Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
+		break;
+	}
+
+	case 2:		// 짓쳐들기 — dash. Drawn as an arrival marker, not a trail:
+				// the mover's own position stream already shows the path.
+	{
+		DrawDebugCircle(World, Ground, 70.f, 24, FColor(90, 220, 190),
+			false, EFFECT_LIFETIME_SEC, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		break;
+	}
+
+	case 3:		// 후려베기 — area. The radius has to be visible or a bystander cannot learn
+				// how far it reaches, which is the only way to learn to stand outside it.
+	{
+		DrawDebugCircle(World, Ground, 250.f, 40, FColor(240, 150, 60),
+			false, EFFECT_LIFETIME_SEC, 0, 7.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		break;
+	}
+
+	default:
+		// Unknown effect_id — the client table is behind the server's. Draw something rather
+		// than nothing: a hit the player cannot see is worse than one they cannot identify.
+		DrawDebugCircle(World, Ground, 60.f, 16, FColor(180, 180, 180),
+			false, EFFECT_LIFETIME_SEC, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		break;
+	}
 }
 
 void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedCms)
