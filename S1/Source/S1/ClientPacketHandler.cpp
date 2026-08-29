@@ -1,4 +1,4 @@
-#include "ClientPacketHandler.h"
+ï»¿#include "ClientPacketHandler.h"
 #include "BufferReader.h"
 #include "S1.h"
 #include "S1GameInstance.h"
@@ -21,9 +21,11 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 		const Protocol::ObjectInfo& Player = pkt.players(i);
 	}
 
-	// ·Îºñ¿¡¼­ Ä³¸¯ÅÍ ¼±ÅÃÇØ¼­ ÀÎµ¦½º Àü¼Û
+	// ë¡œë¹„ì—ì„œ ìºë¦­í„° ì„ íƒí•´ì„œ ì¸ë±ìŠ¤ ì „ì†¡
 	Protocol::C_ENTER_GAME EnterGamePkt;
 	EnterGamePkt.set_playerindex(0);
+
+	EnterGamePkt.set_floor_id(0);
 	SEND_PACKET(EnterGamePkt);
 
 	return true;
@@ -43,7 +45,7 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 {
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
 	{
-		// TODO : °ÔÀÓ Á¾·á? ·Îºñ·Î?
+		// TODO : ê²Œì„ ì¢…ë£Œ? ë¡œë¹„ë¡œ?
 	}
 
 	return true;
@@ -132,7 +134,7 @@ bool Handle_S_CC(PacketSessionRef& session, Protocol::S_CC& pkt)
 
 namespace
 {
-	// ·Î±×¸¦ ´«À¸·Î ÀĞÀ¸·Á°í µÎ´Â °Í. ¼ıÀÚ¸¸ ÂïÀ¸¸é ¸Å¹ø Enum.proto ¸¦ ¿­¾îºÁ¾ß ÇÑ´Ù.
+	// ë¡œê·¸ë¥¼ ëˆˆìœ¼ë¡œ ì½ìœ¼ë ¤ê³  ë‘ëŠ” ê²ƒ. ìˆ«ìë§Œ ì°ìœ¼ë©´ ë§¤ë²ˆ Enum.proto ë¥¼ ì—´ì–´ë´ì•¼ í•œë‹¤.
 	const TCHAR* CcTypeName(Protocol::CcType Type)
 	{
 		switch (Type)
