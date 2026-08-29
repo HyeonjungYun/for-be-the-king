@@ -58,9 +58,13 @@ int main()
 	// Main Thread
 	//DoWorkerJob(service);
 
-	GRoom->DoAsync(&Room::UpdateTick);
-	GRoom->DoAsync(&Room::FlushMoves);
-	GRoom->DoAsync(&Room::FlushCombat);
+	for (int32 i = 0; i < FLOOR_COUNT; i++)
+	{
+		GRooms[i]->DoAsync(&Room::UpdateTick);
+		GRooms[i]->DoAsync(&Room::FlushMoves);
+		GRooms[i]->DoAsync(&Room::FlushCombat);
+		GRooms[i]->DoAsync(&Room::FlushSpawns);
+	}
 
 	while (true)
 	{

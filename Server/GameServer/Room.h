@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "JobQueue.h"
 #include "SkillTable.h"
 
@@ -27,6 +27,7 @@ public:
 	void	UpdateTick();
 	void	FlushMoves();
 	void	FlushCombat();
+	void	FlushSpawns();
 
 	RoomRef	GetRoomRef();
 
@@ -36,6 +37,7 @@ private:
 
 private:
 	void	Broadcast(SendBufferRef sendBuffer, uint64 exceptId = 0);
+	void	Broadcast(SendBufferRef sendBuffer, const unordered_set<uint64>& exceptIds);
 	
 	bool	CancelCast(const CreatureRef& caster);
 
@@ -46,6 +48,12 @@ private:
 private:
 	unordered_map<uint64, ObjectRef>	_objects;
 	unordered_set<uint64>				_dirtyMovers;
+
+	vector<uint64>						_pendingSpawns;
+
+	int32 _enterCount = 0;
+	uint64 _enterTotalUs = 0;
+	uint64 _enterMaxUs = 0;
 
 private:
 	unordered_set<uint64>				_attackers;
@@ -66,4 +74,8 @@ private:
 	int32 _ccStateTickCounter = 0;
 };
 
-extern RoomRef GRoom;
+constexpr int32 FLOOR_COUNT = 4;
+
+extern RoomRef GRooms[FLOOR_COUNT];
+
+RoomRef GetRoomForFloor(uint32 floorId);

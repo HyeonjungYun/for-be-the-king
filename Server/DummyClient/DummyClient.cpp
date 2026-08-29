@@ -15,9 +15,9 @@ std::atomic<uint64> GSentThisWindow{ 0 };
 
 namespace
 {
-	constexpr float BOT_MOVE_SPEED = 340.f; 
-	constexpr float WANDER_RADIUS = 1000.f; 
-	constexpr float ARRIVE_EPSILON = 20.f;  
+	constexpr float BOT_MOVE_SPEED = 340.f;
+	constexpr float WANDER_RADIUS = 1000.f;
+	constexpr float ARRIVE_EPSILON = 20.f;
 	constexpr int   MOVE_INTERVAL_MS = 33;
 	constexpr int   MOVE_CHAT_MS = 2000;
 

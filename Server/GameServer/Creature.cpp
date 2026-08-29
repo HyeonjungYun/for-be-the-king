@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "Creature.h"
 
 Creature::Creature()
@@ -172,7 +172,7 @@ void Creature::ApplySoftCc(Protocol::CcType type, uint64 nowUs, uint32 effective
 
 void Creature::RefreshActiveSlow(uint64 nowUs)
 {
-	// ¸¸·áµÈ ¼Ò½º¸¦ ¾ÕÀ¸·Î ´ç±â¸é¼­ µ¿½Ã¿¡ ÃÖ´ë°ªÀ» »Ì´Â´Ù. ÇÕ»êX
+	// ë§Œë£Œëœ ì†ŒìŠ¤ë¥¼ ì•žìœ¼ë¡œ ë‹¹ê¸°ë©´ì„œ ë™ì‹œì— ìµœëŒ€ê°’ì„ ë½‘ëŠ”ë‹¤. í•©ì‚°X
 	float maxMagnitude = 0.f;
 	size_t writeIdx = 0;
 
@@ -241,8 +241,8 @@ const SkillSlot* Creature::GetSlot(Protocol::EquipSlot slot) const
 
 void Creature::RefreshBindStates()
 {
-	// ¹è¿­ ¼ø¼­°¡ °ð ¿ì¼±¼øÀ§´Ù.
-	// ¹«±â(shift) > ¹«±â(Q) > Åõ±¸ > °©¿Ê > ½Å¹ß > Àå½Å±¸
+	// ë°°ì—´ ìˆœì„œê°€ ê³§ ìš°ì„ ìˆœìœ„ë‹¤.
+	// ë¬´ê¸°(shift) > ë¬´ê¸°(Q) > íˆ¬êµ¬ > ê°‘ì˜· > ì‹ ë°œ > ìž¥ì‹ êµ¬
 
 	unordered_map<uint32, Protocol::EquipSlot> seen;
 

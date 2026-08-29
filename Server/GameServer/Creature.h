@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "Object.h"
 
 constexpr int32		SKILL_SLOT_COUNT = 6;
@@ -70,7 +70,7 @@ public:
 	void				ApplyHardCc(Protocol::CcType type, uint64 nowUs, uint32 effectiveMs);
 	void				ApplySoftCc(Protocol::CcType type, uint64 nowUs, uint32 effectiveMs, float magnitude);
 
-	// ¸¸·áµÈ °¨¼Ó¿øÀ» °È¾î³»°í activeSlow¸¦ ´Ù½Ã »Ì´Â´Ù.
+	// ë§Œë£Œëœ ê°ì†ì›ì„ ê±·ì–´ë‚´ê³  activeSlowë¥¼ ë‹¤ì‹œ ë½‘ëŠ”ë‹¤.
 	void				RefreshActiveSlow(uint64 nowUs);
 
 	bool				IsHardCced(uint64 nowUs) const;

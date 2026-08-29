@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Session.h"
 
 /*-----------------
@@ -14,6 +14,7 @@ public:
 
 public:
 	atomic<bool> inGame = false;
+	uint32 floorId = 0;
 	atomic<uint64> objectId = 0;
 
 	atomic<bool> alive = true;

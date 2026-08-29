@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "ClientPacketHandler.h"
 #include "BufferReader.h"
 #include "BotSession.h"
@@ -24,7 +24,7 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	const Protocol::PosInfo& pos = pkt.player().pos_info();
 
-	// ¼­¹ö°¡ Á¤ÇØÁØ ½ºÆù À§Ä¡¿¡¼­ ½ÃÀÛ. 
+	// ì„œë²„ê°€ ì •í•´ì¤€ ìŠ¤í° ìœ„ì¹˜ì—ì„œ ì‹œìž‘. 
 	bot->x = pos.x();
 	bot->y = pos.y();
 	bot->z = pos.z();

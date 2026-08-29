@@ -1,4 +1,4 @@
-syntax = "proto3";
+﻿syntax = "proto3";
 package Protocol;
 
 import "Enum.proto";
@@ -19,6 +19,7 @@ message S_LOGIN
 message C_ENTER_GAME
 {
 	uint64 playerIndex = 1;
+	uint32 floor_id = 2;
 }
 
 message S_ENTER_GAME
