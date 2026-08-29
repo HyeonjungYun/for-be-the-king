@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "ServerPacketHandler.h"
 #include "BufferReader.h"
 #include "BufferWriter.h"
@@ -17,8 +17,8 @@ bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 
 bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 {
-	// TODO : DB¿¡¼­ Account Á¤º¸¸¦ ±Ü¾î¿Â´Ù.
-	// TODO : DB¿¡¼­ À¯Àú Á¤º¸¸¦ ±Ü¾î¿Â´Ù.
+	// TODO : DBì—ì„œ Account ì •ë³´ë¥¼ ê¸ì–´ì˜¨ë‹¤.
+	// TODO : DBì—ì„œ ìœ ì € ì •ë³´ë¥¼ ê¸ì–´ì˜¨ë‹¤.
 
 	Protocol::S_LOGIN loginPkt;
 
@@ -41,11 +41,15 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 {
-	// ÇÃ·¹ÀÌ¾î »ı¼º
+	RoomRef room = GetRoomForFloor(pkt.floor_id());
+	if (room == nullptr)
+		return false;
+
+	// í”Œë ˆì´ì–´ ìƒì„±
 	PlayerRef player = ObjectUtils::CreatPlayer(static_pointer_cast<GameSession>(session));
 
-	// ¹æ¿¡ ÀÔÀå
-	GRoom->DoAsync(&Room::HandleEnterPlayer, player);
+	// ë°©ì— ì…ì¥
+	room->DoAsync(&Room::HandleEnterPlayer, player);
 	// GRoom->HandleEnterPlayer(player);
 
 	return true;
@@ -63,7 +67,7 @@ bool Handle_C_LEAVE_GAME(PacketSessionRef& session, Protocol::C_LEAVE_GAME& pkt)
 	if (room == nullptr)
 		return false;
 
-	GRoom->DoAsync(&Room::HandleLeavePlayer, player);
+	room->DoAsync(&Room::HandleLeavePlayer, player);
 
 	return true;
 }
@@ -83,7 +87,7 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	const uint64 realId = player->objectInfo->object_id();
 	if (pkt.info().object_id() != realId)
 	{
-		// Å¬¶ó°¡ S_ENTER_GAME À» Ã³¸®Çß´Ù¸é 0 ÀÌ ¾Æ´Ñ Á¦ id ¸¦ º¸³½´Ù.
+		// í´ë¼ê°€ S_ENTER_GAME ì„ ì²˜ë¦¬í–ˆë‹¤ë©´ 0 ì´ ì•„ë‹Œ ì œ id ë¥¼ ë³´ë‚¸ë‹¤.
 		cout << "[ID MISMATCH] claimed=" << pkt.info().object_id()
 			<< " actual=" << realId << endl;
 	}
@@ -106,7 +110,7 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt)
 	if (room == nullptr)
 		return false;
 
-	// °ø°İÀÚ id´Â ÆĞÅ¶¿¡¼­ ¹ŞÁö ¾Ê´Â´Ù. ¼¼¼Ç¿¡¼­ °¡Á®¿Â´Ù.
+	// ê³µê²©ì idëŠ” íŒ¨í‚·ì—ì„œ ë°›ì§€ ì•ŠëŠ”ë‹¤. ì„¸ì…˜ì—ì„œ ê°€ì ¸ì˜¨ë‹¤.
 	const uint64 attackerId = player->objectInfo->object_id();
 
 	room->DoAsync(&Room::HandleAttack, attackerId, pkt.target_id());
@@ -126,7 +130,7 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 	if (room == nullptr)
 		return false;
 
-	// CC µğ¹ö±× Àü¿ë
+	// CC ë””ë²„ê·¸ ì „ìš©
 	const string& msg = pkt.msg();
 	if (msg.empty() || msg[0] != '/')
 		return true;

@@ -1,9 +1,16 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "ServerStats.h"
 #include "Utils.h"
 #include <psapi.h>
 
 #pragma comment(lib, "psapi.lib")
+
+namespace
+{
+	constexpr double SENT_LIMIT_MBPS = 80.0;
+	constexpr double PER_CLIENT_LIMIT_KBPS = 400.0;
+	constexpr double MEMORY_LIMIT_MB = 512.0;
+}
 
 ServerStats GStats;
 
@@ -64,7 +71,7 @@ void ServerStats::Dump(int32 sessionCount)
 	const double elapsedSec = (_lastDumpUs == 0) ? 0.0 : static_cast<double>(nowUs - _lastDumpUs) / 1000000.0;
 	_lastDumpUs = nowUs;
 
-	// ´ë¿ªÆøÀº 'ÀÌ¹ø ±¸°£' °ªÀÌ¹Ç·Î ÀÐÀ¸¸é¼­ 0À¸·Î µÇµ¹¸°´Ù.
+	// ëŒ€ì—­í­ì€ 'ì´ë²ˆ êµ¬ê°„' ê°’ì´ë¯€ë¡œ ì½ìœ¼ë©´ì„œ 0ìœ¼ë¡œ ë˜ëŒë¦°ë‹¤.
 	const uint64 recvBytes = _recvBytes.exchange(0);
 	const uint64 sentBytes = _sentBytes.exchange(0);
 
@@ -87,7 +94,7 @@ void ServerStats::Dump(int32 sessionCount)
 		sentMbps = (sentBytes * 8.0) / elapsedSec / 1000000.0;
 	}
 
-	// Å¬¶ô 1ÀÎÀÌ ¹Þ´Â ¾ç = ¼­¹ö°¡ º¸³½ ÃÑŽU % ÀÎ¿ø
+	// í´ë½ 1ì¸ì´ ë°›ëŠ” ì–‘ = ì„œë²„ê°€ ë³´ë‚¸ ì´ëž¼ % ì¸ì›
 	const double perClientKbps = (sessionCount > 0) ? (sentMbps * 1000.0 / sessionCount) : 0.0;
 
 	PROCESS_MEMORY_COUNTERS pmc = {};
@@ -102,10 +109,10 @@ void ServerStats::Dump(int32 sessionCount)
 		<< " max=" << flushMax << "us " << Verdict(flushMax <= 100000) << "\n";
 
 	cout << " SV-5 band    recv=" << recvMbps << " Mbps"
-		<< "  sent=" << sentMbps << " Mbps " << Verdict(sentMbps <= 12.0)
-		<< "  per-client=" << perClientKbps << " kbps " << Verdict(perClientKbps <= 400.0) << "\n";
+		<< "  sent=" << sentMbps << " Mbps " << Verdict(sentMbps <= SENT_LIMIT_MBPS)
+		<< "  per-client=" << perClientKbps << " kbps " << Verdict(perClientKbps <= PER_CLIENT_LIMIT_KBPS) << "\n";
 
-	cout << " SV-6 memory  workingset=" << memMB << " MB " << Verdict(memMB <= 130.0) << "\n";
+	cout << " SV-6 memory  workingset=" << memMB << " MB " << Verdict(memMB <= MEMORY_LIMIT_MB) << "\n";
 
 	cout << "==========================================================\n" << endl;
 }

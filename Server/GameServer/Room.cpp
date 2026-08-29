@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "Room.h"
 #include "Player.h"
 #include "SkillTable.h"
@@ -9,6 +9,7 @@ namespace
 	constexpr double MAX_BUDGET_SEC = 0.5;
 	constexpr uint64 MOVE_FLUSH_MS = 33;
 	constexpr uint64 COMBAT_FLUSH_MS = 33;
+	constexpr uint64 SPAWN_FLUSH_MS = 33;
 	constexpr int32 CC_STATE_TICKS = 30;
 
 	constexpr float CAST_MOVE_EPSILON = 1.f;
@@ -42,7 +43,21 @@ namespace
 	}
 }
 
-RoomRef GRoom = make_shared<Room>();
+RoomRef GRooms[FLOOR_COUNT] =
+{
+	make_shared<Room>(),
+	make_shared<Room>(),
+	make_shared<Room>(),
+	make_shared<Room>()
+};
+
+RoomRef GetRoomForFloor(uint32 floorId)
+{
+	if (floorId >= FLOOR_COUNT)
+		return nullptr;
+
+	return GRooms[floorId];
+}
 
 Room::Room()
 {
@@ -56,7 +71,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 {
 	bool success = AddObject(object);
 
-	// ·£´ı À§Ä¡
+	// ëœë¤ ìœ„ì¹˜
 	if (randPos)
 	{
 		object->posInfo->set_x(Utils::GetRandom(0.f, 500.f));
@@ -65,19 +80,13 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		object->posInfo->set_yaw(Utils::GetRandom(0.f, 100.f));
 	}
 
-	// ÀÔÀå »ç½ÇÀ» ½ÅÀÔ ÇÃ·¹ÀÌ¾î¿¡°Ô ¾Ë¸°´Ù.
+	// ì…ì¥ ì‚¬ì‹¤ì„ ì‹ ì… í”Œë ˆì´ì–´ì—ê²Œ ì•Œë¦°ë‹¤.
 	if (auto player = dynamic_pointer_cast<Player>(object))
 	{
 		const uint64 enterUs = Utils::NowMicroseconds();
 		player->lastMoveUs = enterUs;
 
 		player->moveBudget = player->GetSpeedCeiling(enterUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
-
-		// Áø´Ü¿ë
-		wcout << "[SPAWN] id=" << player->objectInfo->object_id()
-			<< " pos=(" << player->posInfo->x()
-			<< ", " << player->posInfo->y()
-			<< ", " << player->posInfo->z() << ")" << endl;
 
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(success);
@@ -109,50 +118,13 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 				info->set_shadowed_by(s.shadowedBy);
 			}
 
-			for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
-			{
-				const SkillSlot& s = player->skillSlots[i];
-				wcout << L"[EQUIP] slot=" << (i + 1)
-					<< L" skill=" << s.skillId
-					<< L" bind=" << static_cast<int32>(s.bindState)
-					<< L" shadowedBy=" << static_cast<int32>(s.shadowedBy) << endl;
-			}
-
 			SendBufferRef equipBuffer = ServerPacketHandler::MakeSendBuffer(equipPkt);
 			if (auto session = player->session.lock())
 				session->Send(equipBuffer);
 		}
 	}
 
-	// ÀÔÀå »ç½ÇÀ» ´Ù¸¥ ÇÃ·¹ÀÌ¾î¿¡°Ô ¾Ë¸°´Ù.
-	{
-		Protocol::S_SPAWN spawnPkt;
-
-		Protocol::ObjectInfo* objectInfo = spawnPkt.add_players();
-		objectInfo->CopyFrom(*object->objectInfo);
-
-		SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(spawnPkt);
-		Broadcast(sendBuffer, object->objectInfo->object_id());
-	}
-
-	// ±âÁ¸¿¡ ÀÔÀåÇÑ ÇÃ·¹ÀÌ¾î ¸ñ·ÏÀ» ½ÅÀÔ ÇÃ·¹ÀÌ¾îÇÑÅ× Àü¼ÛÇØÁØ´Ù
-	if (auto player = dynamic_pointer_cast<Player>(object))
-	{
-		Protocol::S_SPAWN spawnPkt;
-
-		for (auto& item : _objects)
-		{
-			if (item.second->IsPlayer() == false)
-				continue;
-
-			Protocol::ObjectInfo* playerInfo = spawnPkt.add_players();
-			playerInfo->CopyFrom(*item.second->objectInfo);
-		}
-
-		SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(spawnPkt);
-		if (auto session = player->session.lock())
-			session->Send(sendBuffer);
-	}
+	_pendingSpawns.push_back(object->objectInfo->object_id());
 
 	return success;
 }
@@ -165,7 +137,7 @@ bool Room::LeaveRoom(ObjectRef object)
 	const uint64 objectId = object->objectInfo->object_id();
 	bool success = RemoveObject(objectId);
 
-	// ÅğÀå »ç½ÇÀ» ÅğÀåÇÏ´Â ÇÃ·¹ÀÌ¾î¿¡°Ô ¾Ë¸°´Ù.
+	// í‡´ì¥ ì‚¬ì‹¤ì„ í‡´ì¥í•˜ëŠ” í”Œë ˆì´ì–´ì—ê²Œ ì•Œë¦°ë‹¤.
 	if (auto player = dynamic_pointer_cast<Player>(object))
 	{
 		Protocol::S_LEAVE_GAME leaveGamePkt;
@@ -175,7 +147,7 @@ bool Room::LeaveRoom(ObjectRef object)
 			session->Send(sendBuffer);
 	}
 
-	// ÅğÀå »ç½ÇÀ» ¾Ë¸°´Ù.
+	// í‡´ì¥ ì‚¬ì‹¤ì„ ì•Œë¦°ë‹¤.
 	{
 		Protocol::S_DESPAWN despawnPkt;
 		despawnPkt.add_object_ids(objectId);
@@ -186,7 +158,7 @@ bool Room::LeaveRoom(ObjectRef object)
 		if (auto player = dynamic_pointer_cast<Player>(object))
 			if (auto session = player->session.lock())
 				session->Send(sendBuffer);
-		// "bool success = LeavePlayer(objectId);" ÀÌ ºÎºĞÀÌ À§¿¡¼­ ´©¶ôµÉ °æ¿ì¸¦ ´ëºñÇÏ¿©
+		// "bool success = LeavePlayer(objectId);" ì´ ë¶€ë¶„ì´ ìœ„ì—ì„œ ëˆ„ë½ë  ê²½ìš°ë¥¼ ëŒ€ë¹„í•˜ì—¬
 	}
 
 	return success;
@@ -194,7 +166,25 @@ bool Room::LeaveRoom(ObjectRef object)
 
 bool Room::HandleEnterPlayer(PlayerRef player)
 {
-	return EnterRoom(player, true);
+	const uint64 beginUs = Utils::NowMicroseconds();
+
+	const bool result = EnterRoom(player, true);
+
+	const uint64 elapsedUs = Utils::NowMicroseconds() - beginUs;
+
+	_enterCount++;
+	_enterTotalUs += elapsedUs;
+	if (elapsedUs > _enterMaxUs)
+		_enterMaxUs = elapsedUs;
+
+	if (_enterCount % 30 == 0)
+	{
+		wcout << L"[ENTER] n=" << _enterCount
+			<< L" avg=" << (_enterTotalUs / _enterCount) << L"us"
+			<< L" max=" << _enterMaxUs << L"us" << endl;
+	}
+
+	return result;
 }
 
 bool Room::HandleLeavePlayer(PlayerRef player)
@@ -210,7 +200,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	if (findIt == _objects.end())
 		return;
 
-	// Àû¿ë
+	// ì ìš©
 	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
 	if (player == nullptr)
 		return;
@@ -231,7 +221,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		return;
 	}
 
-	// ¼­¹ö ÀÌµ¿ °ËÁõ
+	// ì„œë²„ ì´ë™ ê²€ì¦
 	const uint64 nowUs = Utils::NowMicroseconds();
 	bool rejected = (player->lastMoveUs == 0);
 
@@ -248,7 +238,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		if (player->moveBudget > maxBudget)
 			player->moveBudget = maxBudget;
 
-		// XY Æò¸é °Å¸®¸¸ º»´Ù.
+		// XY í‰ë©´ ê±°ë¦¬ë§Œ ë³¸ë‹¤.
 		const double dx = static_cast<double>(pkt.info().x()) - player->posInfo->x();
 		const double dy = static_cast<double>(pkt.info().y()) - player->posInfo->y();
 		const double distance = std::sqrt(dx * dx + dy * dy);
@@ -270,8 +260,8 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	
 	if (rejected)
 	{
-		// °ËÁõ ½ÇÆĞ - posInfo¸¦ °»½ÅÇÏÁö ¾Ê°í ¸¶Áö¸· À¯È¿ À§Ä¡¸¦ µÇµ¹·Á º¸³½´Ù.
-			// ºê·ÎÄ³½ºÆ® X
+		// ê²€ì¦ ì‹¤íŒ¨ - posInfoë¥¼ ê°±ì‹ í•˜ì§€ ì•Šê³  ë§ˆì§€ë§‰ ìœ íš¨ ìœ„ì¹˜ë¥¼ ë˜ëŒë ¤ ë³´ë‚¸ë‹¤.
+			// ë¸Œë¡œìºìŠ¤íŠ¸ X
 		Protocol::S_MOVE snapbackPkt;
 		snapbackPkt.set_correction(true);
 		snapbackPkt.add_infos()->CopyFrom(*player->posInfo);
@@ -296,7 +286,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		}
 	}
 
-	// °ËÁõ Åë°ú, ÀÌµ¿
+	// ê²€ì¦ í†µê³¼, ì´ë™
 	player->posInfo->CopyFrom(pkt.info());
 	_dirtyMovers.insert(objectId);
 }
@@ -336,7 +326,7 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId)
 	if (target == nullptr || target->IsAlive() == false)
 		return;
 
-	// ´ë»ó ¶ô ½ÃÁ¡¿¡µµ »ç°Å¸®¸¦ º»´Ù. È÷Æ® ½ÃÁ¡¿¡ ÇÑ ¹ø ´õ Àç°ËÁõ
+	// ëŒ€ìƒ ë½ ì‹œì ì—ë„ ì‚¬ê±°ë¦¬ë¥¼ ë³¸ë‹¤. íˆíŠ¸ ì‹œì ì— í•œ ë²ˆ ë” ì¬ê²€ì¦
 	if (IsInAttackRange(attacker, target) == false)
 		return;
 
@@ -466,7 +456,7 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 	info.set_duration_ms(effectiveMs);
 	info.set_magnitude(magnitude);
 
-	// ÇÏµåCC´Â ÁøÇà ÁßÀÎ ÆòÅ¸¸¦ Áï½Ã Ãë¼Ò
+	// í•˜ë“œCCëŠ” ì§„í–‰ ì¤‘ì¸ í‰íƒ€ë¥¼ ì¦‰ì‹œ ì·¨ì†Œ
 	if (isHard && target->attackHitAtUs != 0)
 	{
 		target->attackTargetId = 0;
@@ -491,7 +481,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 		auto attackerIt = _objects.find(attackerId);
 		if (attackerIt == _objects.end())
 		{
-			resolved.push_back(attackerId);	// ±× »çÀÌ ¹æÀ» ³ª°£ °æ¿ì
+			resolved.push_back(attackerId);	// ê·¸ ì‚¬ì´ ë°©ì„ ë‚˜ê°„ ê²½ìš°
 			continue;
 		}
 
@@ -517,7 +507,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 			target = dynamic_pointer_cast<Creature>(targetIt->second);
 
 
-		// °ø°İÀÚ »ç¸Á, ´ë»ó ¼Ò¸í, ´ë»ó »ç¸Á, »ç°Å¸® ÀÌÅ»-> Ãë¼Ò. Äğ´Ù¿îÀ» ¼Ò¸ğ ÇÏÁö ¾Ê´Â´Ù.
+		// ê³µê²©ì ì‚¬ë§, ëŒ€ìƒ ì†Œëª…, ëŒ€ìƒ ì‚¬ë§, ì‚¬ê±°ë¦¬ ì´íƒˆ-> ì·¨ì†Œ. ì¿¨ë‹¤ìš´ì„ ì†Œëª¨ í•˜ì§€ ì•ŠëŠ”ë‹¤.
 		if (attacker->IsAlive() == false
 			|| target == nullptr
 			|| target->IsAlive() == false
@@ -539,7 +529,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 		dmg.set_is_crit(isCrit);
 		dmg.set_damage_type(Protocol::DAMAGE_TYPE_PHYSICAL);
 
-		// ÈÄµô ¼Ò¸ğ´Â È÷Æ®¿¡ ¼º°øÇßÀ» ¶§¸¸
+		// í›„ë”œ ì†Œëª¨ëŠ” íˆíŠ¸ì— ì„±ê³µí–ˆì„ ë•Œë§Œ
 		attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
 
 		if (remainingHp <= 0)
@@ -551,7 +541,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 				? Protocol::DEATH_CAUSE_PLAYER
 				: Protocol::DEATH_CAUSE_MONSTER);
 
-			// Á×Àº ´ë»óÀÌ °ø°İ ÁßÀÌ¾ú´Ù¸é ±× °ø°İµµ ¾ø¾Ø´Ù.
+			// ì£½ì€ ëŒ€ìƒì´ ê³µê²© ì¤‘ì´ì—ˆë‹¤ë©´ ê·¸ ê³µê²©ë„ ì—†ì•¤ë‹¤.
 			target->attackTargetId = 0;
 			target->attackHitAtUs = 0;
 
@@ -596,12 +586,12 @@ void Room::ResolveCasts(uint64 nowUs)
 		const uint32 skillId = caster->castSkillId;
 		const Protocol::EquipSlot slot = caster->castSlot;
 
-		// Á¶ÁØ°ªÀ» Áö¿ì±â Àü¿¡ ÀúÀå
+		// ì¡°ì¤€ê°’ì„ ì§€ìš°ê¸° ì „ì— ì €ì¥
 		const uint64 castTargetId = caster->castTargetId;
 		const float castAimX = caster->castAimX;
 		const float castAimY = caster->castAimY;
 
-		// Ä³½ºÆ® »óÅÂ ÇØÁ¦
+		// ìºìŠ¤íŠ¸ ìƒíƒœ í•´ì œ
 		caster->castEndAtUs = 0;
 		caster->castSkillId = 0;
 		caster->castSlot = Protocol::SLOT_NONE;
@@ -611,7 +601,7 @@ void Room::ResolveCasts(uint64 nowUs)
 		if (def == nullptr)
 			continue;
 
-		// È¿°ú Àû¿ë ½ÃÁ¡
+		// íš¨ê³¼ ì ìš© ì‹œì 
 		if (SkillSlot* skillSlot = caster->GetSlot(slot))
 			skillSlot->cooldownEndUs = nowUs + static_cast<uint64>(def->cooldownMs) * 1000;
 
@@ -619,7 +609,7 @@ void Room::ResolveCasts(uint64 nowUs)
 		CollectSkillTargets(caster, *def, castTargetId, castAimX, castAimY, OUT targets);
 		ApplySkillEffects(caster, *def, targets, nowUs);
 
-		// ¿¬ÃâÀº ´ë»óÀÌ 0¸íÀÌ¾îµµ ³ª°¨
+		// ì—°ì¶œì€ ëŒ€ìƒì´ 0ëª…ì´ì–´ë„ ë‚˜ê°
 		if (targets.empty())
 		{
 			Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
@@ -642,8 +632,8 @@ void Room::ResolveCasts(uint64 nowUs)
 			}
 		}
 
-		// TODO : ÆÇÁ¤ ½ÃÀÛ
-		//   shape º° ´ë»ó ¼öÁı -> µ¥¹ÌÁö / CC / ÀÌµ¿ -> _pendingSkillHits ÀûÀç
+		// TODO : íŒì • ì‹œì‘
+		//   shape ë³„ ëŒ€ìƒ ìˆ˜ì§‘ -> ë°ë¯¸ì§€ / CC / ì´ë™ -> _pendingSkillHits ì ì¬
 		wcout << L"[SKILL FIRE] caster=" << casterId
 			<< L" skill=" << skillId
 			<< L" targets=" << targets.size()
@@ -781,7 +771,7 @@ void Room::UpdateTick()
 {
 	//cout << "Update Room" << endl;
 	
-	// 0.1ÃÊ °æ°úÇßÀ¸¸é, UpdateTick()
+	// 0.1ì´ˆ ê²½ê³¼í–ˆìœ¼ë©´, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
 }
 
@@ -914,6 +904,70 @@ void Room::FlushCombat()
 	DoTimer(COMBAT_FLUSH_MS, &Room::FlushCombat);
 }
 
+void Room::FlushSpawns()
+{
+	if (_pendingSpawns.empty() == false)
+	{
+		Protocol::S_SPAWN newPkt;
+		unordered_set<uint64> newIds;
+
+		for (uint64 id : _pendingSpawns)
+		{
+			auto findIt = _objects.find(id);
+			if (findIt == _objects.end())
+				continue;
+
+			newPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
+			newIds.insert(id);
+		}
+
+		_pendingSpawns.clear();
+
+		if (newIds.empty() == false)
+		{
+			// ì‹ ê·œ ì „ì›ì„ í•œ íŒ¨í‚·ì— ë‹´ì•„ ê¸°ì¡´ ì „ì›ì—ê²Œ 1íšŒ ë¸Œë¡œë“œìºìŠ¤íŠ¸
+			// ì§ë ¬í™” 1íšŒ
+			{
+				SendBufferRef newBuffer = ServerPacketHandler::MakeSendBuffer(newPkt);
+				Broadcast(newBuffer, newIds);
+			}
+
+			// ì „ì²´ ëª©ë¡ì„ 1íšŒë§Œ ì§ë ¬í™”í•´ ì‹ ê·œ ì „ì›ì´ ê°™ì€ ë²„í¼ë¥¼ ë‚˜ëˆ ì“´ë‹¤.
+			{
+				Protocol::S_SPAWN allPkt;
+
+				for (auto& item : _objects)
+				{
+					if (item.second->IsPlayer() == false)
+						continue;
+
+					allPkt.add_players()->CopyFrom(*item.second->objectInfo);
+				}
+
+				if (allPkt.players_size() > 0)
+				{
+					SendBufferRef allBuffer = ServerPacketHandler::MakeSendBuffer(allPkt);
+
+					for (uint64 id : newIds)
+					{
+						auto findIt = _objects.find(id);
+						if (findIt == _objects.end())
+							continue;
+
+						PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+						if (player == nullptr)
+							continue;
+
+						if (auto session = player->session.lock())
+							session->Send(allBuffer);
+					}
+				}
+			}
+		}
+	}
+	DoTimer(SPAWN_FLUSH_MS, &Room::FlushSpawns);
+}
+
 RoomRef Room::GetRoomRef()
 {
 	return static_pointer_cast<Room>(shared_from_this());
@@ -921,7 +975,7 @@ RoomRef Room::GetRoomRef()
 
 bool Room::AddObject(ObjectRef object)
 {
-	// ÀÌ¹Ì ÇÃ·¹ÀÌ¾î°¡ ÀÖ´Ù¸é ¹®Á¦°¡ ÀÖ´Ù.
+	// ì´ë¯¸ í”Œë ˆì´ì–´ê°€ ìˆë‹¤ë©´ ë¬¸ì œê°€ ìˆë‹¤.
 	if (_objects.find(object->objectInfo->object_id()) != _objects.end())
 		return false;
 
@@ -934,7 +988,7 @@ bool Room::AddObject(ObjectRef object)
 
 bool Room::RemoveObject(uint64 objectId)
 {
-	// ¾ø´Ù¸é ¹®Á¦°¡ ÀÖ´Ù.
+	// ì—†ë‹¤ë©´ ë¬¸ì œê°€ ìˆë‹¤.
 	if (_objects.find(objectId) == _objects.end())
 		return false;
 
@@ -959,6 +1013,22 @@ void Room::Broadcast(SendBufferRef sendBuffer, uint64 exceptId)
 			continue;
 
 		if (player->objectInfo->object_id() == exceptId)
+			continue;
+
+		if (GameSessionRef session = player->session.lock())
+			session->Send(sendBuffer);
+	}
+}
+
+void Room::Broadcast(SendBufferRef sendBuffer, const unordered_set<uint64>& exceptIds)
+{
+	for (auto& item : _objects)
+	{
+		PlayerRef player = dynamic_pointer_cast<Player>(item.second);
+		if (player == nullptr)
+			continue;
+
+		if (exceptIds.find(player->objectInfo->object_id()) != exceptIds.end())
 			continue;
 
 		if (GameSessionRef session = player->session.lock())
