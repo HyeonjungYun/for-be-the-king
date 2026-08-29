@@ -563,6 +563,7 @@ class C_ENTER_GAME final :
 
   enum : int {
     kPlayerIndexFieldNumber = 1,
+    kFloorIdFieldNumber = 2,
   };
   // uint64 playerIndex = 1;
   void clear_playerindex();
@@ -571,6 +572,15 @@ class C_ENTER_GAME final :
   private:
   uint64_t _internal_playerindex() const;
   void _internal_set_playerindex(uint64_t value);
+  public:
+
+  // uint32 floor_id = 2;
+  void clear_floor_id();
+  uint32_t floor_id() const;
+  void set_floor_id(uint32_t value);
+  private:
+  uint32_t _internal_floor_id() const;
+  void _internal_set_floor_id(uint32_t value);
   public:
 
   // @@protoc_insertion_point(class_scope:Protocol.C_ENTER_GAME)
@@ -582,6 +592,7 @@ class C_ENTER_GAME final :
   typedef void DestructorSkippable_;
   struct Impl_ {
     uint64_t playerindex_;
+    uint32_t floor_id_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -4113,6 +4124,26 @@ inline void C_ENTER_GAME::_internal_set_playerindex(uint64_t value) {
 inline void C_ENTER_GAME::set_playerindex(uint64_t value) {
   _internal_set_playerindex(value);
   // @@protoc_insertion_point(field_set:Protocol.C_ENTER_GAME.playerIndex)
+}
+
+// uint32 floor_id = 2;
+inline void C_ENTER_GAME::clear_floor_id() {
+  _impl_.floor_id_ = 0u;
+}
+inline uint32_t C_ENTER_GAME::_internal_floor_id() const {
+  return _impl_.floor_id_;
+}
+inline uint32_t C_ENTER_GAME::floor_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_ENTER_GAME.floor_id)
+  return _internal_floor_id();
+}
+inline void C_ENTER_GAME::_internal_set_floor_id(uint32_t value) {
+  
+  _impl_.floor_id_ = value;
+}
+inline void C_ENTER_GAME::set_floor_id(uint32_t value) {
+  _internal_set_floor_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_ENTER_GAME.floor_id)
 }
 
 // -------------------------------------------------------------------
