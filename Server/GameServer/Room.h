@@ -2,6 +2,19 @@
 #include "JobQueue.h"
 #include "SkillTable.h"
 
+struct PendingTelegraph
+{
+	uint64 casterId = 0;
+	uint32 skillId = 0;
+	uint64 fireAtUs = 0;
+
+	uint64 targetId = 0;
+	float originX = 0.f;
+	float originY = 0.f;
+	float aimX = 0.f;
+	float aimY = 0.f;
+};
+
 class Room : public JobQueue
 {
 public:
@@ -20,6 +33,7 @@ public:
 	void	ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, uint32 baseDurationMs, float magnitude);
 	void	ResolveAttacks(uint64 nowUs);
 	void	ResolveCasts(uint64 nowUs);
+	void	ResolveTelegraphs(uint64 nowUs);
 	void	UpdateCc(uint64 nowUs);
 	void	FlushCcState(uint64 nowUs);
 
@@ -41,7 +55,7 @@ private:
 	
 	bool	CancelCast(const CreatureRef& caster);
 
-	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
+	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
 	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs);
 	void	ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs);
 
@@ -50,6 +64,7 @@ private:
 	unordered_set<uint64>				_dirtyMovers;
 
 	vector<uint64>						_pendingSpawns;
+	vector<PendingTelegraph>			_pendingTelegraphs;
 
 	int32 _enterCount = 0;
 	uint64 _enterTotalUs = 0;
@@ -68,9 +83,9 @@ private:
 	vector<Protocol::DamageInfo>		_pendingDamages;
 	vector<Protocol::DiedInfo>			_pendingDeaths;
 
-	unordered_set<uint64> _ccTargets;
-	vector<Protocol::CcEventInfo> _pendingCcApplied;
-	vector<Protocol::CcEventInfo> _pendingCcExpired;
+	unordered_set<uint64>				_ccTargets;
+	vector<Protocol::CcEventInfo>		_pendingCcApplied;
+	vector<Protocol::CcEventInfo>		_pendingCcExpired;
 	int32 _ccStateTickCounter = 0;
 };
 
