@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Enum.pb.h"
 
 /*-----------------
@@ -72,6 +72,8 @@ struct SkillDef
 	uint32					castMs = 0;
 	uint32					cooldownMs = 0;
 	bool					canMoveWhileCasting = false;
+
+	uint32					telegraphMs = 0;
 
 	SkillShape				shape = SkillShape::Single;
 	SkillAimType			aimType = SkillAimType::None;

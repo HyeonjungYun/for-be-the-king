@@ -605,43 +605,93 @@ void Room::ResolveCasts(uint64 nowUs)
 		if (SkillSlot* skillSlot = caster->GetSlot(slot))
 			skillSlot->cooldownEndUs = nowUs + static_cast<uint64>(def->cooldownMs) * 1000;
 
-		vector<CreatureRef> targets;
-		CollectSkillTargets(caster, *def, castTargetId, castAimX, castAimY, OUT targets);
-		ApplySkillEffects(caster, *def, targets, nowUs);
+		const float originX = caster->posInfo->x();
+		const float originY = caster->posInfo->y();
 
-		// 연출은 대상이 0명이어도 나감
-		if (targets.empty())
 		{
 			Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
 			hit.set_caster_id(casterId);
 			hit.set_effect_id(def->effectId);
 			hit.set_target_id(0);
-			hit.set_impact_x(caster->posInfo->x());
-			hit.set_impact_y(caster->posInfo->y());
+			hit.set_impact_x(originX);
+			hit.set_impact_y(originY);
+		}
+
+		if (def->telegraphMs == 0)
+		{
+			vector<CreatureRef> targets;
+			CollectSkillTargets(caster, *def, originX, originY, castTargetId, castAimX, castAimY, OUT targets);
+			ApplySkillEffects(caster, *def, targets, nowUs);
+
+			wcout << L"[SKILL FIRE] caster=" << casterId
+				<< L" skill=" << skillId
+				<< L" targets=" << targets.size()
+				<< L" cd=" << def->cooldownMs << L"ms" << endl;
 		}
 		else
 		{
-			for (const CreatureRef& hitTarget : targets)
-			{
-				Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
-				hit.set_caster_id(casterId);
-				hit.set_effect_id(def->effectId);
-				hit.set_target_id(hitTarget->objectInfo->object_id());
-				hit.set_impact_x(hitTarget->posInfo->x());
-				hit.set_impact_y(hitTarget->posInfo->y());
-			}
-		}
+			PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
+			pending.casterId = casterId;
+			pending.skillId = skillId;
+			pending.fireAtUs = nowUs + static_cast<uint64>(def->telegraphMs) * 1000;
+			pending.targetId = castTargetId;
+			pending.originX = originX;
+			pending.originY = originY;
 
-		// TODO : 판정 시작
-		//   shape 별 대상 수집 -> 데미지 / CC / 이동 -> _pendingSkillHits 적재
-		wcout << L"[SKILL FIRE] caster=" << casterId
-			<< L" skill=" << skillId
-			<< L" targets=" << targets.size()
-			<< L" cd=" << def->cooldownMs << L"ms" << endl;
+			wcout << L"[SKILL TELEGRAPH] caster=" << casterId
+				<< L" skill=" << skillId
+				<< L" in=" << def->telegraphMs << L"ms" << endl;
+		}
 	}
 
 	for (uint64 id : resolved)
 		_casters.erase(id);
+}
+
+void Room::ResolveTelegraphs(uint64 nowUs)
+{
+	if (_pendingTelegraphs.empty())
+		return;
+
+	for (int32 i = static_cast<int32>(_pendingTelegraphs.size()) - 1; i >= 0; i--)
+	{
+		PendingTelegraph& pending = _pendingTelegraphs[i];
+
+		if (nowUs < pending.fireAtUs)
+			continue;
+
+		const uint32 skillId = pending.skillId;
+		const uint64 casterId = pending.casterId;
+		const float originX = pending.originX;
+		const float originY = pending.originY;
+		const uint64 targetId = pending.targetId;
+		const float aimX = pending.aimX;
+		const float aimY = pending.aimY;
+
+		_pendingTelegraphs.erase(_pendingTelegraphs.begin() + i);
+
+		const SkillDef* def = SkillTable::Find(skillId);
+		if (def == nullptr)
+			continue;
+
+		auto casterIt = _objects.find(casterId);
+		if (casterIt == _objects.end())
+			continue;
+
+		CreatureRef caster = dynamic_pointer_cast<Creature>(casterIt->second);
+
+		if (caster == nullptr || caster->IsAlive() == false)
+			continue;
+
+		vector<CreatureRef> targets;
+		CollectSkillTargets(caster, *def, originX, originY, targetId, aimX, aimY, OUT targets);
+		ApplySkillEffects(caster, *def, targets, nowUs);
+
+		wcout << L"[SKILL FIRE] caster=" << casterId
+			<< L" skill=" << skillId
+			<< L" targets=" << targets.size()
+			<< L" (telegraphed)" << endl;
+	}
 }
 
 void Room::UpdateCc(uint64 nowUs)
@@ -809,6 +859,7 @@ void Room::FlushCombat()
 	UpdateCc(nowUs);
 	ResolveAttacks(nowUs);
 	ResolveCasts(nowUs);
+	ResolveTelegraphs(nowUs);
 
 	if (_pendingAttacks.empty() == false)
 	{
@@ -999,6 +1050,9 @@ bool Room::RemoveObject(uint64 objectId)
 	_dirtyMovers.erase(objectId);
 	_attackers.erase(objectId);
 	_casters.erase(objectId);
+	_pendingTelegraphs.erase(remove_if(_pendingTelegraphs.begin(), _pendingTelegraphs.end(),
+		[objectId](const PendingTelegraph& p)
+		{return p.casterId == objectId; }), _pendingTelegraphs.end());
 	_ccTargets.erase(objectId);
 
 	return true;
@@ -1059,7 +1113,7 @@ bool Room::CancelCast(const CreatureRef& caster)
 	return true;
 }
 
-void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, uint64 castTargetId, float aimX, float aimY, vector<CreatureRef>& outTargets)
+void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets)
 {
 	outTargets.clear();
 
@@ -1077,7 +1131,9 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, u
 		if (target == nullptr || target->IsAlive() == false)
 			return;
 
-		if (IsInSkillRange(caster, target, def.rangeCm) == false)
+		const float dx = target->posInfo->x() - originX;
+		const float dy = target->posInfo->y() - originY;
+		if ((dx * dx + dy * dy) > (def.rangeCm * def.rangeCm))
 			return;
 
 		outTargets.push_back(target);
@@ -1097,7 +1153,9 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, u
 			if (target == nullptr || target->IsAlive() == false)
 				continue;
 
-			if (IsInSkillRange(caster, target, def.radiusCm))
+			const float dx = target->posInfo->x() - originX;
+			const float dy = target->posInfo->y() - originY;
+			if ((dx * dx + dy * dy) <= (def.radiusCm * def.radiusCm))
 				outTargets.push_back(target);
 		}
 		return;

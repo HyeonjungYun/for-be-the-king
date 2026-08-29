@@ -109,6 +109,8 @@ void SkillTable::Init()
 		slow.ccMagnitude = 0.30f;					// 상한 0.40 (soft_cc_slow_cap) 이하
 		def.effects.push_back(slow);
 
+		def.telegraphMs = 1000;
+
 		s_defs[def.skillId] = def;
 	}
 }
