@@ -280,6 +280,53 @@ void US1GameInstance::HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt)
 		SkillSlots.Add(Info);
 }
 
+void US1GameInstance::HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt)
+{
+	for (const Protocol::SkillCastInfo& Info : CastPkt.casts())
+	{
+		if (TWeakObjectPtr<AS1Player>* Found = Players.Find(Info.caster_id()))
+		{
+			if (AS1Player* Caster = Found->Get())
+				Caster->OnSkillCastStarted(Info.is_stationary());
+		}
+	}
+}
+
+void US1GameInstance::HandleSkillCancel(const Protocol::S_SKILL_CANCEL& CancelPkt)
+{
+	for (const uint64 CasterId : CancelPkt.caster_ids())
+	{
+		if (TWeakObjectPtr<AS1Player>* Found = Players.Find(CasterId))
+		{
+			if (AS1Player* Caster = Found->Get())
+				Caster->OnSkillCastEnded();
+		}
+	}
+}
+
+void US1GameInstance::HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt)
+{
+	for (const Protocol::SkillHitInfo& Info : HitPkt.hits())
+	{
+		if (TWeakObjectPtr<AS1Player>* Found = Players.Find(Info.caster_id()))
+		{
+			if (AS1Player* Caster = Found->Get())
+				Caster->OnSkillCastEnded();
+		}
+
+		const FVector Impact(Info.impact_x(), Info.impact_y(), 0.f);
+
+		AS1Player* Target = nullptr;
+		if (Info.target_id() != 0)
+		{
+			if (TWeakObjectPtr<AS1Player>* FoundTarget = Players.Find(Info.target_id()))
+				Target = FoundTarget->Get();
+		}
+
+		AS1Player::PlaySkillEffect(GetWorld(), Info.effect_id(), Impact, Target);
+	}
+}
+
 void US1GameInstance::DebugChatCCStun()
 {
 	Protocol::C_CHAT pkt;
