@@ -1,14 +1,14 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+ï»¿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 
-// ClinetPacketHandler¸¦ µÇ»ì¸± ¶§ ÇÊ¿äÇÑ ºÎºĞµéÀ» ¿©±â´Ù°¡ ±¸Çö
+// ClinetPacketHandlerë¥¼ ë˜ì‚´ë¦´ ë•Œ í•„ìš”í•œ ë¶€ë¶„ë“¤ì„ ì—¬ê¸°ë‹¤ê°€ êµ¬í˜„
 struct PacketHeader
 {
 	uint16 size;
-	uint16 id; // ÇÁ·ÎÅäÄİID (ex. 1=·Î±×ÀÎ, 2=ÀÌµ¿¿äÃ»)
+	uint16 id; // í”„ë¡œí† ì½œID (ex. 1=ë¡œê·¸ì¸, 2=ì´ë™ìš”ì²­)
 };
 
 class SendBuffer : public TSharedFromThis<SendBuffer>

@@ -54,3 +54,10 @@ Desktop.ini
 
 # Visual Studio IntelliSense 힌트 — 생성물
 cpp.hint
+
+# Python 캐시 — 인터프리터 버전마다 달라져 계속 diff 에 뜬다
+__pycache__/
+*.pyc
+
+# ServerCore 빌드 출력이 잘못된 경로로 떨어진 것. 정식 위치는 Server/Libraries/Libs/
+Server/ServerCore/Libraries/

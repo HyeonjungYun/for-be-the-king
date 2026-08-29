@@ -1,8 +1,8 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "BufferReader.h"
 #include "BufferWriter.h"
 
-TEST(Buffer, ¾´_°ªÀ»_±×´ë·Î_ÀĞ´Â´Ù)
+TEST(Buffer, ì“´_ê°’ì„_ê·¸ëŒ€ë¡œ_ì½ëŠ”ë‹¤)
 {
 	BYTE raw[64] = {};
 
@@ -25,7 +25,7 @@ TEST(Buffer, ¾´_°ªÀ»_±×´ë·Î_ÀĞ´Â´Ù)
 	EXPECT_FLOAT_EQ(rc, c);
 }
 
-TEST(Buffer, ¾´_¸¸Å­_Ä¿¼­°¡_¿òÁ÷ÀÎ´Ù)
+TEST(Buffer, ì“´_ë§Œí¼_ì»¤ì„œê°€_ì›€ì§ì¸ë‹¤)
 {
 	BYTE raw[64] = {};
 	BufferWriter w(raw, sizeof(raw));
@@ -37,7 +37,7 @@ TEST(Buffer, ¾´_¸¸Å­_Ä¿¼­°¡_¿òÁ÷ÀÎ´Ù)
 	EXPECT_EQ(w.FreeSize(), sizeof(raw) - sizeof(uint32));
 }
 
-TEST(Buffer, ¿ë·®À»_³Ñ±â¸é_¾²±â°¡_½ÇÆĞÇÑ´Ù)
+TEST(Buffer, ìš©ëŸ‰ì„_ë„˜ê¸°ë©´_ì“°ê¸°ê°€_ì‹¤íŒ¨í•œë‹¤)
 {
 	BYTE raw[4] = {};
 	BufferWriter w(raw, sizeof(raw));
@@ -47,7 +47,7 @@ TEST(Buffer, ¿ë·®À»_³Ñ±â¸é_¾²±â°¡_½ÇÆĞÇÑ´Ù)
 	EXPECT_FALSE(w.Write(&v));
 }
 
-TEST(Buffer, ¿ë·®À»_³Ñ±â¸é_ÀĞ±â°¡_½ÇÆĞÇÑ´Ù)
+TEST(Buffer, ìš©ëŸ‰ì„_ë„˜ê¸°ë©´_ì½ê¸°ê°€_ì‹¤íŒ¨í•œë‹¤)
 {
 	BYTE raw[4] = {};
 	BufferReader r(raw, sizeof(raw));
@@ -57,7 +57,7 @@ TEST(Buffer, ¿ë·®À»_³Ñ±â¸é_ÀĞ±â°¡_½ÇÆĞÇÑ´Ù)
 	EXPECT_FALSE(r.Read(&v));
 }
 
-TEST(Buffer, PeekÀº_Ä¿¼­¸¦_¿òÁ÷ÀÌÁö_¾Ê´Â´Ù)
+TEST(Buffer, Peekì€_ì»¤ì„œë¥¼_ì›€ì§ì´ì§€_ì•ŠëŠ”ë‹¤)
 {
 	BYTE raw[8] = {};
 	uint32 v = 0xABCD1234;
@@ -78,7 +78,7 @@ TEST(Buffer, PeekÀº_Ä¿¼­¸¦_¿òÁ÷ÀÌÁö_¾Ê´Â´Ù)
 	EXPECT_EQ(r.ReadSize(), sizeof(uint32));
 }
 
-TEST(Buffer, Reserve´Â_°ø°£ÀÌ_¾øÀ¸¸é_nullptrÀ»_ÁØ´Ù)
+TEST(Buffer, ReserveëŠ”_ê³µê°„ì´_ì—†ìœ¼ë©´_nullptrì„_ì¤€ë‹¤)
 {
 	BYTE raw[4] = {};
 	BufferWriter w(raw, sizeof(raw));

@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -140,8 +140,8 @@ public:
 	void OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit);
 
 protected:
-	class Protocol::PosInfo* PlayerInfo; // ���� ��ġ
-	class Protocol::PosInfo* DestInfo; // ����ġ
+	class Protocol::PosInfo* PlayerInfo; // 현재 위치
+	class Protocol::PosInfo* DestInfo; // 목적치
 
 	// 30Hz. movement-camera.md Core Rule 10, entities.yaml move_packet_send_rate.
 	// The server's validation margin (1.15) and min_delta_t (16.6ms = half of this)

@@ -1,4 +1,4 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "JobQueue.h"
 #include "GlobalQueue.h"
 #include "ServerStats.h"
@@ -13,23 +13,23 @@ void JobQueue::Push(JobRef job, bool pushOnly)
 	const int32 prevCount = _jobCount.fetch_add(1);
 	_jobs.Push(job); // WRITE_LOCK
 
-	// Ã¹¹øÂ° JobÀ» ³ÖÀº ¾²·¹µå°¡ ½ÇÇà±îÁö ´ã´ç
+	// ì²«ë²ˆì§¸ Jobì„ ë„£ì€ ì“°ë ˆë“œê°€ ì‹¤í–‰ê¹Œì§€ ë‹´ë‹¹
 	if (prevCount == 0)
 	{
-		// ÀÌ¹Ì ½ÇÇàÁßÀÎ JobQueue°¡ ¾øÀ¸¸é ½ÇÇà
+		// ì´ë¯¸ ì‹¤í–‰ì¤‘ì¸ JobQueueê°€ ì—†ìœ¼ë©´ ì‹¤í–‰
 		if (LCurrentJobQueue == nullptr && pushOnly == false)
 		{
 			Execute();
 		}
 		else
 		{
-			// ¿©À¯ ÀÖ´Â ´Ù¸¥ ¾²·¹µå°¡ ½ÇÇàÇÏµµ·Ï GlobalQueue¿¡ ³Ñ±ä´Ù
+			// ì—¬ìœ  ìžˆëŠ” ë‹¤ë¥¸ ì“°ë ˆë“œê°€ ì‹¤í–‰í•˜ë„ë¡ GlobalQueueì— ë„˜ê¸´ë‹¤
 			GGlobalQueue->Push(shared_from_this());
 		}
 	}
 }
 
-// 1) ÀÏ°¨ÀÌ ³Ê~¹« ¸ô¸®¸é?
+// 1) ì¼ê°ì´ ë„ˆ~ë¬´ ëª°ë¦¬ë©´?
 void JobQueue::Execute()
 {
 	LCurrentJobQueue = this;
@@ -49,7 +49,7 @@ void JobQueue::Execute()
 		if (jobCount > 0)
 			GStats.RecordFlush(Utils::NowMicroseconds() - flushStartUs);
 
-		// ³²Àº ÀÏ°¨ÀÌ 0°³¶ó¸é Á¾·á
+		// ë‚¨ì€ ì¼ê°ì´ 0ê°œë¼ë©´ ì¢…ë£Œ
 		if (_jobCount.fetch_sub(jobCount) == jobCount)
 		{
 			LCurrentJobQueue = nullptr;
@@ -60,7 +60,7 @@ void JobQueue::Execute()
 		if (now >= LEndTickCount)
 		{
 			LCurrentJobQueue = nullptr;
-			// ¿©À¯ ÀÖ´Â ´Ù¸¥ ¾²·¹µå°¡ ½ÇÇàÇÏµµ·Ï GlobalQueue¿¡ ³Ñ±ä´Ù
+			// ì—¬ìœ  ìžˆëŠ” ë‹¤ë¥¸ ì“°ë ˆë“œê°€ ì‹¤í–‰í•˜ë„ë¡ GlobalQueueì— ë„˜ê¸´ë‹¤
 			GGlobalQueue->Push(shared_from_this());
 			break;
 		}			

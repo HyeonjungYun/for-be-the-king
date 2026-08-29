@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -55,7 +55,7 @@ protected:
 	std::atomic<bool> Running = true;
 	FSocket* Socket;
 	TWeakPtr<class PacketSession> SessionRef;	
-	// ¼¼¼ÇÀÇ Å¥¸¦ ¼¼¼Ç¿¡¼­ Á÷Á¢ ¹Ş¾Æ¿À¸é ¼¼¼ÇÀÌ Á¾·áµÇ¾úÀ» ¶§ Å¥ÀÇ Æ÷ÀÎÅÍ°¡ nullÀÌ µÇ¹Ç·Î ¼¼¼ÇÀ» Á÷Á¢ ¹Ş¾Æ¿Í ·¹ÆÛ·±½º Ä«¿îÆ®¸¦ 1 ´Ã·ÁÁØ´Ù
+	// ì„¸ì…˜ì˜ íë¥¼ ì„¸ì…˜ì—ì„œ ì§ì ‘ ë°›ì•„ì˜¤ë©´ ì„¸ì…˜ì´ ì¢…ë£Œë˜ì—ˆì„ ë•Œ íì˜ í¬ì¸í„°ê°€ nullì´ ë˜ë¯€ë¡œ ì„¸ì…˜ì„ ì§ì ‘ ë°›ì•„ì™€ ë ˆí¼ëŸ°ìŠ¤ ì¹´ìš´íŠ¸ë¥¼ 1 ëŠ˜ë ¤ì¤€ë‹¤
 };
 
 /*---------------

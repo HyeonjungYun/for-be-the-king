@@ -1,13 +1,13 @@
-#include "pch.h"
+ï»¿#include "pch.h"
 #include "LockQueue.h"
 
-TEST(LockQueue, ºó_Å¥¿¡¼­_PopÇÏ¸é_±âº»°ªÀ»_µ¹·ÁÁØ´Ù)
+TEST(LockQueue, ë¹ˆ_íì—ì„œ_Popí•˜ë©´_ê¸°ë³¸ê°’ì„_ëŒë ¤ì¤€ë‹¤)
 {
 	LockQueue<shared_ptr<int>> q;
 	EXPECT_EQ(q.Pop(), nullptr);
 }
 
-TEST(LockQueue, ³ÖÀº_¼ø¼­´ë·Î_³ª¿Â´Ù)
+TEST(LockQueue, ë„£ì€_ìˆœì„œëŒ€ë¡œ_ë‚˜ì˜¨ë‹¤)
 {
 	LockQueue<shared_ptr<int>> q;
 	q.Push(make_shared<int>(1));
@@ -17,7 +17,7 @@ TEST(LockQueue, ³ÖÀº_¼ø¼­´ë·Î_³ª¿Â´Ù)
 	EXPECT_EQ(*q.Pop(), 2);
 }
 
-TEST(LockQueue, ClearÇÏ¸é_ºñ¿öÁø´Ù)
+TEST(LockQueue, Clearí•˜ë©´_ë¹„ì›Œì§„ë‹¤)
 {
 	LockQueue<shared_ptr<int>> q;
 	for (int i = 1; i <= 10; i++)
@@ -27,7 +27,7 @@ TEST(LockQueue, ClearÇÏ¸é_ºñ¿öÁø´Ù)
 	EXPECT_EQ(q.Pop(), nullptr);
 }
 
-TEST(LockQueue, PopAllÀÌ_ÀÚ±â_ÀÚ½ÅÀ»_´Ù½Ã_Àá±×Áö_¾Ê´Â´Ù)
+TEST(LockQueue, PopAllì´_ìê¸°_ìì‹ ì„_ë‹¤ì‹œ_ì ê·¸ì§€_ì•ŠëŠ”ë‹¤)
 {
 	LockQueue<shared_ptr<int>> q;
 	for (int i = 1; i <= 100; i++)
@@ -39,7 +39,7 @@ TEST(LockQueue, PopAllÀÌ_ÀÚ±â_ÀÚ½ÅÀ»_´Ù½Ã_Àá±×Áö_¾Ê´Â´Ù)
 	EXPECT_EQ(items.size(), 100u);
 }
 
-TEST(LockQueue, ±âº»°ª°ú_±¸ºĞµÇÁö_¾Ê´Â_¿ø¼Ò´Â_PopAllÀ»_Á¶±â_Á¾·á½ÃÅ²´Ù)
+TEST(LockQueue, ê¸°ë³¸ê°’ê³¼_êµ¬ë¶„ë˜ì§€_ì•ŠëŠ”_ì›ì†ŒëŠ”_PopAllì„_ì¡°ê¸°_ì¢…ë£Œì‹œí‚¨ë‹¤)
 {
 	LockQueue<int> q;
 	q.Push(1);

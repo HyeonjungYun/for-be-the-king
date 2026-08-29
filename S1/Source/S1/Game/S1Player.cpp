@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "Game/S1Player.h"
@@ -530,9 +530,9 @@ void AS1Player::SetDestInfo(const Protocol::PosInfo& Info)
 
 	ResetInterpolation(Info.state());
 
-	// Dest�� ���� ���� ����
+	// Dest에 최종 상태 복사
 	DestInfo->CopyFrom(Info);
 
-	// ���¸� �ٷ� ����
+	// 상태만 바로 적용
 	SetMoveState(Info.state());
 }
