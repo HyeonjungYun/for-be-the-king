@@ -33,6 +33,8 @@ namespace
 	constexpr float SKILL_RANGE_SQ = SKILL_RANGE * SKILL_RANGE;
 
 	constexpr uint64 DASH_TRY_INTERVAL_US = 5'000'000;
+	constexpr uint64 AREA_TRY_INTERVAL_US = 4'000'000;
+	constexpr uint64 AREA_CAST_HOLD_US = 60'000;
 	constexpr uint64 DASH_CAST_HOLD_US = 100'000;
 }
 atomic<uint64> GAttackSentThisWindow = 0;
@@ -167,6 +169,20 @@ static void TickBots(float deltaTime)
 				bot->castUnitlUs = nowUs + DASH_CAST_HOLD_US;
 				++GSkillSentThisWindow;
 			}
+		}
+		else if (casting == false && dashing == false && nowUs >= bot->nextAreaAtUs)
+		{
+			Protocol::C_SKILL areaPkt;
+			areaPkt.set_slot(Protocol::SLOT_ARMOR);
+			areaPkt.set_target_id(0);
+			areaPkt.set_aim_x(bot->x);
+			areaPkt.set_aim_y(bot->y);
+
+			bot->Send(ClientPacketHandler::MakeSendBuffer(areaPkt));
+
+			bot->nextAreaAtUs = nowUs + AREA_TRY_INTERVAL_US;
+			bot->dashUntilUs = nowUs + AREA_CAST_HOLD_US;
+			++GSkillSentThisWindow;
 		}
 		else if (target != nullptr && bestDistSq <= SKILL_RANGE_SQ && nowUs >= bot->nextSkillAtUs)
 		{
