@@ -33,6 +33,7 @@ public:
 	atomic<uint64> hardCcUntilUs = 0;
 
 	uint64 nextDashAtUs = 0;
+	uint64 nextAreaAtUs = 0;
 	atomic<uint64> dashUntilUs = 0;
 	float dashDirX = 0.f;
 	float dashDirY = 0.f;
