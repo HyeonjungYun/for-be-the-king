@@ -12,20 +12,19 @@ bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 
 bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 {
-	for (auto& Player : pkt.players())
+	if (pkt.success() == false || pkt.characters_size() == 0)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[LOGIN] failed - characters=%d"), pkt.characters_size());
+		return true;
 	}
 
-	for (int32 i = 0; i < pkt.players_size(); i++)
-	{
-		const Protocol::ObjectInfo& Player = pkt.players(i);
-	}
+	const Protocol::CharacterInfo& Character = pkt.characters(0);
 
 	// 로비에서 캐릭터 선택해서 인덱스 전송
 	Protocol::C_ENTER_GAME EnterGamePkt;
 	EnterGamePkt.set_playerindex(0);
-
 	EnterGamePkt.set_floor_id(0);
+
 	SEND_PACKET(EnterGamePkt);
 
 	return true;

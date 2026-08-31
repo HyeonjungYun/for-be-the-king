@@ -217,7 +217,7 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORIT
 PROTOBUF_CONSTEXPR CharacterInfo::CharacterInfo(
     ::_pbi::ConstantInitialized): _impl_{
     /*decltype(_impl_.name_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
-  , /*decltype(_impl_.character_id_)*/uint64_t{0u}
+  , /*decltype(_impl_.object_info_)*/nullptr
   , /*decltype(_impl_.hp_)*/0
   , /*decltype(_impl_.max_hp_)*/0
   , /*decltype(_impl_.floor_id_)*/0u
@@ -364,7 +364,7 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
   ~0u,  // no _inlined_string_donated_
-  PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _impl_.character_id_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _impl_.object_info_),
   PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _impl_.name_),
   PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _impl_.hp_),
   PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _impl_.max_hp_),
@@ -436,16 +436,17 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "\ris_stationary\030\002 \001(\010\"k\n\014SkillHitInfo\022\021\n\t"
   "caster_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\tta"
   "rget_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impac"
-  "t_y\030\005 \001(\002\"a\n\rCharacterInfo\022\024\n\014Character_"
-  "id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006ma"
-  "x_hp\030\004 \001(\005\022\020\n\010floor_id\030\005 \001(\rb\006proto3"
+  "t_y\030\005 \001(\002\"v\n\rCharacterInfo\022)\n\013object_inf"
+  "o\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014\n\004name\030\002 "
+  "\001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n\010floor"
+  "_id\030\005 \001(\rb\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 1436, descriptor_table_protodef_Struct_2eproto,
+    false, false, 1457, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 13,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -3806,8 +3807,13 @@ void SkillHitInfo::InternalSwap(SkillHitInfo* other) {
 
 class CharacterInfo::_Internal {
  public:
+  static const ::Protocol::ObjectInfo& object_info(const CharacterInfo* msg);
 };
 
+const ::Protocol::ObjectInfo&
+CharacterInfo::_Internal::object_info(const CharacterInfo* msg) {
+  return *msg->_impl_.object_info_;
+}
 CharacterInfo::CharacterInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena,
                          bool is_message_owned)
   : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
@@ -3819,7 +3825,7 @@ CharacterInfo::CharacterInfo(const CharacterInfo& from)
   CharacterInfo* const _this = this; (void)_this;
   new (&_impl_) Impl_{
       decltype(_impl_.name_){}
-    , decltype(_impl_.character_id_){}
+    , decltype(_impl_.object_info_){nullptr}
     , decltype(_impl_.hp_){}
     , decltype(_impl_.max_hp_){}
     , decltype(_impl_.floor_id_){}
@@ -3834,9 +3840,12 @@ CharacterInfo::CharacterInfo(const CharacterInfo& from)
     _this->_impl_.name_.Set(from._internal_name(), 
       _this->GetArenaForAllocation());
   }
-  ::memcpy(&_impl_.character_id_, &from._impl_.character_id_,
+  if (from._internal_has_object_info()) {
+    _this->_impl_.object_info_ = new ::Protocol::ObjectInfo(*from._impl_.object_info_);
+  }
+  ::memcpy(&_impl_.hp_, &from._impl_.hp_,
     static_cast<size_t>(reinterpret_cast<char*>(&_impl_.floor_id_) -
-    reinterpret_cast<char*>(&_impl_.character_id_)) + sizeof(_impl_.floor_id_));
+    reinterpret_cast<char*>(&_impl_.hp_)) + sizeof(_impl_.floor_id_));
   // @@protoc_insertion_point(copy_constructor:Protocol.CharacterInfo)
 }
 
@@ -3846,7 +3855,7 @@ inline void CharacterInfo::SharedCtor(
   (void)is_message_owned;
   new (&_impl_) Impl_{
       decltype(_impl_.name_){}
-    , decltype(_impl_.character_id_){uint64_t{0u}}
+    , decltype(_impl_.object_info_){nullptr}
     , decltype(_impl_.hp_){0}
     , decltype(_impl_.max_hp_){0}
     , decltype(_impl_.floor_id_){0u}
@@ -3870,6 +3879,7 @@ CharacterInfo::~CharacterInfo() {
 inline void CharacterInfo::SharedDtor() {
   GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
   _impl_.name_.Destroy();
+  if (this != internal_default_instance()) delete _impl_.object_info_;
 }
 
 void CharacterInfo::SetCachedSize(int size) const {
@@ -3883,9 +3893,13 @@ void CharacterInfo::Clear() {
   (void) cached_has_bits;
 
   _impl_.name_.ClearToEmpty();
-  ::memset(&_impl_.character_id_, 0, static_cast<size_t>(
+  if (GetArenaForAllocation() == nullptr && _impl_.object_info_ != nullptr) {
+    delete _impl_.object_info_;
+  }
+  _impl_.object_info_ = nullptr;
+  ::memset(&_impl_.hp_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&_impl_.floor_id_) -
-      reinterpret_cast<char*>(&_impl_.character_id_)) + sizeof(_impl_.floor_id_));
+      reinterpret_cast<char*>(&_impl_.hp_)) + sizeof(_impl_.floor_id_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -3895,10 +3909,10 @@ const char* CharacterInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext*
     uint32_t tag;
     ptr = ::_pbi::ReadTag(ptr, &tag);
     switch (tag >> 3) {
-      // uint64 Character_id = 1;
+      // .Protocol.ObjectInfo object_info = 1;
       case 1:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
-          _impl_.character_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
+          ptr = ctx->ParseMessage(_internal_mutable_object_info(), ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -3966,10 +3980,11 @@ uint8_t* CharacterInfo::_InternalSerialize(
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // uint64 Character_id = 1;
-  if (this->_internal_character_id() != 0) {
-    target = stream->EnsureSpace(target);
-    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(1, this->_internal_character_id(), target);
+  // .Protocol.ObjectInfo object_info = 1;
+  if (this->_internal_has_object_info()) {
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::
+      InternalWriteMessage(1, _Internal::object_info(this),
+        _Internal::object_info(this).GetCachedSize(), target, stream);
   }
 
   // string name = 2;
@@ -4023,9 +4038,11 @@ size_t CharacterInfo::ByteSizeLong() const {
         this->_internal_name());
   }
 
-  // uint64 Character_id = 1;
-  if (this->_internal_character_id() != 0) {
-    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_character_id());
+  // .Protocol.ObjectInfo object_info = 1;
+  if (this->_internal_has_object_info()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::MessageSize(
+        *_impl_.object_info_);
   }
 
   // int32 hp = 3;
@@ -4064,8 +4081,9 @@ void CharacterInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   if (!from._internal_name().empty()) {
     _this->_internal_set_name(from._internal_name());
   }
-  if (from._internal_character_id() != 0) {
-    _this->_internal_set_character_id(from._internal_character_id());
+  if (from._internal_has_object_info()) {
+    _this->_internal_mutable_object_info()->::Protocol::ObjectInfo::MergeFrom(
+        from._internal_object_info());
   }
   if (from._internal_hp() != 0) {
     _this->_internal_set_hp(from._internal_hp());
@@ -4102,9 +4120,9 @@ void CharacterInfo::InternalSwap(CharacterInfo* other) {
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(CharacterInfo, _impl_.floor_id_)
       + sizeof(CharacterInfo::_impl_.floor_id_)
-      - PROTOBUF_FIELD_OFFSET(CharacterInfo, _impl_.character_id_)>(
-          reinterpret_cast<char*>(&_impl_.character_id_),
-          reinterpret_cast<char*>(&other->_impl_.character_id_));
+      - PROTOBUF_FIELD_OFFSET(CharacterInfo, _impl_.object_info_)>(
+          reinterpret_cast<char*>(&_impl_.object_info_),
+          reinterpret_cast<char*>(&other->_impl_.object_info_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata CharacterInfo::GetMetadata() const {

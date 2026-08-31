@@ -13,6 +13,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{2F6A6A59
 	ProjectSection(SolutionItems) = preProject
 		Tools\schema.sql = Tools\schema.sql
 		Tools\seed_bots.sql = Tools\seed_bots.sql
+		Tools\seed_dev.sql = Tools\seed_dev.sql
 		Tools\setup_db.ps1 = Tools\setup_db.ps1
 	EndProjectSection
 EndProject

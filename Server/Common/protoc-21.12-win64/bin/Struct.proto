@@ -102,7 +102,7 @@ message SkillHitInfo
 
 message CharacterInfo
 {
-	uint64 Character_id = 1;
+	ObjectInfo object_info = 1;
 	string name = 2;
 	int32 hp = 3;
 	int32 max_hp = 4;
