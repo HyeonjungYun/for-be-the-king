@@ -61,6 +61,11 @@ private:
 
 	void	SavePlayer(PlayerRef player);
 	void	UpdateSaves(uint64 nowUs);
+	
+	void	FindSpawnPosition(float baseX, float baseY, float& outX, float& outY);
+
+public:
+	uint32								_floorId = 0;
 
 private:
 	unordered_map<uint64, ObjectRef>	_objects;
@@ -93,6 +98,16 @@ private:
 };
 
 constexpr int32 FLOOR_COUNT = 4;
+
+struct SpawnPoint { float x; float y; };
+
+constexpr SpawnPoint FLOOR_SPAWN[FLOOR_COUNT] =
+{
+	{0.f, 0.f},
+	{0.f, 0.f},
+	{0.f, 0.f},
+	{0.f, 0.f}
+};
 
 extern RoomRef GRooms[FLOOR_COUNT];
 
