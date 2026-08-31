@@ -57,7 +57,8 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			if (accountId != 0)
 			{
 				::snprintf(query, sizeof(query),
-					"SELECT character_id, name, hp, max_hp, floor_id FROM characters "
+					"SELECT character_id, name, hp, max_hp, floor_id, "
+					"pos_x, pos_y, pos_z, yaw FROM characters "
 					"WHERE account_id = %llu ORDER BY character_id",
 					accountId);
 
@@ -66,10 +67,20 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 					while (MYSQL_ROW row = ::mysql_fetch_row(result))
 					{
 						Protocol::CharacterInfo* info = loginPkt.add_characters();
-						info->set_character_id(::strtoull(row[0], nullptr, 10));
 						info->set_name(row[1] ? row[1] : "");
-						info->set_hp(atoi(row[3]));
+						info->set_hp(::atoi(row[2]));
+						info->set_max_hp(::atoi(row[3]));
 						info->set_floor_id(static_cast<uint32>(::atoi(row[4])));
+
+						Protocol::ObjectInfo* obj = info->mutable_object_info();
+						obj->set_object_id(::strtoull(row[0], nullptr, 10));
+						obj->set_object_type(Protocol::OBJECT_TYPE_CREATURE);
+
+						Protocol::PosInfo* pos = obj->mutable_pos_info();
+						pos->set_x(static_cast<float>(::atof(row[5])));
+						pos->set_y(static_cast<float>(::atof(row[6])));
+						pos->set_z(static_cast<float>(::atof(row[7])));
+						pos->set_yaw(static_cast<float>(::atof(row[8])));
 					}
 
 					conn->FreeResult(result);
@@ -106,10 +117,16 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 		return false;
 
 	// 플레이어 생성
-	PlayerRef player = ObjectUtils::CreatPlayer(gameSession);
+	PlayerRef player = ObjectUtils::CreatPlayer(gameSession, character.object_info().object_id());
 
 	player->maxHp = character.max_hp();
 	player->hp = character.hp();
+
+	const Protocol::PosInfo& saved = character.object_info().pos_info();
+	player->posInfo->set_x(saved.x());
+	player->posInfo->set_y(saved.y());
+	player->posInfo->set_z(saved.z());
+	player->posInfo->set_yaw(saved.yaw());
 
 	// 방에 입장
 	room->DoAsync(&Room::HandleEnterPlayer, player);

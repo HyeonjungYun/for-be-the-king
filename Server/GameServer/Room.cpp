@@ -137,6 +137,27 @@ bool Room::LeaveRoom(ObjectRef object)
 	const uint64 objectId = object->objectInfo->object_id();
 	bool success = RemoveObject(objectId);
 
+	if (auto player = dynamic_pointer_cast<Player>(object))
+	{
+		const uint64 characterId = objectId;
+		const int32 hp = player->hp;
+		const float x = player->posInfo->x();
+		const float y = player->posInfo->y();
+		const float z = player->posInfo->z();
+		const float yaw = player->posInfo->yaw();
+
+		GDBQueue.Push([=](DBConnection* conn)
+			{
+				char query[512];
+				::snprintf(query, sizeof(query),
+					"UPDATE characters SET hp = %d, pos_x = %f, pos_y = %f, "
+					"pos_z = %f, yaw = %f WHERE character_id = %llu",
+					hp, x, y, z, yaw, characterId);
+
+				conn->Excute(query);
+			});
+	}
+
 	// 퇴장 사실을 퇴장하는 플레이어에게 알린다.
 	if (auto player = dynamic_pointer_cast<Player>(object))
 	{
@@ -168,7 +189,7 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 {
 	const uint64 beginUs = Utils::NowMicroseconds();
 
-	const bool result = EnterRoom(player, true);
+	const bool result = EnterRoom(player, false);
 
 	const uint64 elapsedUs = Utils::NowMicroseconds() - beginUs;
 

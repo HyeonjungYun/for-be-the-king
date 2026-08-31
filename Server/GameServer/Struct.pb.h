@@ -2428,7 +2428,7 @@ class CharacterInfo final :
 
   enum : int {
     kNameFieldNumber = 2,
-    kCharacterIdFieldNumber = 1,
+    kObjectInfoFieldNumber = 1,
     kHpFieldNumber = 3,
     kMaxHpFieldNumber = 4,
     kFloorIdFieldNumber = 5,
@@ -2447,14 +2447,23 @@ class CharacterInfo final :
   std::string* _internal_mutable_name();
   public:
 
-  // uint64 Character_id = 1;
-  void clear_character_id();
-  uint64_t character_id() const;
-  void set_character_id(uint64_t value);
+  // .Protocol.ObjectInfo object_info = 1;
+  bool has_object_info() const;
   private:
-  uint64_t _internal_character_id() const;
-  void _internal_set_character_id(uint64_t value);
+  bool _internal_has_object_info() const;
   public:
+  void clear_object_info();
+  const ::Protocol::ObjectInfo& object_info() const;
+  PROTOBUF_NODISCARD ::Protocol::ObjectInfo* release_object_info();
+  ::Protocol::ObjectInfo* mutable_object_info();
+  void set_allocated_object_info(::Protocol::ObjectInfo* object_info);
+  private:
+  const ::Protocol::ObjectInfo& _internal_object_info() const;
+  ::Protocol::ObjectInfo* _internal_mutable_object_info();
+  public:
+  void unsafe_arena_set_allocated_object_info(
+      ::Protocol::ObjectInfo* object_info);
+  ::Protocol::ObjectInfo* unsafe_arena_release_object_info();
 
   // int32 hp = 3;
   void clear_hp();
@@ -2492,7 +2501,7 @@ class CharacterInfo final :
   typedef void DestructorSkippable_;
   struct Impl_ {
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr name_;
-    uint64_t character_id_;
+    ::Protocol::ObjectInfo* object_info_;
     int32_t hp_;
     int32_t max_hp_;
     uint32_t floor_id_;
@@ -3630,24 +3639,94 @@ inline void SkillHitInfo::set_impact_y(float value) {
 
 // CharacterInfo
 
-// uint64 Character_id = 1;
-inline void CharacterInfo::clear_character_id() {
-  _impl_.character_id_ = uint64_t{0u};
+// .Protocol.ObjectInfo object_info = 1;
+inline bool CharacterInfo::_internal_has_object_info() const {
+  return this != internal_default_instance() && _impl_.object_info_ != nullptr;
 }
-inline uint64_t CharacterInfo::_internal_character_id() const {
-  return _impl_.character_id_;
+inline bool CharacterInfo::has_object_info() const {
+  return _internal_has_object_info();
 }
-inline uint64_t CharacterInfo::character_id() const {
-  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.Character_id)
-  return _internal_character_id();
+inline void CharacterInfo::clear_object_info() {
+  if (GetArenaForAllocation() == nullptr && _impl_.object_info_ != nullptr) {
+    delete _impl_.object_info_;
+  }
+  _impl_.object_info_ = nullptr;
 }
-inline void CharacterInfo::_internal_set_character_id(uint64_t value) {
+inline const ::Protocol::ObjectInfo& CharacterInfo::_internal_object_info() const {
+  const ::Protocol::ObjectInfo* p = _impl_.object_info_;
+  return p != nullptr ? *p : reinterpret_cast<const ::Protocol::ObjectInfo&>(
+      ::Protocol::_ObjectInfo_default_instance_);
+}
+inline const ::Protocol::ObjectInfo& CharacterInfo::object_info() const {
+  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.object_info)
+  return _internal_object_info();
+}
+inline void CharacterInfo::unsafe_arena_set_allocated_object_info(
+    ::Protocol::ObjectInfo* object_info) {
+  if (GetArenaForAllocation() == nullptr) {
+    delete reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(_impl_.object_info_);
+  }
+  _impl_.object_info_ = object_info;
+  if (object_info) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:Protocol.CharacterInfo.object_info)
+}
+inline ::Protocol::ObjectInfo* CharacterInfo::release_object_info() {
   
-  _impl_.character_id_ = value;
+  ::Protocol::ObjectInfo* temp = _impl_.object_info_;
+  _impl_.object_info_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old =  reinterpret_cast<::PROTOBUF_NAMESPACE_ID::MessageLite*>(temp);
+  temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+  if (GetArenaForAllocation() == nullptr) { delete old; }
+#else  // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArenaForAllocation() != nullptr) {
+    temp = ::PROTOBUF_NAMESPACE_ID::internal::DuplicateIfNonNull(temp);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return temp;
 }
-inline void CharacterInfo::set_character_id(uint64_t value) {
-  _internal_set_character_id(value);
-  // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.Character_id)
+inline ::Protocol::ObjectInfo* CharacterInfo::unsafe_arena_release_object_info() {
+  // @@protoc_insertion_point(field_release:Protocol.CharacterInfo.object_info)
+  
+  ::Protocol::ObjectInfo* temp = _impl_.object_info_;
+  _impl_.object_info_ = nullptr;
+  return temp;
+}
+inline ::Protocol::ObjectInfo* CharacterInfo::_internal_mutable_object_info() {
+  
+  if (_impl_.object_info_ == nullptr) {
+    auto* p = CreateMaybeMessage<::Protocol::ObjectInfo>(GetArenaForAllocation());
+    _impl_.object_info_ = p;
+  }
+  return _impl_.object_info_;
+}
+inline ::Protocol::ObjectInfo* CharacterInfo::mutable_object_info() {
+  ::Protocol::ObjectInfo* _msg = _internal_mutable_object_info();
+  // @@protoc_insertion_point(field_mutable:Protocol.CharacterInfo.object_info)
+  return _msg;
+}
+inline void CharacterInfo::set_allocated_object_info(::Protocol::ObjectInfo* object_info) {
+  ::PROTOBUF_NAMESPACE_ID::Arena* message_arena = GetArenaForAllocation();
+  if (message_arena == nullptr) {
+    delete _impl_.object_info_;
+  }
+  if (object_info) {
+    ::PROTOBUF_NAMESPACE_ID::Arena* submessage_arena =
+        ::PROTOBUF_NAMESPACE_ID::Arena::InternalGetOwningArena(object_info);
+    if (message_arena != submessage_arena) {
+      object_info = ::PROTOBUF_NAMESPACE_ID::internal::GetOwnedMessage(
+          message_arena, object_info, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  _impl_.object_info_ = object_info;
+  // @@protoc_insertion_point(field_set_allocated:Protocol.CharacterInfo.object_info)
 }
 
 // string name = 2;
