@@ -11,6 +11,7 @@
 #include "Room.h"
 #include "ServerStats.h"
 #include "SkillTable.h"
+#include "DBJobQueue.h"
 
 enum
 {
@@ -38,6 +39,40 @@ int main()
 {
 	ServerPacketHandler::Init();
 	SkillTable::Init();
+
+	string dbPassword;
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_DB_PASSWORD") == 0 && raw != nullptr)
+		{
+			dbPassword = raw;
+			::free(raw);
+		}
+	}
+
+	if (dbPassword.empty())
+	{
+		cout << "[DB] FBTK_DB_PASSWORD not set" << endl;
+		return -1;
+	}
+
+	constexpr int32 DB_THREAD_COUNT = 4;
+
+	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", 3306, "root", dbPassword.c_str(), "forbetheking") == false)
+	{
+		cout << "[DB] pool connect failed" << endl;
+		return -1;
+	}
+
+	if (GDBQueue.Init(DB_THREAD_COUNT, &GDBPool) == false)
+	{
+		cout << "[DB] queue init failed" << endl;
+		return -1;
+	}
+
+	cout << "[DB] connected — " << DB_THREAD_COUNT << " connections" << endl;
 
 	ServerServiceRef service = make_shared<ServerService>(
 		NetAddress(L"127.0.0.1", 7777),

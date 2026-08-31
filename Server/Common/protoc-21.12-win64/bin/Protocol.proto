@@ -7,13 +7,13 @@ import "Struct.proto";
 
 message C_LOGIN
 {
-
+	string token = 1;
 }
 
 message S_LOGIN
 {
 	bool success = 1;
-	repeated ObjectInfo players = 2;
+	repeated CharacterInfo characters = 2;
 }
 
 message C_ENTER_GAME

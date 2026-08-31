@@ -8,12 +8,17 @@ void BotSession::OnConnected()
 		lock_guard<mutex> guard(GBotsLock);
 		GBots.push_back(static_pointer_cast<BotSession>(GetSessionRef()));
 
-		floorId = static_cast<uint32>(GBots.size() - 1) % 4;
+		botIndex = static_cast<uint32>(GBots.size());
+		floorId = (botIndex - 1) % 4;
 	}
 
-	Protocol::C_ENTER_GAME pkt;
-	pkt.set_floor_id(floorId);
-	Send(ClientPacketHandler::MakeSendBuffer(pkt));
+	char username[32];
+	::snprintf(username, sizeof(username), "bot_%u", botIndex);
+
+	Protocol::C_LOGIN loginPkt;
+	loginPkt.set_token(Utils::Sha256Hex(username));
+
+	Send(ClientPacketHandler::MakeSendBuffer(loginPkt));
 }
 
 void BotSession::OnRecvPacket(BYTE* buffer, int32 len)

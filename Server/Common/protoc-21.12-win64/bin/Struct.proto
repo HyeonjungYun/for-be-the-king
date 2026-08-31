@@ -1,4 +1,4 @@
-syntax = "proto3";
+﻿syntax = "proto3";
 package Protocol;
 
 import "Enum.proto";
@@ -98,4 +98,13 @@ message SkillHitInfo
 	uint64 target_id = 3;
 	float impact_x = 4;
 	float impact_y = 5;
+}
+
+message CharacterInfo
+{
+	uint64 Character_id = 1;
+	string name = 2;
+	int32 hp = 3;
+	int32 max_hp = 4;
+	uint32 floor_id = 5;
 }

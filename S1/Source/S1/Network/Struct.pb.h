@@ -58,6 +58,9 @@ extern CcSlotDefaultTypeInternal _CcSlot_default_instance_;
 class CcStateInfo;
 struct CcStateInfoDefaultTypeInternal;
 extern CcStateInfoDefaultTypeInternal _CcStateInfo_default_instance_;
+class CharacterInfo;
+struct CharacterInfoDefaultTypeInternal;
+extern CharacterInfoDefaultTypeInternal _CharacterInfo_default_instance_;
 class DamageInfo;
 struct DamageInfoDefaultTypeInternal;
 extern DamageInfoDefaultTypeInternal _DamageInfo_default_instance_;
@@ -88,6 +91,7 @@ template<> ::Protocol::AttackInfo* Arena::CreateMaybeMessage<::Protocol::AttackI
 template<> ::Protocol::CcEventInfo* Arena::CreateMaybeMessage<::Protocol::CcEventInfo>(Arena*);
 template<> ::Protocol::CcSlot* Arena::CreateMaybeMessage<::Protocol::CcSlot>(Arena*);
 template<> ::Protocol::CcStateInfo* Arena::CreateMaybeMessage<::Protocol::CcStateInfo>(Arena*);
+template<> ::Protocol::CharacterInfo* Arena::CreateMaybeMessage<::Protocol::CharacterInfo>(Arena*);
 template<> ::Protocol::DamageInfo* Arena::CreateMaybeMessage<::Protocol::DamageInfo>(Arena*);
 template<> ::Protocol::DiedInfo* Arena::CreateMaybeMessage<::Protocol::DiedInfo>(Arena*);
 template<> ::Protocol::KnockbackInfo* Arena::CreateMaybeMessage<::Protocol::KnockbackInfo>(Arena*);
@@ -2300,6 +2304,203 @@ class SkillHitInfo final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Struct_2eproto;
 };
+// -------------------------------------------------------------------
+
+class CharacterInfo final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.CharacterInfo) */ {
+ public:
+  inline CharacterInfo() : CharacterInfo(nullptr) {}
+  ~CharacterInfo() override;
+  explicit PROTOBUF_CONSTEXPR CharacterInfo(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  CharacterInfo(const CharacterInfo& from);
+  CharacterInfo(CharacterInfo&& from) noexcept
+    : CharacterInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline CharacterInfo& operator=(const CharacterInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline CharacterInfo& operator=(CharacterInfo&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const CharacterInfo& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const CharacterInfo* internal_default_instance() {
+    return reinterpret_cast<const CharacterInfo*>(
+               &_CharacterInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    12;
+
+  friend void swap(CharacterInfo& a, CharacterInfo& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(CharacterInfo* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(CharacterInfo* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  CharacterInfo* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<CharacterInfo>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const CharacterInfo& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const CharacterInfo& from) {
+    CharacterInfo::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(CharacterInfo* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.CharacterInfo";
+  }
+  protected:
+  explicit CharacterInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kNameFieldNumber = 2,
+    kCharacterIdFieldNumber = 1,
+    kHpFieldNumber = 3,
+    kMaxHpFieldNumber = 4,
+    kFloorIdFieldNumber = 5,
+  };
+  // string name = 2;
+  void clear_name();
+  const std::string& name() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_name(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_name();
+  PROTOBUF_NODISCARD std::string* release_name();
+  void set_allocated_name(std::string* name);
+  private:
+  const std::string& _internal_name() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_name(const std::string& value);
+  std::string* _internal_mutable_name();
+  public:
+
+  // uint64 Character_id = 1;
+  void clear_character_id();
+  uint64_t character_id() const;
+  void set_character_id(uint64_t value);
+  private:
+  uint64_t _internal_character_id() const;
+  void _internal_set_character_id(uint64_t value);
+  public:
+
+  // int32 hp = 3;
+  void clear_hp();
+  int32_t hp() const;
+  void set_hp(int32_t value);
+  private:
+  int32_t _internal_hp() const;
+  void _internal_set_hp(int32_t value);
+  public:
+
+  // int32 max_hp = 4;
+  void clear_max_hp();
+  int32_t max_hp() const;
+  void set_max_hp(int32_t value);
+  private:
+  int32_t _internal_max_hp() const;
+  void _internal_set_max_hp(int32_t value);
+  public:
+
+  // uint32 floor_id = 5;
+  void clear_floor_id();
+  uint32_t floor_id() const;
+  void set_floor_id(uint32_t value);
+  private:
+  uint32_t _internal_floor_id() const;
+  void _internal_set_floor_id(uint32_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.CharacterInfo)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr name_;
+    uint64_t character_id_;
+    int32_t hp_;
+    int32_t max_hp_;
+    uint32_t floor_id_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Struct_2eproto;
+};
 // ===================================================================
 
 
@@ -3425,9 +3626,145 @@ inline void SkillHitInfo::set_impact_y(float value) {
   // @@protoc_insertion_point(field_set:Protocol.SkillHitInfo.impact_y)
 }
 
+// -------------------------------------------------------------------
+
+// CharacterInfo
+
+// uint64 Character_id = 1;
+inline void CharacterInfo::clear_character_id() {
+  _impl_.character_id_ = uint64_t{0u};
+}
+inline uint64_t CharacterInfo::_internal_character_id() const {
+  return _impl_.character_id_;
+}
+inline uint64_t CharacterInfo::character_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.Character_id)
+  return _internal_character_id();
+}
+inline void CharacterInfo::_internal_set_character_id(uint64_t value) {
+  
+  _impl_.character_id_ = value;
+}
+inline void CharacterInfo::set_character_id(uint64_t value) {
+  _internal_set_character_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.Character_id)
+}
+
+// string name = 2;
+inline void CharacterInfo::clear_name() {
+  _impl_.name_.ClearToEmpty();
+}
+inline const std::string& CharacterInfo::name() const {
+  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.name)
+  return _internal_name();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void CharacterInfo::set_name(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.name_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.name)
+}
+inline std::string* CharacterInfo::mutable_name() {
+  std::string* _s = _internal_mutable_name();
+  // @@protoc_insertion_point(field_mutable:Protocol.CharacterInfo.name)
+  return _s;
+}
+inline const std::string& CharacterInfo::_internal_name() const {
+  return _impl_.name_.Get();
+}
+inline void CharacterInfo::_internal_set_name(const std::string& value) {
+  
+  _impl_.name_.Set(value, GetArenaForAllocation());
+}
+inline std::string* CharacterInfo::_internal_mutable_name() {
+  
+  return _impl_.name_.Mutable(GetArenaForAllocation());
+}
+inline std::string* CharacterInfo::release_name() {
+  // @@protoc_insertion_point(field_release:Protocol.CharacterInfo.name)
+  return _impl_.name_.Release();
+}
+inline void CharacterInfo::set_allocated_name(std::string* name) {
+  if (name != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.name_.SetAllocated(name, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.name_.IsDefault()) {
+    _impl_.name_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.CharacterInfo.name)
+}
+
+// int32 hp = 3;
+inline void CharacterInfo::clear_hp() {
+  _impl_.hp_ = 0;
+}
+inline int32_t CharacterInfo::_internal_hp() const {
+  return _impl_.hp_;
+}
+inline int32_t CharacterInfo::hp() const {
+  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.hp)
+  return _internal_hp();
+}
+inline void CharacterInfo::_internal_set_hp(int32_t value) {
+  
+  _impl_.hp_ = value;
+}
+inline void CharacterInfo::set_hp(int32_t value) {
+  _internal_set_hp(value);
+  // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.hp)
+}
+
+// int32 max_hp = 4;
+inline void CharacterInfo::clear_max_hp() {
+  _impl_.max_hp_ = 0;
+}
+inline int32_t CharacterInfo::_internal_max_hp() const {
+  return _impl_.max_hp_;
+}
+inline int32_t CharacterInfo::max_hp() const {
+  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.max_hp)
+  return _internal_max_hp();
+}
+inline void CharacterInfo::_internal_set_max_hp(int32_t value) {
+  
+  _impl_.max_hp_ = value;
+}
+inline void CharacterInfo::set_max_hp(int32_t value) {
+  _internal_set_max_hp(value);
+  // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.max_hp)
+}
+
+// uint32 floor_id = 5;
+inline void CharacterInfo::clear_floor_id() {
+  _impl_.floor_id_ = 0u;
+}
+inline uint32_t CharacterInfo::_internal_floor_id() const {
+  return _impl_.floor_id_;
+}
+inline uint32_t CharacterInfo::floor_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.CharacterInfo.floor_id)
+  return _internal_floor_id();
+}
+inline void CharacterInfo::_internal_set_floor_id(uint32_t value) {
+  
+  _impl_.floor_id_ = value;
+}
+inline void CharacterInfo::set_floor_id(uint32_t value) {
+  _internal_set_floor_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.floor_id)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
