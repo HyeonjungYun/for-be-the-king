@@ -10,6 +10,11 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerCore", "ServerCore\ServerCore.vcxproj", "{705B6A11-F950-4DDC-9E67-F9ACCFA0B538}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{2F6A6A59-AE15-4F32-8401-5B29BD338F3A}"
+	ProjectSection(SolutionItems) = preProject
+		Tools\schema.sql = Tools\schema.sql
+		Tools\seed_bots.sql = Tools\seed_bots.sql
+		Tools\setup_db.ps1 = Tools\setup_db.ps1
+	EndProjectSection
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "PacketGenerator", "Tools\PacketGenerator\PacketGenerator.pyproj", "{2DCD6DF2-6F34-4FC1-9BFE-327F851360CB}"
 EndProject

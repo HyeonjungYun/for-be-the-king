@@ -5,9 +5,11 @@
 #ifdef _DEBUG
 #pragma comment(lib, "ServerCore\\Debug\\ServerCore.lib")
 #pragma comment(lib, "Protobuf\\Debug\\libprotobufd.lib")
+#pragma comment(lib, "MySQL\\libmysql.lib")
 #else
 #pragma comment(lib, "ServerCore\\Release\\ServerCore.lib")
 #pragma comment(lib, "Protobuf\\Release\\libprotobuf.lib")
+#pragma comment(lib, "MySQL\\libmysql.lib")
 #endif
 
 #include "CorePch.h"
@@ -18,6 +20,7 @@
 #include "ServerPacketHandler.h"
 #include "Utils.h"
 #include "GameSession.h"
+#include "DBJobQueue.h"
 
 USING_SHARED_PTR(GameSession);
 USING_SHARED_PTR(Player);

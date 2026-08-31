@@ -1,4 +1,5 @@
-#pragma once
+﻿#pragma once
+#include "Struct.pb.h"
 #include "Session.h"
 
 class Player;
@@ -18,4 +19,8 @@ public:
 
 public:
 	atomic<shared_ptr<Player>> player;
+
+public:
+	atomic<uint64> accountId = 0;
+	vector<Protocol::CharacterInfo> characters;
 };

@@ -156,9 +156,10 @@ namespace Protocol {
 // ===================================================================
 
 class C_LOGIN final :
-    public ::PROTOBUF_NAMESPACE_ID::internal::ZeroFieldsBase /* @@protoc_insertion_point(class_definition:Protocol.C_LOGIN) */ {
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_LOGIN) */ {
  public:
   inline C_LOGIN() : C_LOGIN(nullptr) {}
+  ~C_LOGIN() override;
   explicit PROTOBUF_CONSTEXPR C_LOGIN(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
 
   C_LOGIN(const C_LOGIN& from);
@@ -231,15 +232,29 @@ class C_LOGIN final :
   C_LOGIN* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
     return CreateMaybeMessage<C_LOGIN>(arena);
   }
-  using ::PROTOBUF_NAMESPACE_ID::internal::ZeroFieldsBase::CopyFrom;
-  inline void CopyFrom(const C_LOGIN& from) {
-    ::PROTOBUF_NAMESPACE_ID::internal::ZeroFieldsBase::CopyImpl(*this, from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const C_LOGIN& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const C_LOGIN& from) {
+    C_LOGIN::MergeImpl(*this, from);
   }
-  using ::PROTOBUF_NAMESPACE_ID::internal::ZeroFieldsBase::MergeFrom;
-  void MergeFrom(const C_LOGIN& from) {
-    ::PROTOBUF_NAMESPACE_ID::internal::ZeroFieldsBase::MergeImpl(*this, from);
-  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
   public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_LOGIN* other);
 
   private:
   friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
@@ -260,6 +275,23 @@ class C_LOGIN final :
 
   // accessors -------------------------------------------------------
 
+  enum : int {
+    kTokenFieldNumber = 1,
+  };
+  // string token = 1;
+  void clear_token();
+  const std::string& token() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_token(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_token();
+  PROTOBUF_NODISCARD std::string* release_token();
+  void set_allocated_token(std::string* token);
+  private:
+  const std::string& _internal_token() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_token(const std::string& value);
+  std::string* _internal_mutable_token();
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_LOGIN)
  private:
   class _Internal;
@@ -268,7 +300,10 @@ class C_LOGIN final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr token_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
+  union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
 // -------------------------------------------------------------------
@@ -394,26 +429,26 @@ class S_LOGIN final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kPlayersFieldNumber = 2,
+    kCharactersFieldNumber = 2,
     kSuccessFieldNumber = 1,
   };
-  // repeated .Protocol.ObjectInfo players = 2;
-  int players_size() const;
+  // repeated .Protocol.CharacterInfo characters = 2;
+  int characters_size() const;
   private:
-  int _internal_players_size() const;
+  int _internal_characters_size() const;
   public:
-  void clear_players();
-  ::Protocol::ObjectInfo* mutable_players(int index);
-  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ObjectInfo >*
-      mutable_players();
+  void clear_characters();
+  ::Protocol::CharacterInfo* mutable_characters(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::CharacterInfo >*
+      mutable_characters();
   private:
-  const ::Protocol::ObjectInfo& _internal_players(int index) const;
-  ::Protocol::ObjectInfo* _internal_add_players();
+  const ::Protocol::CharacterInfo& _internal_characters(int index) const;
+  ::Protocol::CharacterInfo* _internal_add_characters();
   public:
-  const ::Protocol::ObjectInfo& players(int index) const;
-  ::Protocol::ObjectInfo* add_players();
-  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ObjectInfo >&
-      players() const;
+  const ::Protocol::CharacterInfo& characters(int index) const;
+  ::Protocol::CharacterInfo* add_characters();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::CharacterInfo >&
+      characters() const;
 
   // bool success = 1;
   void clear_success();
@@ -432,7 +467,7 @@ class S_LOGIN final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
-    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ObjectInfo > players_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::CharacterInfo > characters_;
     bool success_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
@@ -4041,6 +4076,56 @@ class S_EQUIP_SYNC final :
 #endif  // __GNUC__
 // C_LOGIN
 
+// string token = 1;
+inline void C_LOGIN::clear_token() {
+  _impl_.token_.ClearToEmpty();
+}
+inline const std::string& C_LOGIN::token() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_LOGIN.token)
+  return _internal_token();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void C_LOGIN::set_token(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.token_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.C_LOGIN.token)
+}
+inline std::string* C_LOGIN::mutable_token() {
+  std::string* _s = _internal_mutable_token();
+  // @@protoc_insertion_point(field_mutable:Protocol.C_LOGIN.token)
+  return _s;
+}
+inline const std::string& C_LOGIN::_internal_token() const {
+  return _impl_.token_.Get();
+}
+inline void C_LOGIN::_internal_set_token(const std::string& value) {
+  
+  _impl_.token_.Set(value, GetArenaForAllocation());
+}
+inline std::string* C_LOGIN::_internal_mutable_token() {
+  
+  return _impl_.token_.Mutable(GetArenaForAllocation());
+}
+inline std::string* C_LOGIN::release_token() {
+  // @@protoc_insertion_point(field_release:Protocol.C_LOGIN.token)
+  return _impl_.token_.Release();
+}
+inline void C_LOGIN::set_allocated_token(std::string* token) {
+  if (token != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.token_.SetAllocated(token, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.token_.IsDefault()) {
+    _impl_.token_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.C_LOGIN.token)
+}
+
 // -------------------------------------------------------------------
 
 // S_LOGIN
@@ -4065,41 +4150,41 @@ inline void S_LOGIN::set_success(bool value) {
   // @@protoc_insertion_point(field_set:Protocol.S_LOGIN.success)
 }
 
-// repeated .Protocol.ObjectInfo players = 2;
-inline int S_LOGIN::_internal_players_size() const {
-  return _impl_.players_.size();
+// repeated .Protocol.CharacterInfo characters = 2;
+inline int S_LOGIN::_internal_characters_size() const {
+  return _impl_.characters_.size();
 }
-inline int S_LOGIN::players_size() const {
-  return _internal_players_size();
+inline int S_LOGIN::characters_size() const {
+  return _internal_characters_size();
 }
-inline ::Protocol::ObjectInfo* S_LOGIN::mutable_players(int index) {
-  // @@protoc_insertion_point(field_mutable:Protocol.S_LOGIN.players)
-  return _impl_.players_.Mutable(index);
+inline ::Protocol::CharacterInfo* S_LOGIN::mutable_characters(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_LOGIN.characters)
+  return _impl_.characters_.Mutable(index);
 }
-inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ObjectInfo >*
-S_LOGIN::mutable_players() {
-  // @@protoc_insertion_point(field_mutable_list:Protocol.S_LOGIN.players)
-  return &_impl_.players_;
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::CharacterInfo >*
+S_LOGIN::mutable_characters() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_LOGIN.characters)
+  return &_impl_.characters_;
 }
-inline const ::Protocol::ObjectInfo& S_LOGIN::_internal_players(int index) const {
-  return _impl_.players_.Get(index);
+inline const ::Protocol::CharacterInfo& S_LOGIN::_internal_characters(int index) const {
+  return _impl_.characters_.Get(index);
 }
-inline const ::Protocol::ObjectInfo& S_LOGIN::players(int index) const {
-  // @@protoc_insertion_point(field_get:Protocol.S_LOGIN.players)
-  return _internal_players(index);
+inline const ::Protocol::CharacterInfo& S_LOGIN::characters(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_LOGIN.characters)
+  return _internal_characters(index);
 }
-inline ::Protocol::ObjectInfo* S_LOGIN::_internal_add_players() {
-  return _impl_.players_.Add();
+inline ::Protocol::CharacterInfo* S_LOGIN::_internal_add_characters() {
+  return _impl_.characters_.Add();
 }
-inline ::Protocol::ObjectInfo* S_LOGIN::add_players() {
-  ::Protocol::ObjectInfo* _add = _internal_add_players();
-  // @@protoc_insertion_point(field_add:Protocol.S_LOGIN.players)
+inline ::Protocol::CharacterInfo* S_LOGIN::add_characters() {
+  ::Protocol::CharacterInfo* _add = _internal_add_characters();
+  // @@protoc_insertion_point(field_add:Protocol.S_LOGIN.characters)
   return _add;
 }
-inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ObjectInfo >&
-S_LOGIN::players() const {
-  // @@protoc_insertion_point(field_list:Protocol.S_LOGIN.players)
-  return _impl_.players_;
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::CharacterInfo >&
+S_LOGIN::characters() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_LOGIN.characters)
+  return _impl_.characters_;
 }
 
 // -------------------------------------------------------------------

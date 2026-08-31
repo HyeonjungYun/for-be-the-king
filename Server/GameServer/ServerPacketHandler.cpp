@@ -17,40 +17,102 @@ bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 
 bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 {
-	// TODO : DB에서 Account 정보를 긁어온다.
-	// TODO : DB에서 유저 정보를 긁어온다.
+	auto gameSession = static_pointer_cast<GameSession>(session);
 
-	Protocol::S_LOGIN loginPkt;
-
-	for (int32 i = 0; i < 3; i++)
+	const string token = pkt.token();
+	if (token.empty())
 	{
-		Protocol::ObjectInfo* player = loginPkt.add_players();
-		Protocol::PosInfo* posInfo = player->mutable_pos_info();
+		Protocol::S_LOGIN loginPkt;
+		loginPkt.set_success(false);
 
-		posInfo->set_x(Utils::GetRandom(0.f, 100.f));
-		posInfo->set_y(Utils::GetRandom(0.f, 100.f));
-		posInfo->set_z(Utils::GetRandom(0.f, 100.f));
-		posInfo->set_yaw(Utils::GetRandom(0.f, 45.f));
+		SEND_PACKET_DECLARATION(loginPkt);
+		gameSession->Send(sendBuffer);
+
+		return true;
 	}
 
-	loginPkt.set_success(true);
-	SEND_PACKET(loginPkt);
+	GDBQueue.Push([gameSession, token](DBConnection* conn)
+		{
+			Protocol::S_LOGIN loginPkt;
+			loginPkt.set_success(false);
+
+			const string safeToken = conn->Escape(token);
+
+			char query[256];
+			::snprintf(query, sizeof(query),
+				"SELECT account_id FROM login_sessions "
+				"WHERE token = '%s' AND expires_at > NOW()",
+				safeToken.c_str());
+
+			uint64 accountId = 0;
+
+			if (MYSQL_RES* result = conn->Query(query))
+			{
+				if (MYSQL_ROW row = ::mysql_fetch_row(result))
+					accountId = ::strtoull(row[0], nullptr, 10);
+
+				conn->FreeResult(result);
+			}
+
+			if (accountId != 0)
+			{
+				::snprintf(query, sizeof(query),
+					"SELECT character_id, name, hp, max_hp, floor_id FROM characters "
+					"WHERE account_id = %llu ORDER BY character_id",
+					accountId);
+
+				if (MYSQL_RES* result = conn->Query(query))
+				{
+					while (MYSQL_ROW row = ::mysql_fetch_row(result))
+					{
+						Protocol::CharacterInfo* info = loginPkt.add_characters();
+						info->set_character_id(::strtoull(row[0], nullptr, 10));
+						info->set_name(row[1] ? row[1] : "");
+						info->set_hp(atoi(row[3]));
+						info->set_floor_id(static_cast<uint32>(::atoi(row[4])));
+					}
+
+					conn->FreeResult(result);
+				}
+
+				gameSession->characters.assign(loginPkt.characters().begin(), loginPkt.characters().end());
+				gameSession->accountId.store(accountId);
+
+				loginPkt.set_success(true);
+			}
+
+			SEND_PACKET_DECLARATION(loginPkt);
+			gameSession->Send(sendBuffer);
+		});
 
 	return true;
 }
 
 bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 {
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	if (gameSession->accountId.load() == 0)
+		return false;
+
+	const uint64 index = pkt.playerindex();
+	if (index >= gameSession->characters.size())
+		return false;
+
+	const Protocol::CharacterInfo& character = gameSession->characters[index];
+
 	RoomRef room = GetRoomForFloor(pkt.floor_id());
 	if (room == nullptr)
 		return false;
 
 	// 플레이어 생성
-	PlayerRef player = ObjectUtils::CreatPlayer(static_pointer_cast<GameSession>(session));
+	PlayerRef player = ObjectUtils::CreatPlayer(gameSession);
+
+	player->maxHp = character.max_hp();
+	player->hp = character.hp();
 
 	// 방에 입장
 	room->DoAsync(&Room::HandleEnterPlayer, player);
-	// GRoom->HandleEnterPlayer(player);
 
 	return true;
 }

@@ -16,6 +16,9 @@
     <Filter Include="Utils">
       <UniqueIdentifier>{13f8da5f-8028-43f7-908f-ab7928fa6c57}</UniqueIdentifier>
     </Filter>
+    <Filter Include="DB">
+      <UniqueIdentifier>{6887473f-4f49-4eb4-89e4-0443fc492317}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CorePch.h">
@@ -93,6 +96,15 @@
     <ClInclude Include="ServerStats.h">
       <Filter>Utils</Filter>
     </ClInclude>
+    <ClInclude Include="DBConnection.h">
+      <Filter>DB</Filter>
+    </ClInclude>
+    <ClInclude Include="DBConnectionPool.h">
+      <Filter>DB</Filter>
+    </ClInclude>
+    <ClInclude Include="DBJobQueue.h">
+      <Filter>DB</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CorePch.cpp">
@@ -163,6 +175,15 @@
     </ClCompile>
     <ClCompile Include="ServerStats.cpp">
       <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="DBConnection.cpp">
+      <Filter>DB</Filter>
+    </ClCompile>
+    <ClCompile Include="DBConnectionPool.cpp">
+      <Filter>DB</Filter>
+    </ClCompile>
+    <ClCompile Include="DBJobQueue.cpp">
+      <Filter>DB</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

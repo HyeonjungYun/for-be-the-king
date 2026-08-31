@@ -12,6 +12,20 @@ bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 
 bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 {
+	auto bot = static_pointer_cast<BotSession>(session);
+
+	if (pkt.success() == false || pkt.characters_size() == 0)
+	{
+		cout << "[BOT] login failed idx=" << bot->botIndex << endl;
+		return true;
+	}
+
+	Protocol::C_ENTER_GAME enterPkt;
+	enterPkt.set_playerindex(0);
+	enterPkt.set_floor_id(bot->floorId);
+
+	bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
+
 	return true;
 }
 

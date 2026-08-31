@@ -84,6 +84,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)Libraries\Include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -101,6 +102,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)Libraries\Include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -118,6 +120,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)Libraries\Include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -137,6 +140,7 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <WholeProgramOptimization>false</WholeProgramOptimization>
+      <AdditionalIncludeDirectories>$(SolutionDir)Libraries\Include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -156,6 +160,9 @@
     <ClInclude Include="CoreMacro.h" />
     <ClInclude Include="CorePch.h" />
     <ClInclude Include="CoreTLS.h" />
+    <ClInclude Include="DBConnection.h" />
+    <ClInclude Include="DBConnectionPool.h" />
+    <ClInclude Include="DBJobQueue.h" />
     <ClInclude Include="GlobalQueue.h" />
     <ClInclude Include="IocpCore.h" />
     <ClInclude Include="IocpEvent.h" />
@@ -182,6 +189,9 @@
     <ClCompile Include="CoreGlobal.cpp" />
     <ClCompile Include="CorePch.cpp" />
     <ClCompile Include="CoreTLS.cpp" />
+    <ClCompile Include="DBConnection.cpp" />
+    <ClCompile Include="DBConnectionPool.cpp" />
+    <ClCompile Include="DBJobQueue.cpp" />
     <ClCompile Include="GlobalQueue.cpp" />
     <ClCompile Include="IocpCore.cpp" />
     <ClCompile Include="IocpEvent.cpp" />
