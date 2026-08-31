@@ -5,15 +5,18 @@
 
 namespace
 {
-	constexpr double VALIDATION_MARGIN = 1.15;	// validation_margin
-	constexpr double MAX_BUDGET_SEC = 0.5;
-	constexpr uint64 MOVE_FLUSH_MS = 33;
-	constexpr uint64 COMBAT_FLUSH_MS = 33;
-	constexpr uint64 SPAWN_FLUSH_MS = 33;
-	constexpr int32 CC_STATE_TICKS = 30;
+	constexpr double	VALIDATION_MARGIN = 1.15;	// validation_margin
+	constexpr double	MAX_BUDGET_SEC = 0.5;
+	constexpr uint64	MOVE_FLUSH_MS = 33;
+	constexpr uint64	COMBAT_FLUSH_MS = 33;
+	constexpr uint64	SPAWN_FLUSH_MS = 33;
+	constexpr int32		CC_STATE_TICKS = 30;
 
-	constexpr float CAST_MOVE_EPSILON = 1.f;
-	constexpr float CAST_MOVE_EPSILON_SQ = CAST_MOVE_EPSILON * CAST_MOVE_EPSILON;
+	constexpr float		CAST_MOVE_EPSILON = 1.f;
+	constexpr float		CAST_MOVE_EPSILON_SQ = CAST_MOVE_EPSILON * CAST_MOVE_EPSILON;
+
+	constexpr uint64	SAVE_INTERVAL_US = 60'000'000;
+	constexpr int32		SAVE_PER_TICK = 2;
 }
 
 namespace
@@ -85,6 +88,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 	{
 		const uint64 enterUs = Utils::NowMicroseconds();
 		player->lastMoveUs = enterUs;
+		player->lastSaveUs = enterUs;
 
 		player->moveBudget = player->GetSpeedCeiling(enterUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
 
@@ -138,25 +142,7 @@ bool Room::LeaveRoom(ObjectRef object)
 	bool success = RemoveObject(objectId);
 
 	if (auto player = dynamic_pointer_cast<Player>(object))
-	{
-		const uint64 characterId = objectId;
-		const int32 hp = player->hp;
-		const float x = player->posInfo->x();
-		const float y = player->posInfo->y();
-		const float z = player->posInfo->z();
-		const float yaw = player->posInfo->yaw();
-
-		GDBQueue.Push([=](DBConnection* conn)
-			{
-				char query[512];
-				::snprintf(query, sizeof(query),
-					"UPDATE characters SET hp = %d, pos_x = %f, pos_y = %f, "
-					"pos_z = %f, yaw = %f WHERE character_id = %llu",
-					hp, x, y, z, yaw, characterId);
-
-				conn->Excute(query);
-			});
-	}
+		SavePlayer(player);
 
 	// 퇴장 사실을 퇴장하는 플레이어에게 알린다.
 	if (auto player = dynamic_pointer_cast<Player>(object))
@@ -840,7 +826,7 @@ void Room::FlushCcState(uint64 nowUs)
 
 void Room::UpdateTick()
 {
-	//cout << "Update Room" << endl;
+	UpdateSaves(Utils::NowMicroseconds());
 	
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
@@ -1283,4 +1269,53 @@ void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, u
 	wcout << L"[DASH WINDOW] caster=" << player->objectInfo->object_id()
 		<< L" speed=" << effect.speedCms
 		<< L" dur=" << (durUs / 1000) << L"ms" << endl;
+}
+
+void Room::SavePlayer(PlayerRef player)
+{
+	if (player == nullptr)
+		return;
+
+	const uint64 characterId = player->objectInfo->object_id();
+	if (characterId == 0)
+		return;
+
+	const int32 hp = player->hp;
+	const float x = player->posInfo->x();
+	const float y = player->posInfo->y();
+	const float z = player->posInfo->z();
+	const float yaw = player->posInfo->yaw();
+
+	GDBQueue.Push([=](DBConnection* conn)
+		{
+			char query[512];
+			::snprintf(query, sizeof(query),
+				"UPDATE characters SET hp = %d, pos_x = %f, pos_y = %f, "
+				"pos_z = %f, yaw = %f WHERE character_id = %llu",
+				hp, x, y, z, yaw, characterId);
+
+			conn->Excute(query);
+		});
+}
+
+void Room::UpdateSaves(uint64 nowUs)
+{
+	int32 saved = 0;
+
+	for (auto& item : _objects)
+	{
+		if (saved >= SAVE_PER_TICK)
+			break;
+
+		auto player = dynamic_pointer_cast<Player>(item.second);
+		if (player == nullptr)
+			continue;
+
+		if (nowUs - player->lastSaveUs < SAVE_INTERVAL_US)
+			continue;
+
+		player->lastMoveUs = nowUs;
+		SavePlayer(player);
+		saved++;
+	}
 }

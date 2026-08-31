@@ -59,6 +59,9 @@ private:
 	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs);
 	void	ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs);
 
+	void	SavePlayer(PlayerRef player);
+	void	UpdateSaves(uint64 nowUs);
+
 private:
 	unordered_map<uint64, ObjectRef>	_objects;
 	unordered_set<uint64>				_dirtyMovers;
