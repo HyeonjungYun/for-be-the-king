@@ -17,6 +17,10 @@ namespace
 
 	constexpr uint64	SAVE_INTERVAL_US = 60'000'000;
 	constexpr int32		SAVE_PER_TICK = 2;
+
+	constexpr float		SPAWN_SPACING_CM = 150.0f;
+	constexpr int32		SPAWN_MAX_RINGS = 6;
+	constexpr float		SPAWN_PI = 3.14159265f;
 }
 
 namespace
@@ -46,12 +50,19 @@ namespace
 	}
 }
 
+static RoomRef MakeFloorRoom(uint32 floorId)
+{
+	RoomRef room = make_shared<Room>();
+	room->_floorId = floorId;
+	return room;
+}
+
 RoomRef GRooms[FLOOR_COUNT] =
 {
-	make_shared<Room>(),
-	make_shared<Room>(),
-	make_shared<Room>(),
-	make_shared<Room>()
+	MakeFloorRoom(0),
+	MakeFloorRoom(1),
+	MakeFloorRoom(2),
+	MakeFloorRoom(3)
 };
 
 RoomRef GetRoomForFloor(uint32 floorId)
@@ -72,6 +83,18 @@ Room::~Room()
 
 bool Room::EnterRoom(ObjectRef object, bool randPos)
 {
+	if (object->posInfo->x() == 0.f && object->posInfo->y() == 0.f)
+	{
+		const SpawnPoint& spawn = FLOOR_SPAWN[_floorId];
+
+		float spawnX = 0.f;
+		float spawnY = 0.f;
+		FindSpawnPosition(spawn.x, spawn.y, spawnX, spawnY);
+
+		object->posInfo->set_x(spawnX);
+		object->posInfo->set_y(spawnY);
+		object->posInfo->set_z(100.f);
+	}
 	bool success = AddObject(object);
 
 	// 랜덤 위치
@@ -1318,4 +1341,47 @@ void Room::UpdateSaves(uint64 nowUs)
 		SavePlayer(player);
 		saved++;
 	}
+}
+
+void Room::FindSpawnPosition(float baseX, float baseY, float& outX, float& outY)
+{
+	const float spacingSq = SPAWN_SPACING_CM * SPAWN_SPACING_CM;
+
+	for (int32 ring = 1; ring <= SPAWN_MAX_RINGS; ring++)
+	{
+		const int32 slots = (ring == 0) ? 1 : ring * 6;
+		const float radius = ring * SPAWN_SPACING_CM;
+
+		for (int32 i = 0; i < slots; i++)
+		{
+			const float  angle = (2.f * SPAWN_PI * i) / slots;
+			const float cx = baseX + radius * ::cosf(angle);
+			const float cy = baseY + radius * ::sinf(angle);
+
+			bool occupied = false;
+
+			for (auto& item : _objects)
+			{
+				const float dx = item.second->posInfo->x() - cx;
+				const float dy = item.second->posInfo->y() - cy;
+
+				if ((dx * dx + dy * dy) < spacingSq)
+				{
+					occupied = true;
+					break;
+				}
+			}
+
+			if (occupied == false)
+			{
+				outX = cx;
+				outY = cy;
+				return;
+			}
+		}
+	}
+
+	const float fallback = SPAWN_MAX_RINGS * SPAWN_SPACING_CM;
+	outX = baseX + Utils::GetRandom(-fallback, fallback);
+	outY = baseY + Utils::GetRandom(-fallback, fallback);
 }
