@@ -22,4 +22,6 @@ public:
 	double					moveBudget = 0.0;
 	float					moveExceptionSpeed = 0.f;
 	uint64					moveExceptionEndUs = 0;
+
+	uint64 lastSaveUs = 0;
 };

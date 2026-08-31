@@ -5,6 +5,7 @@
 #include "ObjectUtils.h"
 #include "Room.h"
 #include "Player.h"
+#include "AccountManager.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
 
@@ -53,6 +54,11 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 				conn->FreeResult(result);
 			}
+			if (accountId != 0 && GAccountManager.TryLogin(accountId) == false)
+			{
+				cout << "[LOGIN] already online - account=" << accountId << endl;
+				accountId = 0;
+			}
 
 			if (accountId != 0)
 			{
@@ -64,26 +70,37 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 				if (MYSQL_RES* result = conn->Query(query))
 				{
-					while (MYSQL_ROW row = ::mysql_fetch_row(result))
+					enum {COL_ID = 0, COL_NAME, COL_HP, COL_MAX_HP, COL_FLOOR, COL_X, COL_Y, COL_Z, COL_YAW, COL_COUNT };
+
+					if (::mysql_num_fields(result) < COL_COUNT)
 					{
-						Protocol::CharacterInfo* info = loginPkt.add_characters();
-						info->set_name(row[1] ? row[1] : "");
-						info->set_hp(::atoi(row[2]));
-						info->set_max_hp(::atoi(row[3]));
-						info->set_floor_id(static_cast<uint32>(::atoi(row[4])));
-
-						Protocol::ObjectInfo* obj = info->mutable_object_info();
-						obj->set_object_id(::strtoull(row[0], nullptr, 10));
-						obj->set_object_type(Protocol::OBJECT_TYPE_CREATURE);
-
-						Protocol::PosInfo* pos = obj->mutable_pos_info();
-						pos->set_x(static_cast<float>(::atof(row[5])));
-						pos->set_y(static_cast<float>(::atof(row[6])));
-						pos->set_z(static_cast<float>(::atof(row[7])));
-						pos->set_yaw(static_cast<float>(::atof(row[8])));
+						cout << "[LOGIN] column count mismatch - expected " << COL_COUNT << " got " << ::mysql_num_fields(result) << endl;
+						conn->FreeResult(result);
+						accountId = 0;
 					}
+					else
+					{
+						while (MYSQL_ROW row = ::mysql_fetch_row(result))
+						{
+							Protocol::CharacterInfo* info = loginPkt.add_characters();
+							info->set_name(row[1] ? row[1] : "");
+							info->set_hp(::atoi(row[2]));
+							info->set_max_hp(::atoi(row[3]));
+							info->set_floor_id(static_cast<uint32>(::atoi(row[4])));
 
-					conn->FreeResult(result);
+							Protocol::ObjectInfo* obj = info->mutable_object_info();
+							obj->set_object_id(::strtoull(row[0], nullptr, 10));
+							obj->set_object_type(Protocol::OBJECT_TYPE_CREATURE);
+
+							Protocol::PosInfo* pos = obj->mutable_pos_info();
+							pos->set_x(static_cast<float>(::atof(row[5])));
+							pos->set_y(static_cast<float>(::atof(row[6])));
+							pos->set_z(static_cast<float>(::atof(row[7])));
+							pos->set_yaw(static_cast<float>(::atof(row[8])));
+						}
+
+						conn->FreeResult(result);
+					}
 				}
 
 				gameSession->characters.assign(loginPkt.characters().begin(), loginPkt.characters().end());

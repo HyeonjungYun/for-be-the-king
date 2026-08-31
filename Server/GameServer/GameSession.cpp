@@ -4,6 +4,7 @@
 #include "ServerPacketHandler.h"
 #include "Player.h"
 #include "Room.h"
+#include "AccountManager.h"
 
 void GameSession::OnConnected()
 {
@@ -15,6 +16,8 @@ void GameSession::OnDisconnected()
 	wcout << "[DISCONNECT] OnDisconnected 진입" << endl;
 
 	GSessionManager.Remove(static_pointer_cast<GameSession>(shared_from_this()));
+
+	GAccountManager.LogOut(accountId.exchange(0));
 
 	PlayerRef leavingPlayer = player.load();
 
