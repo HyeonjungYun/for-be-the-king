@@ -25,6 +25,11 @@ bool DBConnectionPool::Connect(int32 connectionCount, const char* host, uint32 p
 				c->Close();
 				delete c;
 			}
+
+			_connections.clear();
+			_idle.clear();
+
+			return false;
 		}
 
 		_connections.push_back(connection);

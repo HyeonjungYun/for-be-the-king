@@ -5,6 +5,8 @@
 
 #pragma comment(lib, "psapi.lib")
 
+ServerStats GStats;
+
 namespace
 {
 	constexpr double SENT_LIMIT_MBPS = 80.0;
@@ -12,7 +14,10 @@ namespace
 	constexpr double MEMORY_LIMIT_MB = 512.0;
 }
 
-ServerStats GStats;
+namespace
+{
+	const char* Verdict(bool pass) { return pass ? "PASS" : "*** FAIL ***"; }
+}
 
 const uint64 ServerStats::BUCKET_UPPER_US[ServerStats::BUCKET_COUNT] =
 {
@@ -42,27 +47,28 @@ void ServerStats::RecordFlush(uint64 micros)
 	}
 }
 
-namespace
+uint64 ServerStats::PercentileUpperUs(const uint64* buckets, uint64 total, double p)
 {
-	uint64 PercentileUpperUs(const uint64* buckets, uint64 total, double p)
+	if (total == 0)
+		return 0;
+
+	const uint64 target = static_cast<uint64>(total * p);
+	uint64 acc = 0;
+
+	for (int32 i = 0; i < ServerStats::BUCKET_COUNT; i++)
 	{
-		if (total == 0)
-			return 0;
-
-		const uint64 target = static_cast<uint64>(total * p);
-		uint64 acc = 0;
-
-		for (int32 i = 0; i < ServerStats::BUCKET_COUNT; i++)
-		{
-			acc += buckets[i];
-			if (acc >= target)
-				return ServerStats::BUCKET_UPPER_US[i];
-		}
-
-		return ServerStats::BUCKET_UPPER_US[ServerStats::BUCKET_COUNT - 1];
+		acc += buckets[i];
+		if (acc >= target)
+			return ServerStats::BUCKET_UPPER_US[i];
 	}
 
-	const char* Verdict(bool pass) { return pass ? "PASS" : "*** FAIL ***"; }
+	return ServerStats::BUCKET_UPPER_US[ServerStats::BUCKET_COUNT - 1];
+}
+
+void ServerStats::SnapshotBuckets(uint64* outBuckets) const
+{
+	for (int32 i = 0; i < BUCKET_COUNT; i++)
+		outBuckets[i] = _flushBuckets[i].load();
 }
 
 void ServerStats::Dump(int32 sessionCount)
@@ -94,7 +100,7 @@ void ServerStats::Dump(int32 sessionCount)
 		sentMbps = (sentBytes * 8.0) / elapsedSec / 1000000.0;
 	}
 
-	// 클락 1인이 받는 양 = 서버가 보낸 총랼 % 인원
+	// 클락 1인이 받는 양 = 서버가 보낸 총량 % 인원
 	const double perClientKbps = (sessionCount > 0) ? (sentMbps * 1000.0 / sessionCount) : 0.0;
 
 	PROCESS_MEMORY_COUNTERS pmc = {};
