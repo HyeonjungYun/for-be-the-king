@@ -1,4 +1,4 @@
-//
+﻿//
 // pch.h
 //
 
@@ -13,6 +13,8 @@
 #else
 #pragma comment(lib, "ServerCore\\Release\\ServerCore.lib")
 #endif
+
+#pragma comment(lib, "MySQL\\libmysql.lib")
 
 #include "CorePch.h"
 #include "Utils.h"

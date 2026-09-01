@@ -105,14 +105,34 @@
 | `S1/` (UE 의존) | **Unreal Automation Spec** | `UnrealEditor-Cmd` 헤드리스 | 분 단위 |
 
 - **Framework**: GoogleTest (서버) + Unreal Automation Spec (클라이언트)
-- **Minimum Coverage**: **`Server/ServerCore/` 라인 커버리지 70%**
+- **Minimum Coverage**: **`Server/ServerCore/` 라인 커버리지 70%** — ✅ **2026-09-01 달성 (77%)**
   - 측정 도구: **OpenCppCoverage** (무료, PDB 기반 — 소스 수정 불필요)
-    ```bash
-    OpenCppCoverage.exe --sources Server\ServerCore --export_type html:coverage -- ServerCoreTests.exe
+    ```powershell
+    & "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" `
+        --sources "C:\Server\MMO\Server\ServerCore" `
+        --excluded_sources "ServerCoreSTests" `
+        --export_type "cobertura:C:\Server\MMO\Server\coverage.xml" `
+        --export_type "html:C:\Server\MMO\Server\coverage" `
+        -- "C:\Server\MMO\Server\Binaries\Debug\ServerCoreSTests.exe"
     ```
-  - **포함**: `LockQueue` · `RecvBuffer` · `SendBuffer` · `BufferReader/Writer` · `JobQueue` · `GlobalQueue` · `JobTimer`
-  - **제외**: 실제 소켓 I/O(`IocpCore`·`Listener`·`Session`의 WSA 호출) · `*.pb.cc` · `GameServer/` · `S1/`
+    - **`--excluded_sources "ServerCoreSTests"` 를 빼면 안 된다.** 테스트 코드 자신이
+      분모에 들어가 수치를 부풀린다 (58% → 74% 로 왜곡됐다)
+    - 측정에는 **Debug 빌드**가 필요하다 (PDB 기반)
+  - **제외** — 아래 둘만. 파일을 실제로 읽고 *"순수 로직이 한 줄이라도 있는가"* 로 판정했다
+    | 제외 | 근거 |
+    |---|---|
+    | `SocketUtils.{cpp,h}` · `IocpCore` · `Listener` · `Session` | 전 함수가 Winsock 래퍼. 실 소켓 없이 의미 없음 |
+    | `DBConnection.cpp` | 전 함수가 MySQL C API 래퍼. `Escape` 조차 연결이 있어야 동작 |
+    - `*.pb.cc` · `GameServer/` · `S1/` 는 애초에 대상 밖
+  - 🔴 **제외를 늘려 숫자를 만들지 말 것.** `ThreadManager` · `NetAddress` · `DBConnectionPool` ·
+    `DBJobQueue` 는 "테스트가 어렵다"가 아니라 **"아직 안 썼다"** 이므로 분모에 남긴다.
+    분모에서 빼는 순간 할 일 목록에서도 사라진다
+  - 🔴 **손대지 않은 파일은 리포트에 나타나지도 않는다.** DB 계층 3개 파일(159줄)은 테스트가
+    한 줄도 실행하지 않아 분모에 없었고, 테스트를 추가하자 **수치가 72% → 68% 로 떨어졌다.**
+    커버리지가 오르는 것만이 진전은 아니다
   - **숫자가 아니라 리포트의 빨간 줄을 볼 것.** "이 줄이 프로덕션에서 실행될 수 있나?" 를 묻고, 그렇다면 테스트를 추가하고 아니면 죽은 코드로 보고 삭제한다
+  - **커버리지는 "실행됐다"이지 "검증됐다"가 아니다.** 어서션 없이 호출만 해도 오른다.
+    라인 커버리지는 분기의 한쪽만 돌아도 100%가 되므로 **부등호 실수를 잡지 못한다**
 - **Required Tests**:
   - 밸런스 공식 (전투 데미지·이동속도·CC 지속시간)
   - 패킷 직렬화 왕복 (`.proto` 변경 시 회귀 방지)

@@ -61,3 +61,7 @@ __pycache__/
 
 # ServerCore 빌드 출력이 잘못된 경로로 떨어진 것. 정식 위치는 Server/Libraries/Libs/
 Server/ServerCore/Libraries/
+
+# 커버리지 리포트 — 매 측정마다 전부 바뀌는 생성물
+Server/coverage/
+Server/coverage.xml
