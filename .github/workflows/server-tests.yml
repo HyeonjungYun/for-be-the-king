@@ -18,10 +18,10 @@ jobs:
     runs-on: windows-2022
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       # gtest 는 NuGet 패키지다. Server/packages/ 를 저장소에 두었지만
       # vcxproj 가 참조하는 경로가 맞는지 복원으로 한 번 확인한다
@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results.xml
