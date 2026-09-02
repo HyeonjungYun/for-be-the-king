@@ -65,3 +65,9 @@ Server/ServerCore/Libraries/
 # 커버리지 리포트 — 매 측정마다 전부 바뀌는 생성물
 Server/coverage/
 Server/coverage.xml
+
+# 🔴 [Xx]64/ 규칙이 NuGet 패키지의 x64 라이브러리까지 걸러낸다.
+#    빌드 산출물을 막으려던 규칙이 의존성을 막았고, CI 에서 gtest_maind.lib 를
+#    찾지 못해 링크가 깨졌다. packages 는 예외로 둔다.
+!Server/packages/**/x64/
+!Server/packages/**/x64/**
