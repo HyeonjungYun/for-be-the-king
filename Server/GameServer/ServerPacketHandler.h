@@ -35,6 +35,8 @@ enum : uint16
 	PKT_S_SKILL_CANCEL = 1022,
 	PKT_S_SKILL_HIT = 1023,
 	PKT_S_EQUIP_SYNC = 1024,
+	PKT_C_GRANT_REWARD = 1025,
+	PKT_S_GRANT_REWARD = 1026,
 };
 
 // Custom Handlers
@@ -47,6 +49,7 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt);
 bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt);
 bool Handle_C_SKILL(PacketSessionRef& session, Protocol::C_SKILL& pkt);
 bool Handle_C_SKILL_CANCEL(PacketSessionRef& session, Protocol::C_SKILL_CANCEL& pkt);
+bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& pkt);
 
 class ServerPacketHandler
 {
@@ -63,6 +66,7 @@ public:
 		GPacketHandler[PKT_C_CHAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_CHAT>(Handle_C_CHAT, session, buffer, len); };
 		GPacketHandler[PKT_C_SKILL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_SKILL>(Handle_C_SKILL, session, buffer, len); };
 		GPacketHandler[PKT_C_SKILL_CANCEL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_SKILL_CANCEL>(Handle_C_SKILL_CANCEL, session, buffer, len); };
+		GPacketHandler[PKT_C_GRANT_REWARD] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_GRANT_REWARD>(Handle_C_GRANT_REWARD, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -87,6 +91,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_SKILL_CANCEL& pkt) { return MakeSendBuffer(pkt, PKT_S_SKILL_CANCEL); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_SKILL_HIT& pkt) { return MakeSendBuffer(pkt, PKT_S_SKILL_HIT); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_EQUIP_SYNC& pkt) { return MakeSendBuffer(pkt, PKT_S_EQUIP_SYNC); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_GRANT_REWARD& pkt) { return MakeSendBuffer(pkt, PKT_S_GRANT_REWARD); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

@@ -57,6 +57,9 @@ extern C_CHATDefaultTypeInternal _C_CHAT_default_instance_;
 class C_ENTER_GAME;
 struct C_ENTER_GAMEDefaultTypeInternal;
 extern C_ENTER_GAMEDefaultTypeInternal _C_ENTER_GAME_default_instance_;
+class C_GRANT_REWARD;
+struct C_GRANT_REWARDDefaultTypeInternal;
+extern C_GRANT_REWARDDefaultTypeInternal _C_GRANT_REWARD_default_instance_;
 class C_LEAVE_GAME;
 struct C_LEAVE_GAMEDefaultTypeInternal;
 extern C_LEAVE_GAMEDefaultTypeInternal _C_LEAVE_GAME_default_instance_;
@@ -102,6 +105,9 @@ extern S_ENTER_GAMEDefaultTypeInternal _S_ENTER_GAME_default_instance_;
 class S_EQUIP_SYNC;
 struct S_EQUIP_SYNCDefaultTypeInternal;
 extern S_EQUIP_SYNCDefaultTypeInternal _S_EQUIP_SYNC_default_instance_;
+class S_GRANT_REWARD;
+struct S_GRANT_REWARDDefaultTypeInternal;
+extern S_GRANT_REWARDDefaultTypeInternal _S_GRANT_REWARD_default_instance_;
 class S_LEAVE_GAME;
 struct S_LEAVE_GAMEDefaultTypeInternal;
 extern S_LEAVE_GAMEDefaultTypeInternal _S_LEAVE_GAME_default_instance_;
@@ -128,6 +134,7 @@ PROTOBUF_NAMESPACE_OPEN
 template<> ::Protocol::C_ATTACK* Arena::CreateMaybeMessage<::Protocol::C_ATTACK>(Arena*);
 template<> ::Protocol::C_CHAT* Arena::CreateMaybeMessage<::Protocol::C_CHAT>(Arena*);
 template<> ::Protocol::C_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::C_ENTER_GAME>(Arena*);
+template<> ::Protocol::C_GRANT_REWARD* Arena::CreateMaybeMessage<::Protocol::C_GRANT_REWARD>(Arena*);
 template<> ::Protocol::C_LEAVE_GAME* Arena::CreateMaybeMessage<::Protocol::C_LEAVE_GAME>(Arena*);
 template<> ::Protocol::C_LOGIN* Arena::CreateMaybeMessage<::Protocol::C_LOGIN>(Arena*);
 template<> ::Protocol::C_MOVE* Arena::CreateMaybeMessage<::Protocol::C_MOVE>(Arena*);
@@ -143,6 +150,7 @@ template<> ::Protocol::S_DESPAWN* Arena::CreateMaybeMessage<::Protocol::S_DESPAW
 template<> ::Protocol::S_DIED* Arena::CreateMaybeMessage<::Protocol::S_DIED>(Arena*);
 template<> ::Protocol::S_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::S_ENTER_GAME>(Arena*);
 template<> ::Protocol::S_EQUIP_SYNC* Arena::CreateMaybeMessage<::Protocol::S_EQUIP_SYNC>(Arena*);
+template<> ::Protocol::S_GRANT_REWARD* Arena::CreateMaybeMessage<::Protocol::S_GRANT_REWARD>(Arena*);
 template<> ::Protocol::S_LEAVE_GAME* Arena::CreateMaybeMessage<::Protocol::S_LEAVE_GAME>(Arena*);
 template<> ::Protocol::S_LOGIN* Arena::CreateMaybeMessage<::Protocol::S_LOGIN>(Arena*);
 template<> ::Protocol::S_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MOVE>(Arena*);
@@ -4065,6 +4073,372 @@ class S_EQUIP_SYNC final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class C_GRANT_REWARD final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_GRANT_REWARD) */ {
+ public:
+  inline C_GRANT_REWARD() : C_GRANT_REWARD(nullptr) {}
+  ~C_GRANT_REWARD() override;
+  explicit PROTOBUF_CONSTEXPR C_GRANT_REWARD(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_GRANT_REWARD(const C_GRANT_REWARD& from);
+  C_GRANT_REWARD(C_GRANT_REWARD&& from) noexcept
+    : C_GRANT_REWARD() {
+    *this = ::std::move(from);
+  }
+
+  inline C_GRANT_REWARD& operator=(const C_GRANT_REWARD& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_GRANT_REWARD& operator=(C_GRANT_REWARD&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_GRANT_REWARD& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_GRANT_REWARD* internal_default_instance() {
+    return reinterpret_cast<const C_GRANT_REWARD*>(
+               &_C_GRANT_REWARD_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    25;
+
+  friend void swap(C_GRANT_REWARD& a, C_GRANT_REWARD& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_GRANT_REWARD* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_GRANT_REWARD* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  C_GRANT_REWARD* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<C_GRANT_REWARD>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const C_GRANT_REWARD& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const C_GRANT_REWARD& from) {
+    C_GRANT_REWARD::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_GRANT_REWARD* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_GRANT_REWARD";
+  }
+  protected:
+  explicit C_GRANT_REWARD(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRequestIdFieldNumber = 1,
+    kReasonFieldNumber = 4,
+    kCharacterIdFieldNumber = 2,
+    kGoldFieldNumber = 3,
+  };
+  // string request_id = 1;
+  void clear_request_id();
+  const std::string& request_id() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_request_id(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_request_id();
+  PROTOBUF_NODISCARD std::string* release_request_id();
+  void set_allocated_request_id(std::string* request_id);
+  private:
+  const std::string& _internal_request_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_request_id(const std::string& value);
+  std::string* _internal_mutable_request_id();
+  public:
+
+  // string reason = 4;
+  void clear_reason();
+  const std::string& reason() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_reason(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_reason();
+  PROTOBUF_NODISCARD std::string* release_reason();
+  void set_allocated_reason(std::string* reason);
+  private:
+  const std::string& _internal_reason() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_reason(const std::string& value);
+  std::string* _internal_mutable_reason();
+  public:
+
+  // uint64 character_id = 2;
+  void clear_character_id();
+  uint64_t character_id() const;
+  void set_character_id(uint64_t value);
+  private:
+  uint64_t _internal_character_id() const;
+  void _internal_set_character_id(uint64_t value);
+  public:
+
+  // uint64 gold = 3;
+  void clear_gold();
+  uint64_t gold() const;
+  void set_gold(uint64_t value);
+  private:
+  uint64_t _internal_gold() const;
+  void _internal_set_gold(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_GRANT_REWARD)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr request_id_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr reason_;
+    uint64_t character_id_;
+    uint64_t gold_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_GRANT_REWARD final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_GRANT_REWARD) */ {
+ public:
+  inline S_GRANT_REWARD() : S_GRANT_REWARD(nullptr) {}
+  ~S_GRANT_REWARD() override;
+  explicit PROTOBUF_CONSTEXPR S_GRANT_REWARD(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_GRANT_REWARD(const S_GRANT_REWARD& from);
+  S_GRANT_REWARD(S_GRANT_REWARD&& from) noexcept
+    : S_GRANT_REWARD() {
+    *this = ::std::move(from);
+  }
+
+  inline S_GRANT_REWARD& operator=(const S_GRANT_REWARD& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_GRANT_REWARD& operator=(S_GRANT_REWARD&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_GRANT_REWARD& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_GRANT_REWARD* internal_default_instance() {
+    return reinterpret_cast<const S_GRANT_REWARD*>(
+               &_S_GRANT_REWARD_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    26;
+
+  friend void swap(S_GRANT_REWARD& a, S_GRANT_REWARD& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_GRANT_REWARD* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_GRANT_REWARD* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_GRANT_REWARD* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_GRANT_REWARD>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_GRANT_REWARD& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_GRANT_REWARD& from) {
+    S_GRANT_REWARD::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_GRANT_REWARD* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_GRANT_REWARD";
+  }
+  protected:
+  explicit S_GRANT_REWARD(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRequestIdFieldNumber = 1,
+    kGoldAfterFieldNumber = 3,
+    kResultFieldNumber = 2,
+  };
+  // string request_id = 1;
+  void clear_request_id();
+  const std::string& request_id() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_request_id(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_request_id();
+  PROTOBUF_NODISCARD std::string* release_request_id();
+  void set_allocated_request_id(std::string* request_id);
+  private:
+  const std::string& _internal_request_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_request_id(const std::string& value);
+  std::string* _internal_mutable_request_id();
+  public:
+
+  // uint64 gold_after = 3;
+  void clear_gold_after();
+  uint64_t gold_after() const;
+  void set_gold_after(uint64_t value);
+  private:
+  uint64_t _internal_gold_after() const;
+  void _internal_set_gold_after(uint64_t value);
+  public:
+
+  // uint32 result = 2;
+  void clear_result();
+  uint32_t result() const;
+  void set_result(uint32_t value);
+  private:
+  uint32_t _internal_result() const;
+  void _internal_set_result(uint32_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_GRANT_REWARD)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr request_id_;
+    uint64_t gold_after_;
+    uint32_t result_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -5334,9 +5708,251 @@ S_EQUIP_SYNC::skills() const {
   return _impl_.skills_;
 }
 
+// -------------------------------------------------------------------
+
+// C_GRANT_REWARD
+
+// string request_id = 1;
+inline void C_GRANT_REWARD::clear_request_id() {
+  _impl_.request_id_.ClearToEmpty();
+}
+inline const std::string& C_GRANT_REWARD::request_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_GRANT_REWARD.request_id)
+  return _internal_request_id();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void C_GRANT_REWARD::set_request_id(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.request_id_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.C_GRANT_REWARD.request_id)
+}
+inline std::string* C_GRANT_REWARD::mutable_request_id() {
+  std::string* _s = _internal_mutable_request_id();
+  // @@protoc_insertion_point(field_mutable:Protocol.C_GRANT_REWARD.request_id)
+  return _s;
+}
+inline const std::string& C_GRANT_REWARD::_internal_request_id() const {
+  return _impl_.request_id_.Get();
+}
+inline void C_GRANT_REWARD::_internal_set_request_id(const std::string& value) {
+  
+  _impl_.request_id_.Set(value, GetArenaForAllocation());
+}
+inline std::string* C_GRANT_REWARD::_internal_mutable_request_id() {
+  
+  return _impl_.request_id_.Mutable(GetArenaForAllocation());
+}
+inline std::string* C_GRANT_REWARD::release_request_id() {
+  // @@protoc_insertion_point(field_release:Protocol.C_GRANT_REWARD.request_id)
+  return _impl_.request_id_.Release();
+}
+inline void C_GRANT_REWARD::set_allocated_request_id(std::string* request_id) {
+  if (request_id != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.request_id_.SetAllocated(request_id, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.request_id_.IsDefault()) {
+    _impl_.request_id_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.C_GRANT_REWARD.request_id)
+}
+
+// uint64 character_id = 2;
+inline void C_GRANT_REWARD::clear_character_id() {
+  _impl_.character_id_ = uint64_t{0u};
+}
+inline uint64_t C_GRANT_REWARD::_internal_character_id() const {
+  return _impl_.character_id_;
+}
+inline uint64_t C_GRANT_REWARD::character_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_GRANT_REWARD.character_id)
+  return _internal_character_id();
+}
+inline void C_GRANT_REWARD::_internal_set_character_id(uint64_t value) {
+  
+  _impl_.character_id_ = value;
+}
+inline void C_GRANT_REWARD::set_character_id(uint64_t value) {
+  _internal_set_character_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_GRANT_REWARD.character_id)
+}
+
+// uint64 gold = 3;
+inline void C_GRANT_REWARD::clear_gold() {
+  _impl_.gold_ = uint64_t{0u};
+}
+inline uint64_t C_GRANT_REWARD::_internal_gold() const {
+  return _impl_.gold_;
+}
+inline uint64_t C_GRANT_REWARD::gold() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_GRANT_REWARD.gold)
+  return _internal_gold();
+}
+inline void C_GRANT_REWARD::_internal_set_gold(uint64_t value) {
+  
+  _impl_.gold_ = value;
+}
+inline void C_GRANT_REWARD::set_gold(uint64_t value) {
+  _internal_set_gold(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_GRANT_REWARD.gold)
+}
+
+// string reason = 4;
+inline void C_GRANT_REWARD::clear_reason() {
+  _impl_.reason_.ClearToEmpty();
+}
+inline const std::string& C_GRANT_REWARD::reason() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_GRANT_REWARD.reason)
+  return _internal_reason();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void C_GRANT_REWARD::set_reason(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.reason_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.C_GRANT_REWARD.reason)
+}
+inline std::string* C_GRANT_REWARD::mutable_reason() {
+  std::string* _s = _internal_mutable_reason();
+  // @@protoc_insertion_point(field_mutable:Protocol.C_GRANT_REWARD.reason)
+  return _s;
+}
+inline const std::string& C_GRANT_REWARD::_internal_reason() const {
+  return _impl_.reason_.Get();
+}
+inline void C_GRANT_REWARD::_internal_set_reason(const std::string& value) {
+  
+  _impl_.reason_.Set(value, GetArenaForAllocation());
+}
+inline std::string* C_GRANT_REWARD::_internal_mutable_reason() {
+  
+  return _impl_.reason_.Mutable(GetArenaForAllocation());
+}
+inline std::string* C_GRANT_REWARD::release_reason() {
+  // @@protoc_insertion_point(field_release:Protocol.C_GRANT_REWARD.reason)
+  return _impl_.reason_.Release();
+}
+inline void C_GRANT_REWARD::set_allocated_reason(std::string* reason) {
+  if (reason != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.reason_.SetAllocated(reason, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.reason_.IsDefault()) {
+    _impl_.reason_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.C_GRANT_REWARD.reason)
+}
+
+// -------------------------------------------------------------------
+
+// S_GRANT_REWARD
+
+// string request_id = 1;
+inline void S_GRANT_REWARD::clear_request_id() {
+  _impl_.request_id_.ClearToEmpty();
+}
+inline const std::string& S_GRANT_REWARD::request_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_GRANT_REWARD.request_id)
+  return _internal_request_id();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void S_GRANT_REWARD::set_request_id(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.request_id_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.S_GRANT_REWARD.request_id)
+}
+inline std::string* S_GRANT_REWARD::mutable_request_id() {
+  std::string* _s = _internal_mutable_request_id();
+  // @@protoc_insertion_point(field_mutable:Protocol.S_GRANT_REWARD.request_id)
+  return _s;
+}
+inline const std::string& S_GRANT_REWARD::_internal_request_id() const {
+  return _impl_.request_id_.Get();
+}
+inline void S_GRANT_REWARD::_internal_set_request_id(const std::string& value) {
+  
+  _impl_.request_id_.Set(value, GetArenaForAllocation());
+}
+inline std::string* S_GRANT_REWARD::_internal_mutable_request_id() {
+  
+  return _impl_.request_id_.Mutable(GetArenaForAllocation());
+}
+inline std::string* S_GRANT_REWARD::release_request_id() {
+  // @@protoc_insertion_point(field_release:Protocol.S_GRANT_REWARD.request_id)
+  return _impl_.request_id_.Release();
+}
+inline void S_GRANT_REWARD::set_allocated_request_id(std::string* request_id) {
+  if (request_id != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.request_id_.SetAllocated(request_id, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.request_id_.IsDefault()) {
+    _impl_.request_id_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.S_GRANT_REWARD.request_id)
+}
+
+// uint32 result = 2;
+inline void S_GRANT_REWARD::clear_result() {
+  _impl_.result_ = 0u;
+}
+inline uint32_t S_GRANT_REWARD::_internal_result() const {
+  return _impl_.result_;
+}
+inline uint32_t S_GRANT_REWARD::result() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_GRANT_REWARD.result)
+  return _internal_result();
+}
+inline void S_GRANT_REWARD::_internal_set_result(uint32_t value) {
+  
+  _impl_.result_ = value;
+}
+inline void S_GRANT_REWARD::set_result(uint32_t value) {
+  _internal_set_result(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_GRANT_REWARD.result)
+}
+
+// uint64 gold_after = 3;
+inline void S_GRANT_REWARD::clear_gold_after() {
+  _impl_.gold_after_ = uint64_t{0u};
+}
+inline uint64_t S_GRANT_REWARD::_internal_gold_after() const {
+  return _impl_.gold_after_;
+}
+inline uint64_t S_GRANT_REWARD::gold_after() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_GRANT_REWARD.gold_after)
+  return _internal_gold_after();
+}
+inline void S_GRANT_REWARD::_internal_set_gold_after(uint64_t value) {
+  
+  _impl_.gold_after_ = value;
+}
+inline void S_GRANT_REWARD::set_gold_after(uint64_t value) {
+  _internal_set_gold_after(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_GRANT_REWARD.gold_after)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

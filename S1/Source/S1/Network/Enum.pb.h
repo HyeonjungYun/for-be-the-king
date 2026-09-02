@@ -293,6 +293,34 @@ inline bool SlotBindState_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<SlotBindState>(
     SlotBindState_descriptor(), name, value);
 }
+enum GrantResult : int {
+  GRANT_OK = 0,
+  GRANT_ALREADY = 1,
+  GRANT_NO_TARGET = 2,
+  GRANT_DB_ERROR = 3,
+  GRANT_BAD_REQUEST = 4,
+  GrantResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  GrantResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool GrantResult_IsValid(int value);
+constexpr GrantResult GrantResult_MIN = GRANT_OK;
+constexpr GrantResult GrantResult_MAX = GRANT_BAD_REQUEST;
+constexpr int GrantResult_ARRAYSIZE = GrantResult_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* GrantResult_descriptor();
+template<typename T>
+inline const std::string& GrantResult_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, GrantResult>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function GrantResult_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    GrantResult_descriptor(), enum_t_value);
+}
+inline bool GrantResult_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, GrantResult* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<GrantResult>(
+    GrantResult_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -359,6 +387,11 @@ template <> struct is_proto_enum< ::Protocol::SlotBindState> : ::std::true_type 
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::SlotBindState>() {
   return ::Protocol::SlotBindState_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::GrantResult> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::GrantResult>() {
+  return ::Protocol::GrantResult_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE

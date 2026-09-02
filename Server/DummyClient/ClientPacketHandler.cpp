@@ -24,6 +24,15 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 	enterPkt.set_playerindex(0);
 	enterPkt.set_floor_id(bot->floorId);
 
+	const Protocol::CharacterInfo& Character = pkt.characters(0);
+
+	bot->characterId.store(Character.object_info().object_id());
+
+	uint64 expectedId = 0;
+
+	uint64 expected = 0;
+	GGrantTargetId.compare_exchange_strong(expected, Character.object_info().object_id());
+
 	bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
 
 	return true;
@@ -200,4 +209,19 @@ bool Handle_S_SKILL_HIT(PacketSessionRef& session, Protocol::S_SKILL_HIT& pkt)
 bool Handle_S_EQUIP_SYNC(PacketSessionRef& session, Protocol::S_EQUIP_SYNC& pkt)
 {
 	return false;
+}
+
+bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& pkt)
+{
+	switch (pkt.result())
+	{
+	case Protocol::GRANT_OK:			GGrantOk.fetch_add(1); break;
+	case Protocol::GRANT_ALREADY:		GGrantAlready.fetch_add(1); break;
+	case Protocol::GRANT_NO_TARGET:		GGrantNoTarget.fetch_add(1); break;
+	case Protocol::GRANT_BAD_REQUEST:	GGrantBad.fetch_add(1); break;
+	defalut:							GGrantError.fetch_add(1); break;
+	}
+
+	GGrantReplies.fetch_add(1);
+	return true;
 }

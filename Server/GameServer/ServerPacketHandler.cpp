@@ -9,6 +9,21 @@
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
 
+namespace
+{
+	// 지급 결과를 세션에 돌려준다. DB 스레드에서 호출
+	void SendGrantResult(GameSessionRef session, const string& requestId, Protocol::GrantResult result, uint64 goldAfter)
+	{
+		Protocol::S_GRANT_REWARD pkt;
+		pkt.set_request_id(requestId);
+		pkt.set_result(result);
+		pkt.set_gold_after(goldAfter);
+
+		SEND_PACKET_DECLARATION(pkt);
+		session->Send(sendBuffer);
+	}
+}
+
 bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 {
 	PacketHeader* header = reinterpret_cast<PacketHeader*>(buffer);
@@ -296,6 +311,146 @@ bool Handle_C_SKILL_CANCEL(PacketSessionRef& session, Protocol::C_SKILL_CANCEL& 
 		return false;
 
 	room->DoAsync(&Room::HandleSkillCancel, player->objectInfo->object_id());
+
+	return true;
+}
+
+bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	const string requestId = pkt.request_id();
+	const uint64 characterId = pkt.character_id();
+	const uint64 gold = pkt.gold();
+	const string reason = pkt.reason();
+
+	if (requestId.empty() || requestId.size() > 36 || characterId == 0 || gold == 0)
+	{
+		SendGrantResult(gameSession, requestId, Protocol::GRANT_BAD_REQUEST, 0);
+		return true;
+	}
+
+	GDBQueue.Push([gameSession, requestId, characterId, gold, reason](DBConnection* conn)
+		{
+			const string safeRequestId = conn->Escape(requestId);
+			const string safeReason = conn->Escape(reason);
+
+			Protocol::GrantResult result = Protocol::GRANT_DB_ERROR;
+			uint64 goldAfter = 0;
+
+			char query[512];
+
+			if (conn->BeginTransaction() == false)
+			{
+				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
+				return;
+			}
+
+			::snprintf(query, sizeof(query),
+				"SELECT gold FROM characters WHERE character_id = %llu FOR UPDATE",
+				characterId);
+
+			bool targetExists = false;
+
+			if (MYSQL_RES* res = conn->Query(query))
+			{
+				targetExists = (::mysql_fetch_row(res) != nullptr);
+				conn->FreeResult(res);
+			}
+			else
+			{
+				cout << "[GRANT] lock failed err=" << conn->GetLastErrorNo()
+					<< " " << conn->GetError() << endl;
+
+				conn->Rollback();
+				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
+				return;
+			}
+
+			// 잠금 단계에서 대상 유무가 판명된다. FK 나 affected_rows 보다 앞선다
+			if (targetExists == false)
+			{
+				conn->Rollback();
+				SendGrantResult(gameSession, requestId, Protocol::GRANT_NO_TARGET, 0);
+				return;
+			}
+
+			::snprintf(query, sizeof(query),
+				"INSERT INTO reward_grants (request_id, character_id, gold, reason) "
+				"VALUES ('%s', %llu, %llu, '%s')",
+				safeRequestId.c_str(), characterId, gold, safeReason.c_str());
+
+			if (conn->Excute(query) == false)
+			{
+				const uint32 errorNo = conn->GetLastErrorNo();
+				conn->Rollback();
+
+				// 1062 = ER_DUP_ENTRY. 이미 처리된 요청.
+				if (errorNo == 1062)
+				{
+					// 이미 지급됐으므로 현재 잔액을 읽어 돌려준다.
+					::snprintf(query, sizeof(query),
+						"SELECT gold FROM characters WHERE character_id = %llu", characterId);
+
+					if (MYSQL_RES* res = conn->Query(query))
+					{
+						if (MYSQL_ROW row = ::mysql_fetch_row(res))
+							goldAfter = ::strtoull(row[0], nullptr, 10);
+
+						conn->FreeResult(res);
+					}
+
+					result = Protocol::GRANT_ALREADY;
+				}
+				else
+				{
+					cout << "[GRANT] insert failed err=" << errorNo << " " << conn->GetError() << endl;
+					result = Protocol::GRANT_DB_ERROR;
+				}
+
+				SendGrantResult(gameSession, requestId, result, goldAfter);
+				return;
+			}
+
+			// 잔액을 올린다.
+			::snprintf(query, sizeof(query), "UPDATE characters SET gold = gold + %llu WHERE character_id = %llu", gold, characterId);
+
+			if (conn->Excute(query) == false)
+			{
+				cout << "[GRANT] update failed err=" << conn->GetLastErrorNo() << " " << conn->GetError() << endl;
+				conn->Rollback();
+				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
+				return;
+			}
+
+			// 0행이면 캐릭터가 없다는 뜻, FK가 있어 Insert단계에서 걸러지지만, FK가 없더라도 한 번 더 걸러냄
+			if (conn->GetAffectedRows() == 0)
+			{
+				conn->Rollback();
+				SendGrantResult(gameSession, requestId, Protocol::GRANT_NO_TARGET, 0);
+				return;
+			}
+
+			::snprintf(query, sizeof(query), "SELECT gold FROM characters WHERE character_Id = %llu", characterId);
+
+			if (MYSQL_RES* res = conn->Query(query))
+			{
+				if (MYSQL_ROW row = ::mysql_fetch_row(res))
+					goldAfter = ::strtoull(row[0], nullptr, 10);
+
+				conn->FreeResult(res);
+			}
+
+			if (conn->Commit() == false)
+			{
+				cout << "[GRANT] commit failed " << conn->GetError() << endl;
+				conn->Rollback();
+				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
+				return;
+			}
+
+			SendGrantResult(gameSession, requestId, Protocol::GRANT_OK, goldAfter);
+		});
 
 	return true;
 }

@@ -28,7 +28,13 @@ public:
 	// 🔴 사용자 입력을 쿼리에 붙일 때 반드시 거칠 것 — 계정명이 그 경로다.
 	string			Escape(const string& value) const;
 
+	bool			BeginTransaction();
+	bool			Commit();
+	bool			Rollback();
+
 	const char*		GetError() const;
+	uint32			GetLastErrorNo() const;
+
 	bool			IsConnected() const { return _conn != nullptr; }
 
 private:

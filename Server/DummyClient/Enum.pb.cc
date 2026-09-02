@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[9];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[10];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -53,11 +53,14 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "ONDARY\020\002\022\017\n\013SLOT_HELMET\020\003\022\016\n\nSLOT_ARMOR\020"
   "\004\022\016\n\nSLOT_BOOTS\020\005\022\020\n\014SLOT_TRINKET\020\006*D\n\rS"
   "lotBindState\022\020\n\014BIND_UNBOUND\020\000\022\016\n\nBIND_B"
-  "OUND\020\001\022\021\n\rBIND_SHADOWED\020\002b\006proto3"
+  "OUND\020\001\022\021\n\rBIND_SHADOWED\020\002*n\n\013GrantResult"
+  "\022\014\n\010GRANT_OK\020\000\022\021\n\rGRANT_ALREADY\020\001\022\023\n\017GRA"
+  "NT_NO_TARGET\020\002\022\022\n\016GRANT_DB_ERROR\020\003\022\025\n\021GR"
+  "ANT_BAD_REQUEST\020\004b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 993, descriptor_table_protodef_Enum_2eproto,
+    false, false, 1105, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -212,6 +215,23 @@ bool SlotBindState_IsValid(int value) {
     case 0:
     case 1:
     case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* GrantResult_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[9];
+}
+bool GrantResult_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
       return true;
     default:
       return false;

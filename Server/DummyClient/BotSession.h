@@ -19,6 +19,8 @@ public:
 
 	uint32				botIndex = 0;
 
+	atomic<uint64>		characterId = 0;
+
 	atomic<bool>		alive = true;
 
 	float				x = 0.f;
@@ -49,3 +51,11 @@ using							BotSessionRef = std::shared_ptr<BotSession>;
 
 extern mutex					GBotsLock;
 extern vector<BotSessionRef>	GBots;
+
+extern atomic<uint64> GGrantTargetId;
+extern atomic<uint64> GGrantOk;
+extern atomic<uint64> GGrantAlready;
+extern atomic<uint64> GGrantNoTarget;
+extern atomic<uint64> GGrantError;
+extern atomic<uint64> GGrantBad;
+extern atomic<uint64> GGrantReplies;
