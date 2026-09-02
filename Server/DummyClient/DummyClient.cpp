@@ -50,7 +50,7 @@ namespace
 {
 	constexpr uint64 GRANT_GOLD = 100;
 
-	void RunGrantBenchmark(int32 sessionCount, int32 uniqueCount)
+	void RunGrantBenchmark(int32 sessionCount, int32 uniqueCount, bool spread)
 	{
 		cout << "[GRANT] waiting for " << sessionCount << " session(s) to log in" << endl;
 
@@ -84,6 +84,21 @@ namespace
 			return;
 		}
 
+		vector<uint64> targets;
+
+		if (spread)
+		{
+			for (BotSessionRef& bot : snapshot)
+			{
+				const uint64 id = bot->characterId.load();
+				if (id != 0)
+					targets.push_back(id);
+			}
+		}
+
+		if (targets.empty())
+			targets.push_back(targetId);
+
 		const uint64 expectedReplies = static_cast<uint64>(snapshot.size()) * uniqueCount;
 
 		cout << "[GRANT] target character=" << targetId << " sessions=" << snapshot.size() << " unique=" << uniqueCount << " total=" << expectedReplies << endl;
@@ -94,13 +109,13 @@ namespace
 
 		for (BotSessionRef& bot : snapshot)
 		{
-			senders.emplace_back([bot, uniqueCount, targetId]()
+			senders.emplace_back([bot, uniqueCount, &targets]()
 				{
 					for (int32 i = 0; i < uniqueCount; i++)
 					{
 						Protocol::C_GRANT_REWARD pkt;
 						pkt.set_request_id("grant-" + to_string(i));
-						pkt.set_character_id(targetId);
+						pkt.set_character_id(targets[i%targets.size()]);
 						pkt.set_gold(GRANT_GOLD);
 						pkt.set_reason("bench");
 
@@ -135,6 +150,8 @@ namespace
 
 		cout << "\n===== GRANT BENCHMARK =====\n"
 			<< " sessions      " << snapshot.size() << "\n"
+			<< " targets       " << targets.size()
+			<< (targets.size() == 1 ? "  (집중)" : "  (분산)") << "\n"
 			<< " unique ids    " << uniqueCount << "\n"
 			<< " requests sent " << expectedReplies << "\n"
 			<< " replies       " << replies
@@ -340,6 +357,14 @@ int main(int argc, char* argv[])
 		else if (::strcmp(argv[i], "-grant") == 0)
 			grantUnique = ::atoi(argv[i + 1]);
 	}
+
+	bool grantSpread = false;
+	for (int i = 1; i < argc; i++)
+	{
+		if (::strcmp(argv[i], "-spread") == 0)
+			grantSpread = true;
+	}
+
 	if (botCount < 1)
 		botCount = 1;
 
@@ -369,7 +394,7 @@ int main(int argc, char* argv[])
 
 	if (grantUnique > 0)
 	{
-		RunGrantBenchmark(botCount, grantUnique);
+		RunGrantBenchmark(botCount, grantUnique, grantSpread);
 		return 0;
 	}
 
