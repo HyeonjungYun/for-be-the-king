@@ -138,3 +138,18 @@ message S_EQUIP_SYNC
 {
 	repeated SkillInfo skills = 1;
 }
+
+message C_GRANT_REWARD
+{
+	string request_id = 1;
+	uint64 character_id = 2;
+	uint64 gold = 3;
+	string reason = 4;
+}
+
+message S_GRANT_REWARD
+{
+	string request_id = 1;
+	uint32 result = 2;
+	uint64 gold_after = 3;
+}

@@ -35,6 +35,8 @@ enum : uint16
 	PKT_S_SKILL_CANCEL = 1022,
 	PKT_S_SKILL_HIT = 1023,
 	PKT_S_EQUIP_SYNC = 1024,
+	PKT_C_GRANT_REWARD = 1025,
+	PKT_S_GRANT_REWARD = 1026,
 };
 
 // Custom Handlers
@@ -56,6 +58,7 @@ bool Handle_S_SKILL_CAST(PacketSessionRef& session, Protocol::S_SKILL_CAST& pkt)
 bool Handle_S_SKILL_CANCEL(PacketSessionRef& session, Protocol::S_SKILL_CANCEL& pkt);
 bool Handle_S_SKILL_HIT(PacketSessionRef& session, Protocol::S_SKILL_HIT& pkt);
 bool Handle_S_EQUIP_SYNC(PacketSessionRef& session, Protocol::S_EQUIP_SYNC& pkt);
+bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& pkt);
 
 class ClientPacketHandler
 {
@@ -81,6 +84,7 @@ public:
 		GPacketHandler[PKT_S_SKILL_CANCEL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SKILL_CANCEL>(Handle_S_SKILL_CANCEL, session, buffer, len); };
 		GPacketHandler[PKT_S_SKILL_HIT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SKILL_HIT>(Handle_S_SKILL_HIT, session, buffer, len); };
 		GPacketHandler[PKT_S_EQUIP_SYNC] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_EQUIP_SYNC>(Handle_S_EQUIP_SYNC, session, buffer, len); };
+		GPacketHandler[PKT_S_GRANT_REWARD] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_GRANT_REWARD>(Handle_S_GRANT_REWARD, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -96,6 +100,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_CHAT& pkt) { return MakeSendBuffer(pkt, PKT_C_CHAT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_SKILL& pkt) { return MakeSendBuffer(pkt, PKT_C_SKILL); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_SKILL_CANCEL& pkt) { return MakeSendBuffer(pkt, PKT_C_SKILL_CANCEL); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_GRANT_REWARD& pkt) { return MakeSendBuffer(pkt, PKT_C_GRANT_REWARD); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

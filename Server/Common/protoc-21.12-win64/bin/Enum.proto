@@ -1,4 +1,4 @@
-syntax = "proto3";
+﻿syntax = "proto3";
 package Protocol;
 
 enum ObjectType
@@ -74,4 +74,13 @@ enum SlotBindState
 	BIND_UNBOUND = 0;
 	BIND_BOUND = 1;
 	BIND_SHADOWED = 2;
+}
+
+enum GrantResult
+{
+	GRANT_OK = 0;
+	GRANT_ALREADY = 1;
+	GRANT_NO_TARGET = 2;
+	GRANT_DB_ERROR = 3;
+	GRANT_BAD_REQUEST = 4;
 }

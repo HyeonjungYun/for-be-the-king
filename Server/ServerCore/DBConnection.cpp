@@ -77,7 +77,27 @@ string DBConnection::Escape(const string& value) const
 	return escaped;
 }
 
+bool DBConnection::BeginTransaction()
+{
+	return Excute("START TRANSACTION");
+}
+
+bool DBConnection::Commit()
+{
+	return Excute("COMMIT");
+}
+
+bool DBConnection::Rollback()
+{
+	return Excute("ROLLBACK");
+}
+
 const char* DBConnection::GetError() const
 {
 	return (_conn != nullptr) ? ::mysql_error(_conn) : "not connected";
+}
+
+uint32 DBConnection::GetLastErrorNo() const
+{
+	return (_conn != nullptr) ? ::mysql_errno(_conn) : 0;
 }

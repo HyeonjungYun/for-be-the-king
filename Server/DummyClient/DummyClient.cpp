@@ -13,6 +13,14 @@ mutex GBotsLock;
 vector<BotSessionRef> GBots;
 std::atomic<uint64> GSentThisWindow{ 0 };
 
+atomic<uint64> GGrantTargetId = 0;
+atomic<uint64> GGrantOk = 0;
+atomic<uint64> GGrantAlready = 0;
+atomic<uint64> GGrantNoTarget = 0;
+atomic<uint64> GGrantError = 0;
+atomic<uint64> GGrantBad = 0;
+atomic<uint64> GGrantReplies = 0;
+
 namespace
 {
 	constexpr float BOT_MOVE_SPEED = 340.f;
@@ -37,6 +45,115 @@ namespace
 	constexpr uint64 AREA_CAST_HOLD_US = 60'000;
 	constexpr uint64 DASH_CAST_HOLD_US = 100'000;
 }
+
+namespace
+{
+	constexpr uint64 GRANT_GOLD = 100;
+
+	void RunGrantBenchmark(int32 sessionCount, int32 uniqueCount)
+	{
+		cout << "[GRANT] waiting for " << sessionCount << " session(s) to log in" << endl;
+
+		for (int32 spin = 0; spin < 300; spin++)
+		{
+			size_t  ready = 0;
+			{
+				lock_guard<mutex> guard(GBotsLock);
+				for (BotSessionRef& bot : GBots)
+					if (bot->characterId.load() != 0)
+						ready++;
+			}
+
+			if (ready >= static_cast<size_t>(sessionCount))
+				break;
+
+			this_thread::sleep_for(chrono::milliseconds(100));
+		}
+
+		vector<BotSessionRef> snapshot;
+		{
+			lock_guard<mutex> guard(GBotsLock);
+			snapshot = GBots;
+		}
+
+		const uint64 targetId = GGrantTargetId.load();
+
+		if (snapshot.empty() || targetId == 0)
+		{
+			cout << "[GRANT] no session logged in — abort" << endl;
+			return;
+		}
+
+		const uint64 expectedReplies = static_cast<uint64>(snapshot.size()) * uniqueCount;
+
+		cout << "[GRANT] target character=" << targetId << " sessions=" << snapshot.size() << " unique=" << uniqueCount << " total=" << expectedReplies << endl;
+
+		const uint64 startUs = Utils::NowMicroseconds();
+
+		vector<thread> senders;
+
+		for (BotSessionRef& bot : snapshot)
+		{
+			senders.emplace_back([bot, uniqueCount, targetId]()
+				{
+					for (int32 i = 0; i < uniqueCount; i++)
+					{
+						Protocol::C_GRANT_REWARD pkt;
+						pkt.set_request_id("grant-" + to_string(i));
+						pkt.set_character_id(targetId);
+						pkt.set_gold(GRANT_GOLD);
+						pkt.set_reason("bench");
+
+						bot->Send(ClientPacketHandler::MakeSendBuffer(pkt));
+					}
+				});
+		}
+
+		for (thread& t : senders)
+			t.join();
+
+		const uint64 sentUs = Utils::NowMicroseconds();
+		cout << "[GRANT] all sent in " << (sentUs - startUs) / 1000.0 << " ms — waiting for replies" << endl;
+
+		// 응답을 다 받을 때까지 기다림. 30초를 넘기면 포기하고 현재까지를 보고
+		for (int32 spin = 0; spin < 300; spin++)
+		{
+			if (GGrantReplies.load() >= expectedReplies)
+				break;
+
+			this_thread::sleep_for(chrono::milliseconds(100));
+		}
+
+		const uint64 endUs = Utils::NowMicroseconds();
+		const double elapsedSec = (endUs - startUs) / 1000000.0;
+
+		this_thread::sleep_for(chrono::milliseconds(500));
+
+		const uint64 ok = GGrantOk.load();
+		const uint64 already = GGrantAlready.load();
+		const uint64 replies = GGrantReplies.load();
+
+		cout << "\n===== GRANT BENCHMARK =====\n"
+			<< " sessions      " << snapshot.size() << "\n"
+			<< " unique ids    " << uniqueCount << "\n"
+			<< " requests sent " << expectedReplies << "\n"
+			<< " replies       " << replies
+			<< (replies == expectedReplies ? "  (all)" : "  *** MISSING ***") << "\n"
+			<< "\n"
+			<< " GRANT_OK      " << ok
+			<< (ok == static_cast<uint64>(uniqueCount) ? "  PASS" : "  *** FAIL ***") << "\n"
+			<< " GRANT_ALREADY " << already << "\n"
+			<< " NO_TARGET     " << GGrantNoTarget.load() << "\n"
+			<< " BAD_REQUEST   " << GGrantBad.load() << "\n"
+			<< " DB_ERROR      " << GGrantError.load() << "\n"
+			<< "\n"
+			<< " elapsed       " << elapsedSec << " s\n"
+			<< " throughput    " << (replies / elapsedSec) << " req/s\n"
+			<< " expected gold +" << (static_cast<uint64>(uniqueCount) * GRANT_GOLD) << "\n"
+			<< "===========================\n" << endl;
+	}
+}
+
 atomic<uint64> GAttackSentThisWindow = 0;
 atomic<uint64> GSkillSentThisWindow = 0;
 
@@ -214,11 +331,14 @@ static void TickBots(float deltaTime)
 int main(int argc, char* argv[])
 {
 	int32 botCount = 1;
+	int32 grantUnique = 0;
 
 	for (int i = 1; i < argc - 1; i++)
 	{
 		if (::strcmp(argv[i], "-bots") == 0)
 			botCount = ::atoi(argv[i + 1]);
+		else if (::strcmp(argv[i], "-grant") == 0)
+			grantUnique = ::atoi(argv[i + 1]);
 	}
 	if (botCount < 1)
 		botCount = 1;
@@ -245,6 +365,12 @@ int main(int argc, char* argv[])
 				while (true)
 					service->GetIocpCore()->Dispatch();
 			});
+	}
+
+	if (grantUnique > 0)
+	{
+		RunGrantBenchmark(botCount, grantUnique);
+		return 0;
 	}
 
 	uint64 lastUs = Utils::NowMicroseconds();
