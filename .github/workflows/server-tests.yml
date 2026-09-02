@@ -1,0 +1,60 @@
+name: server-tests
+
+# 🔴 SV-4 게이트가 요구하는 "8스레드 × 1000회 × 반복 100회 크래시 0건"을 자동화한다.
+#    스트레스 테스트는 비결정적이라 100번 중 1번만 실패할 수 있고,
+#    그것을 손으로 매번 돌릴 수는 없다.
+#
+#    측정(부하·지급 벤치마크)은 여기서 돌리지 않는다. CI 러너의 성능이
+#    매번 다르므로 처리량 수치를 비교할 수 없다 — 정확성만 본다.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # gtest 는 NuGet 패키지다. Server/packages/ 를 저장소에 두었지만
+      # vcxproj 가 참조하는 경로가 맞는지 복원으로 한 번 확인한다
+      - name: Restore NuGet packages
+        run: nuget restore Server\Server.sln
+        continue-on-error: true
+
+      # 🔴 ServerCoreSTests 는 pch.h 의 #pragma comment 로 ServerCore.lib 를
+      #    링크한다. 프로젝트 참조가 아니라 경로 참조이므로 순서를 명시해야 한다.
+      #    이 순서를 어기면 구버전 lib 가 링크되는 문제가 실제로 있었다.
+      - name: Build ServerCore
+        run: msbuild Server\Server.sln /t:ServerCore /p:Configuration=Debug /p:Platform=x64 /m /v:minimal
+
+      - name: Build ServerCoreSTests
+        run: msbuild Server\Server.sln /t:ServerCoreSTests /p:Configuration=Debug /p:Platform=x64 /m /v:minimal
+
+      # ServerCore.lib 안의 DBConnection 이 libmysql 을 동적 로드한다.
+      # 실제 DB 연결은 필요 없지만 DLL 이 없으면 실행 자체가 안 된다
+      - name: Copy MySQL runtime
+        run: |
+          Copy-Item Server\Libraries\Bin\MySQL\*.dll Server\Binaries\Debug\ -Force
+          Get-ChildItem Server\Binaries\Debug\*.dll | Select-Object Name
+
+      - name: Run unit tests
+        run: Server\Binaries\Debug\ServerCoreSTests.exe --gtest_output=xml:test-results.xml
+
+      # SV-4 — 스트레스만 100회 반복. 데이터 레이스는 한 번에 드러나지 않는다
+      - name: Stress tests × 100
+        run: Server\Binaries\Debug\ServerCoreSTests.exe --gtest_filter=Stress.* --gtest_repeat=100
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
