@@ -385,6 +385,11 @@
 
 #### C7b. 🔴 30초 교전 목표와 장비 스케일 상한(1.67×)의 해석 — 레지스트리 충돌 후보
 
+> ✅ **종결 (2026-09-03)** — 아래는 이력이다. 2026-08-14 옵션 B(armor 포함 재역산)가 확정됐고,
+> `item-equipment-system.md` § D4가 그 위에서 **실효HP ≤ 2.0 · DPS ≤ 3.33을 `K_mitigation` 범위
+> [50, 150] 전체에서 검증**했다(물리·마법 8조합). 상한 검증의 권위는 그 문서 D4이며, 이 문서는
+> `K_mitigation`·`crit_multiplier` 기본값(1.75, `entities.yaml` `crit_multiplier_base`)만 소유한다.
+
 `game-concept.md`의 `DPS배율 = 1.67 × HP배율`(풀장비 vs 풀장비 30초 목표 역산)은 **원문 수식이 `armor`/`magic_resist`를 변수로 포함하지 않는다** — `(500 × HP배율) ÷ (10 × DPS배율) = 30초`는 명목(mitigation 이전) `attack_power`와 `health`만으로 계산됐다.
 
 그런데 `armor`/`magic_resist`는 **별도로 존재하는, 100% 장비 공급 스탯**이다(`base_stats_naked`에 명시). 장비가 HP·공격력과 **별도로** 방어력도 올린다면, 실제 TTK는 `C7`의 `dps_avg`에 `(1−mitigation_pct)` 항이 추가로 곱해져 **30초보다 길어진다** — 명목 배율 관계(1.67×)를 정확히 지켜도 실제 교전은 목표보다 늘어질 수 있다.
@@ -583,7 +588,7 @@ P1 봇 실측에서 **이 전제가 저절로 성립하지 않는다**는 것이
 | `hard_cc_base_duration`(개별) | — | 🔴 미정, "4인 합 5초" 총량만 확정 | 무기당 강력한 CC 1개 | 짧은 CC 여러 무기에 분산 |
 | `base_knockback_dist` / `knockback_speed` | — | 🔴 미정, 속도는 `dash_speed`(450–1360) 범위 준수 권장 | 강한 넉백·군중제어감 | 약한 넉백 |
 | `attack_range`(맨몸 기본) | — | 🔴 미정 | 원거리 유리 | 근접 강제, 밀집전 유도 |
-| `percent_as_bonus_i` 개별 상한 | — | 🔴 미정 | 공속 아이템 가치↑, 폭주 위험 | 공속 아이템 무가치화 |
+| `percent_as_bonus_i` 개별 상한 | **0.35** | ✅ 확정 2026-09-03 — `item-equipment-system.md` D3 경병기(전설·16레벨 +0.35, 공속 1.35). 합계 상한은 `as_max_ratio` 2.5 | 공속 아이템 가치↑, 폭주 위험 | 공속 아이템 무가치화 |
 
 > **상호작용 주의**: `K_mitigation` × `base_damage`가 실질 TTK(공식 C7)를 결정한다. `crit_chance`(장비) × `crit_multiplier`가 폭딜 분산을 결정한다. `resistance_max_reduction`(0.4, registry 확정 — 이 문서는 변경 권한 없음) × 하드 CC 개별 지속시간이 체인CC 체감을 결정한다.
 >
@@ -701,10 +706,10 @@ P1 봇 실측에서 **이 전제가 저절로 성립하지 않는다**는 것이
 | ~~하드 CC 중첩 모델~~ | ✅ **최댓값 방식 확정 2026-08-14** — `ccEndUs = max(ccEndUs, now+dur)`. 합집합과 결과 동일, 상태는 uint64 하나. "합 5초"는 데이터 제약(개별 ≤1.25s)으로 | — |
 | ~~소프트 CC "공격불가" 범위~~ | ✅ **스킬만 차단 확정 2026-08-14** — 평타 가능. 명칭을 **침묵(Silence)** 으로 정정 | — |
 | `K_mitigation` 최종값 | economy-designer + PT | 아이템 방어구 수치 설계 시 | 잠정 계승값 100 |
-| `crit_chance`/`crit_multiplier` 최종 분포(등급별) | economy-designer | 아이템 설계 시 | 미정 |
+| `crit_chance`/`crit_multiplier` 최종 분포(등급별) | economy-designer | 아이템 설계 시 | ✅ **아키타입 값 확정 2026-09-03** — `item-equipment-system.md` D3: 경병기 `crit_chance` +0.25 · 정찰형 투구 +0.15 · 정찰형 `crit_multiplier` **보너스** +0.75(기본 1.75 위에 가산, 최종 2.50) · 중병기·방비형 0. 등급별 분포는 `grade_multiplier` 스케일 |
+| ~~`percent_as_bonus_i` 개별 상한~~ | — | — | ✅ **0.35 확정 2026-09-03** (Tuning Knobs 참조) |
 | `hard_cc_base_duration`(개별 스킬) | systems-designer | P1.5 스킬 콘텐츠 확정 시 | registry `pending:`에 이미 등재. "4인 합 5초" 총량만 확정 |
 | `base_knockback_dist`/`knockback_speed`(개별 스킬) | systems-designer | P1.5 스킬 콘텐츠 확정 시 | 신규 pending 후보(§ 최종 응답) |
-| `percent_as_bonus_i` 개별 상한 | economy-designer | 아이템 설계 시 | 미정 — 폭주 방지 캡 필요 여부 |
 | 회복감소(`HealReduction`) 메커니즘 및 힐 primitive 소유 | game-designer | 스킬 시스템 GDD 시 | 아카이브 Open Q "힐 primitive 소유 미정" 그대로 승계 |
 | 평타 즉시히트(투사체 없음) 유지 여부 | game-designer + PT | 전투 프로토타입("30초 교전 손맛" 결정 시) | 아카이브 계승, 재확인 안 됨 |
 | `target_acquisition_leniency` 재검증 | game-designer | P1 프로토타입 | `movement-camera.md` Open Questions에 이미 등재(카메라 확정 후 재검증 필요) — 중복 소유 아님, 참조만 |
