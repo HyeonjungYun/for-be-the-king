@@ -334,8 +334,13 @@ constants:
     unit: slots
     derived_from: [equipment_slots]
     source: design/gdd/game-concept.md
-    referenced_by: []
-    note: 부위 5개 × 5 = 25칸. 예비 세트 약 5벌이 의도된 천장.
+    referenced_by:
+      - design/gdd/item-equipment-system.md     # C6 출정 선택 — MVP 최소판 `Vaulted` 상한
+    note: >
+      부위 5개 × 5 = 25칸. 예비 세트 약 5벌이 의도된 천장.
+      ✅ **2026-09-03**: 창고 완전판은 T3 지만, `item-equipment-system.md` C6 **출정 선택**이 같은 25 를
+      MVP 의 베이스캠프 보관 상한으로 쓴다(관리 UI·골드·경제 없음). 상한 없이 두면 P5 와
+      인구 순환 브레이크가 MVP 에서 깨진다.
 
   - name: warehouse_capacity_formula
     type: constant
@@ -459,8 +464,9 @@ constants:
       "아무것도 안 가진 상태"의 정의다.
       파생 제약 3건 (모두 **평타만** 기준. 스킬 딜이 얹히면 실제 시간은 더 짧다) —
       ① **맨몸 vs 맨몸 = 50초**(500÷10). 느리지만 결판은 난다 — 매복·마무리가 성립한다.
-      ② **장비 스케일 상한**: 30초 교전(풀장비 vs 풀장비) 역산 → **DPS배율 = 1.67 × HP배율**.
-         HP 2배면 DPS 3.3배, HP 3배면 DPS 5배. 이 비율을 넘으면 교전이 30초보다 짧아진다.
+      ② **장비 스케일 상한**: 30초 교전(풀장비 vs 풀장비) 역산. ⚠️ **2026-09-03 정정** — 이전 서술
+         `DPS배율 = 1.67 × HP배율`은 armor 를 빠뜨린 폐기식이다(`full_gear_dps_cap` 참조). 현행은
+         **실효HP 배율 ≤ 2.0 · DPS 배율 ≤ 3.33 을 각각 독립 검증**한다(`item-equipment-system.md` § D4).
       ③ **최하급 몬스터 HP는 100~200** 이어야 맨몸이 10~20초에 잡고 재기할 수 있다.
       ⚠️ HP÷공격력 = **50**. LoL 라이즈 1렙(600÷55 ≈ 11)보다 4.5배 탱키한 비율이다.
       **의도된 비대칭** — 아이템 수치 설계 시 이 점을 전제할 것.
@@ -501,14 +507,19 @@ constants:
     status: active
     value: 3.33
     unit: 배율
-    source: design/gdd/game-concept.md          # § 장비 스케일 상한
+    source: design/gdd/game-concept.md          # § 확정 상한 (2026-08-14)
     referenced_by:
       - design/gdd/game-concept.md
       - design/gdd/combat-system.md
+      - design/gdd/item-equipment-system.md
     note: >
-      **풀장비 DPS 배율 상한.** `1.67 × full_gear_effective_hp_cap(2.0)` 에서 유도.
-      맨몸 DPS 10 → 풀장비 최대 **33.3**.
+      **풀장비 DPS 배율 상한 = 3.33 (고정값).** 맨몸 DPS 10 → 풀장비 최대 **33.3**.
       🔴 **이 값을 넘기면 교전이 30초보다 짧아진다.** 아이템에 공격력·공속을 붙일 때마다 대조할 것.
+
+      ⚠️ **`1.67 × HP배율` 유도식은 폐기됐다** (`game-concept.md` 2026-08-14).
+      그 식은 armor 를 빠뜨려 실효HP 를 과소평가했다. 이제 3.33 은 유도값이 아니라
+      **독립 확정값**이며, HP 상한과 각각 따로 검증한다
+      (`item-equipment-system.md` § D4 가 두 축을 분리 검증하는 이유).
 
   - name: silence_semantics
     type: constant
@@ -550,6 +561,38 @@ constants:
       🔴 **동시에 던지면 겹쳐서 낭비된다(4인 동시 → 약 1.55초).** 이것은 버그가 아니라 의도다 —
       **실력 표현 축 2순위(쿨다운 시퀀싱)** 가 여기서 작동한다. 순서를 맞출 줄 아는 팀만 5초를 얻는다.
 
+  - name: crit_multiplier_base
+    type: constant
+    status: active
+    value: 1.75
+    range: [1.0, 3.0]
+    source: design/gdd/combat-system.md         # C2 — "기본 1.75, 아카이브 계승"
+    referenced_by:
+      - design/gdd/item-equipment-system.md     # § D3 정찰형 보너스가 이 위에 가산
+      - design/gdd/combat-system.md
+    note: >
+      **맨몸 치명타 배율.** `base_stats_naked` 에 항목이 없어 2026-09-03 등록.
+      🔴 **아이템은 이 값을 대체하지 않고 보너스를 가산한다** — `crit_multiplier = 1.75 + Σ보너스`,
+      [1.0, 3.0] 클램프. 정찰형 투구의 "2.50"은 최종값(1.75 + 0.75)이며, 2.50 을 아이템 선형 공식
+      (`base_stat × GM + per_level × level`)에 넣으면 일반·0레벨에서 0.735 가 되어 치명타가
+      데미지를 깎는다 (/design-review 2026-09-03, creative-director).
+
+  - name: magic_weapon_offset
+    type: constant
+    status: active
+    value: 10
+    derived_from: [base_stats_naked]           # = base_stats_naked.attack_power
+    source: design/gdd/item-equipment-system.md # § C3-b
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+      - design/gdd/skill-system.md              # S3·S4 — magic_power 스케일 가정
+    note: >
+      **마법 무기 착용 시 `magic_power` 에 고정으로 더해지는 값.** 등급·레벨로 스케일하지 않는다.
+      맨몸 `attack_power` 10 을 그대로 옮긴 상수 — 무기가 맨주먹을 대체한다.
+      물리·마법 무기의 `base_stat` 이 같으므로 **공격 스탯 총합이 모든 등급·레벨에서 동일**해진다
+      (AC-IE-04). 🔴 초안의 "델타 동일"은 마법 경병기 DPS 배율을 0.8~1.1 로 무너뜨렸다
+      (/design-review 2026-09-03, systems-designer). 맨몸 공격력이 바뀌면 이 값도 같이 바뀐다.
+
   - name: attack_range_naked
     type: constant
     status: active
@@ -558,6 +601,7 @@ constants:
     source: design/gdd/combat-system.md         # § Detailed Rules 1 — 평타
     referenced_by:
       - design/gdd/combat-system.md
+      - design/gdd/item-equipment-system.md     # C3-b — 무기 사거리의 하한
     note: >
       **맨몸(무기 0개) 기본 공격 사거리.** 2026-08-14 확정.
       캐릭터 캡슐 반경 42cm 의 3.5배 — 서로 붙어야 닿는 근접 거리.
@@ -593,9 +637,13 @@ constants:
     source: design/gdd/game-concept.md            # § CC 체계 (2026-08-11 확정)
     referenced_by:
       - design/gdd/game-concept.md
+      - design/gdd/item-equipment-system.md       # § Edge Cases 합산 규칙 · AC-IE-36
     note: >
       **저항력** 스탯의 상한. 장비로만 오르며 기본값 0.
       🔴 이름 주의 — "저항력"은 **CC 전용**이다. 데미지 완화는 `armor` · `magic_resist` 소관으로 별개 스탯.
+      ⚠️ **2026-09-03**: 현재 아이템 로스터(`item-equipment-system.md` D3)의 공급원은 방비형 투구 +0.50 ·
+      지구형 신발 +0.15 뿐이라 **실제 도달 최대는 0.65**(CC 경감 26%)다. 1.0(경감 40%)은 세 번째
+      공급원이 생기기 전까지 도달하지 않는다 — 의도된 여유.
 
   - name: resistance_max_reduction
     type: constant
@@ -821,11 +869,160 @@ items:
     source: design/art/art-bible.md               # Section 4 ②
     referenced_by:
       - design/gdd/game-concept.md
+      - design/gdd/item-equipment-system.md       # § Visual — 고유 아이템 개별 아트 위에도 그대로 얹는다
     note: >
       🔴 **색만으로는 구분 불가** (색맹 ΔE 6.5, WARN 구간) → **형태 이중부호화 필수.**
       색만 쓰는 UI · 문서 작성 금지.
       **공식 등급명은 일반 · 희귀 · 영웅 · 전설 뿐이다.** "매우 희귀" 같은 서술적 표현을 쓰면
       드랍 테이블에서 등급 오해가 생긴다 (2026-08-11 game-concept.md § 공간을 공식 명칭으로 정렬함).
+      ⚠️ **2026-09-03 사용자 결정**: 영웅·전설 고유 아이템은 **전부 개별 아트**다. art-bible § 4 ②의
+      "전설 히어로 아이템 몇 개"라는 전제가 깨지므로 § 8 예산 재검증 필요 (pending `unique_item_art_budget`).
+
+  - name: item_grade_model
+    type: item
+    status: active
+    value:
+      generic:  { grade_mode: rolled, grades: [common, rare] }        # 범용 종류 — 드랍 시 추첨
+      unique:   { grade_mode: fixed,  grades: [epic, legendary] }     # 고유 종류 — 종류에 고정, 개별 서사
+      unique_base_stat_rule: "unique.base_stat <= generic.base_stat (같은 부위·아키타입, 스탯별)"
+      unique_skill_roll: "equipment-skill-binding B3 추첨 그대로"
+      unique_concurrency_limit: none                                  # worldbuilding § 4.3 "사본"
+      story_artifacts_excluded: ["호모라의 검", "니라의 익힘책", "선대의 책"]   # 드랍 파이프라인 밖
+    source: design/gdd/item-equipment-system.md   # § C5 (2026-09-03 사용자 결정 D1)
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+      - design/gdd/equipment-skill-binding.md     # B3 — 고유 종류도 추첨
+    note: >
+      **등급의 두 층.** 범용 종류는 영웅·전설로 절대 떨어지지 않고, 영웅·전설은 각각 이름 있는
+      고유 종류다. 서사는 툴팁이 아니라 던전 기록물에 있다(D2) — 종류가 `lore_record_ids[]` 로 내부 참조.
+      🔴 **고유 `base_stat` ≤ 범용 `base_stat`** 규칙이 D4 상한 검증을 고유 50~60종에 자동 전이시킨다.
+      명명·공개 가드레일(실명 금지 · 층별 허용 범위 · 마법 유물 10년 이내)은 GDD § C5-a.
+
+  - name: grade_multiplier
+    type: formula
+    status: active
+    value:
+      common:    1.0
+      rare:      1.3
+      epic:      1.7
+      legendary: 2.2
+    source: design/gdd/item-equipment-system.md   # § D1
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+    note: >
+      **아이템 등급이 `base_stat` 에 곱해지는 계수.** 드랍 시 확정되고 영구 불변이다.
+
+      🔴 **이 표의 간격이 "운 대 노력"의 다이얼이다.** 풀장비 상한(HP 2.0 / DPS 3.33)이
+      꼭대기를 고정하므로, 배율을 키우면 최강 장비가 세지는 게 아니라 **최약 장비가
+      상대적으로 약해진다.** 가파르게 하면 파밍 운이, 완만하게 하면 강화 노력이 지배한다.
+
+      현행 값이 만드는 성질: **만렙 일반템 = 갓 나온 전설템** (정확히 동률).
+
+      ✅ **2026-09-03 등급 모델 두 층** (`item_grade_model` 참조): 1.0/1.3 은 범용 종류가 드랍 시 굴리고,
+      **1.7/2.2 는 고유 종류(영웅·전설)로만 도달**한다. "만렙 일반 = 전설 0" 동률은 이제 공식 성질이
+      아니라 데이터 제약(고유 `base_stat` ≤ 범용 `base_stat`)에서 오며, 실제 비교 기준점은
+      **만렙 희귀(×2.5) 대 전설 0(×2.2)** 다.
+      🔴 **`GM_전설` 을 안전범위(1.6~2.6) 안에서 바꿔도 `base_stat` 을 재유도하고 D4 를 다시 돌려야 한다.**
+      2.6 에서 재유도 없이는 DPS 상한을 넘는다 (/design-review 2026-09-03, systems-designer).
+
+  - name: item_level_max
+    type: constant
+    status: active
+    value: 16
+    source: design/gdd/item-equipment-system.md   # § D2
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+    note: >
+      **아이템 강화 최대 레벨.** 안전 범위 10~25.
+
+      🔴 **이 값을 바꾸면 `per_level_rate` 가 자동으로 따라 움직여야 한다** —
+      `per_level_rate = base_stat × (GM_전설 − GM_일반) / item_level_max`.
+      따로 조절하면 "만렙 일반템 = 전설 0레벨" 동률이 깨진다.
+
+  - name: item_level_reset_on_forced_transfer
+    type: constant
+    status: active
+    value: 0
+    source: design/gdd/item-equipment-system.md   # § C4
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+      - design/narrative/worldbuilding.md
+    note: >
+      **강제 소유권 이전 시 아이템 레벨이 떨어지는 값 = 0 (전량 초기화).**
+      새 주인도 이 값에서 시작한다. 등급은 초기화되지 않는다.
+
+      **초기화되는 경우**: PvP·몬스터 사망으로 가방 드랍 → 타인이 루팅
+      **초기화되지 않는 경우**: 착용 해제 · 인벤 보관 · 창고 보관 · 탈출 성공
+
+      세계관 근거: 기물은 주인의 마력이 스며든 정도를 레벨로 갖는다.
+      주인을 잃는 순간 마력을 놓는다 (`worldbuilding.md` § 11.2).
+      **타이머 만료 사망은 해당 없다** — 전량 소멸이라 드랍 자체가 없다.
+
+  - name: enhancement_material_cost
+    type: formula
+    status: active
+    value: "ceil(11 × 1.20^L)"
+    tier: T3                                       # 강화는 Tier 3 — roadmap § P2 "강화 제외"
+    source: design/gdd/item-equipment-system.md   # § D5
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+    note: >
+      **강화 비용 (마력정 개수).** `L` 은 **현재 레벨**이며 `L → L+1` 강화에 드는 값이다.
+      🔴 지수는 `L` 이지 `L+1` 이 아니다. **정수화는 올림(ceil)** — 2026-09-03 확정. 마력정에 파편이 없다.
+
+      변수: `base_cost` = 11 (🔴 잠정, 5~20) · `growth_rate` = 1.20 (🔴 잠정, 1.15~1.30)
+      총비용 0→16 = Σ ceil(11 × 1.20^L) = **970개** (연속식 962 + 올림분 8). 마지막 4레벨이 전체의 54.5%.
+      ⚠️ 안전범위 양끝에서 총비용이 279~4,369 개로 진동하고 상단은 스택 99 × 창고 25 = 2,475 를 넘는다.
+
+      🔴 **페이싱은 사망률의 함수다** (/design-review 2026-09-03, economy-designer). 초안의 "~31런"은
+      "31런 연속 무사망"이며 런당 사망률 10% 면 기대 281런. 창고가 레벨을 보존하므로 플레이어가 이
+      함수를 회피할 수 있다(좋은 것은 강화만 하고 안 들고 나간다) — 구조 문제. **창고·티어 게이팅과
+      동시에 설계**하며, 이 잠정값을 목표로 Q4 를 튜닝하지 않는다.
+
+      **등급은 비용에 영향이 없다.** 레벨당 스탯 성장이 등급 무관이므로 비용도 무관해야
+      대칭이 맞는다 — 아니면 등급 운이 진행 속도까지 지배한다.
+
+      **실패·파괴 확률 없음.** 죽으면 이미 전량 초기화되므로 두 번째 손실 장치는 중복이고,
+      이 게임엔 캐릭터 레벨이라는 완충재가 없다.
+
+  - name: dungeon_inventory_slots
+    type: constant
+    status: active
+    value: 25
+    source: design/gdd/item-equipment-system.md   # § Core Rules
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+    note: >
+      **던전 반입 인벤토리 용량.** 창고(25슬롯)와 같은 값이며 **부위 무관**이다.
+      사망 시 이 25슬롯 + 착용 5부위 = 최대 30개가 가방으로 전이한다.
+
+      ⚠️ **`game-concept.md` 의 "무게·소지한도 시스템은 없다"는 이동속도 페널티 같은
+      무게 계산이 없다는 뜻으로 좁혀 해석한다.** 25슬롯은 무게가 아니라 개수 상한이다.
+
+  - name: enhancement_material
+    type: item
+    status: active
+    tier: T3                                       # 2026-09-03 사용자 결정 — MVP 에서 드랍하지 않는다
+    value:
+      name_placeholder: 마력정
+      stack_limit: 99
+      occupies_slot: true
+      lost_on_death: true
+      mvp_drop: false
+    source: design/gdd/item-equipment-system.md   # § D5 · D6
+    referenced_by:
+      - design/gdd/item-equipment-system.md
+    note: >
+      **강화 재화. 인벤토리 슬롯을 차지하는 소모성 아이템**이며 일반 아이템과 같은
+      전손 규칙을 따른다 (골드처럼 30% 보호되지 않는다).
+
+      아이템 형태를 택한 이유: 골드의 유일한 파세트(`guild_buyback_rules`)가 미설계라
+      골드 기반 강화는 미결 항목에 묶인다. 드랍 → 강화의 자기완결 루프가 필요했다.
+      또 "골드는 P5의 유일한 예외"라는 문장을 그대로 살린다.
+
+      🔴 **스택이 필수다.** 962개(1아이템 만렙분)가 25슬롯에 들어가려면 스택이 있어야 한다.
+      스택 상한 99는 잠정값 (50~999).
+      🔴 이름 "마력정"은 자리표시자다 — 서사 확정 필요.
 
 # ──────────────────────────────────────────────────────────────
 # 미정 — 확정되면 위로 옮긴다
@@ -872,7 +1069,25 @@ pending:
 
   - name: floor_item_pool
     owner: economy-designer
-    note: Tier 3.
+    urgency: 🔴 MVP subset 은 P2(09-22) 전
+    note: >
+      완전판(4층·티어 연동)은 Tier 3. 그러나 **P2 상자·드랍 구현에 1층 subset(일반/희귀 비율 · 상자 vs
+      개활지 · 부위 분포)이 필요**하다 — 둘을 분리 등록할 것 (/design-review 2026-09-03, economy-designer).
+      범용 종류는 {일반, 희귀} 만 추첨한다 (`item_grade_model`). 마력정은 MVP 드랍 없음.
+
+  - name: weapon_attack_range
+    owner: game-designer
+    note: >
+      `item-equipment-system.md` C3-b 가 **175cm 🔴 잠정**(중·경 공통, 등급·레벨 무관)으로 두었다.
+      중/경 사거리 차등(다섯 번째 트레이드오프 축 후보)과 마법 무기 원거리 여부는 T2 — GDD Q11.
+      확정되면 constants 로 승격.
+
+  - name: unique_item_art_budget
+    owner: art-director
+    urgency: 🔴 로스터 집필 전
+    note: >
+      2026-09-03 사용자 결정 — 영웅·전설 고유 아이템 50~60종 **전부 개별 아트**. art-bible § 4 ②
+      ("전설 히어로 아이템 몇 개") 갱신과 § 8 텍스처·VRAM 예산, 마켓+AI 생성 전략에서의 제작 계획 검증 필요.
 
 
 

@@ -48,7 +48,7 @@ DungeonKing 인덱스(29개)를 그대로 잇지 않는다. **전제가 세 개 
 | 3 | 이동 & 카메라 시스템 | Core | Tier 1 | **Designed** | `design/gdd/movement-camera.md` | 입력, 네트워킹 |
 | 4 | 계정 & 로그인 (inferred) | Core | Tier 1 | Not Started | — | 네트워킹 |
 | 5 | 세이브 & 영속성 (inferred) | Persistence | Tier 1 | Not Started | — | 계정 & 로그인 |
-| 6 | 아이템 & 장비 시스템 | Economy | Tier 1 | Not Started | — | 세이브 & 영속성 |
+| 6 | 아이템 & 장비 시스템 | Economy | Tier 1 | **Designed** | `design/gdd/item-equipment-system.md` | 세이브 & 영속성 |
 | 7 | 전투 시스템 | Gameplay | Tier 1 | **Designed** | `design/gdd/combat-system.md` | 이동 & 카메라, 네트워킹 |
 | 8 | 스킬 시스템 | Gameplay | Tier 1 | **Designed** | `design/gdd/skill-system.md` | 전투, 입력 |
 | 9 | **장비-스킬 결속 시스템** ⭐ | Gameplay | Tier 1 | **Designed** | `design/gdd/equipment-skill-binding.md` | 스킬, 아이템 & 장비 |
@@ -162,7 +162,7 @@ DungeonKing 인덱스(29개)를 그대로 잇지 않는다. **전제가 세 개 
 | 3 | ~~이동 & 카메라~~ ✅ | Tier 1 | Core | — | **완료 2026-08-11** |
 | 4 | 계정 & 로그인 | Tier 1 | Core | network-programmer | S |
 | 5 | 세이브 & 영속성 | Tier 1 | Core | systems-designer, technical-director | M |
-| 6 | 아이템 & 장비 | Tier 1 | Feature | economy-designer, systems-designer | M |
+| 6 | ~~아이템 & 장비~~ ✅ | Tier 1 | Feature | — | **완료 2026-09-03** |
 | 7 | 전투 시스템 | Tier 1 | Feature | systems-designer, game-designer | L |
 | 8 | 스킬 시스템 | Tier 1 | Feature | systems-designer | M |
 | 9 | **장비-스킬 결속** ⭐ | Tier 1 | Feature | game-designer, systems-designer | L |
