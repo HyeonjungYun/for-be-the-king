@@ -12,6 +12,7 @@
 #include "ServerStats.h"
 #include "SkillTable.h"
 #include "DBJobQueue.h"
+#include "ObjectUtils.h"
 
 enum
 {
@@ -64,6 +65,24 @@ int main()
 	{
 		cout << "[DB] pool connect failed" << endl;
 		return -1;
+	}
+
+	{
+		DBConnection* conn = GDBPool.Pop();
+		if (conn == nullptr)
+		{
+			cout << "[BOOT] no DB connection for recovery" << endl;
+			return -1;
+		}
+
+		const bool ok = RestoreIdCounters(conn) && PurgeExpiredBags(conn);
+		GDBPool.Push(conn);
+
+		if (ok == false)
+		{
+			cout << "[BOOT] recovery failed - refusing to start" << endl;
+			return -1;
+		}
 	}
 
 	if (GDBQueue.Init(DB_THREAD_COUNT, &GDBPool) == false)

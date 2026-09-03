@@ -22,45 +22,56 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[10];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[13];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
 static constexpr ::_pb::Message* const* file_default_instances = nullptr;
 
 const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
-  "\n\nEnum.proto\022\010Protocol*m\n\nObjectType\022\024\n\020"
-  "OBJECT_TYPE_NONE\020\000\022\030\n\024OBJECT_TYPE_CREATU"
-  "RE\020\001\022\032\n\026OBJECT_TYPE_PROJECTILE\020\002\022\023\n\017OBJE"
-  "CT_TYPE_ENV\020\003*j\n\014CreatureType\022\024\n\020CREATE_"
-  "TYPE_NONE\020\000\022\026\n\022CREATE_TYPE_PLAYER\020\001\022\027\n\023C"
-  "REATE_TYPE_MONSTER\020\002\022\023\n\017CREATE_TYPE_NPC\020"
-  "\003*h\n\nPlayerType\022\024\n\020PLAYER_TYPE_NONE\020\000\022\026\n"
-  "\022PLAYER_TYPE_KNIGHT\020\001\022\024\n\020PLAYER_TYPE_MAG"
-  "E\020\002\022\026\n\022PLAYER_TYPE_ARCHER\020\003*_\n\tMoveState"
-  "\022\023\n\017MOVE_STATE_NONE\020\000\022\023\n\017MOVE_STATE_IDLE"
-  "\020\001\022\022\n\016MOVE_STATE_RUN\020\002\022\024\n\020MOVE_STATE_SKI"
-  "LL\020\003*=\n\nDamageType\022\030\n\024DAMAGE_TYPE_PHYSIC"
-  "AL\020\000\022\025\n\021DAMAGE_TYPE_MAGIC\020\001*\254\001\n\006CcType\022\020"
-  "\n\014CC_TYPE_NONE\020\000\022\020\n\014CC_TYPE_STUN\020\001\022\020\n\014CC"
-  "_TYPE_ROOT\020\002\022\025\n\021CC_TYPE_KNOCKBACK\020\004\022\022\n\016C"
-  "C_TYPE_LAUNCH\020\010\022\020\n\014CC_TYPE_SLOW\020\020\022\032\n\026CC_"
-  "TYPE_HEAL_REDUCTION\020 \022\023\n\017CC_TYPE_SILENCE"
-  "\020@*S\n\nDeathCause\022\024\n\020DEATH_CAUSE_NONE\020\000\022\026"
-  "\n\022DEATH_CAUSE_PLAYER\020\001\022\027\n\023DEATH_CAUSE_MO"
-  "NSTER\020\002*\221\001\n\tEquipSlot\022\r\n\tSLOT_NONE\020\000\022\027\n\023"
-  "SLOT_WEAPON_PRIMARY\020\001\022\031\n\025SLOT_WEAPON_SEC"
-  "ONDARY\020\002\022\017\n\013SLOT_HELMET\020\003\022\016\n\nSLOT_ARMOR\020"
-  "\004\022\016\n\nSLOT_BOOTS\020\005\022\020\n\014SLOT_TRINKET\020\006*D\n\rS"
-  "lotBindState\022\020\n\014BIND_UNBOUND\020\000\022\016\n\nBIND_B"
-  "OUND\020\001\022\021\n\rBIND_SHADOWED\020\002*n\n\013GrantResult"
-  "\022\014\n\010GRANT_OK\020\000\022\021\n\rGRANT_ALREADY\020\001\022\023\n\017GRA"
-  "NT_NO_TARGET\020\002\022\022\n\016GRANT_DB_ERROR\020\003\022\025\n\021GR"
-  "ANT_BAD_REQUEST\020\004b\006proto3"
+  "\n\nEnum.proto\022\010Protocol*\202\001\n\nObjectType\022\024\n"
+  "\020OBJECT_TYPE_NONE\020\000\022\030\n\024OBJECT_TYPE_CREAT"
+  "URE\020\001\022\032\n\026OBJECT_TYPE_PROJECTILE\020\002\022\023\n\017OBJ"
+  "ECT_TYPE_ENV\020\003\022\023\n\017OBJECT_TYPE_BAG\020\004*j\n\014C"
+  "reatureType\022\024\n\020CREATE_TYPE_NONE\020\000\022\026\n\022CRE"
+  "ATE_TYPE_PLAYER\020\001\022\027\n\023CREATE_TYPE_MONSTER"
+  "\020\002\022\023\n\017CREATE_TYPE_NPC\020\003*h\n\nPlayerType\022\024\n"
+  "\020PLAYER_TYPE_NONE\020\000\022\026\n\022PLAYER_TYPE_KNIGH"
+  "T\020\001\022\024\n\020PLAYER_TYPE_MAGE\020\002\022\026\n\022PLAYER_TYPE"
+  "_ARCHER\020\003*_\n\tMoveState\022\023\n\017MOVE_STATE_NON"
+  "E\020\000\022\023\n\017MOVE_STATE_IDLE\020\001\022\022\n\016MOVE_STATE_R"
+  "UN\020\002\022\024\n\020MOVE_STATE_SKILL\020\003*=\n\nDamageType"
+  "\022\030\n\024DAMAGE_TYPE_PHYSICAL\020\000\022\025\n\021DAMAGE_TYP"
+  "E_MAGIC\020\001*\254\001\n\006CcType\022\020\n\014CC_TYPE_NONE\020\000\022\020"
+  "\n\014CC_TYPE_STUN\020\001\022\020\n\014CC_TYPE_ROOT\020\002\022\025\n\021CC"
+  "_TYPE_KNOCKBACK\020\004\022\022\n\016CC_TYPE_LAUNCH\020\010\022\020\n"
+  "\014CC_TYPE_SLOW\020\020\022\032\n\026CC_TYPE_HEAL_REDUCTIO"
+  "N\020 \022\023\n\017CC_TYPE_SILENCE\020@*S\n\nDeathCause\022\024"
+  "\n\020DEATH_CAUSE_NONE\020\000\022\026\n\022DEATH_CAUSE_PLAY"
+  "ER\020\001\022\027\n\023DEATH_CAUSE_MONSTER\020\002*\221\001\n\tEquipS"
+  "lot\022\r\n\tSLOT_NONE\020\000\022\027\n\023SLOT_WEAPON_PRIMAR"
+  "Y\020\001\022\031\n\025SLOT_WEAPON_SECONDARY\020\002\022\017\n\013SLOT_H"
+  "ELMET\020\003\022\016\n\nSLOT_ARMOR\020\004\022\016\n\nSLOT_BOOTS\020\005\022"
+  "\020\n\014SLOT_TRINKET\020\006*D\n\rSlotBindState\022\020\n\014BI"
+  "ND_UNBOUND\020\000\022\016\n\nBIND_BOUND\020\001\022\021\n\rBIND_SHA"
+  "DOWED\020\002*n\n\013GrantResult\022\014\n\010GRANT_OK\020\000\022\021\n\r"
+  "GRANT_ALREADY\020\001\022\023\n\017GRANT_NO_TARGET\020\002\022\022\n\016"
+  "GRANT_DB_ERROR\020\003\022\025\n\021GRANT_BAD_REQUEST\020\004*"
+  "{\n\tItemGrade\022\023\n\017ITEM_GRADE_NONE\020\000\022\025\n\021ITE"
+  "M_GRADE_COMMON\020\001\022\023\n\017ITEM_GRADE_RARE\020\002\022\023\n"
+  "\017ITEM_GRADE_EPIC\020\003\022\030\n\024ITEM_GRADE_LEGENDA"
+  "RY\020\004*\200\001\n\tItemState\022\023\n\017ITEM_STATE_NONE\020\000\022"
+  "\026\n\022ITEM_STATE_CARRIED\020\001\022\027\n\023ITEM_STATE_EQ"
+  "UIPPED\020\002\022\026\n\022ITEM_STATE_VAULTED\020\003\022\025\n\021ITEM"
+  "_STATE_IN_BAG\020\004*\231\001\n\nItemResult\022\013\n\007ITEM_O"
+  "K\020\000\022\020\n\014ITEM_ALREADY\020\001\022\022\n\016ITEM_NOT_FOUND\020"
+  "\002\022\026\n\022ITEM_INVALID_STATE\020\003\022\027\n\023ITEM_INVENT"
+  "ORY_FULL\020\004\022\024\n\020ITEM_BAD_REQUEST\020\005\022\021\n\rITEM"
+  "_DB_ERROR\020\006b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 1105, descriptor_table_protodef_Enum_2eproto,
+    false, false, 1539, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -84,6 +95,7 @@ bool ObjectType_IsValid(int value) {
     case 1:
     case 2:
     case 3:
+    case 4:
       return true;
     default:
       return false;
@@ -232,6 +244,59 @@ bool GrantResult_IsValid(int value) {
     case 2:
     case 3:
     case 4:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemGrade_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[10];
+}
+bool ItemGrade_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemState_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[11];
+}
+bool ItemState_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[12];
+}
+bool ItemResult_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
       return true;
     default:
       return false;

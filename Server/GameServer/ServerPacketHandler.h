@@ -37,6 +37,14 @@ enum : uint16
 	PKT_S_EQUIP_SYNC = 1024,
 	PKT_C_GRANT_REWARD = 1025,
 	PKT_S_GRANT_REWARD = 1026,
+	PKT_C_EQUIP = 1027,
+	PKT_C_UNEQUIP = 1028,
+	PKT_C_LOOT = 1029,
+	PKT_C_DROP = 1030,
+	PKT_S_ITEM_RESULT = 1031,
+	PKT_C_STASH = 1032,
+	PKT_S_INVENTORY_SYNC = 1033,
+	PKT_S_BAG_CONTENTS = 1034,
 };
 
 // Custom Handlers
@@ -50,6 +58,11 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt);
 bool Handle_C_SKILL(PacketSessionRef& session, Protocol::C_SKILL& pkt);
 bool Handle_C_SKILL_CANCEL(PacketSessionRef& session, Protocol::C_SKILL_CANCEL& pkt);
 bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& pkt);
+bool Handle_C_EQUIP(PacketSessionRef& session, Protocol::C_EQUIP& pkt);
+bool Handle_C_UNEQUIP(PacketSessionRef& session, Protocol::C_UNEQUIP& pkt);
+bool Handle_C_LOOT(PacketSessionRef& session, Protocol::C_LOOT& pkt);
+bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt);
+bool Handle_C_STASH(PacketSessionRef& session, Protocol::C_STASH& pkt);
 
 class ServerPacketHandler
 {
@@ -67,6 +80,11 @@ public:
 		GPacketHandler[PKT_C_SKILL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_SKILL>(Handle_C_SKILL, session, buffer, len); };
 		GPacketHandler[PKT_C_SKILL_CANCEL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_SKILL_CANCEL>(Handle_C_SKILL_CANCEL, session, buffer, len); };
 		GPacketHandler[PKT_C_GRANT_REWARD] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_GRANT_REWARD>(Handle_C_GRANT_REWARD, session, buffer, len); };
+		GPacketHandler[PKT_C_EQUIP] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_EQUIP>(Handle_C_EQUIP, session, buffer, len); };
+		GPacketHandler[PKT_C_UNEQUIP] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_UNEQUIP>(Handle_C_UNEQUIP, session, buffer, len); };
+		GPacketHandler[PKT_C_LOOT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_LOOT>(Handle_C_LOOT, session, buffer, len); };
+		GPacketHandler[PKT_C_DROP] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_DROP>(Handle_C_DROP, session, buffer, len); };
+		GPacketHandler[PKT_C_STASH] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_STASH>(Handle_C_STASH, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -92,6 +110,9 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_SKILL_HIT& pkt) { return MakeSendBuffer(pkt, PKT_S_SKILL_HIT); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_EQUIP_SYNC& pkt) { return MakeSendBuffer(pkt, PKT_S_EQUIP_SYNC); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_GRANT_REWARD& pkt) { return MakeSendBuffer(pkt, PKT_S_GRANT_REWARD); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_ITEM_RESULT& pkt) { return MakeSendBuffer(pkt, PKT_S_ITEM_RESULT); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_INVENTORY_SYNC& pkt) { return MakeSendBuffer(pkt, PKT_S_INVENTORY_SYNC); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_BAG_CONTENTS& pkt) { return MakeSendBuffer(pkt, PKT_S_BAG_CONTENTS); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

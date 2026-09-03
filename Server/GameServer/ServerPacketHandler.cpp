@@ -149,7 +149,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 		return false;
 
 	// 플레이어 생성
-	PlayerRef player = ObjectUtils::CreatPlayer(gameSession, character.object_info().object_id());
+	PlayerRef player = ObjectUtils::CreatePlayer(gameSession, character.object_info().object_id());
 
 	player->maxHp = character.max_hp();
 	player->hp = character.hp();
@@ -452,5 +452,30 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 			SendGrantResult(gameSession, requestId, Protocol::GRANT_OK, goldAfter);
 		});
 
+	return true;
+}
+
+bool Handle_C_EQUIP(PacketSessionRef& session, Protocol::C_EQUIP& pkt)
+{
+	return true;
+}
+
+bool Handle_C_UNEQUIP(PacketSessionRef& session, Protocol::C_UNEQUIP& pkt)
+{
+	return true;
+}
+
+bool Handle_C_LOOT(PacketSessionRef& session, Protocol::C_LOOT& pkt)
+{
+	return true;
+}
+
+bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
+{
+	return true;
+}
+
+bool Handle_C_STASH(PacketSessionRef& session, Protocol::C_STASH& pkt)
+{
 	return true;
 }

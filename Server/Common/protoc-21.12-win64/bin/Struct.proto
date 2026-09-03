@@ -108,3 +108,14 @@ message CharacterInfo
 	int32 max_hp = 4;
 	uint32 floor_id = 5;
 }
+
+message ItemInstance
+{
+	uint64 instance_id = 1;
+	uint32 item_type_id = 2;
+	ItemGrade grade = 3;
+	uint32 level = 4;
+	ItemState state = 5;
+	EquipSlot slot = 6;
+	repeated SkillInfo skills = 7;
+}

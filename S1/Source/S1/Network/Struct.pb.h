@@ -67,6 +67,9 @@ extern DamageInfoDefaultTypeInternal _DamageInfo_default_instance_;
 class DiedInfo;
 struct DiedInfoDefaultTypeInternal;
 extern DiedInfoDefaultTypeInternal _DiedInfo_default_instance_;
+class ItemInstance;
+struct ItemInstanceDefaultTypeInternal;
+extern ItemInstanceDefaultTypeInternal _ItemInstance_default_instance_;
 class KnockbackInfo;
 struct KnockbackInfoDefaultTypeInternal;
 extern KnockbackInfoDefaultTypeInternal _KnockbackInfo_default_instance_;
@@ -94,6 +97,7 @@ template<> ::Protocol::CcStateInfo* Arena::CreateMaybeMessage<::Protocol::CcStat
 template<> ::Protocol::CharacterInfo* Arena::CreateMaybeMessage<::Protocol::CharacterInfo>(Arena*);
 template<> ::Protocol::DamageInfo* Arena::CreateMaybeMessage<::Protocol::DamageInfo>(Arena*);
 template<> ::Protocol::DiedInfo* Arena::CreateMaybeMessage<::Protocol::DiedInfo>(Arena*);
+template<> ::Protocol::ItemInstance* Arena::CreateMaybeMessage<::Protocol::ItemInstance>(Arena*);
 template<> ::Protocol::KnockbackInfo* Arena::CreateMaybeMessage<::Protocol::KnockbackInfo>(Arena*);
 template<> ::Protocol::ObjectInfo* Arena::CreateMaybeMessage<::Protocol::ObjectInfo>(Arena*);
 template<> ::Protocol::PosInfo* Arena::CreateMaybeMessage<::Protocol::PosInfo>(Arena*);
@@ -2510,6 +2514,229 @@ class CharacterInfo final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Struct_2eproto;
 };
+// -------------------------------------------------------------------
+
+class ItemInstance final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.ItemInstance) */ {
+ public:
+  inline ItemInstance() : ItemInstance(nullptr) {}
+  ~ItemInstance() override;
+  explicit PROTOBUF_CONSTEXPR ItemInstance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  ItemInstance(const ItemInstance& from);
+  ItemInstance(ItemInstance&& from) noexcept
+    : ItemInstance() {
+    *this = ::std::move(from);
+  }
+
+  inline ItemInstance& operator=(const ItemInstance& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline ItemInstance& operator=(ItemInstance&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const ItemInstance& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const ItemInstance* internal_default_instance() {
+    return reinterpret_cast<const ItemInstance*>(
+               &_ItemInstance_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    13;
+
+  friend void swap(ItemInstance& a, ItemInstance& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(ItemInstance* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(ItemInstance* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  ItemInstance* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<ItemInstance>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const ItemInstance& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const ItemInstance& from) {
+    ItemInstance::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(ItemInstance* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.ItemInstance";
+  }
+  protected:
+  explicit ItemInstance(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSkillsFieldNumber = 7,
+    kInstanceIdFieldNumber = 1,
+    kItemTypeIdFieldNumber = 2,
+    kGradeFieldNumber = 3,
+    kLevelFieldNumber = 4,
+    kStateFieldNumber = 5,
+    kSlotFieldNumber = 6,
+  };
+  // repeated .Protocol.SkillInfo skills = 7;
+  int skills_size() const;
+  private:
+  int _internal_skills_size() const;
+  public:
+  void clear_skills();
+  ::Protocol::SkillInfo* mutable_skills(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >*
+      mutable_skills();
+  private:
+  const ::Protocol::SkillInfo& _internal_skills(int index) const;
+  ::Protocol::SkillInfo* _internal_add_skills();
+  public:
+  const ::Protocol::SkillInfo& skills(int index) const;
+  ::Protocol::SkillInfo* add_skills();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >&
+      skills() const;
+
+  // uint64 instance_id = 1;
+  void clear_instance_id();
+  uint64_t instance_id() const;
+  void set_instance_id(uint64_t value);
+  private:
+  uint64_t _internal_instance_id() const;
+  void _internal_set_instance_id(uint64_t value);
+  public:
+
+  // uint32 item_type_id = 2;
+  void clear_item_type_id();
+  uint32_t item_type_id() const;
+  void set_item_type_id(uint32_t value);
+  private:
+  uint32_t _internal_item_type_id() const;
+  void _internal_set_item_type_id(uint32_t value);
+  public:
+
+  // .Protocol.ItemGrade grade = 3;
+  void clear_grade();
+  ::Protocol::ItemGrade grade() const;
+  void set_grade(::Protocol::ItemGrade value);
+  private:
+  ::Protocol::ItemGrade _internal_grade() const;
+  void _internal_set_grade(::Protocol::ItemGrade value);
+  public:
+
+  // uint32 level = 4;
+  void clear_level();
+  uint32_t level() const;
+  void set_level(uint32_t value);
+  private:
+  uint32_t _internal_level() const;
+  void _internal_set_level(uint32_t value);
+  public:
+
+  // .Protocol.ItemState state = 5;
+  void clear_state();
+  ::Protocol::ItemState state() const;
+  void set_state(::Protocol::ItemState value);
+  private:
+  ::Protocol::ItemState _internal_state() const;
+  void _internal_set_state(::Protocol::ItemState value);
+  public:
+
+  // .Protocol.EquipSlot slot = 6;
+  void clear_slot();
+  ::Protocol::EquipSlot slot() const;
+  void set_slot(::Protocol::EquipSlot value);
+  private:
+  ::Protocol::EquipSlot _internal_slot() const;
+  void _internal_set_slot(::Protocol::EquipSlot value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.ItemInstance)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo > skills_;
+    uint64_t instance_id_;
+    uint32_t item_type_id_;
+    int grade_;
+    uint32_t level_;
+    int state_;
+    int slot_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Struct_2eproto;
+};
 // ===================================================================
 
 
@@ -3839,9 +4066,175 @@ inline void CharacterInfo::set_floor_id(uint32_t value) {
   // @@protoc_insertion_point(field_set:Protocol.CharacterInfo.floor_id)
 }
 
+// -------------------------------------------------------------------
+
+// ItemInstance
+
+// uint64 instance_id = 1;
+inline void ItemInstance::clear_instance_id() {
+  _impl_.instance_id_ = uint64_t{0u};
+}
+inline uint64_t ItemInstance::_internal_instance_id() const {
+  return _impl_.instance_id_;
+}
+inline uint64_t ItemInstance::instance_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.instance_id)
+  return _internal_instance_id();
+}
+inline void ItemInstance::_internal_set_instance_id(uint64_t value) {
+  
+  _impl_.instance_id_ = value;
+}
+inline void ItemInstance::set_instance_id(uint64_t value) {
+  _internal_set_instance_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.instance_id)
+}
+
+// uint32 item_type_id = 2;
+inline void ItemInstance::clear_item_type_id() {
+  _impl_.item_type_id_ = 0u;
+}
+inline uint32_t ItemInstance::_internal_item_type_id() const {
+  return _impl_.item_type_id_;
+}
+inline uint32_t ItemInstance::item_type_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.item_type_id)
+  return _internal_item_type_id();
+}
+inline void ItemInstance::_internal_set_item_type_id(uint32_t value) {
+  
+  _impl_.item_type_id_ = value;
+}
+inline void ItemInstance::set_item_type_id(uint32_t value) {
+  _internal_set_item_type_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.item_type_id)
+}
+
+// .Protocol.ItemGrade grade = 3;
+inline void ItemInstance::clear_grade() {
+  _impl_.grade_ = 0;
+}
+inline ::Protocol::ItemGrade ItemInstance::_internal_grade() const {
+  return static_cast< ::Protocol::ItemGrade >(_impl_.grade_);
+}
+inline ::Protocol::ItemGrade ItemInstance::grade() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.grade)
+  return _internal_grade();
+}
+inline void ItemInstance::_internal_set_grade(::Protocol::ItemGrade value) {
+  
+  _impl_.grade_ = value;
+}
+inline void ItemInstance::set_grade(::Protocol::ItemGrade value) {
+  _internal_set_grade(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.grade)
+}
+
+// uint32 level = 4;
+inline void ItemInstance::clear_level() {
+  _impl_.level_ = 0u;
+}
+inline uint32_t ItemInstance::_internal_level() const {
+  return _impl_.level_;
+}
+inline uint32_t ItemInstance::level() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.level)
+  return _internal_level();
+}
+inline void ItemInstance::_internal_set_level(uint32_t value) {
+  
+  _impl_.level_ = value;
+}
+inline void ItemInstance::set_level(uint32_t value) {
+  _internal_set_level(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.level)
+}
+
+// .Protocol.ItemState state = 5;
+inline void ItemInstance::clear_state() {
+  _impl_.state_ = 0;
+}
+inline ::Protocol::ItemState ItemInstance::_internal_state() const {
+  return static_cast< ::Protocol::ItemState >(_impl_.state_);
+}
+inline ::Protocol::ItemState ItemInstance::state() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.state)
+  return _internal_state();
+}
+inline void ItemInstance::_internal_set_state(::Protocol::ItemState value) {
+  
+  _impl_.state_ = value;
+}
+inline void ItemInstance::set_state(::Protocol::ItemState value) {
+  _internal_set_state(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.state)
+}
+
+// .Protocol.EquipSlot slot = 6;
+inline void ItemInstance::clear_slot() {
+  _impl_.slot_ = 0;
+}
+inline ::Protocol::EquipSlot ItemInstance::_internal_slot() const {
+  return static_cast< ::Protocol::EquipSlot >(_impl_.slot_);
+}
+inline ::Protocol::EquipSlot ItemInstance::slot() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.slot)
+  return _internal_slot();
+}
+inline void ItemInstance::_internal_set_slot(::Protocol::EquipSlot value) {
+  
+  _impl_.slot_ = value;
+}
+inline void ItemInstance::set_slot(::Protocol::EquipSlot value) {
+  _internal_set_slot(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.slot)
+}
+
+// repeated .Protocol.SkillInfo skills = 7;
+inline int ItemInstance::_internal_skills_size() const {
+  return _impl_.skills_.size();
+}
+inline int ItemInstance::skills_size() const {
+  return _internal_skills_size();
+}
+inline void ItemInstance::clear_skills() {
+  _impl_.skills_.Clear();
+}
+inline ::Protocol::SkillInfo* ItemInstance::mutable_skills(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.ItemInstance.skills)
+  return _impl_.skills_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >*
+ItemInstance::mutable_skills() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.ItemInstance.skills)
+  return &_impl_.skills_;
+}
+inline const ::Protocol::SkillInfo& ItemInstance::_internal_skills(int index) const {
+  return _impl_.skills_.Get(index);
+}
+inline const ::Protocol::SkillInfo& ItemInstance::skills(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.skills)
+  return _internal_skills(index);
+}
+inline ::Protocol::SkillInfo* ItemInstance::_internal_add_skills() {
+  return _impl_.skills_.Add();
+}
+inline ::Protocol::SkillInfo* ItemInstance::add_skills() {
+  ::Protocol::SkillInfo* _add = _internal_add_skills();
+  // @@protoc_insertion_point(field_add:Protocol.ItemInstance.skills)
+  return _add;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >&
+ItemInstance::skills() const {
+  // @@protoc_insertion_point(field_list:Protocol.ItemInstance.skills)
+  return _impl_.skills_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
