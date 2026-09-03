@@ -153,3 +153,55 @@ message S_GRANT_REWARD
 	uint32 result = 2;
 	uint64 gold_after = 3;
 }
+
+message C_EQUIP
+{
+	string request_id = 1;
+	uint64 instance_id = 2;
+	EquipSlot slot = 3;
+}
+
+message C_UNEQUIP
+{
+	string request_id = 1;
+	uint64 instance_id = 2;
+}
+
+message C_LOOT
+{
+	string reqeust_id = 1;
+	uint64 bag_id = 2;
+	uint64 instance_id = 3;
+}
+
+message C_DROP
+{
+	string request_id = 1;
+	uint64 instance_id = 2;
+}
+
+message S_ITEM_RESULT
+{
+	string request_id = 1;
+	ItemResult result = 2;
+	repeated ItemInstance changed = 3;
+}
+
+message C_STASH
+{
+	string request_id = 1;
+	uint64 instance_id = 2;
+	bool to_vault = 3;
+}
+
+message S_INVENTORY_SYNC
+{
+	repeated ItemInstance items= 1;
+}
+
+message S_BAG_CONTENTS
+{
+	uint64 bag_id = 1;
+	repeated ItemInstance items = 2;
+	uint64 remaining_ms = 3;
+}

@@ -52,12 +52,13 @@ enum ObjectType : int {
   OBJECT_TYPE_CREATURE = 1,
   OBJECT_TYPE_PROJECTILE = 2,
   OBJECT_TYPE_ENV = 3,
+  OBJECT_TYPE_BAG = 4,
   ObjectType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   ObjectType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool ObjectType_IsValid(int value);
 constexpr ObjectType ObjectType_MIN = OBJECT_TYPE_NONE;
-constexpr ObjectType ObjectType_MAX = OBJECT_TYPE_ENV;
+constexpr ObjectType ObjectType_MAX = OBJECT_TYPE_BAG;
 constexpr int ObjectType_ARRAYSIZE = ObjectType_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ObjectType_descriptor();
@@ -321,6 +322,92 @@ inline bool GrantResult_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<GrantResult>(
     GrantResult_descriptor(), name, value);
 }
+enum ItemGrade : int {
+  ITEM_GRADE_NONE = 0,
+  ITEM_GRADE_COMMON = 1,
+  ITEM_GRADE_RARE = 2,
+  ITEM_GRADE_EPIC = 3,
+  ITEM_GRADE_LEGENDARY = 4,
+  ItemGrade_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  ItemGrade_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool ItemGrade_IsValid(int value);
+constexpr ItemGrade ItemGrade_MIN = ITEM_GRADE_NONE;
+constexpr ItemGrade ItemGrade_MAX = ITEM_GRADE_LEGENDARY;
+constexpr int ItemGrade_ARRAYSIZE = ItemGrade_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemGrade_descriptor();
+template<typename T>
+inline const std::string& ItemGrade_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, ItemGrade>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function ItemGrade_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    ItemGrade_descriptor(), enum_t_value);
+}
+inline bool ItemGrade_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, ItemGrade* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ItemGrade>(
+    ItemGrade_descriptor(), name, value);
+}
+enum ItemState : int {
+  ITEM_STATE_NONE = 0,
+  ITEM_STATE_CARRIED = 1,
+  ITEM_STATE_EQUIPPED = 2,
+  ITEM_STATE_VAULTED = 3,
+  ITEM_STATE_IN_BAG = 4,
+  ItemState_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  ItemState_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool ItemState_IsValid(int value);
+constexpr ItemState ItemState_MIN = ITEM_STATE_NONE;
+constexpr ItemState ItemState_MAX = ITEM_STATE_IN_BAG;
+constexpr int ItemState_ARRAYSIZE = ItemState_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemState_descriptor();
+template<typename T>
+inline const std::string& ItemState_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, ItemState>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function ItemState_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    ItemState_descriptor(), enum_t_value);
+}
+inline bool ItemState_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, ItemState* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ItemState>(
+    ItemState_descriptor(), name, value);
+}
+enum ItemResult : int {
+  ITEM_OK = 0,
+  ITEM_ALREADY = 1,
+  ITEM_NOT_FOUND = 2,
+  ITEM_INVALID_STATE = 3,
+  ITEM_INVENTORY_FULL = 4,
+  ITEM_BAD_REQUEST = 5,
+  ITEM_DB_ERROR = 6,
+  ItemResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  ItemResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool ItemResult_IsValid(int value);
+constexpr ItemResult ItemResult_MIN = ITEM_OK;
+constexpr ItemResult ItemResult_MAX = ITEM_DB_ERROR;
+constexpr int ItemResult_ARRAYSIZE = ItemResult_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor();
+template<typename T>
+inline const std::string& ItemResult_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, ItemResult>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function ItemResult_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    ItemResult_descriptor(), enum_t_value);
+}
+inline bool ItemResult_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, ItemResult* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ItemResult>(
+    ItemResult_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -392,6 +479,21 @@ template <> struct is_proto_enum< ::Protocol::GrantResult> : ::std::true_type {}
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::GrantResult>() {
   return ::Protocol::GrantResult_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::ItemGrade> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ItemGrade>() {
+  return ::Protocol::ItemGrade_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::ItemState> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ItemState>() {
+  return ::Protocol::ItemState_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::ItemResult> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ItemResult>() {
+  return ::Protocol::ItemResult_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE
