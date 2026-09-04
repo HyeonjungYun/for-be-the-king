@@ -22,6 +22,63 @@ namespace
 		SEND_PACKET_DECLARATION(pkt);
 		session->Send(sendBuffer);
 	}
+
+	// 캐릭터의 아이템을 전부 읽어 Player에 싣는다.
+	// 이후 던전 내에서는 DB를 치지 않는다.
+	bool LoadPlayerItems(DBConnection* conn, PlayerRef player)
+	{
+		char query[512];
+		::snprintf(query, sizeof(query),
+			"SELECT instance_id, item_type_id, grade, level, state, slot, "
+			"skill_id_primary, skill_id_secondary FROM item_instances "
+			"WHERE owner_character_id = %llu",
+			player->objectInfo->object_id());
+
+		MYSQL_RES* res = conn->Query(query);
+		if (res == nullptr)
+		{
+			cout << "[ENTER] item query failed: " << conn->GetError() << endl;
+			return false;
+		}
+
+		enum { COL_ID = 0, COL_TYPE, COL_GRADE, COL_LEVEL, COL_STATE, COL_SLOT, COL_SKILL1, COL_SKILL2, COL_COUNT };
+
+		if (::mysql_num_fields(res) < COL_COUNT)
+		{
+			cout << "[ENTER] item column mismatch" << endl;
+			conn->FreeResult(res);
+			return false;
+		}
+
+		while (MYSQL_ROW row = ::mysql_fetch_row(res))
+		{
+			ItemEntry e;
+			e.instanceId = ::strtoull(row[COL_ID], nullptr, 10);
+			e.itemTypeId = static_cast<uint32>(::atoi(row[COL_TYPE]));
+			e.grade = static_cast<Protocol::ItemGrade>(::atoi(row[COL_GRADE]));
+			e.level = static_cast<uint32>(::atoi(row[COL_LEVEL]));
+			e.skillIdPrimary = static_cast<uint32>(::atoi(row[COL_SKILL1]));
+			e.skillIdSecondary = static_cast<uint32>(::atoi(row[COL_SKILL2]));
+
+			const int32 state = ::atoi(row[COL_STATE]);
+			const int32 slot = ::atoi(row[COL_SLOT]);
+
+			if (state == Protocol::ITEM_STATE_EQUIPPED && slot >= Protocol::SLOT_WEAPON_PRIMARY && slot <= Protocol::SLOT_TRINKET)
+			{
+				player->equipped[slot - 1] = e;
+			}
+			else if (state == Protocol::ITEM_STATE_CARRIED)
+			{
+				if (player->inventory.size() >= Player::INVENTORY_SLOT_COUNT)
+					cout << "[ENTER] inventory overflow - char=" << player->objectInfo->object_id() << endl;
+
+				player->inventory.push_back(e);
+			}
+		}
+
+		conn->FreeResult(res);
+		return true;
+	}
 }
 
 bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -160,8 +217,19 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 	player->posInfo->set_z(saved.z());
 	player->posInfo->set_yaw(saved.yaw());
 
-	// 방에 입장
-	room->DoAsync(&Room::HandleEnterPlayer, player);
+	GDBQueue.Push([gameSession, player, room](DBConnection* conn)
+		{
+			if (LoadPlayerItems(conn, player) == false)
+			{
+				cout << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << endl;
+
+				gameSession->Disconnect(L"item load failed");
+				return;
+			}
+
+			// 방에 입장
+			room->DoAsync(&Room::HandleEnterPlayer, player);
+		});
 
 	return true;
 }
@@ -457,11 +525,47 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 
 bool Handle_C_EQUIP(PacketSessionRef& session, Protocol::C_EQUIP& pkt)
 {
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	PlayerRef player = gameSession->player.load();
+	if (player == nullptr)
+		return false;
+
+	RoomRef room = player->room.load().lock();
+	if (room == nullptr)
+		return false;
+
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY, {});
+		return true;
+	}
+
+	room->DoAsync(&Room::HandleEquip, gameSession, pkt.request_id(), pkt.instance_id(), pkt.slot());
+
 	return true;
 }
 
 bool Handle_C_UNEQUIP(PacketSessionRef& session, Protocol::C_UNEQUIP& pkt)
 {
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	PlayerRef player = gameSession->player.load();
+	if (player == nullptr)
+		return false;
+
+	RoomRef room = player->room.load().lock();
+	if (room == nullptr)
+		return false;
+
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+
+	room->DoAsync(&Room::HandleUnequip, gameSession, pkt.request_id(), pkt.instance_id());
+
 	return true;
 }
 

@@ -25,6 +25,28 @@ namespace
 
 namespace
 {
+	// TEST
+	void LogSlots(const PlayerRef& player, const char* tag)
+	{
+		cout << "[ITEM] " << tag << " char=" << player->objectInfo->object_id()
+			<< " inv=" << player->inventory.size() << " slots=";
+
+		for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+		{
+			const SkillSlot& s = player->skillSlots[i];
+			cout << " [" << (i + 1) << "]" << s.skillId;
+
+			if (s.bindState == Protocol::BIND_SHADOWED)
+				cout << "(S<-" << s.shadowedBy << ")";
+		}
+
+		cout << " inv_ids=";
+		for (const ItemEntry& e : player->inventory)
+			cout << e.instanceId << "(g" << e.grade << ") ";
+
+		cout << endl;
+	}
+
 	bool IsInAttackRange(const CreatureRef& attacker, const CreatureRef& target)
 	{
 		const float dx = target->posInfo->x() - attacker->posInfo->x();
@@ -128,10 +150,8 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			session->Send(sendBuffer);
 
 		{
-			player->skillSlots[0].skillId = 1001;
-			player->skillSlots[3].skillId = 3001;
-			player->skillSlots[4].skillId = 2001;
-			player->RefreshBindStates();
+			player->RebuildSkillSlotsFromEquipment();
+			LogSlots(player, "enter");
 
 			Protocol::S_EQUIP_SYNC equipPkt;
 			for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
@@ -148,6 +168,40 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			SendBufferRef equipBuffer = ServerPacketHandler::MakeSendBuffer(equipPkt);
 			if (auto session = player->session.lock())
 				session->Send(equipBuffer);
+
+			{
+				Protocol::S_INVENTORY_SYNC invPkt;
+
+				for (const ItemEntry& e : player->inventory)
+				{
+					Protocol::ItemInstance* item = invPkt.add_items();
+					item->set_instance_id(e.instanceId);
+					item->set_item_type_id(e.itemTypeId);
+					item->set_grade(e.grade);
+					item->set_level(e.level);
+					item->set_state(Protocol::ITEM_STATE_CARRIED);
+					item->set_slot(Protocol::SLOT_NONE);
+				}
+
+				for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+				{
+					const ItemEntry& e = player->equipped[i];
+					if (e.instanceId == 0)
+						continue;
+
+					Protocol::ItemInstance* item = invPkt.add_items();
+					item->set_instance_id(e.instanceId);
+					item->set_item_type_id(e.itemTypeId);
+					item->set_grade(e.grade);
+					item->set_level(e.level);
+					item->set_state(Protocol::ITEM_STATE_EQUIPPED);
+					item->set_slot(static_cast<Protocol::EquipSlot>(i + 1));
+				}
+
+				SEND_PACKET_DECLARATION(invPkt);
+				if (auto session = player->session.lock())
+					session->Send(sendBuffer);
+			}
 		}
 	}
 
@@ -845,6 +899,95 @@ void Room::FlushCcState(uint64 nowUs)
 	{
 		SEND_PACKET_BROADCAST(pkt);
 	}
+}
+
+void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instanceId, Protocol::EquipSlot slot)
+{
+	PlayerRef player = session->player.load();
+	if (player == nullptr)
+		return;
+
+	if (slot < Protocol::SLOT_WEAPON_PRIMARY || slot > Protocol::SLOT_TRINKET)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_BAD_REQUEST, {});
+		return;
+	}
+
+	if (slot == Protocol::SLOT_WEAPON_SECONDARY)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE, {});
+		return;
+	}
+
+	ItemEntry* found = player->FindInInventory(instanceId);
+	if (found == nullptr)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND, {});
+		return;
+	}
+
+	const int32 idx = slot - 1;
+
+	const size_t invIndex = static_cast<size_t>(found - player->inventory.data());
+	ItemEntry incoming = *found;
+	ItemEntry outgoing = player->equipped[idx];
+
+	player->inventory.erase(player->inventory.begin() + invIndex);
+	player->equipped[idx] = incoming;
+
+	vector<Protocol::ItemInstance> changed;
+	changed.push_back(incoming.ToProto(Protocol::ITEM_STATE_EQUIPPED, slot));
+
+	if (outgoing.instanceId != 0)
+	{
+		player->inventory.push_back(outgoing);
+		changed.push_back(outgoing.ToProto(Protocol::ITEM_STATE_CARRIED));
+	}
+
+	player->RebuildSkillSlotsFromEquipment();
+	LogSlots(player, "equip");
+
+	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
+}
+
+void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instanceId)
+{
+	PlayerRef player = session->player.load();
+	if (player == nullptr)
+		return;
+
+	int32 foundIdx = -1;
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		if (player->equipped[i].instanceId == instanceId)
+		{
+			foundIdx = i;
+			break;
+		}
+	}
+
+	if (foundIdx < 0)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND);
+	}
+
+	if (player->IsInventoryFull())
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_INVENTORY_FULL);
+		return;
+	}
+
+	ItemEntry e = player->equipped[foundIdx];
+	player->equipped[foundIdx] = ItemEntry{};
+	player->inventory.push_back(e);
+
+	player->RebuildSkillSlotsFromEquipment();
+	LogSlots(player, "unequip");
+
+	vector<Protocol::ItemInstance> changed;
+	changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
+
+	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
 }
 
 void Room::UpdateTick()
