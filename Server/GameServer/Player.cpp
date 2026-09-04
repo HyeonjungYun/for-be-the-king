@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "Player.h"
 
 namespace
@@ -33,4 +33,55 @@ float Player::GetSpeedCeiling(uint64 nowUs) const
 		return moveExceptionSpeed;
 
 	return GetEffectiveMoveSpeed();
+}
+
+void Player::RebuildSkillSlotsFromEquipment()
+{
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+		skillSlots[i].skillId = 0;
+
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		const ItemEntry& item = equipped[i];
+		if (item.instanceId == 0)
+			continue;
+
+		skillSlots[i].skillId = item.skillIdPrimary;
+	}
+
+	const ItemEntry& weapon = equipped[Protocol::SLOT_WEAPON_PRIMARY - 1];
+	if (weapon.instanceId != 0)
+		skillSlots[Protocol::SLOT_WEAPON_SECONDARY - 1].skillId = weapon.skillIdSecondary;
+
+	RefreshBindStates();
+}
+
+ItemEntry* Player::FindInInventory(uint64 instanceId)
+{
+	for (ItemEntry& e : inventory)
+	{
+		if (e.instanceId == instanceId)
+			return &e;
+	}
+
+	return nullptr;
+}
+
+Protocol::ItemInstance ItemEntry::ToProto(Protocol::ItemState state, Protocol::EquipSlot slot) const
+{
+	Protocol::ItemInstance item;
+	item.set_instance_id(instanceId);
+	item.set_item_type_id(itemTypeId);
+	item.set_grade(grade);
+	item.set_level(level);
+	item.set_state(state);
+	item.set_slot(slot);
+
+	if (skillIdPrimary != 0)
+		item.add_skills()->set_skill_id(skillIdPrimary);
+
+	if (skillIdSecondary != 0)
+		item.add_skills()->set_skill_id(skillIdSecondary);
+
+	return item;
 }

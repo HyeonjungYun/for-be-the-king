@@ -54,3 +54,16 @@ void GameSession::OnRecvPacket(BYTE* buffer, int32 len)
 void GameSession::OnSend(int32 len)
 {
 }
+
+void GameSession::SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed)
+{
+	Protocol::S_ITEM_RESULT pkt;
+	pkt.set_request_id(requestId);
+	pkt.set_result(result);
+
+	for (const Protocol::ItemInstance& c : changed)
+		pkt.add_changed()->CopyFrom(c);
+
+	SEND_PACKET_DECLARATION(pkt);
+	Send(sendBuffer);
+}

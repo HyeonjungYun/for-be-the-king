@@ -37,6 +37,9 @@ public:
 	void	UpdateCc(uint64 nowUs);
 	void	FlushCcState(uint64 nowUs);
 
+	void	HandleEquip(GameSessionRef session, string requestId, uint64 instanceId, Protocol::EquipSlot slot);
+	void	HandleUnequip(GameSessionRef session, string requestId, uint64 instanceId);
+
 public:
 	void	UpdateTick();
 	void	FlushMoves();
