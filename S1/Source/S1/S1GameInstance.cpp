@@ -46,7 +46,7 @@ void US1GameInstance::ConnectToGameServer()
 		// TEMP: Lobby에서 캐릭터 선택창 등
 		{
 			Protocol::C_LOGIN Pkt;
-			Pkt.set_token("6f6a93de27471f8f4b4bfe01d7e535887f1fda49d3a265bce60e8e9b232968b9");
+			Pkt.set_token("20f8d41e7f333a449f2d2460e958ade73a00c332cb3339eda7e333437fa51162");
 
 			SendBufferRef SendBuffer = ClientPacketHandler::MakeSendBuffer(Pkt);
 			SendPacket(SendBuffer);
@@ -329,50 +329,42 @@ void US1GameInstance::HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt)
 	}
 }
 
-void US1GameInstance::DebugChatCCStun()
+void US1GameInstance::DebugEquipWeapon()
 {
-	Protocol::C_CHAT pkt;
-	pkt.set_msg("/stun 3 1250");
+	Protocol::C_EQUIP Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(4);
+	Pkt.set_slot(Protocol::SLOT_WEAPON_PRIMARY);
 
-	SEND_PACKET(pkt);
+	SEND_PACKET(Pkt);
 }
 
-void US1GameInstance::DebugChatCCSRoot()
+void US1GameInstance::DebugUnequipWeapon()
 {
-	Protocol::C_CHAT pkt;
-	pkt.set_msg("/root 3 1250");
+	Protocol::C_UNEQUIP Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(4);
 
-	SEND_PACKET(pkt);
+	SEND_PACKET(Pkt);
 }
 
-void US1GameInstance::DebugChatCCSlow4()
+void US1GameInstance::DebugEquipIdempotent()
 {
-	Protocol::C_CHAT pkt;
-	pkt.set_msg("/slow 3 5000 0.4");
+	Protocol::C_EQUIP Pkt;
+	Pkt.set_request_id("debug-fixed-request-id");
+	Pkt.set_instance_id(5);
+	Pkt.set_slot(Protocol::SLOT_BOOTS);
 
-	SEND_PACKET(pkt);
+	{ SEND_PACKET(Pkt); }
+	{ SEND_PACKET(Pkt); }
 }
 
-void US1GameInstance::DebugChatCCSlow3()
+void US1GameInstance::DebugEquipBadSlot()
 {
-	Protocol::C_CHAT pkt;
-	pkt.set_msg("/slow 3 5000 0.3");
+	Protocol::C_EQUIP Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(4);
+	Pkt.set_slot(Protocol::SLOT_WEAPON_SECONDARY);
 
-	SEND_PACKET(pkt);
-}
-
-void US1GameInstance::DebugChatCCSlow2()
-{
-	Protocol::C_CHAT pkt;
-	pkt.set_msg("/slow 3 5000 0.2");
-
-	SEND_PACKET(pkt);
-}
-
-void US1GameInstance::DebugChatCCSlow15()
-{
-	Protocol::C_CHAT pkt;
-	pkt.set_msg("/slow 3 5000 0.15");
-
-	SEND_PACKET(pkt);
+	SEND_PACKET(Pkt);
 }
