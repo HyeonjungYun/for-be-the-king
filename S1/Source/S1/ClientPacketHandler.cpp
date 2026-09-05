@@ -239,11 +239,40 @@ bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& 
 
 bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pkt)
 {
+	FString Line = FString::Printf(TEXT("[ITEM] result=%d changed=%d"),
+		static_cast<int32>(pkt.result()), pkt.changed_size());
+
+	for (const Protocol::ItemInstance& Item : pkt.changed())
+	{
+		Line += FString::Printf(TEXT(" | id=%llu slot=%d state=%d"),
+			Item.instance_id(),
+			static_cast<int32>(Item.slot()),
+			static_cast<int32>(Item.state()));
+	}
+
+	if (GEngine != nullptr)
+		GEngine->AddOnScreenDebugMessage(-1, 8.f, FColor::Yellow, Line);
+
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *Line);
+
 	return true;
 };
 
 bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SYNC& pkt)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[ITEM] inventory sync - %d items"), pkt.items_size());
+
+	for (const Protocol::ItemInstance& Item : pkt.items())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT(" id=%llu type=%u grade=%d state=%d slot=%d skills=%d"),
+			Item.instance_id(), Item.item_type_id(),
+			static_cast<int32>(Item.grade()),
+			static_cast<int32>(Item.state()),
+			static_cast<int32>(Item.slot()),
+			Item.skills_size());
+	}
+
 	return true;
 }
 

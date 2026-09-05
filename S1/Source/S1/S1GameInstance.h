@@ -63,23 +63,15 @@ public:
 	TMap<uint64, TWeakObjectPtr<AS1Player>> Players;
 	TArray<Protocol::SkillInfo> SkillSlots;
 
-
-	// 디버그용 테스트 후 삭제
 	UFUNCTION(BlueprintCallable)
-	void DebugChatCCStun();
+	void DebugEquipWeapon();
 
 	UFUNCTION(BlueprintCallable)
-	void DebugChatCCSRoot();
+	void DebugUnequipWeapon();
 
 	UFUNCTION(BlueprintCallable)
-	void DebugChatCCSlow4();
+	void DebugEquipIdempotent();
 
 	UFUNCTION(BlueprintCallable)
-	void DebugChatCCSlow3();
-
-	UFUNCTION(BlueprintCallable)
-	void DebugChatCCSlow2();
-
-	UFUNCTION(BlueprintCallable)
-	void DebugChatCCSlow15();
+	void DebugEquipBadSlot();
 };
