@@ -1,17 +1,16 @@
-﻿-- 아이템 검증용 시딩. dev_1 전용.
--- 착용 3종은 옛 하드코딩(1001/3001/2001)을 그대로 재현한다 —
--- 이 시딩 후 동작이 이전과 다르면 그게 곧 회귀다.
-USE forbetheking;
+﻿USE forbetheking;
+
+SET @account_name = 'auth_test';
 
 SET @char_id = (
     SELECT c.character_id FROM characters c
     JOIN accounts a ON a.account_id = c.account_id
-    WHERE a.username = 'dev_1' LIMIT 1);
+    WHERE a.username = @account_name LIMIT 1);
 
--- dev_1 이 없으면 조용히 0행을 넣고 끝나 버린다. 그건 디버깅이 어렵다
+-- 캐릭터가 없으면 조용히 0행을 넣고 끝나 버린다. 그건 디버깅이 어렵다
 SELECT IF(@char_id IS NULL,
-    (SELECT * FROM (SELECT 'dev_1 not found - run seed_dev.sql first') x),
-    'ok') AS precheck;
+    CONCAT(@account_name, ' 의 캐릭터가 없다 — seed_auth_character.sql 을 먼저 하라'),
+    CONCAT('ok - character_id=', @char_id)) AS precheck;
 
 START TRANSACTION;
 
