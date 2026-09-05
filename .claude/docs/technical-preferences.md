@@ -111,10 +111,16 @@
     & "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" `
         --sources "C:\Server\MMO\Server\ServerCore" `
         --excluded_sources "ServerCoreSTests" `
+        --excluded_sources "SocketUtils" `
+        --excluded_sources "DBConnection.cpp" `
         --export_type "cobertura:C:\Server\MMO\Server\coverage.xml" `
         --export_type "html:C:\Server\MMO\Server\coverage" `
         -- "C:\Server\MMO\Server\Binaries\Debug\ServerCoreSTests.exe"
     ```
+    - 🔴 **`SocketUtils` · `DBConnection.cpp` 제외를 빼면 66.6% 가 나온다.** 아래 제외 표는
+      있었지만 명령에는 빠져 있어, 그대로 돌리면 문서의 77% 를 재현할 수 없었다
+      (2026-09-05 재측정 중 발견). 두 수치를 함께 기억할 것:
+      **제외 미적용 375/563 = 66.6% · 제외 적용 340/442 = 76.9%**
     - **`--excluded_sources "ServerCoreSTests"` 를 빼면 안 된다.** 테스트 코드 자신이
       분모에 들어가 수치를 부풀린다 (58% → 74% 로 왜곡됐다)
     - 측정에는 **Debug 빌드**가 필요하다 (PDB 기반)
