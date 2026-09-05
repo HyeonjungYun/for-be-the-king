@@ -38,6 +38,14 @@ S1/Source/ProtobufCore/Include/
 *.lastbuildstate
 *.log
 
+# ── .NET (AuthServer) ──────────────────────────────────
+# 경로를 한정한다. 전역 bin/ obj/ 로 두면 [Xx]64/ 때와 같은 사고가 난다
+Server/AuthServer/bin/
+Server/AuthServer/obj/
+
+# Visual Studio 가 UTF-8 변환 중 만드는 임시 폴더
+S1/enc_temp_folder/
+
 # ── 서버 빌드 결과 ─────────────────────────────────────
 Server/Binaries/
 # ⚠️ Server/Libraries 는 추적한다 (protobuf 21.12 버전 고정 — 2026-08-11 결정)
