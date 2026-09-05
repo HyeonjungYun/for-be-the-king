@@ -219,9 +219,24 @@ bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& 
 	case Protocol::GRANT_ALREADY:		GGrantAlready.fetch_add(1); break;
 	case Protocol::GRANT_NO_TARGET:		GGrantNoTarget.fetch_add(1); break;
 	case Protocol::GRANT_BAD_REQUEST:	GGrantBad.fetch_add(1); break;
-	defalut:							GGrantError.fetch_add(1); break;
+	default:							GGrantError.fetch_add(1); break;
 	}
 
 	GGrantReplies.fetch_add(1);
+	return true;
+}
+
+bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pkt)
+{
+	return true;
+}
+
+bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SYNC& pkt)
+{
+	return true;
+}
+
+bool Handle_S_BAG_CONTENTS(PacketSessionRef& session, Protocol::S_BAG_CONTENTS& pkt)
+{
 	return true;
 }
