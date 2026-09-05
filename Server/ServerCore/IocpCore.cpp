@@ -36,16 +36,19 @@ bool IocpCore::Dispatch(uint32 timeoutMs)
 	else
 	{
 		int32 errCode = ::WSAGetLastError();
-		switch (errCode)
+
+		if (iocpEvent == nullptr)
 		{
-		case WAIT_TIMEOUT:
+			if (errCode != WAIT_TIMEOUT)
+				cout << "[IOCP] dispatch failed without event - err=" << errCode << endl;
+
 			return false;
-		default:
-			// TODO : 로그 찍기
-			IocpObjectRef iocpObject = iocpEvent->owner;
-			iocpObject->Dispatch(iocpEvent, numOfBytes);
-			break;
 		}
+		if (errCode == WAIT_TIMEOUT)
+			return false;
+
+		IocpObjectRef iocpObject = iocpEvent->owner;
+		iocpObject->Dispatch(iocpEvent, numOfBytes);
 	}
 
 	return true;
