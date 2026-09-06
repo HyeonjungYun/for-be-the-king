@@ -55,6 +55,9 @@ Server/Binaries/
 production/session-state/active.md
 production/session-logs/
 
+# 포트폴리오 · 자기소개서 — 별도 제출물. 저장소에 두지 않는다 (2026-09-07)
+docs/portfolio/
+
 # ── OS ─────────────────────────────────────────────────
 Thumbs.db
 Desktop.ini
