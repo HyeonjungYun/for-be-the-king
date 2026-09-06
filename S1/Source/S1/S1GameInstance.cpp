@@ -46,7 +46,7 @@ void US1GameInstance::ConnectToGameServer()
 		// TEMP: Lobby에서 캐릭터 선택창 등
 		{
 			Protocol::C_LOGIN Pkt;
-			Pkt.set_token("20f8d41e7f333a449f2d2460e958ade73a00c332cb3339eda7e333437fa51162");
+			Pkt.set_token("9f32e2436dd0db4a5737ca5611fa747d77a7273309877c94881b38d42a2c98fe");
 
 			SendBufferRef SendBuffer = ClientPacketHandler::MakeSendBuffer(Pkt);
 			SendPacket(SendBuffer);
