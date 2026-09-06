@@ -1,6 +1,6 @@
 ﻿USE forbetheking;
 
-SET @account_name = 'auth_test';
+SET @account_name = 'dev_1';
 
 SET @char_id = (
     SELECT c.character_id FROM characters c
