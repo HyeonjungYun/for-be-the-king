@@ -1622,4 +1622,4 @@ C# ASP.NET Core 인증 서버를 추가했다. **Phase 항목이 아니라 취�
 | `.claude/docs/technical-preferences.md` | **"16.6 ms (60 Hz 틱)" 정정** — 60 Hz 틱은 존재하지 않는다 | ✅ 반영 |
 | `systems-index.md` | "Tier 1 GDD 16개 후 gate-check" → 정식 6 + quick-spec 10 | 🔴 결정 3 대기 |
 | `production/stage.txt` | `Concept` → **`Production`** | ✅ **2026-09-06 반영** |
-| `docs/architecture/adr-0003~0005` | `Proposed` → `Accepted` | 🔴 **사용자 대기** — § 15 가 참조 중 |
+| `docs/architecture/adr-0003~0005` | `Proposed` → **`Accepted`** | ✅ **2026-09-12 반영.** 구현과 대조하며 불일치 3건 정정 — M2 차단 해제 |

@@ -2,7 +2,8 @@
 
 ## Status
 
-**Proposed (2026-09-04)**
+**Accepted (2026-09-12)** — ID 대역 분리와 부팅 시 카운터 복원 구현·동작 확인 완료.
+런타임 발급(`fetch_add`)은 아이템 드랍이 생기는 M2 에서 처음 쓰인다.
 
 ## Date
 
@@ -10,7 +11,7 @@
 
 ## Last Verified
 
-2026-09-04
+2026-09-12 — 구현과 대조하여 복원 SQL 1건 정정 (오프바이원)
 
 ## Decision Makers
 
@@ -136,13 +137,27 @@ instance_id 공간  (아이템 전용 — ObjectInfo 에 안 실린다)
 ### ③ 두 카운터 모두 전역 atomic + 부팅 시 DB 복원
 
 ```cpp
-// 부팅 시 1회
-_nextInstanceId = SELECT COALESCE(MAX(instance_id), 0) FROM item_instances;
-_nextBagId      = SELECT COALESCE(MAX(bag_id), 2'000'000'000) FROM bags;
+// 부팅 시 1회 — ObjectUtils.cpp: RestoreIdCounters
+//
+// 🔴 2026-09-12 정정. 원안은 bag_id 의 COALESCE 기본값을 2'000'000'000 으로 뒀다.
+//    그러면 빈 테이블에서 20억이 나오고 거기에 +1 을 해 첫 가방이 2,000,000,001 이 된다.
+//    기본값은 0 으로 두고 분기에서 대역 시작값을 쓴다.
+SELECT COALESCE(MAX(instance_id), 0) FROM item_instances;   // → maxInstance
+SELECT COALESCE(MAX(bag_id), 0)      FROM bags;             // → maxBag
+
+GNextInstanceId.store(maxInstance + 1);                     // 빈 테이블이면 1
+GNextBagId.store((maxBag == 0) ? BAG_ID_BASE : maxBag + 1); // 빈 테이블이면 20억 정확히
 
 // 이후 발급은 메모리에서 — DB 왕복 없음
-uint64 newId = _nextInstanceId.fetch_add(1) + 1;
+uint64 newId = GNextInstanceId.fetch_add(1);
 ```
+
+> **`instance_id` 는 기본값 0 이 그대로 맞다.** 대역이 1 부터 시작하므로 `maxInstance + 1`
+> 이 곧 1 이 된다. `bag_id` 만 대역 시작값이 0 이 아니라서 분기가 필요하다.
+>
+> 🔴 **이 복원은 `GDBQueue.Init` 보다 먼저 해야 한다.** `DBJobQueue` 워커가 커넥션을 스레드
+> 수명 내내 점유하므로, Init 뒤에 두면 `GDBPool.Pop()` 이 `nullptr` 을 반환해 부팅이
+> 실패한다 (ADR-0003 § Implementation Guidelines). 실제로 그 순서로 짰다가 겪었다.
 
 ### Architecture
 

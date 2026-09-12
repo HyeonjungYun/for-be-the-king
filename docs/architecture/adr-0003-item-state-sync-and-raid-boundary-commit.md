@@ -2,7 +2,8 @@
 
 ## Status
 
-**Proposed (2026-09-04)**
+**Accepted (2026-09-12)** — 던전 내 메모리 경로는 구현·실측 완료.
+탈출·사망 커밋은 미구현이며 M2 범위다. 아래 § Validation Criteria 참조.
 
 ## Date
 
@@ -10,7 +11,7 @@
 
 ## Last Verified
 
-2026-09-04
+2026-09-12 — 구현과 대조하여 Implementation Guidelines 2건 정정
 
 ## Decision Makers
 
@@ -159,9 +160,43 @@ GDBQueue.Push([room, playerId, snapshot](DBConnection* conn)
 
 ### Implementation Guidelines
 
-**던전 입장 시 적재 시점**: `Handle_C_ENTER_GAME`이 이미 `characters` 행을 읽어
-`Player`를 만든다. 인벤·장비도 **같은 조회에서 함께 읽어** Room에 넣는다 — 별도 왕복을
-만들지 않는다.
+**던전 입장 시 적재 시점** — 🔴 **2026-09-12 정정. 원안은 실현되지 않았다.**
+
+원안은 *"`Handle_C_ENTER_GAME`이 이미 `characters` 행을 읽으므로 인벤·장비도 같은 조회에서
+함께 읽어 별도 왕복을 만들지 않는다"* 였다. **실제로는 합칠 수 없었다.**
+
+```
+Handle_C_LOGIN       characters 조회 — 캐릭터 목록을 세션에 싣는다
+Handle_C_ENTER_GAME  item_instances 조회 — 별도 왕복                ← 합쳐지지 않는다
+```
+
+**두 조회가 다른 패킷에 속한다.** 로그인 시점에는 어느 캐릭터로 입장할지 아직 모르므로
+아이템을 미리 읽을 대상이 없고, 계정의 모든 캐릭터 아이템을 읽는 것은 낭비다.
+
+따라서 **입장 경로에 DB 왕복 1회가 추가된다.** 대신 두 가지로 비용을 막았다.
+
+- **입장은 런당 1회**다. 던전 내 조작(착용·루팅)은 여전히 DB 접근 0회다
+- **`GDBQueue`를 거치고 입장 자체를 그 콜백 안으로 옮겼다.** 그래서 IOCP 워커가 DB 왕복
+  동안 막히지 않고, "아이템 없이 방에 서 있는" 창도 존재하지 않는다
+
+**🔴 던전 내 DB 접근은 예외 없이 `GDBQueue`를 거친다 — `GDBPool.Pop()`을 직접 쓰지 말 것.**
+
+처음에는 적재를 동기 조회로 짰다가 `[ENTER] no DB connection`으로 실패했다.
+
+```cpp
+// DBJobQueue.cpp:71 — WorkerLoop 맨 위
+DBConnection* connection = _pool->Pop();   // 스레드 수명 내내 반납하지 않는다
+```
+
+`GDBQueue.Init(DB_THREAD_COUNT, &GDBPool)`이 커넥션 수와 같은 수의 워커를 띄우므로,
+부팅이 끝나면 `_idle`은 **영구히 비어 있고** `Pop()`은 즉시 `nullptr`을 반환한다(대기하지
+않는다). **런타임에 동기 DB 조회는 구조적으로 불가능하다.**
+
+> 동기 조회를 고른 이유는 "아이템 없이 입장했다가 나중에 채워지는 창"을 막으려는 것이었다.
+> 그 창은 **조회를 동기로 만들어서가 아니라 입장을 조회 뒤로 미뤄서** 없앴다.
+>
+> 예외는 **부팅 시점**뿐이다. 아직 워커를 띄우기 전이므로 `GDBPool.Pop()`이 성공한다 —
+> ADR-0004의 카운터 복원이 그 자리를 쓴다. **반드시 `GDBQueue.Init` 앞에서** 해야 한다.
 
 **커밋 스냅샷은 값으로 복사한다.** 기존 `Room::SavePlayer`가 이미 그렇게 한다 —
 람다가 `PlayerRef`를 잡으면 DB 스레드가 게임 스레드와 동시에 `posInfo`를 읽는다.
@@ -304,9 +339,17 @@ GDBQueue.Push([room, playerId, snapshot](DBConnection* conn)
 
 ## Validation Criteria
 
-- [ ] 던전 내 착용·루팅 100회 동안 `GDBQueue` 작업이 **0건** 추가된다
-- [ ] 착용 요청 → 응답 지연이 Room flush P95 예산(16.6 ms) 안에 들어간다
-- [ ] 같은 `request_id`로 루팅을 재전송하면 **아이템이 하나만** 들어온다 (AC-IE-49a)
+> **2026-09-12 현재.** 던전 내 메모리 경로는 확인됐고, 탈출·사망 커밋 항목은 그 코드가
+> 아직 없어 미검증이다. **Accepted 는 이 설계로 간다는 승인이며 구현 완료를 뜻하지 않는다.**
+
+- [x] 던전 내 착용·해제가 `GDBQueue` 작업을 **0건** 추가한다 — `Room::HandleEquip` ·
+      `HandleUnequip` 에 DB 접근이 없음을 코드로 확인
+- [x] 같은 `request_id`로 재전송하면 **처리는 1회, 응답은 2회**(`OK` → `ALREADY`)다 —
+      `TryBeginRequest` 세션 인메모리 집합. 실측 확인
+- [x] 인벤과 장비를 오가는 내내 **아이템 총량이 보존된다** — 착용/해제 4회에 걸쳐 6개 유지
+- [ ] 던전 내 **루팅** 100회 동안 `GDBQueue` 작업이 0건 — `C_LOOT` 핸들러 미구현
+- [ ] 착용 요청 → 응답 지연이 Room flush P95 예산(16.6 ms) 안에 들어간다 — **미계측.**
+      봇이 `C_EQUIP` 를 보내지 않아 부하 측정 경로에 들어가지 않는다
 - [ ] 탈출 커밋 실패를 인위적으로 주입하면 플레이어가 **탈출 지점에 무적으로 대기**하고,
       DB 복구 후 **자동으로 커밋되어** 베이스캠프로 전환된다 — 아이템 소실 0
 - [ ] 그 대기 중에 몬스터·타 플레이어 공격을 받아도 **사망하지 않는다**
