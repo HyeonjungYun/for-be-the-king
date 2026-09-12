@@ -31,6 +31,9 @@ public:
 
 	void SendPacket(SendBufferRef SendBuffer);
 
+private:
+	FString ResolveLoginToken() const;
+
 public:
 	void HandleSpawn(const Protocol::ObjectInfo& PlayerInfo, bool IsMine);
 	void HandleSpawn(const Protocol::S_ENTER_GAME& EnterGamePkt);

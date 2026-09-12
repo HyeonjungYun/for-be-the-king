@@ -9,6 +9,7 @@
 #include "PacketSession.h"
 #include "Protocol.pb.h"
 #include "ClientPacketHandler.h"
+#include "HAL/PlatformMisc.h"
 #include "S1MyPlayer.h"
 
 
@@ -18,6 +19,8 @@ void US1GameInstance::Shutdown()
 
 	Super::Shutdown();
 }
+
+
 
 void US1GameInstance::ConnectToGameServer()
 {
@@ -46,7 +49,7 @@ void US1GameInstance::ConnectToGameServer()
 		// TEMP: Lobby에서 캐릭터 선택창 등
 		{
 			Protocol::C_LOGIN Pkt;
-			Pkt.set_token("9f32e2436dd0db4a5737ca5611fa747d77a7273309877c94881b38d42a2c98fe");
+			Pkt.set_token(TCHAR_TO_UTF8(*ResolveLoginToken()));
 
 			SendBufferRef SendBuffer = ClientPacketHandler::MakeSendBuffer(Pkt);
 			SendPacket(SendBuffer);
@@ -71,7 +74,7 @@ void US1GameInstance::DisconnectFromGameServer()
 		GameServerSession->Disconnect();
 		GameServerSession = nullptr;
 	}
-	
+
 	ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get();
 	SocketSubsystem->DestroySocket(Socket);
 	Socket = nullptr;
@@ -94,6 +97,29 @@ void US1GameInstance::SendPacket(SendBufferRef SendBuffer)
 		return;
 
 	GameServerSession->SendPacket(SendBuffer);
+}
+
+FString US1GameInstance::ResolveLoginToken() const
+{
+	FString Token;
+
+	if (FParse::Value(FCommandLine::Get(), TEXT("token="), Token) && Token.Len() == 64)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[LOGIN] token from command line"));
+		return Token;
+	}
+
+	if (GConfig->GetString(TEXT("/Script/S1.S1GameInstance"), TEXT("DevLoginToken"),
+		Token, GGameIni) && Token.Len() == 64)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[LOGIN] token from DefaultGame.ini"));
+		return Token;
+	}
+
+	UE_LOG(LogTemp, Error,
+		TEXT("[LOGIN] no token configured. Set -token=<64> or DefaultGame.ini DevLoginToken"));
+
+	return FString();
 }
 
 void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool IsMine)
