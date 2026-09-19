@@ -1043,3 +1043,15 @@ void AS1MyPlayer::DrawAimIndicator()
 		break;
 	}
 }
+
+void AS1MyPlayer::DebugDashNoNotice()
+{
+	// Same distance and speed as the real dash, so the only difference the server sees is
+	// the missing notice.
+	const FS1SkillDef* Dash = FS1SkillTable::Find(2001);
+	if (Dash == nullptr || Dash->HasMovement() == false)
+		return;
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] dash without C_SKILL - expect [MOVE REJECT] on the server"));
+	RequestDash(GetActorForwardVector(), Dash->MoveDistCm, Dash->MoveSpeedCms);
+}

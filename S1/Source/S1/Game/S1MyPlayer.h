@@ -197,6 +197,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpEnd();
 
+	/**
+	 * DEBUG — M1 ⑤ (production/qa/playtest-m1-skill-binding.md). Console: DebugDashNoNotice
+	 *
+	 * Runs the 2001 displacement with no C_SKILL in front of it. The server never opens its
+	 * speed window, so it must answer with [MOVE REJECT] and a snapback. A dash that gets
+	 * through here means move validation has a hole.
+	 */
+	UFUNCTION(Exec)
+	void DebugDashNoNotice();
+
 public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
