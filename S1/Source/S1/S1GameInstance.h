@@ -77,4 +77,10 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void DebugEquipBadSlot();
+
+	UFUNCTION(Exec)
+	void DebugEquip(int64 InstanceId, int32 Slot);
+
+	UFUNCTION(Exec)
+	void DebugUnequip(int64 InstanceId);
 };

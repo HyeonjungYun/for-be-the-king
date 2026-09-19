@@ -393,3 +393,24 @@ void US1GameInstance::DebugEquipBadSlot()
 
 	SEND_PACKET(Pkt);
 }
+
+void US1GameInstance::DebugEquip(int64 InstanceId, int32 Slot)
+{
+	Protocol::C_EQUIP Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
+	Pkt.set_slot(static_cast<Protocol::EquipSlot>(Slot));
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_EQUIP id=%lld slot=%d"), InstanceId, Slot);
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugUnequip(int64 InstanceId)
+{
+	Protocol::C_UNEQUIP Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_UNEQUIP id=%lld"), InstanceId);
+	SEND_PACKET(Pkt);
+}
