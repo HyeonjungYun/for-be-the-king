@@ -85,6 +85,7 @@
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CcTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="SkillTableTest.cpp" />
     <ClCompile Include="pch.cpp">
