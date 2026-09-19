@@ -48,6 +48,7 @@ void SkillTable::Init()
 		def.shape = SkillShape::Single;
 		def.aimType = SkillAimType::Target;
 		def.rangeCm = 400.f;
+		def.allowedSlot = Protocol::SLOT_WEAPON_PRIMARY;
 
 		SkillEffect dmg;
 		dmg.type = SkillEffectType::Damage;
@@ -74,6 +75,7 @@ void SkillTable::Init()
 		def.shape = SkillShape::CircleSelf;
 		def.aimType = SkillAimType::Direction;
 		def.radiusCm = 0.f;
+		def.allowedSlot = Protocol::SLOT_NONE;
 
 		SkillEffect move;
 		move.type = SkillEffectType::Movement;
@@ -95,6 +97,7 @@ void SkillTable::Init()
 		def.shape = SkillShape::CircleSelf;
 		def.aimType = SkillAimType::SelfArea;			// 내 주위를 벤다. 찍을 것이 없다
 		def.radiusCm = 250.f;
+		def.allowedSlot = Protocol::SLOT_NONE;
 
 		SkillEffect dmg;
 		dmg.type = SkillEffectType::Damage;

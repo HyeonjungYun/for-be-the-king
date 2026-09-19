@@ -81,6 +81,8 @@ struct SkillDef
 	float					widthCm = 0.f;
 	float					radiusCm = 0.f;
 
+	Protocol::EquipSlot		allowedSlot = Protocol::SLOT_NONE;
+
 	vector<SkillEffect>		effects;
 
 	bool HasHardCc() const;
@@ -92,6 +94,8 @@ class SkillTable
 public:
 	static void				Init();
 	static const SkillDef*	Find(uint32 skillId);
+
+	static const unordered_map<uint32, SkillDef>& All() { return s_defs; }
 
 private:
 	static unordered_map<uint32, SkillDef> s_defs;

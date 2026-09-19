@@ -9,7 +9,6 @@
 #include "PacketSession.h"
 #include "Protocol.pb.h"
 #include "ClientPacketHandler.h"
-#include "HAL/PlatformMisc.h"
 #include "S1MyPlayer.h"
 
 
