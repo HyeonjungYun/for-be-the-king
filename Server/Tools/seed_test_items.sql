@@ -61,6 +61,8 @@ VALUES
     (900301, 101, 1, 0, 2, 1, @c3, 1001, 0),      -- 무기 스턴
     (900302, 201, 1, 0, 2, 4, @c3, 3001, 0),      -- 갑옷 광역
     (900303, 301, 1, 0, 1, 0, @c3, 2001, 0);      -- 인벤 신발 — 끼면 대시가 생긴다
+UPDATE characters SET pos_x = 0, pos_y = 0, pos_z = 100, hp = max_hp
+WHERE character_id IN (@c0, @c1, @c2, @c3);
 
 COMMIT;
 

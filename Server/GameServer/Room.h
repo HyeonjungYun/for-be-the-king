@@ -57,6 +57,7 @@ private:
 	void	Broadcast(SendBufferRef sendBuffer, const unordered_set<uint64>& exceptIds);
 	
 	bool	CancelCast(const CreatureRef& caster);
+	void	SendEquipSync(const PlayerRef& player);
 
 	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
 	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs);

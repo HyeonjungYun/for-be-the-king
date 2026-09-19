@@ -153,21 +153,8 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			player->RebuildSkillSlotsFromEquipment();
 			LogSlots(player, "enter");
 
-			Protocol::S_EQUIP_SYNC equipPkt;
-			for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
-			{
-				const SkillSlot& s = player->skillSlots[i];
-
-				Protocol::SkillInfo* info = equipPkt.add_skills();
-				info->set_slot(static_cast<Protocol::EquipSlot>(i + 1));
-				info->set_skill_id(s.skillId);
-				info->set_bind_state(s.bindState);
-				info->set_shadowed_by(s.shadowedBy);
-			}
-
-			SendBufferRef equipBuffer = ServerPacketHandler::MakeSendBuffer(equipPkt);
-			if (auto session = player->session.lock())
-				session->Send(equipBuffer);
+			
+			SendEquipSync(player);
 
 			{
 				Protocol::S_INVENTORY_SYNC invPkt;
@@ -946,6 +933,7 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 
 	player->RebuildSkillSlotsFromEquipment();
 	LogSlots(player, "equip");
+	SendEquipSync(player);
 
 	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
 }
@@ -969,6 +957,7 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 	if (foundIdx < 0)
 	{
 		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND);
+		return;
 	}
 
 	if (player->IsInventoryFull())
@@ -983,6 +972,7 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 
 	player->RebuildSkillSlotsFromEquipment();
 	LogSlots(player, "unequip");
+	SendEquipSync(player);
 
 	vector<Protocol::ItemInstance> changed;
 	changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
@@ -1286,6 +1276,25 @@ bool Room::CancelCast(const CreatureRef& caster)
 	return true;
 }
 
+void Room::SendEquipSync(const PlayerRef& player)
+{
+	Protocol::S_EQUIP_SYNC equipPkt;
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		const SkillSlot& s = player->skillSlots[i];
+
+		Protocol::SkillInfo* info = equipPkt.add_skills();
+		info->set_slot(static_cast<Protocol::EquipSlot>(i + 1));
+		info->set_skill_id(s.skillId);
+		info->set_bind_state(s.bindState);
+		info->set_shadowed_by(s.shadowedBy);
+	}
+
+	SEND_PACKET_DECLARATION(equipPkt);
+	if (auto session = player->session.lock())
+		session->Send(sendBuffer);
+}
+
 void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets)
 {
 	outTargets.clear();
@@ -1480,7 +1489,7 @@ void Room::UpdateSaves(uint64 nowUs)
 		if (nowUs - player->lastSaveUs < SAVE_INTERVAL_US)
 			continue;
 
-		player->lastMoveUs = nowUs;
+		player->lastSaveUs = nowUs;
 		SavePlayer(player);
 		saved++;
 	}
