@@ -26,6 +26,8 @@ Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "PacketGenerator", "Tools\Pa
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerCoreSTests", "ServerCoreSTests\ServerCoreSTests.vcxproj", "{4E718269-2C09-447B-8396-DA2A2C59DB7A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GameServerTests", "GameServerTests\GameServerTests.vcxproj", "{18A62633-FAA4-45F8-9531-9FE66DAB2200}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -90,6 +92,16 @@ Global
 		{4E718269-2C09-447B-8396-DA2A2C59DB7A}.Release|x64.Build.0 = Release|x64
 		{4E718269-2C09-447B-8396-DA2A2C59DB7A}.Release|x86.ActiveCfg = Release|Win32
 		{4E718269-2C09-447B-8396-DA2A2C59DB7A}.Release|x86.Build.0 = Release|Win32
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Debug|Any CPU.Build.0 = Debug|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Debug|x64.ActiveCfg = Debug|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Debug|x64.Build.0 = Debug|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Debug|x86.ActiveCfg = Debug|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Release|Any CPU.ActiveCfg = Release|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Release|Any CPU.Build.0 = Release|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Release|x64.ActiveCfg = Release|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Release|x64.Build.0 = Release|x64
+		{18A62633-FAA4-45F8-9531-9FE66DAB2200}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
