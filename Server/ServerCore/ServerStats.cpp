@@ -84,6 +84,9 @@ void ServerStats::Dump(int32 sessionCount)
 	const uint64 flushTotal = _flushCount.exchange(0);
 	const uint64 flushMax = _flushMaxUs.exchange(0);
 
+	const uint64 moveRejects = _moveRejects.exchange(0);
+	const uint64 moveBlocked = _moveBlocked.exchange(0);
+
 	uint64 buckets[BUCKET_COUNT];
 	for (int32 i = 0; i < BUCKET_COUNT; i++)
 		buckets[i] = _flushBuckets[i].exchange(0);
@@ -103,22 +106,32 @@ void ServerStats::Dump(int32 sessionCount)
 	// 클락 1인이 받는 양 = 서버가 보낸 총량 % 인원
 	const double perClientKbps = (sessionCount > 0) ? (sentMbps * 1000.0 / sessionCount) : 0.0;
 
-	PROCESS_MEMORY_COUNTERS pmc = {};
-	::GetProcessMemoryInfo(::GetCurrentProcess(), &pmc, sizeof(pmc));
+	PROCESS_MEMORY_COUNTERS_EX pmc = {};
+	::GetProcessMemoryInfo(::GetCurrentProcess(),
+		reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc));
 	const double memMB = static_cast<double>(pmc.WorkingSetSize) / (1024.0 * 1024.0);
+	const double commitMB = static_cast<double>(pmc.PrivateUsage) / (1024.0 * 1024.0);
 
-	cout << "\n===== SERVER STATS (window " << elapsedSec << "s, sessions " << sessionCount << ") =====\n";
+	// 🔴 판정 줄이다. 여러 문장으로 나눠 찍으면 다른 스레드 출력이 사이에 끼어
+	//    게이트 판정이 뒤집힌다(2026-09-20 실제로 2건). 블록 전체를 한 번에 내보낸다.
+	std::osyncstream out(std::cout);
 
-	cout << "flush n=" << flushTotal
+	out << "\n===== SERVER STATS (window " << elapsedSec << "s, sessions " << sessionCount << ") =====\n";
+
+	out << "flush n=" << flushTotal
 		<< " p95<=" << p95 << "us " << Verdict(p95 <= 16600)
 		<< " p99<=" << p99 << "us " << Verdict(p99 <= 33000)
 		<< " max=" << flushMax << "us " << Verdict(flushMax <= 100000) << "\n";
 
-	cout << " SV-5 band    recv=" << recvMbps << " Mbps"
+	out << " SV-3 move    reject=" << moveRejects << " " << Verdict(moveRejects == 0)
+		<< "  blocked=" << moveBlocked << " (hard CC, informational)\n";
+
+	out << " SV-5 band    recv=" << recvMbps << " Mbps"
 		<< "  sent=" << sentMbps << " Mbps " << Verdict(sentMbps <= SENT_LIMIT_MBPS)
 		<< "  per-client=" << perClientKbps << " kbps " << Verdict(perClientKbps <= PER_CLIENT_LIMIT_KBPS) << "\n";
 
-	cout << " SV-6 memory  workingset=" << memMB << " MB " << Verdict(memMB <= MEMORY_LIMIT_MB) << "\n";
+	out << " SV-6 memory  commit=" << commitMB << " MB " << Verdict(commitMB <= MEMORY_LIMIT_MB)
+		<< "  workingset=" << memMB << " MB\n";
 
-	cout << "==========================================================\n" << endl;
+	out << "==========================================================\n\n";
 }

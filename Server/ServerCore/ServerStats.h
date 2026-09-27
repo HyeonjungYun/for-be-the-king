@@ -14,6 +14,9 @@ public:
 	void			AddRecvBytes(uint64 bytes) { _recvBytes.fetch_add(bytes); }
 	void			AddSentBytes(uint64 bytes) { _sentBytes.fetch_add(bytes); }
 
+	void			AddMoveReject() { _moveRejects.fetch_add(1); }
+	void			AddMoveBlocked() { _moveBlocked.fetch_add(1); }
+
 	void			Dump(int32 sessionCount);
 
 	static uint64	PercentileUpperUs(const uint64* buckets, uint64 total, double p);
@@ -32,6 +35,9 @@ private:
 
 	atomic<uint64>	_recvBytes = 0;
 	atomic<uint64>	_sentBytes = 0;
+
+	atomic<uint64>	_moveRejects = 0;
+	atomic<uint64>	_moveBlocked = 0;
 
 	uint64			_lastDumpUs = 0;
 };

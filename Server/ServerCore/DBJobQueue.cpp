@@ -71,7 +71,7 @@ void DBJobQueue::WorkerLoop()
 	DBConnection* connection = _pool->Pop();
 	if (connection == nullptr)
 	{
-		cout << "[DB] worker got no connection — pool exhausted" << endl;
+		LOG_LINE << "[DB] worker got no connection — pool exhausted" << '\n';
 		return;
 	}
 

@@ -40,7 +40,7 @@ bool IocpCore::Dispatch(uint32 timeoutMs)
 		if (iocpEvent == nullptr)
 		{
 			if (errCode != WAIT_TIMEOUT)
-				cout << "[IOCP] dispatch failed without event - err=" << errCode << endl;
+				LOG_LINE << "[IOCP] dispatch failed without event - err=" << errCode << '\n';
 
 			return false;
 		}

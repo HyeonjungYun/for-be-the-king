@@ -4,6 +4,20 @@
 #include "Service.h"
 #include "ServerStats.h"
 
+namespace
+{
+	// 로그 전용. Disconnect 의 cause 는 전부 ASCII 리터럴이라는 전제다.
+	// API(const WCHAR*)를 바꾸면 호출부 전체가 파급되므로 출력 지점에서만 좁힌다.
+	string ToNarrow(const WCHAR* wide)
+	{
+		string narrow;
+		for (; wide != nullptr && *wide != L'\0'; ++wide)
+			narrow.push_back(static_cast<char>(*wide < 128 ? *wide : '?'));
+
+		return narrow;
+	}
+}
+
 /*--------------
 	Session
 ---------------*/
@@ -50,7 +64,7 @@ void Session::Disconnect(const WCHAR* cause)
 		return;
 
 	// TEMP
-	wcout << "Disconnect : " << cause << endl;
+	LOG_LINE << "Disconnect : " << ToNarrow(cause) << '\n';
 
 	RegisterDisconnect();
 }
@@ -295,7 +309,7 @@ void Session::HandleError(int32 errorCode)
 		break;
 	default:
 		// TODO : Log
-		cout << "Handle Error : " << errorCode << endl;
+		LOG_LINE << "Handle Error : " << errorCode << '\n';
 		break;
 	}
 }
