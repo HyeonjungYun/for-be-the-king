@@ -16,7 +16,7 @@ namespace BaseStats
 	constexpr float		CRIT_CHANCE					= 0.f;
 	constexpr float		CRIT_MULITPLIER				= 1.75f;
 
-	const float			K_MITIGATION					= 100.f;
+	const float			K_MITIGATION				= 100.f;
 	constexpr int32		MIN_DAMAGE					= 1;
 
 	constexpr float		AS_MIN_RATIO				= 0.5;
@@ -25,6 +25,7 @@ namespace BaseStats
 	constexpr uint32	WINDUP_FLOOR_MS				= 150;
 	constexpr float		RESISTANCE_MAX_REDUCTION	= 0.4f;
 	constexpr float		SOFT_CC_SLOW_CAP			= 0.4f;
+	constexpr uint64	CC_ACK_GRACE_US				= 200'000;
 }
 
 struct SlowSource
@@ -114,6 +115,9 @@ public:
 	vector<SlowSource>	slowSources;
 
 	float				activeSlow = 0.f;
+
+	uint64				speedGraceUntilUs = 0;
+	float				preGraceSlow = 0.f;
 
 public:
 	uint64				attackTargetId	= 0;

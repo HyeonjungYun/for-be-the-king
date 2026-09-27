@@ -24,7 +24,7 @@ float Player::GetEffectiveMoveSpeed() const
 
 	const float speed = (BASE_MOVE_SPEED + flatBonus) * (1.f + percentBonus) * (1.f - activeSlow);
 
-	return std::clamp(speed, BASE_MOVE_SPEED * MS_MIN_RATIO, BASE_MOVE_SPEED * MS_MAX_RATIO);
+	return clamp(speed, BASE_MOVE_SPEED * MS_MIN_RATIO, BASE_MOVE_SPEED * MS_MAX_RATIO);
 }
 
 float Player::GetSpeedCeiling(uint64 nowUs) const
@@ -32,7 +32,20 @@ float Player::GetSpeedCeiling(uint64 nowUs) const
 	if (moveExceptionEndUs != 0 && nowUs < moveExceptionEndUs)
 		return moveExceptionSpeed;
 
+	if (nowUs < speedGraceUntilUs)
+		return ComputeMoveSpeed(min(preGraceSlow, activeSlow));
+
 	return GetEffectiveMoveSpeed();
+}
+
+float Player::ComputeMoveSpeed(float slow) const
+{
+	const float flatBonus = 0.f;
+	const float percentBonus = 0.f;
+
+	const float speed = (BASE_MOVE_SPEED + flatBonus) * (1.f + percentBonus) * (1.f - slow);
+
+	return std::clamp(speed, BASE_MOVE_SPEED * MS_MIN_RATIO, BASE_MOVE_SPEED * MS_MAX_RATIO);
 }
 
 void Player::RebuildSkillSlotsFromEquipment()

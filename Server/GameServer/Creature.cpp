@@ -148,6 +148,11 @@ void Creature::ApplySoftCc(Protocol::CcType type, uint64 nowUs, uint32 effective
 		if (clamped > BaseStats::SOFT_CC_SLOW_CAP)
 			clamped = BaseStats::SOFT_CC_SLOW_CAP;
 
+		if (nowUs >= speedGraceUntilUs)
+			preGraceSlow = activeSlow;
+
+		speedGraceUntilUs = nowUs + BaseStats::CC_ACK_GRACE_US;
+
 		SlowSource& src = slowSources.emplace_back();
 		src.magnitude = clamped;
 		src.endUs = endUs;

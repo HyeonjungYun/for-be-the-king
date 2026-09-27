@@ -27,6 +27,9 @@ public:
 	float		GetEffectiveMoveSpeed() const;
 	float		GetSpeedCeiling(uint64 nowUs) const;
 
+private:
+	float		ComputeMoveSpeed(float slow)const;
+
 public:
 	void	RebuildSkillSlotsFromEquipment();
 	ItemEntry* FindInInventory(uint64 instanceId);
