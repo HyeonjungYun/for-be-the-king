@@ -11,6 +11,7 @@
 
 mutex GBotsLock;
 vector<BotSessionRef> GBots;
+vector<uint32> GFreeBotIndices;
 std::atomic<uint64> GSentThisWindow{ 0 };
 
 atomic<uint64> GGrantTargetId = 0;
@@ -52,7 +53,7 @@ namespace
 
 	void RunGrantBenchmark(int32 sessionCount, int32 uniqueCount, bool spread)
 	{
-		cout << "[GRANT] waiting for " << sessionCount << " session(s) to log in" << endl;
+		LOG_LINE << "[GRANT] waiting for " << sessionCount << " session(s) to log in" << '\n';
 
 		for (int32 spin = 0; spin < 300; spin++)
 		{
@@ -80,7 +81,7 @@ namespace
 
 		if (snapshot.empty() || targetId == 0)
 		{
-			cout << "[GRANT] no session logged in — abort" << endl;
+			LOG_LINE << "[GRANT] no session logged in — abort" << '\n';
 			return;
 		}
 
@@ -101,7 +102,7 @@ namespace
 
 		const uint64 expectedReplies = static_cast<uint64>(snapshot.size()) * uniqueCount;
 
-		cout << "[GRANT] target character=" << targetId << " sessions=" << snapshot.size() << " unique=" << uniqueCount << " total=" << expectedReplies << endl;
+		LOG_LINE << "[GRANT] target character=" << targetId << " sessions=" << snapshot.size() << " unique=" << uniqueCount << " total=" << expectedReplies << '\n';
 
 		const uint64 startUs = Utils::NowMicroseconds();
 
@@ -128,7 +129,7 @@ namespace
 			t.join();
 
 		const uint64 sentUs = Utils::NowMicroseconds();
-		cout << "[GRANT] all sent in " << (sentUs - startUs) / 1000.0 << " ms — waiting for replies" << endl;
+		LOG_LINE << "[GRANT] all sent in " << (sentUs - startUs) / 1000.0 << " ms — waiting for replies" << '\n';
 
 		// 응답을 다 받을 때까지 기다림. 30초를 넘기면 포기하고 현재까지를 보고
 		for (int32 spin = 0; spin < 300; spin++)
@@ -148,7 +149,7 @@ namespace
 		const uint64 already = GGrantAlready.load();
 		const uint64 replies = GGrantReplies.load();
 
-		cout << "\n===== GRANT BENCHMARK =====\n"
+		LOG_LINE << "\n===== GRANT BENCHMARK =====\n"
 			<< " sessions      " << snapshot.size() << "\n"
 			<< " targets       " << targets.size()
 			<< (targets.size() == 1 ? "  (집중)" : "  (분산)") << "\n"
@@ -167,7 +168,7 @@ namespace
 			<< " elapsed       " << elapsedSec << " s\n"
 			<< " throughput    " << (replies / elapsedSec) << " req/s\n"
 			<< " expected gold +" << (static_cast<uint64>(uniqueCount) * GRANT_GOLD) << "\n"
-			<< "===========================\n" << endl;
+			<< "===========================\n" << '\n';
 	}
 }
 
@@ -227,6 +228,19 @@ static void TickBots(float deltaTime)
 		const bool casting = (nowUs < bot->castUnitlUs);
 		const bool dashing = (nowUs < bot->dashUntilUs.load());
 
+		const uint64 slowEnd = bot->slowUntilUs.load();
+		float moveSpeed = BOT_MOVE_SPEED;
+		if (nowUs < slowEnd)
+		{
+			moveSpeed = BOT_MOVE_SPEED * (1.f - bot->slowMagnitude.load());
+			if (moveSpeed < BOT_MOVE_SPEED * 0.5f)
+				moveSpeed = BOT_MOVE_SPEED * 0.5f;
+		}
+		else if (bot->slowMagnitude.load() != 0.f)
+		{
+			bot->slowMagnitude.store(0.f);
+		}
+
 		if (dashing)
 		{
 			const float step = DASH_SPEED * deltaTime;
@@ -246,7 +260,7 @@ static void TickBots(float deltaTime)
 			}
 			else
 			{
-				const float step = BOT_MOVE_SPEED * deltaTime;
+				const float step = moveSpeed * deltaTime;
 				const float ratio = (step < dist) ? (step / dist) : 1.f;
 
 				bot->x += dx * ratio;
@@ -255,7 +269,7 @@ static void TickBots(float deltaTime)
 		}
 		else if (dist > BOT_STOP_DISTANCE)
 		{
-			const float step = BOT_MOVE_SPEED * deltaTime;
+			const float step = moveSpeed * deltaTime;
 			const float ratio = (step < dist) ? (step / dist) : 1.f;
 
 			bot->x += dx * ratio;
@@ -347,6 +361,8 @@ static void TickBots(float deltaTime)
 
 int main(int argc, char* argv[])
 {
+	::setvbuf(stdout, nullptr, _IONBF, 0);
+
 	int32 botCount = 1;
 	int32 grantUnique = 0;
 
@@ -368,7 +384,16 @@ int main(int argc, char* argv[])
 	if (botCount < 1)
 		botCount = 1;
 
-	cout << "[BOT] launching " << botCount << " bot(s)" << endl;
+	LOG_LINE << "[BOT] launching " << botCount << " bot(s)" << '\n';
+
+	// 계정 번호 풀. 끊긴 세션의 번호를 다음 세션이 그대로 물려 받는다
+	{
+		lock_guard<mutex> guard(GBotsLock);
+		GFreeBotIndices.clear();
+		GFreeBotIndices.reserve(botCount);
+		for (int32 i = botCount; i >= 1; i--)
+			GFreeBotIndices.push_back(static_cast<uint32>(i));
+	}
 
 	::timeBeginPeriod(1);
 
@@ -443,11 +468,11 @@ int main(int argc, char* argv[])
 				botCount = GBots.size();
 			}
 
-			cout << "[BOT] send rate = "
+			LOG_LINE << "[BOT] send rate = "
 				<< (botCount > 0 ? sent / sec / botCount : 0.0)
 				<< " Hz/bot  (target 30)"
 				<< "   attacks = " << (attacks / sec) << "/s"
-				<< "   skills = " << (skills / sec) << "/s" << endl;
+				<< "   skills = " << (skills / sec) << "/s" << '\n';
 
 			lastReportUs = nowUs;
 		}

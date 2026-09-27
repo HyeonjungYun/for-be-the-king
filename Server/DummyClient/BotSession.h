@@ -36,6 +36,9 @@ public:
 
 	atomic<uint64>		hardCcUntilUs = 0;
 
+	atomic<uint64>		slowUntilUs = 0;
+	atomic<float>		slowMagnitude = 0.f;
+
 	uint64				nextDashAtUs = 0;
 	uint64				nextAreaAtUs = 0;
 	atomic<uint64>		dashUntilUs = 0;
@@ -43,6 +46,7 @@ public:
 	float				dashDirY = 0.f;
 };
 
+constexpr float					BOT_SLOW_CAP = 0.4f;
 constexpr float					DASH_SPEED = 1200.f;
 constexpr float					DASH_DIST = 400.f;
 constexpr uint64				DASH_DURATION_US = static_cast<uint64>(DASH_DIST / DASH_SPEED * 1'000'000.0);
@@ -51,6 +55,7 @@ using							BotSessionRef = std::shared_ptr<BotSession>;
 
 extern mutex					GBotsLock;
 extern vector<BotSessionRef>	GBots;
+extern vector<uint32>			GFreeBotIndices;
 
 extern atomic<uint64> GGrantTargetId;
 extern atomic<uint64> GGrantOk;

@@ -16,7 +16,8 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 
 	if (pkt.success() == false || pkt.characters_size() == 0)
 	{
-		cout << "[BOT] login failed idx=" << bot->botIndex << endl;
+		LOG_LINE << "[BOT] login failed idx=" << bot->botIndex << " - reconnecting" << '\n';
+		bot->Disconnect(L"login failed");
 		return true;
 	}
 
@@ -40,10 +41,16 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 
 bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 {
-	if (pkt.success() == false)
-		return true;
-
 	auto bot = static_pointer_cast<BotSession>(session);
+
+	if (pkt.success() == false)
+	{
+		LOG_LINE << "[BOT] enter rejected idx=" << bot->botIndex
+			<< " char=" << bot->characterId.load() << " - reconnecting" << '\n';
+		bot->Disconnect(L"enter rejected");
+		return true;
+	}
+
 
 	const Protocol::PosInfo& pos = pkt.player().pos_info();
 
@@ -95,7 +102,7 @@ bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
 		bot->destX = bot->x;
 		bot->destY = bot->y;
 
-		cout << "[BOT SNAPBACK] id=" << bot->objectId.load() << " -> (" << bot->x << ", " << bot->y << ")" << endl;
+		LOG_LINE << "[BOT SNAPBACK] id=" << bot->objectId.load() << " -> (" << bot->x << ", " << bot->y << ")" << '\n';
 	}
 
 	return true;
@@ -128,19 +135,41 @@ bool Handle_S_CC(PacketSessionRef& session, Protocol::S_CC& pkt)
 			continue;
 
 		const Protocol::CcType type = info.cc_type();
+		const uint64 endUs = nowUs + static_cast<uint64>(info.duration_ms()) * 1000;
+
 		const bool isHard = (type == Protocol::CC_TYPE_STUN)
 			|| (type == Protocol::CC_TYPE_ROOT)
 			|| (type == Protocol::CC_TYPE_KNOCKBACK)
 			|| (type == Protocol::CC_TYPE_LAUNCH);
 
-		if (isHard == false)
+		if (isHard)
+		{
+			uint64 prev = bot->hardCcUntilUs.load();
+			while (endUs > prev && bot->hardCcUntilUs.compare_exchange_weak(prev, endUs) == false)
+				;
 			continue;
+		}
 
-		const uint64 endUs = nowUs + static_cast<uint64>(info.duration_ms()) * 1000;
+		if (type == Protocol::CC_TYPE_SLOW)
+		{
+			// 이전 감속이 이미 끝났으면 최대값을 리셋한다. (틱 스레드는 읽기만 한다)
+			if (bot->slowUntilUs.load() <= nowUs)
+				bot->slowMagnitude.store(0.f);
 
-		uint64 prev = bot->hardCcUntilUs.load();
-		while (endUs > prev && bot->hardCcUntilUs.compare_exchange_weak(prev, endUs) == false)
-			;
+			float clamped = info.magnitude();
+			if (clamped < 0.f)
+				clamped = 0.f;
+			if (clamped > BOT_SLOW_CAP)
+				clamped = BOT_SLOW_CAP;
+
+			uint64 prevEnd = bot->slowUntilUs.load();
+			while (endUs > prevEnd && bot->slowUntilUs.compare_exchange_weak(prevEnd, endUs) == false)
+				;
+
+			float prevMag = bot->slowMagnitude.load();
+			while (clamped > prevMag && bot->slowMagnitude.compare_exchange_weak(prevMag, clamped) == false)
+				;
+		}
 	}
 
 	return true;
@@ -162,8 +191,8 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 		bot->alive.store(false);
 
-		cout << "[BOT DIED] id=" << bot->objectId.load()
-			<< " by=" << info.instigator_id() << endl;
+		LOG_LINE << "[BOT DIED] id=" << bot->objectId.load()
+			<< " by=" << info.instigator_id() << '\n';
 
 		bot->Disconnect(L"Died");
 	}

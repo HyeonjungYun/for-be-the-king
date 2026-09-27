@@ -8,8 +8,24 @@ void BotSession::OnConnected()
 		lock_guard<mutex> guard(GBotsLock);
 		GBots.push_back(static_pointer_cast<BotSession>(GetSessionRef()));
 
-		botIndex = static_cast<uint32>(GBots.size());
-		floorId = (botIndex - 1) % 4;
+		if (GFreeBotIndices.empty())
+		{
+			botIndex = 0;
+		}
+		else
+		{
+			botIndex = GFreeBotIndices.back();
+			GFreeBotIndices.pop_back();
+		}
+
+		floorId = (botIndex == 0) ? 0 : (botIndex - 1) % 4;
+	}
+
+	if (botIndex == 0)
+	{
+		LOG_LINE << "[BOT] no free account index" << '\n';
+		Disconnect(L"no free bot index");
+		return;
 	}
 
 	char username[32];
@@ -37,7 +53,13 @@ void BotSession::OnDisconnected()
 
 		BotSessionRef self = static_pointer_cast<BotSession>(GetSessionRef());
 		GBots.erase(remove(GBots.begin(), GBots.end(), self), GBots.end());
+
+		if (botIndex != 0)
+		{
+			GFreeBotIndices.push_back(botIndex);
+			botIndex = 0;
+		}
 	}
 
-	cout << "[BOT] disconnected id=" << objectId.load() << endl;
+	LOG_LINE << "[BOT] disconnected id=" << objectId.load() << '\n';
 }

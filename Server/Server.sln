@@ -11,6 +11,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerCore", "ServerCore\Se
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{2F6A6A59-AE15-4F32-8401-5B29BD338F3A}"
 	ProjectSection(SolutionItems) = preProject
+		Tools\reset_bots.sql = Tools\reset_bots.sql
 		Tools\schema.sql = Tools\schema.sql
 		Tools\schema_auth.sql = Tools\schema_auth.sql
 		Tools\schema_item.sql = Tools\schema_item.sql
