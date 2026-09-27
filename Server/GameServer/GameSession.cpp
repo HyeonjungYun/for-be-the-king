@@ -13,7 +13,7 @@ void GameSession::OnConnected()
 
 void GameSession::OnDisconnected()
 {
-	wcout << "[DISCONNECT] OnDisconnected 진입" << endl;
+	LOG_LINE << "[DISCONNECT] enter\n";
 
 	GSessionManager.Remove(static_pointer_cast<GameSession>(shared_from_this()));
 
@@ -23,20 +23,20 @@ void GameSession::OnDisconnected()
 
 	if (leavingPlayer == nullptr)
 	{
-		wcout << "[DISCONNECT] player == nullptr — 방 이탈 생략" << endl;
+		LOG_LINE << "[DISCONNECT] player == nullptr - skip room leave\n";
 		return;
 	}
 
-	cout << "[DISCONNECT] player id=" << leavingPlayer->objectInfo->object_id() << endl;
+	LOG_LINE << "[DISCONNECT] player id=" << leavingPlayer->objectInfo->object_id() << '\n';
 
 	if (RoomRef room = leavingPlayer->room.load().lock())
 	{
-		wcout << "[DISCONNECT] room 유효 — DoAsync 등록" << endl;
+		LOG_LINE << "[DISCONNECT] room ok - DoAsync queued\n";
 		room->DoAsync(&Room::HandleLeavePlayer, leavingPlayer);
 	}
 	else
 	{
-		wcout << "[DISCONNECT] room == nullptr — 방 이탈 실패" << endl;
+		LOG_LINE << "[DISCONNECT] room == nullptr - leave failed\n";
 	}
 
 	player.store(nullptr);

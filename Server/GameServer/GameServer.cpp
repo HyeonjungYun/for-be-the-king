@@ -38,6 +38,8 @@ void DoWorkerJob(ServerServiceRef& service)
 
 int main()
 {
+	::setvbuf(stdout, nullptr, _IONBF, 0);
+
 	ServerPacketHandler::Init();
 	SkillTable::Init();
 
@@ -55,15 +57,43 @@ int main()
 
 	if (dbPassword.empty())
 	{
-		cout << "[DB] FBTK_DB_PASSWORD not set" << endl;
+		LOG_LINE << "[DB] FBTK_DB_PASSWORD not set" << '\n';
 		return -1;
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_FAIL_DEATH_COMMIT") == 0 && raw != nullptr)
+		{
+			GFailDeathCommit.store(raw[0] == '1');
+			::free(raw);
+		}
+
+		if (GFailDeathCommit.load())
+			LOG_LINE << "[BOOT] FBTK_FAIL_DEATH_COMMIT=1 - every death commit will fail (TEST ONLY)\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_DEATH_COMMIT_DELAY_MS") == 0 && raw != nullptr)
+		{
+			GDeathCommitDelayMs.store(static_cast<uint32>(::strtoul(raw, nullptr, 10)));
+			::free(raw);
+		}
+
+		if (GDeathCommitDelayMs.load() > 0)
+			LOG_LINE << "[BOOT] FBTK_DEATH_COMMIT_DELAY_MS=" << GDeathCommitDelayMs.load() << " (TEST ONLY)\n";
 	}
 
 	constexpr int32 DB_THREAD_COUNT = 4;
 
 	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", 3306, "root", dbPassword.c_str(), "forbetheking") == false)
 	{
-		cout << "[DB] pool connect failed" << endl;
+		LOG_LINE << "[DB] pool connect failed" << '\n';
 		return -1;
 	}
 
@@ -71,27 +101,27 @@ int main()
 		DBConnection* conn = GDBPool.Pop();
 		if (conn == nullptr)
 		{
-			cout << "[BOOT] no DB connection for recovery" << endl;
+			LOG_LINE << "[BOOT] no DB connection for recovery" << '\n';
 			return -1;
 		}
 
-		const bool ok = RestoreIdCounters(conn) && PurgeExpiredBags(conn);
+		const bool ok = RestoreIdCounters(conn) && PurgeExpiredBags(conn) && LoadLiveBags(conn);
 		GDBPool.Push(conn);
 
 		if (ok == false)
 		{
-			cout << "[BOOT] recovery failed - refusing to start" << endl;
+			LOG_LINE << "[BOOT] recovery failed - refusing to start" << '\n';
 			return -1;
 		}
 	}
 
 	if (GDBQueue.Init(DB_THREAD_COUNT, &GDBPool) == false)
 	{
-		cout << "[DB] queue init failed" << endl;
+		LOG_LINE << "[DB] queue init failed" << '\n';
 		return -1;
 	}
 
-	cout << "[DB] connected — " << DB_THREAD_COUNT << " connections" << endl;
+	LOG_LINE << "[DB] connected — " << DB_THREAD_COUNT << " connections" << '\n';
 
 	ServerServiceRef service = make_shared<ServerService>(
 		NetAddress(L"127.0.0.1", 7777),

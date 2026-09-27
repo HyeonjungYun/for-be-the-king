@@ -72,6 +72,9 @@
     <ClCompile Include="AccountManager.cpp">
       <Filter>Main</Filter>
     </ClCompile>
+    <ClCompile Include="Bag.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -118,6 +121,9 @@
     </ClInclude>
     <ClInclude Include="AccountManager.h">
       <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="Bag.h">
+      <Filter>Game\Object</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -4,12 +4,19 @@
 
 class Player;
 
+enum class SessionPlace : uint8
+{
+	None = 0,
+	BaseCamp,
+	Dungeon,
+};
+
 class GameSession : public PacketSession
 {
 public:
 	~GameSession()
 	{
-		cout << "~GameSession" << endl;
+		LOG_LINE << "~GameSession" << endl;
 	}
 
 	virtual void OnConnected() override;
@@ -33,7 +40,7 @@ public:
 public:
 	atomic<uint64> accountId = 0;
 	vector<Protocol::CharacterInfo> characters;
-
+	atomic<SessionPlace> place = SessionPlace::None;
 
 	void SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed = {});
 

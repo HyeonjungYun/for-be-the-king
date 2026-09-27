@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 class Object : public enable_shared_from_this<Object>
 {
@@ -7,6 +7,7 @@ public:
 	virtual ~Object();
 
 	bool IsPlayer() { return _isPlayer; }
+	bool IsBag() const { return objectInfo->object_type() == Protocol::OBJECT_TYPE_BAG; }
 
 public:
 	Protocol::ObjectInfo* objectInfo;

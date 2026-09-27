@@ -2,6 +2,8 @@
 #include "JobQueue.h"
 #include "SkillTable.h"
 
+struct DeathSnapshot;
+
 struct PendingTelegraph
 {
 	uint64 casterId = 0;
@@ -39,6 +41,13 @@ public:
 
 	void	HandleEquip(GameSessionRef session, string requestId, uint64 instanceId, Protocol::EquipSlot slot);
 	void	HandleUnequip(GameSessionRef session, string requestId, uint64 instanceId);
+
+	bool	AddBag(BagRef bag);
+	bool	RemoveBag(uint64 bagId);
+	void	DebugDropBag(uint64 playerId);
+
+	void	BeginDeathCommit(const CreatureRef& victim);
+	void	OnBagCreated(DeathSnapshot snap, bool ok);
 
 public:
 	void	UpdateTick();

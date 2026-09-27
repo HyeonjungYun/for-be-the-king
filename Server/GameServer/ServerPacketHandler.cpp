@@ -37,7 +37,7 @@ namespace
 		MYSQL_RES* res = conn->Query(query);
 		if (res == nullptr)
 		{
-			cout << "[ENTER] item query failed: " << conn->GetError() << endl;
+			LOG_LINE << "[ENTER] item query failed: " << conn->GetError() << '\n';
 			return false;
 		}
 
@@ -45,7 +45,7 @@ namespace
 
 		if (::mysql_num_fields(res) < COL_COUNT)
 		{
-			cout << "[ENTER] item column mismatch" << endl;
+			LOG_LINE << "[ENTER] item column mismatch" << '\n';
 			conn->FreeResult(res);
 			return false;
 		}
@@ -70,7 +70,7 @@ namespace
 			else if (state == Protocol::ITEM_STATE_CARRIED)
 			{
 				if (player->inventory.size() >= Player::INVENTORY_SLOT_COUNT)
-					cout << "[ENTER] inventory overflow - char=" << player->objectInfo->object_id() << endl;
+					LOG_LINE << "[ENTER] inventory overflow - char=" << player->objectInfo->object_id() << '\n';
 
 				player->inventory.push_back(e);
 			}
@@ -128,7 +128,7 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			}
 			if (accountId != 0 && GAccountManager.TryLogin(accountId) == false)
 			{
-				cout << "[LOGIN] already online - account=" << accountId << endl;
+				LOG_LINE << "[LOGIN] already online - account=" << accountId << '\n';
 				accountId = 0;
 			}
 
@@ -146,7 +146,7 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 					if (::mysql_num_fields(result) < COL_COUNT)
 					{
-						cout << "[LOGIN] column count mismatch - expected " << COL_COUNT << " got " << ::mysql_num_fields(result) << endl;
+						LOG_LINE << "[LOGIN] column count mismatch - expected " << COL_COUNT << " got " << ::mysql_num_fields(result) << '\n';
 						conn->FreeResult(result);
 						accountId = 0;
 					}
@@ -177,6 +177,7 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 				gameSession->characters.assign(loginPkt.characters().begin(), loginPkt.characters().end());
 				gameSession->accountId.store(accountId);
+				gameSession->place.store(SessionPlace::BaseCamp);
 
 				loginPkt.set_success(true);
 			}
@@ -201,6 +202,19 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 
 	const Protocol::CharacterInfo& character = gameSession->characters[index];
 
+	// 사망 커밋이 끝나기 전에는 재입장 시키지 않는다. (복제 방지)
+	if (GDeathCommits.IsPending(character.object_info().object_id()))
+	{
+		LOG_LINE << "[ENTER] death commit pending - char=" << character.object_info().object_id() << '\n';
+
+		Protocol::S_ENTER_GAME rejectPkt;
+		rejectPkt.set_success(false);
+		SEND_PACKET_DECLARATION(rejectPkt);
+		gameSession->Send(sendBuffer);
+		
+		return true;
+	}
+
 	RoomRef room = GetRoomForFloor(pkt.floor_id());
 	if (room == nullptr)
 		return false;
@@ -217,11 +231,27 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 	player->posInfo->set_z(saved.z());
 	player->posInfo->set_yaw(saved.yaw());
 
+	// TEST용 임시 규칙 : 죽은 채로 저장된 캐릭터를 입장 때 되살린다.
+	if (player->hp <= 0)
+	{
+		if (player->maxHp <= 0)
+			player->maxHp = BaseStats::MAX_HP;
+
+		player->hp = player->maxHp;
+
+		player->posInfo->set_x(Utils::GetRandom(-2000.f, 2000.f));
+		player->posInfo->set_y(Utils::GetRandom(-2000.f, 2000.f));
+		player->posInfo->set_z(100.f);
+
+		LOG_LINE << "[ENTER] revive char=" << character.object_info().object_id()
+			<< " hp=" << player->hp << '\n';
+	}
+
 	GDBQueue.Push([gameSession, player, room](DBConnection* conn)
 		{
 			if (LoadPlayerItems(conn, player) == false)
 			{
-				cout << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << endl;
+				LOG_LINE << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << '\n';
 
 				gameSession->Disconnect(L"item load failed");
 				return;
@@ -267,8 +297,8 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	if (pkt.info().object_id() != realId)
 	{
 		// 클라가 S_ENTER_GAME 을 처리했다면 0 이 아닌 제 id 를 보낸다.
-		cout << "[ID MISMATCH] claimed=" << pkt.info().object_id()
-			<< " actual=" << realId << endl;
+		LOG_LINE << "[ID MISMATCH] claimed=" << pkt.info().object_id()
+			<< " actual=" << realId << '\n';
 	}
 	pkt.mutable_info()->set_object_id(realId);
 
@@ -314,6 +344,21 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 	if (msg.empty() || msg[0] != '/')
 		return true;
 
+	// 가방 디버그 전용
+	if (msg.rfind("/bag", 0) == 0)
+	{
+		room->DoAsync(&Room::DebugDropBag, player->objectInfo->object_id());
+		return true;
+	}
+
+	if (msg.rfind("/unbag", 0) == 0)
+	{
+		uint64 bagId = 0;
+		if (::sscanf_s(msg.c_str(), "/unbag %llu", &bagId) == 1)
+			room->DoAsync(&Room::RemoveBag, bagId);
+		return true;
+	}
+
 	char command[32] = {};
 	uint64 targetId = 0;
 	uint32 durationMs = 0;
@@ -339,8 +384,8 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 
 	const uint64 instigatorId = player->objectInfo->object_id();
 
-	cout << "[DEBUG CC] " << command << " target=" << targetId
-		<< " ms=" << durationMs << " mag=" << magnitude << endl;
+	LOG_LINE << "[DEBUG CC] " << command << " target=" << targetId
+		<< " ms=" << durationMs << " mag=" << magnitude << '\n';
 
 	room->DoAsync(&Room::ApplyCc, targetId, instigatorId, type, durationMs, magnitude);
 
@@ -427,8 +472,8 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 			}
 			else
 			{
-				cout << "[GRANT] lock failed err=" << conn->GetLastErrorNo()
-					<< " " << conn->GetError() << endl;
+				LOG_LINE << "[GRANT] lock failed err=" << conn->GetLastErrorNo()
+					<< " " << conn->GetError() << '\n';
 
 				conn->Rollback();
 				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
@@ -472,7 +517,7 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 				}
 				else
 				{
-					cout << "[GRANT] insert failed err=" << errorNo << " " << conn->GetError() << endl;
+					LOG_LINE << "[GRANT] insert failed err=" << errorNo << " " << conn->GetError() << '\n';
 					result = Protocol::GRANT_DB_ERROR;
 				}
 
@@ -485,7 +530,7 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 
 			if (conn->Excute(query) == false)
 			{
-				cout << "[GRANT] update failed err=" << conn->GetLastErrorNo() << " " << conn->GetError() << endl;
+				LOG_LINE << "[GRANT] update failed err=" << conn->GetLastErrorNo() << " " << conn->GetError() << '\n';
 				conn->Rollback();
 				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
 				return;
@@ -511,7 +556,7 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 
 			if (conn->Commit() == false)
 			{
-				cout << "[GRANT] commit failed " << conn->GetError() << endl;
+				LOG_LINE << "[GRANT] commit failed " << conn->GetError() << '\n';
 				conn->Rollback();
 				SendGrantResult(gameSession, requestId, Protocol::GRANT_DB_ERROR, 0);
 				return;

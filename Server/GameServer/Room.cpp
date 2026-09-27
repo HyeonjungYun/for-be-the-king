@@ -2,6 +2,9 @@
 #include "Room.h"
 #include "Player.h"
 #include "SkillTable.h"
+#include "ServerStats.h"
+#include "ObjectUtils.h"
+#include "Bag.h"
 
 namespace
 {
@@ -25,26 +28,42 @@ namespace
 
 namespace
 {
+	const char* PickHardCcReason(const Creature& c, uint64 nowUs, OUT uint64& outRemainMs)
+	{
+		const char* reason = "none";
+		uint64 endUs = 0;
+
+		if (c.stunEndUs > endUs) { endUs = c.stunEndUs; reason = "stun"; }
+		if (c.rootEndUs > endUs) { endUs = c.rootEndUs; reason = "root"; }
+		if (c.knockbackEndUs > endUs) { endUs = c.knockbackEndUs; reason = "knockback"; }
+		if (c.launchEndUs > endUs) { endUs = c.launchEndUs; reason = "launch"; }
+
+		outRemainMs = (endUs > nowUs) ? ((endUs - nowUs) / 1000) : 0;
+		return reason;
+	}
 	// TEST
 	void LogSlots(const PlayerRef& player, const char* tag)
 	{
-		cout << "[ITEM] " << tag << " char=" << player->objectInfo->object_id()
+		// 한 이벤트를 여러 문장으로 찍으므로 객체를 직접 둔다. 소멸할 때 한 번에 나간다.
+		std::osyncstream out(std::cout);
+
+		out << "[ITEM] " << tag << " char=" << player->objectInfo->object_id()
 			<< " inv=" << player->inventory.size() << " slots=";
 
 		for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
 		{
 			const SkillSlot& s = player->skillSlots[i];
-			cout << " [" << (i + 1) << "]" << s.skillId;
+			out << " [" << (i + 1) << "]" << s.skillId;
 
 			if (s.bindState == Protocol::BIND_SHADOWED)
-				cout << "(S<-" << s.shadowedBy << ")";
+				out << "(S<-" << s.shadowedBy << ")";
 		}
 
-		cout << " inv_ids=";
+		out << " inv_ids=";
 		for (const ItemEntry& e : player->inventory)
-			cout << e.instanceId << "(g" << e.grade << ") ";
+			out << e.instanceId << "(g" << e.grade << ") ";
 
-		cout << endl;
+		out << '\n';
 	}
 
 	bool IsInAttackRange(const CreatureRef& attacker, const CreatureRef& target)
@@ -135,6 +154,11 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->lastMoveUs = enterUs;
 		player->lastSaveUs = enterUs;
 
+
+		if (success)
+			if (auto session = player->session.lock())
+				session->place.store(SessionPlace::Dungeon);
+
 		player->moveBudget = player->GetSpeedCeiling(enterUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
 
 		Protocol::S_ENTER_GAME enterGamePkt;
@@ -206,7 +230,12 @@ bool Room::LeaveRoom(ObjectRef object)
 	bool success = RemoveObject(objectId);
 
 	if (auto player = dynamic_pointer_cast<Player>(object))
+	{
 		SavePlayer(player);
+
+		if (auto session = player->session.lock())
+			session->place.store(SessionPlace::BaseCamp);
+	}
 
 	// 퇴장 사실을 퇴장하는 플레이어에게 알린다.
 	if (auto player = dynamic_pointer_cast<Player>(object))
@@ -250,9 +279,9 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 
 	if (_enterCount % 30 == 0)
 	{
-		wcout << L"[ENTER] n=" << _enterCount
-			<< L" avg=" << (_enterTotalUs / _enterCount) << L"us"
-			<< L" max=" << _enterMaxUs << L"us" << endl;
+		LOG_LINE << "[ENTER] n=" << _enterCount
+			<< " avg=" << (_enterTotalUs / _enterCount) << "us"
+			<< " max=" << _enterMaxUs << "us" << '\n';
 	}
 
 	return result;
@@ -279,8 +308,18 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	if (player->IsAlive() == false)
 		return;
 
-	if (player->CanMove(Utils::NowMicroseconds()) == false)
+	const uint64 blockCheckUs = Utils::NowMicroseconds();
+	if (player->CanMove(blockCheckUs) == false)
 	{
+		uint64 remainMs = 0;
+		const char* reason = PickHardCcReason(*player, blockCheckUs, OUT remainMs);
+
+		GStats.AddMoveBlocked();
+
+		LOG_LINE << "[MOVE BLOCKED] id=" << objectId
+			<< " reason=" << reason
+			<< " remain=" << remainMs << "ms" << '\n';
+
 		Protocol::S_MOVE snapbackPkt;
 		snapbackPkt.set_correction(true);
 		snapbackPkt.add_infos()->CopyFrom(*player->posInfo);
@@ -318,10 +357,10 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		{
 			rejected = true;
 
-			wcout << "[MOVE REJECT] id=" << objectId
+			LOG_LINE << "[MOVE REJECT] id=" << objectId
 				<< " dist=" << distance
 				<< " budget=" << player->moveBudget
-				<< " dt=" << deltaSec << endl;
+				<< " dt=" << deltaSec << '\n';
 		}
 		else
 		{
@@ -331,6 +370,8 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	
 	if (rejected)
 	{
+		GStats.AddMoveReject();
+
 		// 검증 실패 - posInfo를 갱신하지 않고 마지막 유효 위치를 되돌려 보낸다.
 			// 브로캐스트 X
 		Protocol::S_MOVE snapbackPkt;
@@ -618,7 +659,8 @@ void Room::ResolveAttacks(uint64 nowUs)
 
 			CancelCast(target);
 
-			cout << "[DIED] victim=" << targetId << "by=" << attackerId << endl;
+			LOG_LINE << "[DIED] victim=" << targetId << " by=" << attackerId << '\n';
+			BeginDeathCommit(target);
 		}
 	}
 
@@ -694,10 +736,10 @@ void Room::ResolveCasts(uint64 nowUs)
 			CollectSkillTargets(caster, *def, originX, originY, castTargetId, castAimX, castAimY, OUT targets);
 			ApplySkillEffects(caster, *def, targets, nowUs);
 
-			wcout << L"[SKILL FIRE] caster=" << casterId
-				<< L" skill=" << skillId
-				<< L" targets=" << targets.size()
-				<< L" cd=" << def->cooldownMs << L"ms" << endl;
+			LOG_LINE << "[SKILL FIRE] caster=" << casterId
+				<< " skill=" << skillId
+				<< " targets=" << targets.size()
+				<< " cd=" << def->cooldownMs << "ms" << '\n';
 		}
 		else
 		{
@@ -709,9 +751,9 @@ void Room::ResolveCasts(uint64 nowUs)
 			pending.originX = originX;
 			pending.originY = originY;
 
-			wcout << L"[SKILL TELEGRAPH] caster=" << casterId
-				<< L" skill=" << skillId
-				<< L" in=" << def->telegraphMs << L"ms" << endl;
+			LOG_LINE << "[SKILL TELEGRAPH] caster=" << casterId
+				<< " skill=" << skillId
+				<< " in=" << def->telegraphMs << "ms" << '\n';
 		}
 	}
 
@@ -758,10 +800,10 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		CollectSkillTargets(caster, *def, originX, originY, targetId, aimX, aimY, OUT targets);
 		ApplySkillEffects(caster, *def, targets, nowUs);
 
-		wcout << L"[SKILL FIRE] caster=" << casterId
-			<< L" skill=" << skillId
-			<< L" targets=" << targets.size()
-			<< L" (telegraphed)" << endl;
+		LOG_LINE << "[SKILL FIRE] caster=" << casterId
+			<< " skill=" << skillId
+			<< " targets=" << targets.size()
+			<< " (telegraphed)" << '\n';
 	}
 }
 
@@ -980,6 +1022,144 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
 }
 
+bool Room::AddBag(BagRef bag)
+{
+	if (bag == nullptr)
+		return false;
+
+	if (AddObject(bag) == false)
+		return false;
+
+	_pendingSpawns.push_back(bag->objectInfo->object_id());
+
+	LOG_LINE << "[BAG] add id=" << bag->objectInfo->object_id()
+		<< " floor=" << _floorId
+		<< " pos=(" << bag->posInfo->x() << "," << bag->posInfo->y() << ")"
+		<< " owner=" << bag->ownerCharacterId << '\n';
+
+	return true;
+}
+
+bool Room::RemoveBag(uint64 bagId)
+{
+	auto findIt = _objects.find(bagId);
+	if (findIt == _objects.end() || findIt->second->IsBag() == false)
+		return false;
+
+	RemoveObject(bagId);
+
+	// 스폰 전에 지워졌다면(33ms 안) FlushSpawns가 _objects에서 못 찾아 건너뛴다. 이 DESPAWN은 무해하다.
+	Protocol::S_DESPAWN despawnPkt;
+	despawnPkt.add_object_ids(bagId);
+
+	SEND_PACKET_DECLARATION(despawnPkt);
+	Broadcast(sendBuffer);
+
+	LOG_LINE << "[BAG] remove id=" << bagId << '\n';
+
+	return true;
+}
+
+void Room::DebugDropBag(uint64 playerId)
+{
+	// 위치를 Room 스레드에서 읽는다. IOCP 스레드에서 posInfo를 읽으면 HandleMove와 경쟁한다.
+	auto findIt = _objects.find(playerId);
+	if (findIt == _objects.end())
+		return;
+
+	PlayerRef owner = dynamic_pointer_cast<Player>(findIt->second);
+	if (owner == nullptr)
+		return;
+
+	const char* place = "?";
+	if (auto session = owner->session.lock())
+		place = (session->place.load() == SessionPlace::Dungeon) ? "Dungeon" : "NOT_Dungeon";
+
+	const uint64 bagId = GNextBagId.fetch_add(1);
+	const uint64 expiresAtUs = Utils::NowMicroseconds() + 60'000'000;
+
+	BagRef bag = ObjectUtils::CreateBag(bagId, _floorId, owner->posInfo->x(), owner->posInfo->y(), owner->posInfo->z(), expiresAtUs, playerId);
+
+	LOG_LINE << "[BAG] debug drop by=" << playerId << " place=" << place << '\n';
+
+	AddBag(bag);
+}
+
+void Room::BeginDeathCommit(const CreatureRef& victim)
+{
+	PlayerRef player = dynamic_pointer_cast<Player>(victim);
+	if (player == nullptr)
+		return;
+
+	const uint64 characterId = player->objectInfo->object_id();
+
+	DeathSnapshot snap;
+	snap.characterId = characterId;
+	snap.floorId = _floorId;
+	snap.x = player->posInfo->x();
+	snap.y = player->posInfo->y();
+	snap.z = player->posInfo->z();
+
+	for (const ItemEntry& e : player->inventory)
+		snap.items.push_back(e);
+
+	for (const ItemEntry& e : player->equipped)
+		if (e.instanceId != 0)
+			snap.items.push_back(e);
+
+	if (GDeathCommits.TryBegin(characterId) == false)
+		return;
+
+	snap.bagId = GNextBagId.fetch_add(1);
+	snap.expiresAtUs = Utils::NowMicroseconds() + BAG_LIFETIME_US;
+
+	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size() << '\n';
+
+	RoomRef room = GetRoomRef();
+	GDBQueue.Push([room, snap](DBConnection* conn)
+		{
+			const bool ok = CommitDeath(conn, snap);
+			room->DoAsync(&Room::OnBagCreated, snap, ok);
+		});
+}
+
+void Room::OnBagCreated(DeathSnapshot snap, bool ok)
+{
+	// 성공이든 실패든 재입장을 허용한다. DB는 이미 확정(커밋 또는 롤백)됐다.
+	GDeathCommits.End(snap.characterId);
+
+	if (ok == false)
+	{
+		LOG_LINE << "[DEATH] commit failed - no bag. char=" << snap.characterId << '\n';
+		return;
+	}
+
+	BagRef bag = ObjectUtils::CreateBag(snap.bagId, snap.floorId, snap.x, snap.y, snap.z, snap.expiresAtUs, snap.characterId);
+	bag->items = snap.items;
+	AddBag(bag);
+
+	// 죽은 플레이어가 아직 방에 있으면 메모리도 비운다. 봇은 이미 끊고 나갔을 수 있다.
+	auto findIt = _objects.find(snap.characterId);
+	if (findIt == _objects.end())
+		return;
+
+	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+	if (player == nullptr)
+		return;
+
+	player->inventory.clear();
+	for (ItemEntry& e : player->equipped)
+		e = ItemEntry{};
+
+	player->RebuildSkillSlotsFromEquipment();
+	SendEquipSync(player);
+
+	Protocol::S_INVENTORY_SYNC invPkt;		// 빈 목록, 전부 가방으로 감
+	SEND_PACKET_DECLARATION(invPkt);
+	if (auto session = player->session.lock())
+		session->Send(sendBuffer);
+}
+
 void Room::UpdateTick()
 {
 	UpdateSaves(Utils::NowMicroseconds());
@@ -1152,7 +1332,7 @@ void Room::FlushSpawns()
 
 				for (auto& item : _objects)
 				{
-					if (item.second->IsPlayer() == false)
+					if (item.second->IsPlayer() == false && item.second->IsBag() == false)
 						continue;
 
 					allPkt.add_players()->CopyFrom(*item.second->objectInfo);
@@ -1406,7 +1586,9 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 					_attackers.erase(targetId);
 					CancelCast(target);
 
-					cout << "[DIED] victim=" << targetId << "by=" << casterId << endl;
+					LOG_LINE << "[DIED] victim=" << targetId << " by=" << casterId << '\n';
+
+					BeginDeathCommit(target);
 				}
 				break;
 			}
@@ -1441,9 +1623,9 @@ void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, u
 	player->moveExceptionSpeed = effect.speedCms;
 	player->moveExceptionEndUs = nowUs + durUs + DASH_GRACE_US;
 
-	wcout << L"[DASH WINDOW] caster=" << player->objectInfo->object_id()
-		<< L" speed=" << effect.speedCms
-		<< L" dur=" << (durUs / 1000) << L"ms" << endl;
+	LOG_LINE << "[DASH WINDOW] caster=" << player->objectInfo->object_id()
+		<< " speed=" << effect.speedCms
+		<< " dur=" << (durUs / 1000) << "ms" << '\n';
 }
 
 void Room::SavePlayer(PlayerRef player)
