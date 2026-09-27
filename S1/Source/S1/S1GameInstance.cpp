@@ -130,6 +130,16 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 	if (World == nullptr)
 		return;
 
+	if (objectInfo.object_type() == Protocol::OBJECT_TYPE_BAG)
+	{
+		const Protocol::PosInfo& Pos = objectInfo.pos_info();
+		UE_LOG(LogTemp, Log, TEXT("[BAG] spawn id=%llu pos=(%.0f, %.0f)"),
+			objectInfo.object_id(), Pos.x(), Pos.y());
+
+		Bags.Add(objectInfo.object_id());
+		return;
+	}
+
 	// 중복 처리 체크
 	const uint64 ObjectId = objectInfo.object_id();
 	if (TWeakObjectPtr<AS1Player>* Found = Players.Find(ObjectId))
@@ -188,7 +198,11 @@ void US1GameInstance::HandleDespawn(uint64 ObjectId)
 	if (World == nullptr)
 		return;
 
-	// TODO : Despawn
+	if (Bags.Remove(ObjectId) > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[BAG] despawn id=%llu"), ObjectId);
+		return;
+	}
 
 	TWeakObjectPtr<AS1Player>* FindActor = Players.Find(ObjectId);
 	if (FindActor == nullptr)
@@ -412,5 +426,23 @@ void US1GameInstance::DebugUnequip(int64 InstanceId)
 	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
 
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_UNEQUIP id=%lld"), InstanceId);
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugBag()
+{
+	Protocol::C_CHAT Pkt;
+	Pkt.set_msg("/bag");
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_CHAT /bag"));
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugUnbag(int64 BagId)
+{
+	Protocol::C_CHAT Pkt;
+	Pkt.set_msg(TCHAR_TO_UTF8(*FString::Printf(TEXT("/unbag %lld"), BagId)));
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_CHAT /unbag %lld"), BagId);
 	SEND_PACKET(Pkt);
 }

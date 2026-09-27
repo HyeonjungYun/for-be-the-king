@@ -65,6 +65,7 @@ public:
 	TWeakObjectPtr<AS1Player> MyPlayer;
 	TMap<uint64, TWeakObjectPtr<AS1Player>> Players;
 	TArray<Protocol::SkillInfo> SkillSlots;
+	TSet<uint64> Bags;
 
 	UFUNCTION(BlueprintCallable)
 	void DebugEquipWeapon();
@@ -83,4 +84,10 @@ public:
 
 	UFUNCTION(Exec)
 	void DebugUnequip(int64 InstanceId);
+
+	UFUNCTION(Exec)
+	void DebugBag();
+
+	UFUNCTION(Exec)
+	void DebugUnbag(int64 BagId);
 };
