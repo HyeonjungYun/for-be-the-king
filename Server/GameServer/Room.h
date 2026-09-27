@@ -74,6 +74,7 @@ private:
 
 	void	SavePlayer(PlayerRef player);
 	void	UpdateSaves(uint64 nowUs);
+	void	UpdateBagExpiry(uint64 nowUs);
 	
 	void	FindSpawnPosition(float baseX, float baseY, float& outX, float& outY);
 
@@ -83,6 +84,7 @@ public:
 private:
 	unordered_map<uint64, ObjectRef>	_objects;
 	unordered_set<uint64>				_dirtyMovers;
+	unordered_map<uint64, BagRef>		_bags;
 
 	vector<uint64>						_pendingSpawns;
 	vector<PendingTelegraph>			_pendingTelegraphs;

@@ -24,6 +24,8 @@ bool PurgeExpiredBags(DBConnection* conn);
 
 bool LoadLiveBags(DBConnection* conn);
 
+bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const vector<uint64>& instanceIds);
+
 bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap);
 
 extern atomic<bool> GFailDeathCommit;

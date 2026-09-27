@@ -1030,6 +1030,7 @@ bool Room::AddBag(BagRef bag)
 	if (AddObject(bag) == false)
 		return false;
 
+	_bags[bag->objectInfo->object_id()] = bag;
 	_pendingSpawns.push_back(bag->objectInfo->object_id());
 
 	LOG_LINE << "[BAG] add id=" << bag->objectInfo->object_id()
@@ -1047,6 +1048,7 @@ bool Room::RemoveBag(uint64 bagId)
 		return false;
 
 	RemoveObject(bagId);
+	_bags.erase(bagId);
 
 	// 스폰 전에 지워졌다면(33ms 안) FlushSpawns가 _objects에서 못 찾아 건너뛴다. 이 DESPAWN은 무해하다.
 	Protocol::S_DESPAWN despawnPkt;
@@ -1162,7 +1164,10 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 
 void Room::UpdateTick()
 {
-	UpdateSaves(Utils::NowMicroseconds());
+	const uint64 nowUs = Utils::NowMicroseconds();
+
+	UpdateSaves(nowUs);
+	UpdateBagExpiry(nowUs);
 	
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
@@ -1675,6 +1680,36 @@ void Room::UpdateSaves(uint64 nowUs)
 		SavePlayer(player);
 		saved++;
 	}
+}
+
+void Room::UpdateBagExpiry(uint64 nowUs)
+{
+	vector<uint64> bagIds;
+	vector<uint64> instanceIds;
+
+	for (auto& [bagId, bag] : _bags)
+	{
+		if (nowUs < bag->expiresAtUs)
+			continue;
+
+		bagIds.push_back(bagId);
+
+		for (const ItemEntry& e : bag->items)
+			instanceIds.push_back(e.instanceId);
+	}
+
+	if (bagIds.empty())
+		return;
+
+	for (uint64 bagId : bagIds)
+		RemoveBag(bagId);
+
+	LOG_LINE << "[BAG] expired floor=" << _floorId << " bags=" << bagIds.size() << " items=" << instanceIds.size() << '\n';
+
+	GDBQueue.Push([bagIds, instanceIds](DBConnection* conn)
+		{
+			DeleteExpiredBags(conn, bagIds, instanceIds);
+		});
 }
 
 void Room::FindSpawnPosition(float baseX, float baseY, float& outX, float& outY)

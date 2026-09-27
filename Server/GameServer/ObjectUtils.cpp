@@ -200,6 +200,49 @@ bool LoadLiveBags(DBConnection* conn)
 	return true;
 }
 
+bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const vector<uint64>& instanceIds)
+{
+	auto join = [](const vector<uint64>& v)
+		{
+			string s;
+			for (size_t i = 0; i < v.size(); i++)
+			{
+				if (i > 0)
+					s += ',';
+				s += to_string(v[i]);
+			}
+			return s;
+		};
+
+	if (conn->BeginTransaction() == false)
+	{
+		LOG_LINE << "[BAG] expire delete begin failed - err=" << conn->GetLastErrorNo() << '\n';
+		return false;
+	}
+
+	bool ok = true;
+
+	// 빈 가방만 만료되면 아이템 목록이 비어 있다.
+	if (instanceIds.empty() == false)
+	{
+		const string delItems = "DELETE FROM item_instances WHERE instance_id IN (" + join(instanceIds) + ")";
+		ok = conn->Excute(delItems.c_str());
+	}
+
+	if (ok)
+	{
+		const string delBags = "DELETE FROM bags WHERE  bag_id IN (" + join(bagIds) + ")";
+		ok = conn->Excute(delBags.c_str());
+	}
+
+	if (ok && conn->Commit())
+		return true;
+
+	conn->Rollback();
+	LOG_LINE << "[BAG] expire delete failed - bags=" << bagIds.size() << " err=" << conn->GetLastErrorNo() << " (boot purge will clean up)\n";
+	return false;
+}
+
 bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 {
 	string ids;
