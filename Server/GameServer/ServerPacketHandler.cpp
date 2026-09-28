@@ -645,6 +645,27 @@ bool Handle_C_LOOT(PacketSessionRef& session, Protocol::C_LOOT& pkt)
 
 bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
 {
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	PlayerRef player = gameSession->player.load();
+	if (player == nullptr)
+		return false;
+
+	RoomRef room = player->room.load().lock();
+	if (room == nullptr)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
+		return true;
+	}
+
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+
+	room->DoAsync(&Room::HandleDrop, gameSession, pkt.request_id(), pkt.instance_id());
+
 	return true;
 }
 

@@ -261,6 +261,14 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 		ids += to_string(snap.items[i].instanceId);
 	}
 
+	string dropped;
+	for (size_t i = 0; i < snap.droppedIds.size(); i++)
+	{
+		if (i > 0)
+			dropped += ',';
+		dropped += to_string(snap.droppedIds[i]);
+	}
+
 	for (int32 attempt = 1; attempt <= DEATH_COMMIT_ATTEMPTS; attempt++)
 	{
 		if (conn->BeginTransaction() == false)
@@ -299,6 +307,15 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 				LOG_LINE << "[DEATH] item count mismatch - expected=" << snap.items.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
 				ok = false;
 			}
+		}
+
+		//  이번 런에서 버린 아이템을 파기한다. 이미 없으면 목적은 달성된 것이라 개수가 달라도 실패로 보지않는다.
+		if (ok && snap.droppedIds.empty() == false)
+		{
+			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + dropped + ")";
+			ok = conn->Excute(del.c_str());
+			if (ok && conn->GetAffectedRows() != snap.droppedIds.size())
+				LOG_LINE << "[DEATH] dropped rows already gone - expected=" << snap.droppedIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
 		}
 
 		// 검증 전용 - 커밋을 늦춰 재입장 가드(DeathCommitTracker)가 실제로 발동하는지 본다.

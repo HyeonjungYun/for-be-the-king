@@ -104,4 +104,7 @@ public:
 
 	UFUNCTION(Exec)
 	void DebugLootAll(int64 BagId);
+
+	UFUNCTION(Exec)
+	void DebugDrop(int64 InstanceId);
 };

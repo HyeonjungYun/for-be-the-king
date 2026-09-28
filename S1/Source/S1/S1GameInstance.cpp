@@ -514,3 +514,13 @@ void US1GameInstance::DebugLootAll(int64 BagId)
 	for (uint64 InstanceId : Snapshot)
 		DebugLoot(BagId, static_cast<int64>(InstanceId));
 }
+
+void US1GameInstance::DebugDrop(int64 InstanceId)
+{
+	Protocol::C_DROP Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_DROP id=%lld"), InstanceId);
+	SEND_PACKET(Pkt);
+}

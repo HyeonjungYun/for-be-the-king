@@ -1133,6 +1133,52 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 	LOG_LINE << "[LOOT] take - char=" << playerId << " bag=" << bagId << " item=" << instanceId << " left=" << bag->items.size() << " inv=" << player->inventory.size() << '\n';
 }
 
+void Room::HandleDrop(GameSessionRef session, string requestId, uint64 instanceId)
+{
+	PlayerRef player = session->player.load();
+	if (player == nullptr)
+		return;
+
+	const uint64 playerId = player->objectInfo->object_id();
+
+	// 죽은 뒤의 소지품은 사망 커밋이 가방으로 옮긴다.
+	if (_objects.find(playerId) == _objects.end() || player->IsAlive() == false)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
+		return;
+	}
+
+	// 착용 중인 아이템은 해제부터 해야한다.
+	for (const ItemEntry& e : player->equipped)
+	{
+		if (e.instanceId != 0 && e.instanceId == instanceId)
+		{
+			session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
+			return;
+		}
+	}
+
+	ItemEntry* found = player->FindInInventory(instanceId);
+	if (found == nullptr)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND);
+		return;
+	}
+
+	const size_t invIndex = static_cast<size_t>(found - player->inventory.data());
+	const ItemEntry e = *found;
+
+	player->inventory.erase(player->inventory.begin() + invIndex);
+	player->droppedIds.push_back(e.instanceId);
+
+	vector<Protocol::ItemInstance> changed;
+	changed.push_back(e.ToProto(Protocol::ITEM_STATE_NONE));
+	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
+
+	LOG_LINE << "[ITEM] drop - char=" << playerId << " item=" << e.instanceId
+		<< " inv=" << player->inventory.size() << " dropped=" << player->droppedIds.size() << '\n';
+}
+
 bool Room::AddBag(BagRef bag)
 {
 	if (bag == nullptr)
@@ -1245,13 +1291,15 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 		if (e.instanceId != 0)
 			snap.items.push_back(e);
 
+	snap.droppedIds = player->droppedIds;
+
 	if (GDeathCommits.TryBegin(characterId) == false)
 		return;
 
 	snap.bagId = GNextBagId.fetch_add(1);
 	snap.expiresAtUs = Utils::NowMicroseconds() + BAG_LIFETIME_US;
 
-	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size() << '\n';
+	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size() << " dropped=" << snap.droppedIds.size() << '\n';
 
 	RoomRef room = GetRoomRef();
 	GDBQueue.Push([room, snap](DBConnection* conn)
@@ -1290,6 +1338,7 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 		return;
 
 	player->inventory.clear();
+	player->droppedIds.clear();
 	for (ItemEntry& e : player->equipped)
 		e = ItemEntry{};
 

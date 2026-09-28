@@ -52,4 +52,5 @@ public:
 
 	vector<ItemEntry>		inventory;
 	ItemEntry				equipped[SKILL_SLOT_COUNT];
+	vector<uint64>			droppedIds;
 };

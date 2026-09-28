@@ -14,6 +14,7 @@ struct DeathSnapshot
 	float				z = 0.f;
 	uint64				expiresAtUs = 0;
 	vector<ItemEntry>	items;
+	vector<uint64>		droppedIds;
 };
 
 class Bag : public Object

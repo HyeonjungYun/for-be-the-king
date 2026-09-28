@@ -43,6 +43,7 @@ public:
 	void	HandleUnequip(GameSessionRef session, string requestId, uint64 instanceId);
 	void	HandleBagOpen(GameSessionRef session, uint64 bagId);
 	void	HandleLoot(GameSessionRef session, string requestId, uint64 bagId, uint64 instanceId);
+	void	HandleDrop(GameSessionRef session, string requestId, uint64 instanceId);
 
 	bool	AddBag(BagRef bag);
 	bool	RemoveBag(uint64 bagId);
