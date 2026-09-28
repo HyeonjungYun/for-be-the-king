@@ -9,6 +9,7 @@ enum class SessionPlace : uint8
 	None = 0,
 	BaseCamp,
 	Dungeon,
+	Entering,
 };
 
 class GameSession : public PacketSession

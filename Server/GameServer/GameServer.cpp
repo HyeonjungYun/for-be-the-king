@@ -89,6 +89,20 @@ int main()
 			LOG_LINE << "[BOOT] FBTK_DEATH_COMMIT_DELAY_MS=" << GDeathCommitDelayMs.load() << " (TEST ONLY)\n";
 	}
 
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_BASECAMP_DELAY_MS") == 0 && raw != nullptr)
+		{
+			GBaseCampDelayMs.store(static_cast<uint32>(::strtoul(raw, nullptr, 10)));
+			::free(raw);
+		}
+
+		if (GBaseCampDelayMs.load() > 0)
+			LOG_LINE << "[BOOT] FBTK_BASECAMP_DELAY_MS=" << GBaseCampDelayMs.load() << " (TEST ONLY)\n";
+	}
+
 	constexpr int32 DB_THREAD_COUNT = 4;
 
 	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", 3306, "root", dbPassword.c_str(), "forbetheking") == false)

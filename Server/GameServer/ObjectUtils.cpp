@@ -11,6 +11,7 @@ atomic<uint64> GNextInstanceId = 1;
 atomic<uint64>GNextBagId = BAG_ID_BASE;
 atomic<bool> GFailDeathCommit = false;
 atomic<uint32> GDeathCommitDelayMs = 0;
+atomic<uint32> GBaseCampDelayMs = 0;
 DeathCommitTracker GDeathCommits;
 
 namespace

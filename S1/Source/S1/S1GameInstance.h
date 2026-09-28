@@ -107,4 +107,16 @@ public:
 
 	UFUNCTION(Exec)
 	void DebugDrop(int64 InstanceId);
+
+	UFUNCTION(Exec)
+	void DebugLeave();
+
+	UFUNCTION(Exec)
+	void DebugEnter();
+
+	UFUNCTION(Exec)
+	void DebugVault(int64 InstanceId);
+
+	UFUNCTION(Exec)
+	void DebugUnvault(int64 InstanceId);
 };

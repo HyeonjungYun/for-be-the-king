@@ -524,3 +524,43 @@ void US1GameInstance::DebugDrop(int64 InstanceId)
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_DROP id=%lld"), InstanceId);
 	SEND_PACKET(Pkt);
 }
+
+void US1GameInstance::DebugLeave()
+{
+	Protocol::C_LEAVE_GAME Pkt;
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_LEAVE_GAME"));
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugEnter()
+{
+	Protocol::C_ENTER_GAME Pkt;
+	Pkt.set_playerindex(0);
+	Pkt.set_floor_id(0);
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_ENTER_GAME"));
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugVault(int64 InstanceId)
+{
+	Protocol::C_STASH Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
+	Pkt.set_to_vault(true);
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_STASH vault id=%lld"), InstanceId);
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugUnvault(int64 InstanceId)
+{
+	Protocol::C_STASH Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
+	Pkt.set_to_vault(false);
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_STASH unvault id=%lld"), InstanceId);
+	SEND_PACKET(Pkt);
+}

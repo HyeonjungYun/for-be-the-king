@@ -48,3 +48,4 @@ private:
 
 extern DeathCommitTracker GDeathCommits;
 extern atomic<uint32> GDeathCommitDelayMs;
+extern atomic<uint32> GBaseCampDelayMs;

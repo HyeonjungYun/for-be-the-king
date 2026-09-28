@@ -6,6 +6,7 @@
 #include "Room.h"
 #include "Player.h"
 #include "AccountManager.h"
+#include <thread>
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
 
@@ -27,17 +28,39 @@ namespace
 	// 이후 던전 내에서는 DB를 치지 않는다.
 	bool LoadPlayerItems(DBConnection* conn, PlayerRef player)
 	{
+		const uint64 characterId = player->objectInfo->object_id();
+
 		char query[512];
+
+		if (conn->BeginTransaction() == false)
+		{
+			LOG_LINE << "[ENTER] begin failed: " << conn->GetError() << '\n';
+			return false;
+		}
+
+		::snprintf(query, sizeof(query),
+			"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", characterId);
+
+		MYSQL_RES* lockRes = conn->Query(query);
+		if (lockRes == nullptr)
+		{
+			LOG_LINE << "[ENTER] lock failed: " << conn->GetError() << '\n';
+			conn->Rollback();
+			return false;
+		}
+		conn->FreeResult(lockRes);
+
 		::snprintf(query, sizeof(query),
 			"SELECT instance_id, item_type_id, grade, level, state, slot, "
 			"skill_id_primary, skill_id_secondary FROM item_instances "
 			"WHERE owner_character_id = %llu",
-			player->objectInfo->object_id());
+			characterId);
 
 		MYSQL_RES* res = conn->Query(query);
 		if (res == nullptr)
 		{
 			LOG_LINE << "[ENTER] item query failed: " << conn->GetError() << '\n';
+			conn->Rollback();
 			return false;
 		}
 
@@ -47,6 +70,7 @@ namespace
 		{
 			LOG_LINE << "[ENTER] item column mismatch" << '\n';
 			conn->FreeResult(res);
+			conn->Rollback();
 			return false;
 		}
 
@@ -77,7 +101,196 @@ namespace
 		}
 
 		conn->FreeResult(res);
+		conn->Commit();
 		return true;
+	}
+
+	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy };
+
+	const int32 VAULT_SLOT_COUNT = 25;
+
+	const char* BaseCampOpName(BaseCampOp op)
+	{
+		switch (op)
+		{
+		case BaseCampOp::ToVault: return "vault";
+		case BaseCampOp::ToCarried: return "unvault";
+		default: return "destroy";
+		}
+	}
+
+	Protocol::ItemResult RunBaseCampItemOp(DBConnection* conn, GameSessionRef session, uint64 instanceId, BaseCampOp op, OUT Protocol::ItemInstance& changed)
+	{
+		char query[512];
+
+		// 주인 - 클라는 instance_id만 보낸다. 주인은 서버가 자기 데이터에서 찾는다.
+		uint64 ownerId = 0;
+		::snprintf(query, sizeof(query),
+			"SELECT owner_character_id FROM item_instances WHERE instance_id = %llu", instanceId);
+
+		MYSQL_RES* ownerRes = conn->Query(query);
+		if (ownerRes == nullptr)
+			return Protocol::ITEM_DB_ERROR;
+
+		if (MYSQL_ROW row = ::mysql_fetch_row(ownerRes))
+			ownerId = (row[0] != nullptr) ? ::strtoull(row[0], nullptr, 10) : 0;
+		conn->FreeResult(ownerRes);
+
+		// 남의 아이템, 가방 속 아이템은 없는 것과 같이 답한다 - 존재 여부를 흘리지 않는다.
+		bool mine = false;
+		for (const Protocol::CharacterInfo& c : session->characters)
+			if (ownerId != 0 && c.object_info().object_id() == ownerId)
+				mine = true;
+
+		if (mine == false)
+			return Protocol::ITEM_NOT_FOUND;
+
+		if (conn->BeginTransaction() == false)
+			return Protocol::ITEM_DB_ERROR;
+
+		// 캐릭터 잠금
+		::snprintf(query, sizeof(query),
+			"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", ownerId);
+
+		MYSQL_RES* lockRes = conn->Query(query);
+		if (lockRes == nullptr)
+		{
+			conn->Rollback();
+			return Protocol::ITEM_DB_ERROR;
+		}
+		conn->FreeResult(lockRes);
+
+		// 잠근 뒤에 다시 본다 - 그 사이 입장을 시작했거나(Entering) 사망 커밋이 진행 중이면 손대지 않는다.
+		if (session->place.load() != SessionPlace::BaseCamp || GDeathCommits.IsPending(ownerId))
+		{
+			conn->Rollback();
+			return Protocol::ITEM_INVALID_STATE;
+		}
+
+		// 검증 전용 - 잠금은 쥔 채 늦춰, 입장 적재가 이 커밋을 기다리는지 본다.
+		const uint32 delayMs = GBaseCampDelayMs.load();
+		if (delayMs > 0)
+			this_thread::sleep_for(chrono::milliseconds(delayMs));
+
+		// 아이템 현재 상태 (행 잠금)
+		::snprintf(query, sizeof(query),
+			"SELECT item_type_id, grade, level, state, skill_id_primary, skill_id_secondary "
+			"FROM item_instances WHERE instance_id = %llu AND owner_character_id = %llu FOR UPDATE",
+			instanceId, ownerId);
+
+		MYSQL_RES* itemRes = conn->Query(query);
+		if (itemRes == nullptr)
+		{
+			conn->Rollback();
+			return Protocol::ITEM_DB_ERROR;
+		}
+
+		ItemEntry e;
+		int32 state = -1;
+
+		if (MYSQL_ROW row = ::mysql_fetch_row(itemRes))
+		{
+			e.instanceId = instanceId;
+			e.itemTypeId = static_cast<uint32>(::atoi(row[0]));
+			e.grade = static_cast<Protocol::ItemGrade>(::atoi(row[1]));
+			e.level = static_cast<uint32>(::atoi(row[2]));
+			state = ::atoi(row[3]);
+			e.skillIdPrimary = static_cast<uint32>(::atoi(row[4]));
+			e.skillIdSecondary = static_cast<uint32>(::atoi(row[5]));
+		}
+		conn->FreeResult(itemRes);
+
+		if (state < 0)
+		{
+			conn->Rollback();
+			return Protocol::ITEM_NOT_FOUND;
+		}
+
+		Protocol::ItemState target = Protocol::ITEM_STATE_NONE;
+
+		if (op == BaseCampOp::Destroy)
+		{
+			if (state != Protocol::ITEM_STATE_CARRIED && state != Protocol::ITEM_STATE_VAULTED)
+			{
+				conn->Rollback();
+				return Protocol::ITEM_INVALID_STATE;
+			}
+		}
+		else
+		{
+			const Protocol::ItemState from = (op == BaseCampOp::ToVault) ? Protocol::ITEM_STATE_CARRIED : Protocol::ITEM_STATE_VAULTED;
+			target = (op == BaseCampOp::ToVault) ? Protocol::ITEM_STATE_VAULTED : Protocol::ITEM_STATE_CARRIED;
+
+			// 재접속 뒤 같은 요청을 다시 보냈다 - 이미 목표 상태
+			if (state == target)
+			{
+				conn->Rollback();
+				return Protocol::ITEM_ALREADY;
+			}
+
+			// 착용품은 창고에 넣을 수 없다
+			if (state != from)
+			{
+				conn->Rollback();
+				return Protocol::ITEM_INVALID_STATE;
+			}
+
+			// 용량 - 창고 25, 소지 25
+			::snprintf(query, sizeof(query),
+				"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state = %d",
+				ownerId, static_cast<int32>(target));
+
+			MYSQL_RES* countRes = conn->Query(query);
+			if (countRes == nullptr)
+			{
+				conn->Rollback();
+				return Protocol::ITEM_DB_ERROR;
+			}
+
+			uint64 count = 0;
+			if (MYSQL_ROW row = ::mysql_fetch_row(countRes))
+				count = ::strtoull(row[0], nullptr, 10);
+			conn->FreeResult(countRes);
+
+			const uint64 capacity = (target == Protocol::ITEM_STATE_VAULTED) ? VAULT_SLOT_COUNT : Player::INVENTORY_SLOT_COUNT;
+			if (count >= capacity)
+			{
+				conn->Rollback();
+				return Protocol::ITEM_INVENTORY_FULL;
+			}
+		}
+
+		// 반영
+		if (op == BaseCampOp::Destroy)
+			::snprintf(query, sizeof(query), "DELETE FROM item_instances WHERE instance_id = %llu", instanceId);
+		else
+				::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = 0 WHERE instance_id = %llu",
+					static_cast<int32>(target), instanceId);
+			
+		if (conn->Excute(query) == false || conn->GetAffectedRows() != 1 || conn->Commit() == false)
+		{
+			conn->Rollback();
+			return Protocol::ITEM_DB_ERROR;
+		}
+		
+		changed = e.ToProto(target);
+		return Protocol::ITEM_OK;
+	}
+
+	void PushBaseCampItemOp(GameSessionRef session, string requestId, uint64 instanceId, BaseCampOp op)
+	{
+		GDBQueue.Push([session, requestId, instanceId, op](DBConnection* conn)
+			{
+				Protocol::ItemInstance changed;
+				const Protocol::ItemResult result = RunBaseCampItemOp(conn, session, instanceId, op, OUT changed);
+
+				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " item=" << instanceId << " result=" << result << '\n';
+
+				if (result == Protocol::ITEM_OK)
+					session->SendItemResult(requestId, result, { changed });
+				else
+					session->SendItemResult(requestId, result);
+			});
 	}
 }
 
@@ -218,6 +431,9 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 	RoomRef room = GetRoomForFloor(pkt.floor_id());
 	if (room == nullptr)
 		return false;
+
+	SessionPlace expected = SessionPlace::BaseCamp;
+	gameSession->place.compare_exchange_strong(expected, SessionPlace::Entering);
 
 	// 플레이어 생성
 	PlayerRef player = ObjectUtils::CreatePlayer(gameSession, character.object_info().object_id());
@@ -647,16 +863,8 @@ bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
 {
 	auto gameSession = static_pointer_cast<GameSession>(session);
 
-	PlayerRef player = gameSession->player.load();
-	if (player == nullptr)
+	if (gameSession->accountId.load() == 0)
 		return false;
-
-	RoomRef room = player->room.load().lock();
-	if (room == nullptr)
-	{
-		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
-		return true;
-	}
 
 	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
 	{
@@ -664,6 +872,19 @@ bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
 		return true;
 	}
 
+	if (gameSession->place.load() == SessionPlace::BaseCamp)
+	{
+		PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(), BaseCampOp::Destroy);
+		return true;
+	}
+
+	PlayerRef player = gameSession->player.load();
+	RoomRef room = (player != nullptr) ? player->room.load().lock() : nullptr;
+	if (room == nullptr)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
+		return true;
+	}
 	room->DoAsync(&Room::HandleDrop, gameSession, pkt.request_id(), pkt.instance_id());
 
 	return true;
@@ -671,6 +892,27 @@ bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
 
 bool Handle_C_STASH(PacketSessionRef& session, Protocol::C_STASH& pkt)
 {
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	if (gameSession->accountId.load() == 0)
+		return false;
+
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+
+	// 던전 안에서는 창고에 접근할 수 없다. 입장 중(Entering)도 막는다.
+	if (gameSession->place.load() != SessionPlace::BaseCamp)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
+		return true;
+	}
+
+	PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(),
+		pkt.to_vault() ? BaseCampOp::ToVault : BaseCampOp::ToCarried);
+
 	return true;
 }
 

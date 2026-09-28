@@ -176,9 +176,18 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->lastSaveUs = enterUs;
 
 
-		if (success)
-			if (auto session = player->session.lock())
+		if (auto session = player->session.lock())
+		{
+			if (success)
+			{
 				session->place.store(SessionPlace::Dungeon);
+			}
+			else
+			{
+				SessionPlace expected = SessionPlace::Entering;
+				session->place.compare_exchange_strong(expected, SessionPlace::BaseCamp);
+			}
+		}
 
 		player->moveBudget = player->GetSpeedCeiling(enterUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
 
