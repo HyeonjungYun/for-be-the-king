@@ -169,7 +169,7 @@ message C_UNEQUIP
 
 message C_LOOT
 {
-	string reqeust_id = 1;
+	string request_id = 1;
 	uint64 bag_id = 2;
 	uint64 instance_id = 3;
 }
@@ -204,4 +204,9 @@ message S_BAG_CONTENTS
 	uint64 bag_id = 1;
 	repeated ItemInstance items = 2;
 	uint64 remaining_ms = 3;
+}
+
+message C_BAG_OPEN
+{
+	uint64 bag_id = 1;
 }

@@ -24,6 +24,7 @@ namespace
 	constexpr float		SPAWN_SPACING_CM = 150.0f;
 	constexpr int32		SPAWN_MAX_RINGS = 6;
 	constexpr float		SPAWN_PI = 3.14159265f;
+	constexpr float		LOOT_RANGE_CM = 200.f;
 }
 
 namespace
@@ -88,6 +89,26 @@ namespace
 		const float dy = target->posInfo->y() - caster->posInfo->y();
 
 		return (dx * dx + dy * dy) <= (rangeCm * rangeCm);
+	}
+
+	bool IsInLootRange(const PlayerRef& player, const BagRef& bag)
+	{
+		const float dx = bag->posInfo->x() - player->posInfo->x();
+		const float dy = bag->posInfo->y() - player->posInfo->y();
+
+		return (dx * dx + dy * dy) <= (LOOT_RANGE_CM * LOOT_RANGE_CM);
+	}
+
+	SendBufferRef MakeBagContents(const BagRef& bag, uint64 nowUs)
+	{
+		Protocol::S_BAG_CONTENTS pkt;
+		pkt.set_bag_id(bag->objectInfo->object_id());
+		pkt.set_remaining_ms(bag->expiresAtUs > nowUs ? (bag->expiresAtUs - nowUs) / 1000 : 0);
+
+		for (const ItemEntry& e : bag->items)
+			pkt.add_items()->CopyFrom(e.ToProto(Protocol::ITEM_STATE_IN_BAG));
+
+		return ServerPacketHandler::MakeSendBuffer(pkt);
 	}
 }
 
@@ -1022,6 +1043,96 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
 }
 
+void Room::HandleBagOpen(GameSessionRef session, uint64 bagId)
+{
+	PlayerRef player = session->player.load();
+	if (player == nullptr)
+		return;
+
+	const uint64 playerId = player->objectInfo->object_id();
+
+	if (_objects.find(playerId) == _objects.end() || player->IsAlive() == false)
+		return;
+
+	auto findIt = _bags.find(bagId);
+	if (findIt == _bags.end())
+	{
+		LOG_LINE << "[LOOT] open rejected - char=" << playerId << " bag=" << bagId << " reason=not_found\n";
+		return;
+	}
+
+	BagRef bag = findIt->second;
+	if (IsInLootRange(player, bag) == false)
+	{
+		LOG_LINE << "[LOOT] open rejected - char=" << playerId << " bag=" << bagId << " reason=range\n";
+		return;
+	}
+
+	bag->viewers.insert(playerId);
+	session->Send(MakeBagContents(bag, Utils::NowMicroseconds()));
+
+	LOG_LINE << "[LOOT] open - char=" << playerId << " bag=" << bagId << " items=" << bag->items.size() << '\n';
+}
+
+void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, uint64 instanceId)
+{
+	PlayerRef player = session->player.load();
+	if (player == nullptr)
+		return;
+
+	const uint64 playerId = player->objectInfo->object_id();
+
+	if (_objects.find(playerId) == _objects.end() || player->IsAlive() == false)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
+		return;
+	}
+
+	auto bagIt = _bags.find(bagId);
+	if (bagIt == _bags.end())
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND);
+		return;
+	}
+
+	BagRef bag = bagIt->second;
+	if (IsInLootRange(player, bag) == false)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
+		return;
+	}
+
+	auto itemIt = find_if(bag->items.begin(), bag->items.end(),
+		[instanceId](const ItemEntry& e) {return e.instanceId == instanceId; });
+
+	if (itemIt == bag->items.end())
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND);
+		return;
+	}
+
+	// 부분 루팅 - 거부된 아이템은 가방에 남는다.
+	if (player->IsInventoryFull())
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_INVENTORY_FULL);
+		return;
+	}
+
+	// 메모리만 옮긴다. DB의 이 아이템은 탈출,사망 커밋 때까지 원래 가방 소속이다.
+	ItemEntry e = *itemIt;
+	bag->items.erase(itemIt);
+	player->inventory.push_back(e);
+
+	vector<Protocol::ItemInstance> changed;
+	changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
+	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
+
+	// 비어도 지우지 않는다.
+	PushBagContents(bag);
+
+	LOG_LINE << "[LOOT] take - char=" << playerId << " bag=" << bagId << " item=" << instanceId << " left=" << bag->items.size() << " inv=" << player->inventory.size() << '\n';
+}
+
 bool Room::AddBag(BagRef bag)
 {
 	if (bag == nullptr)
@@ -1087,6 +1198,31 @@ void Room::DebugDropBag(uint64 playerId)
 	AddBag(bag);
 }
 
+void Room::DebugKill(uint64 playerId)
+{
+	auto findIt = _objects.find(playerId);
+	if (findIt == _objects.end())
+		return;
+
+	PlayerRef victim = dynamic_pointer_cast<Player>(findIt->second);
+	if (victim == nullptr || victim->IsAlive() == false)
+		return;
+
+	victim->hp = 0;
+
+	Protocol::DiedInfo& died = _pendingDeaths.emplace_back();
+	died.set_victim_id(playerId);
+	died.set_instigator_id(playerId);
+	died.set_cause(Protocol::DEATH_CAUSE_PLAYER);
+
+	victim->attackTargetId = 0;
+	victim->attackHitAtUs = 0;
+	CancelCast(victim);
+
+	LOG_LINE << "[DIED] victim=" << playerId << " by=debug\n";
+	BeginDeathCommit(victim);
+}
+
 void Room::BeginDeathCommit(const CreatureRef& victim)
 {
 	PlayerRef player = dynamic_pointer_cast<Player>(victim);
@@ -1138,6 +1274,10 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 
 	BagRef bag = ObjectUtils::CreateBag(snap.bagId, snap.floorId, snap.x, snap.y, snap.z, snap.expiresAtUs, snap.characterId);
 	bag->items = snap.items;
+
+	for (ItemEntry& e : bag->items)
+		e.level = 0;
+
 	AddBag(bag);
 
 	// 죽은 플레이어가 아직 방에 있으면 메모리도 비운다. 봇은 이미 끊고 나갔을 수 있다.
@@ -1478,6 +1618,32 @@ void Room::SendEquipSync(const PlayerRef& player)
 	SEND_PACKET_DECLARATION(equipPkt);
 	if (auto session = player->session.lock())
 		session->Send(sendBuffer);
+}
+
+void Room::PushBagContents(const BagRef& bag)
+{
+	if (bag->viewers.empty())
+		return;
+
+	SendBufferRef sendBuffer = MakeBagContents(bag, Utils::NowMicroseconds());
+	
+	for (auto it = bag->viewers.begin(); it != bag->viewers.end(); )
+	{
+		auto objIt = _objects.find(*it);
+		PlayerRef viewer = (objIt != _objects.end()) ? dynamic_pointer_cast<Player>(objIt->second) : nullptr;
+
+		// 닫기 패킷이 없다. 떠났거나 죽었거나 멀어졌으면 열람이 끝난 것으로 보고 여기서 뺀다.
+		if (viewer == nullptr || viewer->IsAlive() == false || IsInLootRange(viewer, bag) == false)
+		{
+			it = bag->viewers.erase(it);
+			continue;
+		}
+
+		if (auto viewerSession = viewer->session.lock())
+			viewerSession->Send(sendBuffer);
+
+		++it;
+	}
 }
 
 void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets)

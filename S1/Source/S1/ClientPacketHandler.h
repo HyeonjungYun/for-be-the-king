@@ -45,6 +45,7 @@ enum : uint16
 	PKT_C_STASH = 1032,
 	PKT_S_INVENTORY_SYNC = 1033,
 	PKT_S_BAG_CONTENTS = 1034,
+	PKT_C_BAG_OPEN = 1035,
 };
 
 // Custom Handlers
@@ -120,6 +121,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_LOOT& pkt) { return MakeSendBuffer(pkt, PKT_C_LOOT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_DROP& pkt) { return MakeSendBuffer(pkt, PKT_C_DROP); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_STASH& pkt) { return MakeSendBuffer(pkt, PKT_C_STASH); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_BAG_OPEN& pkt) { return MakeSendBuffer(pkt, PKT_C_BAG_OPEN); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

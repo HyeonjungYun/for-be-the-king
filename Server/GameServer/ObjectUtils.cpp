@@ -105,8 +105,16 @@ bool PurgeExpiredBags(DBConnection* conn)
 		return false;
 	}
 
-	LOG_LINE << "[BOOT] expired bags purged - bags=" << conn->GetAffectedRows()
-		<< " items=" << removedItems << '\n';
+	const uint64 removeBags = conn->GetAffectedRows();
+
+	if (conn->Excute("DELETE FROM item_instances WHERE bag_id IS NOT NULL AND bag_id NOT IN (SELECT bag_id FROM bags)") == false)
+	{
+		LOG_LINE << "[BOOT] purge orphan items failed: " << conn->GetError() << '\n';
+		return false;
+	}
+
+	LOG_LINE << "[BOOT] expired bags purged - bags=" << removeBags
+		<< " items=" << removedItems << " orphan_items=" << conn->GetAffectedRows() << '\n';
 
 	return true;
 }

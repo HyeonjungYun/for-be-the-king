@@ -50,6 +50,7 @@ public:
 	void HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt);
 	void HandleSkillCancel(const Protocol::S_SKILL_CANCEL& CancelPkt);
 	void HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt);
+	void HandleBagContents(const Protocol::S_BAG_CONTENTS BagPkt);
 	
 public:
 	// GameServer
@@ -66,6 +67,7 @@ public:
 	TMap<uint64, TWeakObjectPtr<AS1Player>> Players;
 	TArray<Protocol::SkillInfo> SkillSlots;
 	TSet<uint64> Bags;
+	TMap<uint64, TArray<uint64>> OpenBags;
 
 	UFUNCTION(BlueprintCallable)
 	void DebugEquipWeapon();
@@ -90,4 +92,16 @@ public:
 
 	UFUNCTION(Exec)
 	void DebugUnbag(int64 BagId);
+
+	UFUNCTION(Exec)
+	void DebugDie();
+
+	UFUNCTION(Exec)
+	void DebugOpenBag(int64 BagId);
+
+	UFUNCTION(Exec)
+	void DebugLoot(int64 BagId, int64 InstanceId);
+
+	UFUNCTION(Exec)
+	void DebugLootAll(int64 BagId);
 };

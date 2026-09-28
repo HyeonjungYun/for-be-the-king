@@ -23,9 +23,10 @@ public:
 	virtual ~Bag();
 
 public:
-	uint64				ownerCharacterId = 0;
-	uint32				floorId;
-	uint64				expiresAtUs = 0;
-	vector<ItemEntry>	items;
+	uint64					ownerCharacterId = 0;
+	uint32					floorId;
+	uint64					expiresAtUs = 0;
+	vector<ItemEntry>		items;
+	unordered_set<uint64>	viewers;
 };
 

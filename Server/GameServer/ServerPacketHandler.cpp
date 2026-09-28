@@ -359,6 +359,12 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 		return true;
 	}
 
+	if (msg.rfind("/die", 0) == 0)
+	{
+		room->DoAsync(&Room::DebugKill, player->objectInfo->object_id());
+		return true;
+	}
+
 	char command[32] = {};
 	uint64 targetId = 0;
 	uint32 durationMs = 0;
@@ -616,6 +622,24 @@ bool Handle_C_UNEQUIP(PacketSessionRef& session, Protocol::C_UNEQUIP& pkt)
 
 bool Handle_C_LOOT(PacketSessionRef& session, Protocol::C_LOOT& pkt)
 {
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	
+	PlayerRef player = gameSession->player.load();
+	if (player == nullptr)
+		return false;
+
+	RoomRef room = player->room.load().lock();
+	if (room == nullptr)
+		return false;
+
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+
+	room->DoAsync(&Room::HandleLoot, gameSession, pkt.request_id(), pkt.bag_id(), pkt.instance_id());
+	
 	return true;
 }
 
@@ -626,5 +650,21 @@ bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
 
 bool Handle_C_STASH(PacketSessionRef& session, Protocol::C_STASH& pkt)
 {
+	return true;
+}
+
+bool Handle_C_BAG_OPEN(PacketSessionRef& session, Protocol::C_BAG_OPEN& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+
+	PlayerRef player = gameSession->player.load();
+	if (player == nullptr)
+		return false;
+
+	RoomRef room = player->room.load().lock();
+	if (room == nullptr)
+		return false;
+
+	room->DoAsync(&Room::HandleBagOpen, gameSession, pkt.bag_id());
 	return true;
 }

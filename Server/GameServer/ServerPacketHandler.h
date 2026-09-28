@@ -45,6 +45,7 @@ enum : uint16
 	PKT_C_STASH = 1032,
 	PKT_S_INVENTORY_SYNC = 1033,
 	PKT_S_BAG_CONTENTS = 1034,
+	PKT_C_BAG_OPEN = 1035,
 };
 
 // Custom Handlers
@@ -63,6 +64,7 @@ bool Handle_C_UNEQUIP(PacketSessionRef& session, Protocol::C_UNEQUIP& pkt);
 bool Handle_C_LOOT(PacketSessionRef& session, Protocol::C_LOOT& pkt);
 bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt);
 bool Handle_C_STASH(PacketSessionRef& session, Protocol::C_STASH& pkt);
+bool Handle_C_BAG_OPEN(PacketSessionRef& session, Protocol::C_BAG_OPEN& pkt);
 
 class ServerPacketHandler
 {
@@ -85,6 +87,7 @@ public:
 		GPacketHandler[PKT_C_LOOT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_LOOT>(Handle_C_LOOT, session, buffer, len); };
 		GPacketHandler[PKT_C_DROP] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_DROP>(Handle_C_DROP, session, buffer, len); };
 		GPacketHandler[PKT_C_STASH] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_STASH>(Handle_C_STASH, session, buffer, len); };
+		GPacketHandler[PKT_C_BAG_OPEN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_BAG_OPEN>(Handle_C_BAG_OPEN, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

@@ -51,6 +51,9 @@ namespace Protocol {
 class C_ATTACK;
 struct C_ATTACKDefaultTypeInternal;
 extern C_ATTACKDefaultTypeInternal _C_ATTACK_default_instance_;
+class C_BAG_OPEN;
+struct C_BAG_OPENDefaultTypeInternal;
+extern C_BAG_OPENDefaultTypeInternal _C_BAG_OPEN_default_instance_;
 class C_CHAT;
 struct C_CHATDefaultTypeInternal;
 extern C_CHATDefaultTypeInternal _C_CHAT_default_instance_;
@@ -156,6 +159,7 @@ extern S_SPAWNDefaultTypeInternal _S_SPAWN_default_instance_;
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
 template<> ::Protocol::C_ATTACK* Arena::CreateMaybeMessage<::Protocol::C_ATTACK>(Arena*);
+template<> ::Protocol::C_BAG_OPEN* Arena::CreateMaybeMessage<::Protocol::C_BAG_OPEN>(Arena*);
 template<> ::Protocol::C_CHAT* Arena::CreateMaybeMessage<::Protocol::C_CHAT>(Arena*);
 template<> ::Protocol::C_DROP* Arena::CreateMaybeMessage<::Protocol::C_DROP>(Arena*);
 template<> ::Protocol::C_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::C_ENTER_GAME>(Arena*);
@@ -4933,22 +4937,22 @@ class C_LOOT final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kReqeustIdFieldNumber = 1,
+    kRequestIdFieldNumber = 1,
     kBagIdFieldNumber = 2,
     kInstanceIdFieldNumber = 3,
   };
-  // string reqeust_id = 1;
-  void clear_reqeust_id();
-  const std::string& reqeust_id() const;
+  // string request_id = 1;
+  void clear_request_id();
+  const std::string& request_id() const;
   template <typename ArgT0 = const std::string&, typename... ArgT>
-  void set_reqeust_id(ArgT0&& arg0, ArgT... args);
-  std::string* mutable_reqeust_id();
-  PROTOBUF_NODISCARD std::string* release_reqeust_id();
-  void set_allocated_reqeust_id(std::string* reqeust_id);
+  void set_request_id(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_request_id();
+  PROTOBUF_NODISCARD std::string* release_request_id();
+  void set_allocated_request_id(std::string* request_id);
   private:
-  const std::string& _internal_reqeust_id() const;
-  inline PROTOBUF_ALWAYS_INLINE void _internal_set_reqeust_id(const std::string& value);
-  std::string* _internal_mutable_reqeust_id();
+  const std::string& _internal_request_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_request_id(const std::string& value);
+  std::string* _internal_mutable_request_id();
   public:
 
   // uint64 bag_id = 2;
@@ -4977,7 +4981,7 @@ class C_LOOT final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
-    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr reqeust_id_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr request_id_;
     uint64_t bag_id_;
     uint64_t instance_id_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
@@ -5839,6 +5843,154 @@ class S_BAG_CONTENTS final :
     ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ItemInstance > items_;
     uint64_t bag_id_;
     uint64_t remaining_ms_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class C_BAG_OPEN final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_BAG_OPEN) */ {
+ public:
+  inline C_BAG_OPEN() : C_BAG_OPEN(nullptr) {}
+  ~C_BAG_OPEN() override;
+  explicit PROTOBUF_CONSTEXPR C_BAG_OPEN(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_BAG_OPEN(const C_BAG_OPEN& from);
+  C_BAG_OPEN(C_BAG_OPEN&& from) noexcept
+    : C_BAG_OPEN() {
+    *this = ::std::move(from);
+  }
+
+  inline C_BAG_OPEN& operator=(const C_BAG_OPEN& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_BAG_OPEN& operator=(C_BAG_OPEN&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_BAG_OPEN& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_BAG_OPEN* internal_default_instance() {
+    return reinterpret_cast<const C_BAG_OPEN*>(
+               &_C_BAG_OPEN_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    35;
+
+  friend void swap(C_BAG_OPEN& a, C_BAG_OPEN& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_BAG_OPEN* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_BAG_OPEN* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  C_BAG_OPEN* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<C_BAG_OPEN>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const C_BAG_OPEN& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const C_BAG_OPEN& from) {
+    C_BAG_OPEN::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_BAG_OPEN* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_BAG_OPEN";
+  }
+  protected:
+  explicit C_BAG_OPEN(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kBagIdFieldNumber = 1,
+  };
+  // uint64 bag_id = 1;
+  void clear_bag_id();
+  uint64_t bag_id() const;
+  void set_bag_id(uint64_t value);
+  private:
+  uint64_t _internal_bag_id() const;
+  void _internal_set_bag_id(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_BAG_OPEN)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t bag_id_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -7523,54 +7675,54 @@ inline void C_UNEQUIP::set_instance_id(uint64_t value) {
 
 // C_LOOT
 
-// string reqeust_id = 1;
-inline void C_LOOT::clear_reqeust_id() {
-  _impl_.reqeust_id_.ClearToEmpty();
+// string request_id = 1;
+inline void C_LOOT::clear_request_id() {
+  _impl_.request_id_.ClearToEmpty();
 }
-inline const std::string& C_LOOT::reqeust_id() const {
-  // @@protoc_insertion_point(field_get:Protocol.C_LOOT.reqeust_id)
-  return _internal_reqeust_id();
+inline const std::string& C_LOOT::request_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_LOOT.request_id)
+  return _internal_request_id();
 }
 template <typename ArgT0, typename... ArgT>
 inline PROTOBUF_ALWAYS_INLINE
-void C_LOOT::set_reqeust_id(ArgT0&& arg0, ArgT... args) {
+void C_LOOT::set_request_id(ArgT0&& arg0, ArgT... args) {
  
- _impl_.reqeust_id_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
-  // @@protoc_insertion_point(field_set:Protocol.C_LOOT.reqeust_id)
+ _impl_.request_id_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.C_LOOT.request_id)
 }
-inline std::string* C_LOOT::mutable_reqeust_id() {
-  std::string* _s = _internal_mutable_reqeust_id();
-  // @@protoc_insertion_point(field_mutable:Protocol.C_LOOT.reqeust_id)
+inline std::string* C_LOOT::mutable_request_id() {
+  std::string* _s = _internal_mutable_request_id();
+  // @@protoc_insertion_point(field_mutable:Protocol.C_LOOT.request_id)
   return _s;
 }
-inline const std::string& C_LOOT::_internal_reqeust_id() const {
-  return _impl_.reqeust_id_.Get();
+inline const std::string& C_LOOT::_internal_request_id() const {
+  return _impl_.request_id_.Get();
 }
-inline void C_LOOT::_internal_set_reqeust_id(const std::string& value) {
+inline void C_LOOT::_internal_set_request_id(const std::string& value) {
   
-  _impl_.reqeust_id_.Set(value, GetArenaForAllocation());
+  _impl_.request_id_.Set(value, GetArenaForAllocation());
 }
-inline std::string* C_LOOT::_internal_mutable_reqeust_id() {
+inline std::string* C_LOOT::_internal_mutable_request_id() {
   
-  return _impl_.reqeust_id_.Mutable(GetArenaForAllocation());
+  return _impl_.request_id_.Mutable(GetArenaForAllocation());
 }
-inline std::string* C_LOOT::release_reqeust_id() {
-  // @@protoc_insertion_point(field_release:Protocol.C_LOOT.reqeust_id)
-  return _impl_.reqeust_id_.Release();
+inline std::string* C_LOOT::release_request_id() {
+  // @@protoc_insertion_point(field_release:Protocol.C_LOOT.request_id)
+  return _impl_.request_id_.Release();
 }
-inline void C_LOOT::set_allocated_reqeust_id(std::string* reqeust_id) {
-  if (reqeust_id != nullptr) {
+inline void C_LOOT::set_allocated_request_id(std::string* request_id) {
+  if (request_id != nullptr) {
     
   } else {
     
   }
-  _impl_.reqeust_id_.SetAllocated(reqeust_id, GetArenaForAllocation());
+  _impl_.request_id_.SetAllocated(request_id, GetArenaForAllocation());
 #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  if (_impl_.reqeust_id_.IsDefault()) {
-    _impl_.reqeust_id_.Set("", GetArenaForAllocation());
+  if (_impl_.request_id_.IsDefault()) {
+    _impl_.request_id_.Set("", GetArenaForAllocation());
   }
 #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  // @@protoc_insertion_point(field_set_allocated:Protocol.C_LOOT.reqeust_id)
+  // @@protoc_insertion_point(field_set_allocated:Protocol.C_LOOT.request_id)
 }
 
 // uint64 bag_id = 2;
@@ -8014,9 +8166,35 @@ inline void S_BAG_CONTENTS::set_remaining_ms(uint64_t value) {
   // @@protoc_insertion_point(field_set:Protocol.S_BAG_CONTENTS.remaining_ms)
 }
 
+// -------------------------------------------------------------------
+
+// C_BAG_OPEN
+
+// uint64 bag_id = 1;
+inline void C_BAG_OPEN::clear_bag_id() {
+  _impl_.bag_id_ = uint64_t{0u};
+}
+inline uint64_t C_BAG_OPEN::_internal_bag_id() const {
+  return _impl_.bag_id_;
+}
+inline uint64_t C_BAG_OPEN::bag_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_BAG_OPEN.bag_id)
+  return _internal_bag_id();
+}
+inline void C_BAG_OPEN::_internal_set_bag_id(uint64_t value) {
+  
+  _impl_.bag_id_ = value;
+}
+inline void C_BAG_OPEN::set_bag_id(uint64_t value) {
+  _internal_set_bag_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_BAG_OPEN.bag_id)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

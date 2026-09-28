@@ -201,6 +201,11 @@ void US1GameInstance::HandleDespawn(uint64 ObjectId)
 	if (Bags.Remove(ObjectId) > 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[BAG] despawn id=%llu"), ObjectId);
+
+		// 열어 둔 가방이 사라졌다.
+		if (OpenBags.Remove(ObjectId) > 0)
+			UE_LOG(LogTemp, Warning, TEXT("[BAG] closed id=%llu - bag gone"), ObjectId);
+
 		return;
 	}
 
@@ -368,6 +373,25 @@ void US1GameInstance::HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt)
 	}
 }
 
+void US1GameInstance::HandleBagContents(const Protocol::S_BAG_CONTENTS BagPkt)
+{
+	TArray<uint64>& Items = OpenBags.FindOrAdd(BagPkt.bag_id());
+	Items.Reset();
+
+	FString Line = FString::Printf(TEXT("[BAG] contents id=%llu items=%d remain=%llums"),
+		BagPkt.bag_id(), BagPkt.items_size(), BagPkt.remaining_ms());
+
+	for (const Protocol::ItemInstance& Item : BagPkt.items())
+	{
+		Items.Add(Item.instance_id());
+		Line += FString::Printf(TEXT(" | id=%llu type=%u g=%d lv=%u skills=%d"),
+			Item.instance_id(), Item.item_type_id(),
+			static_cast<int32>(Item.grade()), Item.level(), Item.skills_size());
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("%s"), *Line);
+}
+
 void US1GameInstance::DebugEquipWeapon()
 {
 	Protocol::C_EQUIP Pkt;
@@ -445,4 +469,48 @@ void US1GameInstance::DebugUnbag(int64 BagId)
 
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_CHAT /unbag %lld"), BagId);
 	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugDie()
+{
+	Protocol::C_CHAT Pkt;
+	Pkt.set_msg("/die");
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_CHAT /die"));
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugOpenBag(int64 BagId)
+{
+	Protocol::C_BAG_OPEN Pkt;
+	Pkt.set_bag_id(static_cast<uint64>(BagId));
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_BAG_OPEN bag=%lld"), BagId);
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugLoot(int64 BagId, int64 InstanceId)
+{
+	Protocol::C_LOOT Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*FGuid::NewGuid().ToString()));
+	Pkt.set_bag_id(static_cast<uint64>(BagId));
+	Pkt.set_instance_id(static_cast<uint64>(InstanceId));
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_LOOT bag=%lld item=%lld"), BagId, InstanceId);
+	SEND_PACKET(Pkt);
+}
+
+void US1GameInstance::DebugLootAll(int64 BagId)
+{
+	const TArray<uint64>* Items = OpenBags.Find(static_cast<uint64>(BagId));
+	if (Items == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[DEBUG] LootAll bag=%lld - open it first"), BagId);
+		return;
+	}
+
+	// "전체 획득" = 개별 C_LOOT N개. 부분 루팅 결과는 S_ITEM_RESULT 의 INVENTORY_FULL 개수로 안다 (AC-IE-32)
+	const TArray<uint64> Snapshot = *Items;
+	for (uint64 InstanceId : Snapshot)
+		DebugLoot(BagId, static_cast<int64>(InstanceId));
 }

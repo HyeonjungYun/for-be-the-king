@@ -41,10 +41,13 @@ public:
 
 	void	HandleEquip(GameSessionRef session, string requestId, uint64 instanceId, Protocol::EquipSlot slot);
 	void	HandleUnequip(GameSessionRef session, string requestId, uint64 instanceId);
+	void	HandleBagOpen(GameSessionRef session, uint64 bagId);
+	void	HandleLoot(GameSessionRef session, string requestId, uint64 bagId, uint64 instanceId);
 
 	bool	AddBag(BagRef bag);
 	bool	RemoveBag(uint64 bagId);
 	void	DebugDropBag(uint64 playerId);
+	void	DebugKill(uint64 playerId);
 
 	void	BeginDeathCommit(const CreatureRef& victim);
 	void	OnBagCreated(DeathSnapshot snap, bool ok);
@@ -67,6 +70,7 @@ private:
 	
 	bool	CancelCast(const CreatureRef& caster);
 	void	SendEquipSync(const PlayerRef& player);
+	void	PushBagContents(const BagRef& bag);
 
 	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
 	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs);
