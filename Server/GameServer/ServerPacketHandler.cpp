@@ -105,7 +105,7 @@ namespace
 		return true;
 	}
 
-	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy };
+	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy, Equip, Unequip };
 
 	const int32 VAULT_SLOT_COUNT = 25;
 
@@ -115,11 +115,60 @@ namespace
 		{
 		case BaseCampOp::ToVault: return "vault";
 		case BaseCampOp::ToCarried: return "unvault";
+		case BaseCampOp::Equip: return "equip";
+		case BaseCampOp::Unequip: return "unequip";
 		default: return "destroy";
 		}
 	}
 
-	Protocol::ItemResult RunBaseCampItemOp(DBConnection* conn, GameSessionRef session, uint64 instanceId, BaseCampOp op, OUT Protocol::ItemInstance& changed)
+	// 아이템 한 행을 잠그며 읽는다. 조건에 맞는 행이 없으면 found = false. 쿼리가 실패하면 false
+	bool LockItemRow(DBConnection* conn, const string& where, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
+	{
+		const string query =
+			"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary "
+			"FROM item_instances WHERE " + where + " FOR UPDATE";
+
+		MYSQL_RES* res = conn->Query(query.c_str());
+		if (res == nullptr)
+			return false;
+
+		found = false;
+		if (MYSQL_ROW row = ::mysql_fetch_row(res))
+		{
+			e.instanceId = ::strtoull(row[0], nullptr, 10);
+			e.itemTypeId = static_cast<uint32>(::atoi(row[1]));
+			e.grade = static_cast<Protocol::ItemGrade>(::atoi(row[2]));
+			e.level = static_cast<uint32>(::atoi(row[3]));
+			state = ::atoi(row[4]);
+			slot = ::atoi(row[5]);
+			e.skillIdPrimary = static_cast<uint32>(::atoi(row[6]));
+			e.skillIdSecondary = static_cast<uint32>(::atoi(row[7]));
+			found = true;
+		}
+		conn->FreeResult(res);
+		return true;
+	}
+
+	// 캐릭터가 가진 state 아이템 개수 - 용량 검사용. 쿼리가 실패하면 false
+	bool CountItems(DBConnection* conn, uint64 ownerId, Protocol::ItemState state, OUT uint64& count)
+	{
+		char query[256];
+		::snprintf(query, sizeof(query),
+			"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state = %d",
+			ownerId, static_cast<int32>(state));
+
+		MYSQL_RES* res = conn->Query(query);
+		if (res == nullptr)
+			return false;
+
+		count = 0;
+		if (MYSQL_ROW row = ::mysql_fetch_row(res))
+			count = ::strtoull(row[0], nullptr, 10);
+		conn->FreeResult(res);
+		return true;
+	}
+
+	Protocol::ItemResult RunBaseCampItemOp(DBConnection* conn, GameSessionRef session, uint64 instanceId, BaseCampOp op, Protocol::EquipSlot equipSlot, OUT vector<Protocol::ItemInstance>& changed)
 	{
 		char query[512];
 
@@ -173,123 +222,156 @@ namespace
 			this_thread::sleep_for(chrono::milliseconds(delayMs));
 
 		// 아이템 현재 상태 (행 잠금)
-		::snprintf(query, sizeof(query),
-			"SELECT item_type_id, grade, level, state, skill_id_primary, skill_id_secondary "
-			"FROM item_instances WHERE instance_id = %llu AND owner_character_id = %llu FOR UPDATE",
-			instanceId, ownerId);
+		ItemEntry e;
+		int32 state = -1;
+		int32 slot = 0;
+		bool found = false;
 
-		MYSQL_RES* itemRes = conn->Query(query);
-		if (itemRes == nullptr)
+		if (LockItemRow(conn, "instance_id = " + to_string(instanceId) + " AND owner_character_id = " + to_string(ownerId), OUT e, OUT state, OUT slot, OUT found) == false)
 		{
 			conn->Rollback();
 			return Protocol::ITEM_DB_ERROR;
 		}
 
-		ItemEntry e;
-		int32 state = -1;
-
-		if (MYSQL_ROW row = ::mysql_fetch_row(itemRes))
-		{
-			e.instanceId = instanceId;
-			e.itemTypeId = static_cast<uint32>(::atoi(row[0]));
-			e.grade = static_cast<Protocol::ItemGrade>(::atoi(row[1]));
-			e.level = static_cast<uint32>(::atoi(row[2]));
-			state = ::atoi(row[3]);
-			e.skillIdPrimary = static_cast<uint32>(::atoi(row[4]));
-			e.skillIdSecondary = static_cast<uint32>(::atoi(row[5]));
-		}
-		conn->FreeResult(itemRes);
-
-		if (state < 0)
+		// 주인 확인과 잠금 사이에 주인이 바뀌었다.
+		if (found == false)
 		{
 			conn->Rollback();
 			return Protocol::ITEM_NOT_FOUND;
 		}
 
+		// 규칙 - 이 아이템의 목표 상태, 슬롯을 정하고, 착용 교체면 밀려나는 아이템을 찾는다.
+		Protocol::ItemResult result = Protocol::ITEM_OK;
 		Protocol::ItemState target = Protocol::ITEM_STATE_NONE;
-
-		if (op == BaseCampOp::Destroy)
+		int32 targetSlot = 0;
+		ItemEntry outgoing;			// 착용 교체로 소지품이 되는 아이템. 없으면 instanceId 0
+		
+		switch (op)
 		{
+		case BaseCampOp::Destroy:
+			// 착용품은 해제부터. Carried, Vaulted만 곧바로 파기
 			if (state != Protocol::ITEM_STATE_CARRIED && state != Protocol::ITEM_STATE_VAULTED)
-			{
-				conn->Rollback();
-				return Protocol::ITEM_INVALID_STATE;
-			}
-		}
-		else
+				result = Protocol::ITEM_INVALID_STATE;
+			break;
+		case BaseCampOp::ToVault:
+		case BaseCampOp::ToCarried:
 		{
 			const Protocol::ItemState from = (op == BaseCampOp::ToVault) ? Protocol::ITEM_STATE_CARRIED : Protocol::ITEM_STATE_VAULTED;
 			target = (op == BaseCampOp::ToVault) ? Protocol::ITEM_STATE_VAULTED : Protocol::ITEM_STATE_CARRIED;
-
-			// 재접속 뒤 같은 요청을 다시 보냈다 - 이미 목표 상태
-			if (state == target)
-			{
-				conn->Rollback();
-				return Protocol::ITEM_ALREADY;
-			}
-
-			// 착용품은 창고에 넣을 수 없다
-			if (state != from)
-			{
-				conn->Rollback();
-				return Protocol::ITEM_INVALID_STATE;
-			}
-
-			// 용량 - 창고 25, 소지 25
-			::snprintf(query, sizeof(query),
-				"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state = %d",
-				ownerId, static_cast<int32>(target));
-
-			MYSQL_RES* countRes = conn->Query(query);
-			if (countRes == nullptr)
-			{
-				conn->Rollback();
-				return Protocol::ITEM_DB_ERROR;
-			}
+			const uint64 capacity = (target == Protocol::ITEM_STATE_VAULTED) ? VAULT_SLOT_COUNT : Player::INVENTORY_SLOT_COUNT;
 
 			uint64 count = 0;
-			if (MYSQL_ROW row = ::mysql_fetch_row(countRes))
-				count = ::strtoull(row[0], nullptr, 10);
-			conn->FreeResult(countRes);
-
-			const uint64 capacity = (target == Protocol::ITEM_STATE_VAULTED) ? VAULT_SLOT_COUNT : Player::INVENTORY_SLOT_COUNT;
-			if (count >= capacity)
-			{
-				conn->Rollback();
-				return Protocol::ITEM_INVENTORY_FULL;
-			}
+			if (state == target)
+				result = Protocol::ITEM_ALREADY;		// 재접속 뒤 재전송
+			else if (state != from)
+				result = Protocol::ITEM_INVALID_STATE;	// 착용품은 해제부터
+			else if (CountItems(conn, ownerId, target, OUT count) == false)
+				result = Protocol::ITEM_DB_ERROR;
+			else if (count >= capacity)
+				result = Protocol::ITEM_INVENTORY_FULL;		// 창고 25, 소지 25
+			break;
 		}
 
-		// 반영
-		if (op == BaseCampOp::Destroy)
-			::snprintf(query, sizeof(query), "DELETE FROM item_instances WHERE instance_id = %llu", instanceId);
-		else
-				::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = 0 WHERE instance_id = %llu",
-					static_cast<int32>(target), instanceId);
+		case BaseCampOp::Equip:
+		{
+			target = Protocol::ITEM_STATE_EQUIPPED;
+			targetSlot = equipSlot;
 			
-		if (conn->Excute(query) == false || conn->GetAffectedRows() != 1 || conn->Commit() == false)
+			if (state == Protocol::ITEM_STATE_EQUIPPED && slot == targetSlot)
+			{
+				result = Protocol::ITEM_ALREADY;
+				break;
+			}
+
+			// 착용 대상은 소지품뿐이다. - 창고품은 먼저 반입, 다른 슬롯 착용품은 먼저 해제
+			if (state != Protocol::ITEM_STATE_CARRIED)
+			{
+				result = Protocol::ITEM_INVALID_STATE;
+				break;
+			}
+
+			// 슬롯에 이미 있으면 자동 교체 - 밀려난 것은 이 아이템이 비운 소지 칸으로 간다.
+			// 소지 개수가 그대로라 25/25에서도 성공한다.
+			int32 outState = 0;
+			int32 outSlot = 0;
+			bool occupied = false;
+			if (LockItemRow(conn,
+				"owner_character_id = " + to_string(ownerId)
+				+ " AND state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED))
+				+ " AND slot = " + to_string(targetSlot),
+				OUT outgoing, OUT outState, OUT outSlot, OUT occupied) == false)
+			{
+				result = Protocol::ITEM_DB_ERROR;
+			}
+			break;
+		}
+
+		case BaseCampOp::Unequip:
+		{
+			target = Protocol::ITEM_STATE_CARRIED;
+			
+			uint64 count = 0;
+			if (state == Protocol::ITEM_STATE_CARRIED)
+				result = Protocol::ITEM_ALREADY;
+			else if (state != Protocol::ITEM_STATE_EQUIPPED)
+				result = Protocol::ITEM_INVALID_STATE;
+			else if (CountItems(conn, ownerId, Protocol::ITEM_STATE_CARRIED, OUT count) == false)
+				result = Protocol::ITEM_DB_ERROR;
+			else if (count >= static_cast<uint64>(Player::INVENTORY_SLOT_COUNT))
+				result = Protocol::ITEM_INVENTORY_FULL;		
+			break;
+		}
+		}
+
+		if (result != Protocol::ITEM_OK)
+		{
+			conn->Rollback();
+			return result;
+		}
+
+		bool ok = true;
+
+		if (outgoing.instanceId != 0)
+		{
+			::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = 0 WHERE instance_id = %llu",
+				static_cast<int32>(Protocol::ITEM_STATE_CARRIED), outgoing.instanceId);
+			ok = conn->Excute(query) && conn->GetAffectedRows() == 1;
+		}
+
+		if (ok)
+		{
+			if (op == BaseCampOp::Destroy)
+				::snprintf(query, sizeof(query), "DELETE FROM item_instances WHERE instance_id = %llu", instanceId);
+			else
+				::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = %d WHERE instance_id = %llu",
+					static_cast<int32>(target), targetSlot, instanceId);
+			
+			ok = conn->Excute(query) && conn->GetAffectedRows() == 1;
+		}
+
+		if (ok == false || conn->Commit() == false)
 		{
 			conn->Rollback();
 			return Protocol::ITEM_DB_ERROR;
 		}
-		
-		changed = e.ToProto(target);
+
+		changed.push_back(e.ToProto(target, static_cast<Protocol::EquipSlot>(targetSlot)));
+		if (outgoing.instanceId != 0)
+			changed.push_back(outgoing.ToProto(Protocol::ITEM_STATE_CARRIED));
 		return Protocol::ITEM_OK;
+
 	}
 
-	void PushBaseCampItemOp(GameSessionRef session, string requestId, uint64 instanceId, BaseCampOp op)
+	void PushBaseCampItemOp(GameSessionRef session, string requestId, uint64 instanceId, BaseCampOp op, Protocol::EquipSlot slot = Protocol::SLOT_NONE)
 	{
-		GDBQueue.Push([session, requestId, instanceId, op](DBConnection* conn)
+		GDBQueue.Push([session, requestId, instanceId, op, slot](DBConnection* conn)
 			{
-				Protocol::ItemInstance changed;
-				const Protocol::ItemResult result = RunBaseCampItemOp(conn, session, instanceId, op, OUT changed);
+				vector<Protocol::ItemInstance> changed;
+				const Protocol::ItemResult result = RunBaseCampItemOp(conn, session, instanceId, op, slot, OUT changed);
 
-				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " item=" << instanceId << " result=" << result << '\n';
+				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " item=" << instanceId << " slot=" << slot << " result=" << result << " changed=" << changed.size() <<'\n';
 
-				if (result == Protocol::ITEM_OK)
-					session->SendItemResult(requestId, result, { changed });
-				else
-					session->SendItemResult(requestId, result);
+				session->SendItemResult(requestId, result, changed);
 			});
 	}
 }
@@ -794,17 +876,33 @@ bool Handle_C_EQUIP(PacketSessionRef& session, Protocol::C_EQUIP& pkt)
 {
 	auto gameSession = static_pointer_cast<GameSession>(session);
 
-	PlayerRef player = gameSession->player.load();
-	if (player == nullptr)
-		return false;
-
-	RoomRef room = player->room.load().lock();
-	if (room == nullptr)
+	if (gameSession->accountId.load() == 0)
 		return false;
 
 	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
 	{
-		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY, {});
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+
+	// 베이스캠프 - DB 직행. 슬롯 규칙은 Room::HandleEquip과 같다.
+	if (gameSession->place.load() == SessionPlace::BaseCamp)
+	{
+		if (pkt.slot() < Protocol::SLOT_WEAPON_PRIMARY || pkt.slot() > Protocol::SLOT_TRINKET)
+			gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_BAD_REQUEST);
+		else if (pkt.slot() == Protocol::SLOT_WEAPON_SECONDARY)
+			gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
+		else
+			PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(), BaseCampOp::Equip, pkt.slot());
+		return true;
+	}
+
+	// 던전 - Room 메모리 우선
+	PlayerRef player = gameSession->player.load();
+	RoomRef room = (player != nullptr) ? player->room.load().lock() : nullptr;
+	if (room == nullptr)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
 		return true;
 	}
 
@@ -817,17 +915,26 @@ bool Handle_C_UNEQUIP(PacketSessionRef& session, Protocol::C_UNEQUIP& pkt)
 {
 	auto gameSession = static_pointer_cast<GameSession>(session);
 
-	PlayerRef player = gameSession->player.load();
-	if (player == nullptr)
-		return false;
-
-	RoomRef room = player->room.load().lock();
-	if (room == nullptr)
+	if (gameSession->accountId.load() == 0)
 		return false;
 
 	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
 	{
 		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+
+	if (gameSession->place.load() == SessionPlace::BaseCamp)
+	{
+		PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(), BaseCampOp::Unequip);
+		return true;
+	}
+
+	PlayerRef player = gameSession->player.load();
+	RoomRef room = (player != nullptr) ? player->room.load().lock() : nullptr;
+	if (room == nullptr)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_INVALID_STATE);
 		return true;
 	}
 
