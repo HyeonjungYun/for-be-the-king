@@ -32,6 +32,12 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 
 bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 {
+	if (pkt.success() == false)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ENTER] rejected by server"));
+		return true;
+	}
+
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
 	{
 		GameInstance->HandleSpawn(pkt);
