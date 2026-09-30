@@ -1360,6 +1360,60 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 		session->Send(sendBuffer);
 }
 
+void Room::BeginEscapeCommit(uint64 playerId)
+{
+	auto findIt = _objects.find(playerId);
+	if (findIt == _objects.end())
+		return;
+
+	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+	if (player == nullptr || player->IsAlive() == false)
+		return;
+
+	GameSessionRef session = player->session.lock();
+	if (session == nullptr)
+		return;
+
+	if (GDeathCommits.TryBegin(playerId) == false)
+		return;
+
+	EscapeSnapshot snap;
+	snap.characterId = playerId;
+	snap.carried = player->inventory;
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+		snap.equipped[i] = player->equipped[i];
+	snap.droppedIds = player->droppedIds;
+
+	// 방에서 뺀다 - 이 순간부터 공격, CC, 조작의 대상이 아니다(무적대기).
+	// 베이스캠프로는 커밋이 끝난 뒤에 보낸다. - 보낸 뒤 되돌리는 것이 가장 나쁘다.
+	CancelCast(player);
+	SavePlayer(player);
+	RemoveObject(playerId);
+	session->place.store(SessionPlace::Escaping);
+
+	Protocol::S_DESPAWN despawnPkt;
+	despawnPkt.add_object_ids(playerId);
+	SEND_PACKET_DECLARATION(despawnPkt);
+	Broadcast(sendBuffer);
+
+	LOG_LINE << "[ESCAPE] commit begin - char=" << playerId << " carried=" << snap.carried.size()
+		<< " dropped=" << snap.droppedIds.size() << '\n';
+
+	GDBQueue.Push([session, snap](DBConnection* conn)
+		{
+			// 성공할 때까지 재시도. 돌아왔으면 커밋된 것
+			CommitEscape(conn, snap);
+			session->place.store(SessionPlace::BaseCamp);
+			GDeathCommits.End(snap.characterId);
+
+			Protocol::S_LEAVE_GAME leavePkt;
+			SEND_PACKET_DECLARATION(leavePkt);
+			session->Send(sendBuffer);
+
+			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << '\n';
+		});
+}
+
 void Room::UpdateTick()
 {
 	const uint64 nowUs = Utils::NowMicroseconds();

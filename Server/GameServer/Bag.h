@@ -17,6 +17,14 @@ struct DeathSnapshot
 	vector<uint64>		droppedIds;
 };
 
+struct EscapeSnapshot
+{
+	uint64				characterId = 0;
+	vector<ItemEntry>	carried;
+	ItemEntry			equipped[SKILL_SLOT_COUNT];
+	vector<uint64>		droppedIds;
+};
+
 class Bag : public Object
 {
 public:

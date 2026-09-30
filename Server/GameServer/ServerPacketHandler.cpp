@@ -663,6 +663,12 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 		return true;
 	}
 
+	if (msg.rfind("/escape", 0) == 0)
+	{
+		room->DoAsync(&Room::BeginEscapeCommit, player->objectInfo->object_id());
+		return true;
+	}
+
 	char command[32] = {};
 	uint64 targetId = 0;
 	uint32 durationMs = 0;

@@ -103,6 +103,20 @@ int main()
 			LOG_LINE << "[BOOT] FBTK_BASECAMP_DELAY_MS=" << GBaseCampDelayMs.load() << " (TEST ONLY)\n";
 	}
 
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_FAIL_ESCAPE_COMMIT") == 0 && raw != nullptr)
+		{
+			GFailEscapeCommits.store(static_cast<int32>(::strtoull(raw, nullptr, 10)));
+			::free(raw);
+		}
+
+		if (GFailEscapeCommits.load() > 0)
+			LOG_LINE << "[BOOT] FBTK_FAIL_ESCAPE_COMMIT=" << GFailEscapeCommits.load() << " - first N escape commits fail (TEST ONLY)\n";
+	}
+
 	constexpr int32 DB_THREAD_COUNT = 4;
 
 	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", 3306, "root", dbPassword.c_str(), "forbetheking") == false)

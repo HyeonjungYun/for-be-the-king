@@ -564,3 +564,12 @@ void US1GameInstance::DebugUnvault(int64 InstanceId)
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_STASH unvault id=%lld"), InstanceId);
 	SEND_PACKET(Pkt);
 }
+
+void US1GameInstance::DebugEscape()
+{
+	Protocol::C_CHAT Pkt;
+	Pkt.set_msg("/escape");
+
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] C_CHAT /escape"));
+	SEND_PACKET(Pkt);
+}

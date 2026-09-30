@@ -12,6 +12,7 @@ atomic<uint64>GNextBagId = BAG_ID_BASE;
 atomic<bool> GFailDeathCommit = false;
 atomic<uint32> GDeathCommitDelayMs = 0;
 atomic<uint32> GBaseCampDelayMs = 0;
+atomic<int32> GFailEscapeCommits = 0;
 DeathCommitTracker GDeathCommits;
 
 namespace
@@ -39,6 +40,108 @@ namespace
 	}
 
 	constexpr int32 DEATH_COMMIT_ATTEMPTS = 3;
+}
+
+namespace
+{
+	constexpr uint32 ESCAPE_RETRY_FIRST_MS = 100;
+	constexpr uint32 ESCAPE_RETRY_MAX_MS = 5000;
+
+	string JoinIds(const vector<uint64>& ids)
+	{
+		string s;
+		for (size_t i = 0; i < ids.size(); i++)
+		{
+			if (i > 0)
+				s += ',';
+			s += to_string(ids[i]);
+		}
+
+		return s;
+	}
+
+	bool TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap)
+	{
+		const uint64 characterId = snap.characterId;
+		char query[256];
+
+		if (conn->BeginTransaction() == false)
+			return false;
+
+		::snprintf(query, sizeof(query),
+			"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", characterId);
+
+		MYSQL_RES* lockRes = conn->Query(query);
+		bool ok = (lockRes != nullptr);
+		if (lockRes != nullptr)
+			conn->FreeResult(lockRes);
+
+		vector<uint64> carriedIds;
+		for (const ItemEntry& e : snap.carried)
+			carriedIds.push_back(e.instanceId);
+
+		if (ok && carriedIds.empty() == false)
+		{
+			const string update =
+				"UPDATE item_instances SET owner_character_id = " + to_string(characterId)
+				+ ", bag_id = NULL, state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED))
+				+ ", slot = 0 WHERE instance_id IN (" + JoinIds(carriedIds) + ")";
+
+			ok = conn->Excute(update.c_str());
+		}
+
+		uint64 expected = carriedIds.size();
+		for (int32 i = 0; ok && i < SKILL_SLOT_COUNT; i++)
+		{
+			const ItemEntry& e = snap.equipped[i];
+			if (e.instanceId == 0)
+				continue;
+
+			::snprintf(query, sizeof(query),
+				"UPDATE item_instances SET owner_character_id = %llu, bag_id = NULL, state = %d, slot = %d WHERE instance_id = %llu",
+				characterId, static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED), i + 1, e.instanceId);
+
+			ok = conn->Excute(query);
+			expected++;
+		}
+
+		if (ok && snap.droppedIds.empty() == false)
+		{
+			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
+			ok = conn->Excute(del.c_str());
+		 }
+
+		if (ok)
+		{
+			::snprintf(query, sizeof(query),
+				"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state IN (%d, %d)",
+				characterId, static_cast<int32>(Protocol::ITEM_STATE_CARRIED), static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED));
+
+			if (MYSQL_RES* countRes = conn->Query(query))
+			{
+				uint64 actual = 0;
+				if (MYSQL_ROW row = ::mysql_fetch_row(countRes))
+					actual = ::strtoull(row[0], nullptr, 10);
+				conn->FreeResult(countRes);
+
+				if (actual != expected)
+					LOG_LINE << "[ESCAPE] owned count mismatch - expected=" << expected << " actual=" << actual << " char=" << characterId << '\n';
+			}
+		}
+
+		// 검증 전용 - 쓰기를 다 한 뒤에 실패시켜 롤백과 재시도를 본다
+		if (ok && GFailEscapeCommits.fetch_sub(1) > 0)
+		{
+			LOG_LINE << "[ESCAPE] injected failure - char=" << characterId << '\n';
+			ok = false;
+		}
+
+		if (ok && conn->Commit())
+			return true;
+
+		conn->Rollback();
+		return false;
+	}
 }
 
 PlayerRef ObjectUtils::CreatePlayer(GameSessionRef session, uint64 characterId)
@@ -332,6 +435,24 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 	}
 
 	return false;
+}
+
+void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap)
+{
+	uint32 backoffMs = ESCAPE_RETRY_FIRST_MS;
+
+	// 탈출만 무한 재시도 - 다른 경로는 실패해도 되돌릴 대상이 있지만, 탈출은 얻은 것을 확정하는 유일한 지점
+	for (int32 attempt = 1; ; attempt++)
+	{
+		if (TryCommitEscape(conn, snap))
+			return;
+
+		LOG_LINE << "[ESCAPE] attempt " << attempt << " failed - char=" << snap.characterId
+			<< " retry in " << backoffMs << "ms\n";
+
+		this_thread::sleep_for(chrono::milliseconds(backoffMs));
+		backoffMs = (backoffMs * 2 < ESCAPE_RETRY_MAX_MS) ? backoffMs * 2 : ESCAPE_RETRY_MAX_MS;
+	}
 }
 
 bool DeathCommitTracker::TryBegin(uint64 characterId)

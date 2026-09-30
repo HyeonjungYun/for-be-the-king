@@ -119,4 +119,7 @@ public:
 
 	UFUNCTION(Exec)
 	void DebugUnvault(int64 InstanceId);
+
+	UFUNCTION(Exec)
+	void DebugEscape();
 };

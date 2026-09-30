@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 struct DeathSnapshot;
+struct EscapeSnapshot;
 
 class ObjectUtils
 {
@@ -28,7 +29,10 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 
 bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap);
 
+void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap);
+
 extern atomic<bool> GFailDeathCommit;
+extern atomic<int32> GFailEscapeCommits;
 
 /*-----------------------
 	DeathCommitTracker

@@ -52,6 +52,7 @@ public:
 
 	void	BeginDeathCommit(const CreatureRef& victim);
 	void	OnBagCreated(DeathSnapshot snap, bool ok);
+	void	BeginEscapeCommit(uint64 playerId);
 
 public:
 	void	UpdateTick();
