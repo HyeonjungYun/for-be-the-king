@@ -14,6 +14,8 @@ atomic<uint32> GDeathCommitDelayMs = 0;
 atomic<uint32> GBaseCampDelayMs = 0;
 atomic<int32> GFailEscapeCommits = 0;
 DeathCommitTracker GDeathCommits;
+atomic<uint64> GDisconnectGraceUs = 180'000'000;
+DetachedBodies GDetachedBodies;
 
 namespace
 {
@@ -471,4 +473,28 @@ bool DeathCommitTracker::IsPending(uint64 characterId)
 {
 	WRITE_LOCK;
 	return _pending.find(characterId) != _pending.end();
+}
+
+void DetachedBodies::Add(uint64 characterId, PlayerRef body)
+{
+	WRITE_LOCK;
+	_bodies[characterId] = body;
+}
+
+PlayerRef DetachedBodies::TryTake(uint64 characterId)
+{
+	WRITE_LOCK;
+	auto findIt = _bodies.find(characterId);
+	if (findIt == _bodies.end())
+		return nullptr;
+
+	PlayerRef body = findIt->second;
+	_bodies.erase(findIt);
+	return body;
+}
+
+bool DetachedBodies::Contains(uint64 characterId)
+{
+	WRITE_LOCK;
+	return _bodies.find(characterId) != _bodies.end();
 }

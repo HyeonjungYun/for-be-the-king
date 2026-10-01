@@ -117,6 +117,19 @@ int main()
 			LOG_LINE << "[BOOT] FBTK_FAIL_ESCAPE_COMMIT=" << GFailEscapeCommits.load() << " - first N escape commits fail (TEST ONLY)\n";
 	}
 
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_DISCONNECT_GRACE_MS") == 0 && raw != nullptr)
+		{
+			GDisconnectGraceUs.store(::strtoull(raw, nullptr, 10) * 1000);
+			::free(raw);
+		}
+
+		LOG_LINE << "[BOOT] disconnect grace=" << GDisconnectGraceUs.load() / 1000 << "ms\n";
+	}
+
 	constexpr int32 DB_THREAD_COUNT = 4;
 
 	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", 3306, "root", dbPassword.c_str(), "forbetheking") == false)

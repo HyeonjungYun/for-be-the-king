@@ -32,7 +32,7 @@ void GameSession::OnDisconnected()
 	if (RoomRef room = leavingPlayer->room.load().lock())
 	{
 		LOG_LINE << "[DISCONNECT] room ok - DoAsync queued\n";
-		room->DoAsync(&Room::HandleLeavePlayer, leavingPlayer);
+		room->DoAsync(&Room::HandleDisconnect, leavingPlayer);
 	}
 	else
 	{

@@ -207,42 +207,8 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			player->RebuildSkillSlotsFromEquipment();
 			LogSlots(player, "enter");
 
-			
 			SendEquipSync(player);
-
-			{
-				Protocol::S_INVENTORY_SYNC invPkt;
-
-				for (const ItemEntry& e : player->inventory)
-				{
-					Protocol::ItemInstance* item = invPkt.add_items();
-					item->set_instance_id(e.instanceId);
-					item->set_item_type_id(e.itemTypeId);
-					item->set_grade(e.grade);
-					item->set_level(e.level);
-					item->set_state(Protocol::ITEM_STATE_CARRIED);
-					item->set_slot(Protocol::SLOT_NONE);
-				}
-
-				for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
-				{
-					const ItemEntry& e = player->equipped[i];
-					if (e.instanceId == 0)
-						continue;
-
-					Protocol::ItemInstance* item = invPkt.add_items();
-					item->set_instance_id(e.instanceId);
-					item->set_item_type_id(e.itemTypeId);
-					item->set_grade(e.grade);
-					item->set_level(e.level);
-					item->set_state(Protocol::ITEM_STATE_EQUIPPED);
-					item->set_slot(static_cast<Protocol::EquipSlot>(i + 1));
-				}
-
-				SEND_PACKET_DECLARATION(invPkt);
-				if (auto session = player->session.lock())
-					session->Send(sendBuffer);
-			}
+			SendInventorySync(player);
 		}
 	}
 
@@ -296,6 +262,14 @@ bool Room::LeaveRoom(ObjectRef object)
 
 bool Room::HandleEnterPlayer(PlayerRef player)
 {
+	// 적재하는 사이에 끊겼다 - 런이 시작되기 전이라 몸을 남기지 않는다.
+	GameSessionRef session = player->session.lock();
+	if (session == nullptr || session->IsConnected() == false)
+	{
+		LOG_LINE << "[ENTER] skipped - session gone. char=" << player->objectInfo->object_id() << '\n';
+		return false;
+	}
+
 	const uint64 beginUs = Utils::NowMicroseconds();
 
 	const bool result = EnterRoom(player, false);
@@ -319,6 +293,13 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 
 bool Room::HandleLeavePlayer(PlayerRef player)
 {
+	// 던전에서 살아 있는 채로 나가는 길은 탈출뿐이다 - 나가기로 사망을 피하는 허점을 막는다.
+	if (_objects.find(player->objectInfo->object_id()) != _objects.end() && player->IsAlive())
+	{
+		LOG_LINE << "[LEAVE] rejected - alive in dungeon. char=" << player->objectInfo->object_id() << '\n';
+		return false;
+	}
+
 	return LeaveRoom(player);
 }
 
@@ -1265,17 +1246,7 @@ void Room::DebugKill(uint64 playerId)
 
 	victim->hp = 0;
 
-	Protocol::DiedInfo& died = _pendingDeaths.emplace_back();
-	died.set_victim_id(playerId);
-	died.set_instigator_id(playerId);
-	died.set_cause(Protocol::DEATH_CAUSE_PLAYER);
-
-	victim->attackTargetId = 0;
-	victim->attackHitAtUs = 0;
-	CancelCast(victim);
-
-	LOG_LINE << "[DIED] victim=" << playerId << " by=debug\n";
-	BeginDeathCommit(victim);
+	KillPlayer(victim, playerId, Protocol::DEATH_CAUSE_PLAYER, "debug");
 }
 
 void Room::BeginDeathCommit(const CreatureRef& victim)
@@ -1322,6 +1293,9 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 {
 	// 성공이든 실패든 재입장을 허용한다. DB는 이미 확정(커밋 또는 롤백)됐다.
 	GDeathCommits.End(snap.characterId);
+
+	// 끊긴 몸이 죽었다 - 커밋이 됐든 안 됐든 몸을 치운다. 다음 접속은 DB에서 새로 적재한다.
+	ReleaseDetachedBody(snap.characterId);
 
 	if (ok == false)
 	{
@@ -1414,12 +1388,82 @@ void Room::BeginEscapeCommit(uint64 playerId)
 		});
 }
 
+void Room::HandleDisconnect(PlayerRef player)
+{
+	const uint64 playerId = player->objectInfo->object_id();
+
+	// 방에 없거나 이미 죽었으면 남길 몸이 없다
+	if (_objects.find(playerId) == _objects.end() || player->IsAlive() == false)
+	{
+		LeaveRoom(player);
+		return;
+	}
+
+	// 몸을 남긴다 - 공격, CC는 계속 받는다. 유예 안에 다시 돌아오면 이 몸으로 돌아온다.
+	player->attackTargetId = 0;
+	player->attackHitAtUs = 0;
+	CancelCast(player);
+	player->session.reset();
+	player->detachedUntilUs = Utils::NowMicroseconds() + GDisconnectGraceUs.load();
+
+	_detached.insert(playerId);
+	GDetachedBodies.Add(playerId, player);
+
+	LOG_LINE << "[DETACH] char=" << playerId << " grace=" << GDisconnectGraceUs.load() / 1000 << "ms\n";
+}
+
+void Room::HandleReattach(GameSessionRef session, PlayerRef body)
+{
+	const uint64 playerId = body->objectInfo->object_id();
+
+	// 표에서 꺼낸 뒤 이 Job이 오기 전에 죽었다 - 사망 커밋이 몸을 지운다. 클라는 잠시 뒤 다시 돌아온다.
+	if (_objects.find(playerId) == _objects.end() || body->IsAlive() == false)
+	{
+		LOG_LINE << "[REATTACH] rejected - char=" << playerId << " (dead or gone)\n";
+
+		SessionPlace expected = SessionPlace::Entering;
+		session->place.compare_exchange_strong(expected, SessionPlace::BaseCamp);
+
+		Protocol::S_ENTER_GAME rejectPkt;
+		rejectPkt.set_success(false);
+		SEND_PACKET_DECLARATION(rejectPkt);
+		session->Send(sendBuffer);
+		return;
+	}
+
+	_detached.erase(playerId);
+	body->detachedUntilUs = 0;
+	body->session = session;
+	session->player.store(body);
+	session->place.store(SessionPlace::Dungeon);
+
+	// 끊긴 동안의 시간이 이동 예산으로 쌓이지 않게 지금을 기준으로 다시 잡는다.
+	const uint64 nowUs = Utils::NowMicroseconds();
+	body->lastMoveUs = nowUs;
+	body->moveBudget = body->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
+
+	Protocol::S_ENTER_GAME enterPkt;
+	enterPkt.set_success(true);
+	enterPkt.mutable_player()->CopyFrom(*body->objectInfo);
+	SEND_PACKET_DECLARATION(enterPkt);
+	session->Send(sendBuffer);
+
+	SendEquipSync(body);
+	SendInventorySync(body);
+
+	// 방 전체 스냅샷을 다시 받게 한다. 다른 클라에는 이미 있는 몸이라 S_SPAWN 은 무시한다.
+	_pendingSpawns.push_back(playerId);
+
+	LOG_LINE << "[REATTACH] char=" << playerId << " inv=" << body->inventory.size() << " dropped=" << body->droppedIds.size() << '\n';
+}
+
 void Room::UpdateTick()
 {
 	const uint64 nowUs = Utils::NowMicroseconds();
 
 	UpdateSaves(nowUs);
 	UpdateBagExpiry(nowUs);
+	UpdateDetached(nowUs);
 	
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
@@ -1730,6 +1774,103 @@ void Room::SendEquipSync(const PlayerRef& player)
 	SEND_PACKET_DECLARATION(equipPkt);
 	if (auto session = player->session.lock())
 		session->Send(sendBuffer);
+}
+
+void Room::SendInventorySync(const PlayerRef& player)
+{
+	Protocol::S_INVENTORY_SYNC invPkt;
+
+	for (const ItemEntry& e : player->inventory)
+	{
+		Protocol::ItemInstance* item = invPkt.add_items();
+		item->set_instance_id(e.instanceId);
+		item->set_item_type_id(e.itemTypeId);
+		item->set_grade(e.grade);
+		item->set_level(e.level);
+		item->set_state(Protocol::ITEM_STATE_CARRIED);
+		item->set_slot(Protocol::SLOT_NONE);
+	}
+
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		const ItemEntry& e = player->equipped[i];
+		if (e.instanceId == 0)
+			continue;
+
+		Protocol::ItemInstance* item = invPkt.add_items();
+		item->set_instance_id(e.instanceId);
+		item->set_item_type_id(e.itemTypeId);
+		item->set_grade(e.grade);
+		item->set_level(e.level);
+		item->set_state(Protocol::ITEM_STATE_EQUIPPED);
+		item->set_slot(static_cast<Protocol::EquipSlot>(i + 1));
+	}
+
+	SEND_PACKET_DECLARATION(invPkt);
+	if (auto session = player->session.lock())
+		session->Send(sendBuffer);
+}
+
+void Room::KillPlayer(const PlayerRef& victim, uint64 instigatorId, Protocol::DeathCause cause, const char* by)
+{
+	const uint64 victimId = victim->objectInfo->object_id();
+	victim->hp = 0;
+
+	Protocol::DiedInfo& died = _pendingDeaths.emplace_back();
+	died.set_victim_id(victimId);
+	died.set_instigator_id(instigatorId);
+	died.set_cause(cause);
+
+	victim->attackTargetId = 0;
+	victim->attackHitAtUs = 0;
+	CancelCast(victim);
+
+	LOG_LINE << "[DIED] victim=" << victimId << " by=" << by << '\n';
+	BeginDeathCommit(victim);
+}
+
+void Room::UpdateDetached(uint64 nowUs)
+{
+	vector<uint64> expired;
+
+	for (uint64 id : _detached)
+	{
+		auto findIt = _objects.find(id);
+		PlayerRef body = (findIt != _objects.end()) ? dynamic_pointer_cast<Player>(findIt->second) : nullptr;
+
+		if (body != nullptr && body->IsAlive() && nowUs >= body->detachedUntilUs)
+			expired.push_back(id);
+	}
+
+	for (uint64 id : expired)
+	{
+		_detached.erase(id);
+
+		// 재접속과 경쟁한다 - 표에서 먼저 꺼낸 쪽만 이긴다.
+		PlayerRef body = GDetachedBodies.TryTake(id);
+		if (body == nullptr)
+			continue;
+
+		LOG_LINE << "[DETACH] grace expired - char=" << id << '\n';
+		KillPlayer(body, 0, Protocol::DEATH_CAUSE_NONE, "disconnect");
+	}
+}
+
+void Room::ReleaseDetachedBody(uint64 characterId)
+{
+	auto findIt = _objects.find(characterId);
+	if (findIt == _objects.end())
+		return;
+
+	PlayerRef body = dynamic_pointer_cast<Player>(findIt->second);
+	if (body == nullptr || body->detachedUntilUs == 0)
+		return;
+
+	_detached.erase(characterId);
+	GDetachedBodies.TryTake(characterId);
+	LeaveRoom(body);
+
+	LOG_LINE << "[DETACH] body released - char=" << characterId << '\n';
 }
 
 void Room::PushBagContents(const BagRef& bag)

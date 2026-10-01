@@ -53,3 +53,25 @@ private:
 extern DeathCommitTracker GDeathCommits;
 extern atomic<uint32> GDeathCommitDelayMs;
 extern atomic<uint32> GBaseCampDelayMs;
+
+extern atomic<uint64> GDisconnectGraceUs;
+
+/*------------------
+	DetachedBodies
+-------------------*/
+
+// 접속이 끊겨 던전에 남은 몸. 재접속과 유예 만료가 같은 몸을 두고 경쟁하므로
+// "표에서 먼저 꺼낸 쪽만 이긴다."로 판정한다.
+class DetachedBodies
+{
+public:
+	void		Add(uint64 characterId, PlayerRef body);
+	PlayerRef	TryTake(uint64 characterId);
+	bool		Contains(uint64 characterId);
+
+private:
+	USE_LOCK;
+	unordered_map<uint64, PlayerRef> _bodies;
+};
+
+extern DetachedBodies GDetachedBodies;

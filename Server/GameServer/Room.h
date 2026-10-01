@@ -54,6 +54,9 @@ public:
 	void	OnBagCreated(DeathSnapshot snap, bool ok);
 	void	BeginEscapeCommit(uint64 playerId);
 
+	void	HandleDisconnect(PlayerRef player);
+	void	HandleReattach(GameSessionRef session, PlayerRef body);
+
 public:
 	void	UpdateTick();
 	void	FlushMoves();
@@ -72,6 +75,10 @@ private:
 	
 	bool	CancelCast(const CreatureRef& caster);
 	void	SendEquipSync(const PlayerRef& player);
+	void	SendInventorySync(const PlayerRef& player);
+	void	KillPlayer(const PlayerRef& victim, uint64 instigatorId, Protocol::DeathCause cause, const char* by);
+	void	UpdateDetached(uint64 nowUs);
+	void	ReleaseDetachedBody(uint64 characterId);
 	void	PushBagContents(const BagRef& bag);
 
 	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
@@ -91,6 +98,7 @@ private:
 	unordered_map<uint64, ObjectRef>	_objects;
 	unordered_set<uint64>				_dirtyMovers;
 	unordered_map<uint64, BagRef>		_bags;
+	unordered_set<uint64>				_detached;
 
 	vector<uint64>						_pendingSpawns;
 	vector<PendingTelegraph>			_pendingTelegraphs;

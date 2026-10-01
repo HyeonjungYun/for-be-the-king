@@ -210,7 +210,7 @@ namespace
 		conn->FreeResult(lockRes);
 
 		// 잠근 뒤에 다시 본다 - 그 사이 입장을 시작했거나(Entering) 사망 커밋이 진행 중이면 손대지 않는다.
-		if (session->place.load() != SessionPlace::BaseCamp || GDeathCommits.IsPending(ownerId))
+		if (session->place.load() != SessionPlace::BaseCamp || GDeathCommits.IsPending(ownerId) || GDetachedBodies.Contains(ownerId))
 		{
 			conn->Rollback();
 			return Protocol::ITEM_INVALID_STATE;
@@ -508,6 +508,16 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 		gameSession->Send(sendBuffer);
 		
 		return true;
+	}
+
+	if (PlayerRef body = GDetachedBodies.TryTake(character.object_info().object_id()))
+	{
+		if (RoomRef bodyRoom = body->room.load().lock())
+		{
+			gameSession->place.store(SessionPlace::Entering);
+			bodyRoom->DoAsync(&Room::HandleReattach, gameSession, body);
+			return true;
+		}
 	}
 
 	RoomRef room = GetRoomForFloor(pkt.floor_id());
