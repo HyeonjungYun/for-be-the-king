@@ -106,6 +106,9 @@ public:
 	/** A request about this item is waiting on the server — dim it and ignore repeat clicks (AC-UI-22). */
 	bool IsPending(uint64 InstanceId) const;
 
+	/** Mirror of the server's loot range — for the F prompt and the loot window's auto-close. */
+	float GetLootRangeCm() const { return LootRangeCm; }
+
 	/** Slots in the carried grid (entities.yaml inventory_slots). */
 	int32 GetCarriedCapacity() const { return CarriedCapacity; }
 

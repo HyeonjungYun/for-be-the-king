@@ -14,7 +14,7 @@ class US1ItemHudRootWidget;
 /**
  * Puts the item UI on screen for the local player and routes its keys.
  *
- * Tab and Esc are Enhanced Input actions built at runtime, so no editor asset is needed.
+ * Tab, F and Esc are Enhanced Input actions built at runtime, so no editor asset is needed.
  * They still go through a mapping context — a rebinding screen can change them later and the
  * key badges follow (AC-UI-24).
  *
@@ -41,12 +41,17 @@ protected:
 private:
 
 	void OnInventoryKey();
+	void OnOpenKey();
 	void OnCloseKey();
 
 	/** The key currently bound to an equip slot's skill action, as the player would read it. */
 	FText KeyNameFor(int32 KeySlot) const;
 
+	/** The first key mapped to Action, or Fallback when nothing is. */
+	FText KeyNameOf(const UInputAction* Action, const FText& Fallback) const;
+
 	UPROPERTY() TObjectPtr<UInputAction>			InventoryAction;
+	UPROPERTY() TObjectPtr<UInputAction>			OpenAction;
 	UPROPERTY() TObjectPtr<UInputAction>			CloseAction;
 	UPROPERTY() TObjectPtr<UInputMappingContext>	Context;
 	UPROPERTY() TObjectPtr<US1ItemHudRootWidget>	Root;

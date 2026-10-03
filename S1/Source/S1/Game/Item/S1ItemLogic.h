@@ -61,6 +61,12 @@ namespace S1ItemLogic
 	 */
 	uint64 FindNearestBag(const TMap<uint64, FS1BagView>& Bags, const FVector& From, float RangeCm);
 
+	/**
+	 * Same measure as FindNearestBag — floor plane, inclusive. The loot window closes itself the
+	 * moment this turns false, because the server drops out-of-range viewers without telling us.
+	 */
+	bool IsWithinLootRange(const FVector& BagLocation, const FVector& From, float RangeCm);
+
 	/** Remaining time for the loot window. Display only — the server decides expiry. */
 	uint64 RemainingMs(const FS1BagView& Bag, double NowSeconds);
 

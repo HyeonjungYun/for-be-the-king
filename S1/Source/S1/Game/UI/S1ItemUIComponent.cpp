@@ -26,10 +26,12 @@ US1ItemUIComponent::US1ItemUIComponent()
 
 	// Built here rather than in BeginPlay so they exist before SetupPlayerInputComponent binds them.
 	InventoryAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_ItemInventory"));
+	OpenAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_ItemOpen"));
 	CloseAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_ItemClose"));
 	Context = CreateDefaultSubobject<UInputMappingContext>(TEXT("IMC_ItemUI"));
 
 	Context->MapKey(InventoryAction, EKeys::Tab);
+	Context->MapKey(OpenAction, EKeys::F);
 	Context->MapKey(CloseAction, EKeys::Escape);
 }
 
@@ -39,6 +41,7 @@ void US1ItemUIComponent::SetupInput(UEnhancedInputComponent* Input)
 		return;
 
 	Input->BindAction(InventoryAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnInventoryKey);
+	Input->BindAction(OpenAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnOpenKey);
 	Input->BindAction(CloseAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnCloseKey);
 }
 
@@ -61,8 +64,9 @@ void US1ItemUIComponent::BeginPlay()
 	if (Root == nullptr)
 		return;
 
-	if (US1InventoryPanelWidget* Inventory = Root->GetInventory())
-		Inventory->SetKeyNameResolver([this](int32 KeySlot) { return KeyNameFor(KeySlot); });
+	Root->SetKeyNameResolver(
+		[this](int32 KeySlot) { return KeyNameFor(KeySlot); },
+		[this]() { return KeyNameOf(OpenAction, FText::AsCultureInvariant(TEXT("F"))); });
 
 	Root->AddToViewport(ItemUIZOrder);
 
@@ -95,6 +99,12 @@ void US1ItemUIComponent::OnInventoryKey()
 		Root->SetInventoryOpen(Root->IsInventoryOpen() == false);
 }
 
+void US1ItemUIComponent::OnOpenKey()
+{
+	if (Root != nullptr)
+		Root->ToggleLootNearest();
+}
+
 void US1ItemUIComponent::OnCloseKey()
 {
 	if (Root != nullptr)
@@ -108,15 +118,20 @@ FText US1ItemUIComponent::KeyNameFor(int32 KeySlot) const
 	const FText FallbackName = FText::AsCultureInvariant(Fallback[FMath::Clamp(KeySlot, 0, 6)]);
 
 	const AS1MyPlayer* Player = Cast<AS1MyPlayer>(GetOwner());
-	const UInputAction* Action = Player != nullptr ? Player->GetSkillAction(KeySlot) : nullptr;
-	const APlayerController* PC = Player != nullptr ? Cast<APlayerController>(Player->GetController()) : nullptr;
+	return KeyNameOf(Player != nullptr ? Player->GetSkillAction(KeySlot) : nullptr, FallbackName);
+}
+
+FText US1ItemUIComponent::KeyNameOf(const UInputAction* Action, const FText& Fallback) const
+{
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	const APlayerController* PC = Pawn != nullptr ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
 	if (Action == nullptr || PC == nullptr)
-		return FallbackName;
+		return Fallback;
 
 	const UEnhancedInputLocalPlayerSubsystem* Input = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer());
 	if (Input == nullptr)
-		return FallbackName;
+		return Fallback;
 
 	const TArray<FKey> Keys = Input->QueryKeysMappedToAction(Action);
-	return Keys.Num() > 0 ? Keys[0].GetDisplayName(/*bLongDisplayName*/ false) : FallbackName;
+	return Keys.Num() > 0 ? Keys[0].GetDisplayName(/*bLongDisplayName*/ false) : Fallback;
 }

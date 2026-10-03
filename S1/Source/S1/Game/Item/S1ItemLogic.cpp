@@ -82,6 +82,11 @@ namespace S1ItemLogic
 		return Best;
 	}
 
+	bool IsWithinLootRange(const FVector& BagLocation, const FVector& From, float RangeCm)
+	{
+		return FVector::DistSquared2D(BagLocation, From) <= static_cast<double>(RangeCm) * RangeCm;
+	}
+
 	uint64 RemainingMs(const FS1BagView& Bag, double NowSeconds)
 	{
 		if (Bag.RemainingMsAtReceive == 0)

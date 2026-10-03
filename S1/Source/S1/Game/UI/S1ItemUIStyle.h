@@ -45,6 +45,7 @@ namespace S1ItemUIStyle
 	inline constexpr float PanelPadding		= 12.f;
 	inline constexpr float NoticeLineHeight	= 18.f;		// Reserved even when empty — no layout jump
 	inline constexpr int32 GridColumns		= 5;
+	inline constexpr int32 LootGridCells	= 30;		// A death bag holds up to 25 carried + 5 worn (GDD AC-IE-31)
 	inline constexpr int32 FontSmall		= 11;
 	inline constexpr int32 FontBody			= 13;
 	inline constexpr int32 FontEmphasis		= 15;

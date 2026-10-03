@@ -16,6 +16,7 @@ bag.gone,가방이 사라졌습니다,closed by expiry
 bag.refilled,다시 채워졌습니다,closed by chest reset
 bag.empty,비어 있다,empty container
 bag.opening,여는 중,shown after 300 ms
+bag.my_bag,내 가방,S2 header - your own carried count
 label.full,가득 참,25/25 header
 label.carried,소지,S1 header
 label.vault,보관,S3 left column

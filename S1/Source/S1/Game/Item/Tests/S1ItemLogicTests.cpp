@@ -170,6 +170,25 @@ bool FS1ItemNearestBagTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ── Loot window auto-close — the server drops viewers who walk away without a packet ──
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1ItemLootRangeTest, "S1.Item.Logic.IsWithinLootRange_WalkingAway_TurnsFalsePastRange", GS1ItemTestFlags)
+bool FS1ItemLootRangeTest::RunTest(const FString& Parameters)
+{
+	using S1ItemLogic::IsWithinLootRange;
+
+	const FVector Bag(1000, 1000, 100);
+	const float Range = 200.f;
+
+	TestTrue(TEXT("standing on it"), IsWithinLootRange(Bag, FVector(1000, 1000, 100), Range));
+	TestTrue(TEXT("exactly at range is still inside"), IsWithinLootRange(Bag, FVector(1200, 1000, 100), Range));
+	TestFalse(TEXT("one step past range closes"), IsWithinLootRange(Bag, FVector(1201, 1000, 100), Range));
+	TestTrue(TEXT("height is ignored, like the server"), IsWithinLootRange(Bag, FVector(1000, 1100, 900), Range));
+	TestFalse(TEXT("diagonal past range"), IsWithinLootRange(Bag, FVector(1150, 1150, 100), Range));
+
+	return true;
+}
+
 // ── AC-UI-05 — "전체 획득" tally ──────────────────────────────────────────
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1ItemLootBatchTest, "S1.Item.Logic.LootBatch_MixedResults_ClosesOnlyWhenEverythingLeft", GS1ItemTestFlags)
