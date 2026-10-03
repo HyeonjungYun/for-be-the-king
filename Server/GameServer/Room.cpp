@@ -1781,15 +1781,7 @@ void Room::SendInventorySync(const PlayerRef& player)
 	Protocol::S_INVENTORY_SYNC invPkt;
 
 	for (const ItemEntry& e : player->inventory)
-	{
-		Protocol::ItemInstance* item = invPkt.add_items();
-		item->set_instance_id(e.instanceId);
-		item->set_item_type_id(e.itemTypeId);
-		item->set_grade(e.grade);
-		item->set_level(e.level);
-		item->set_state(Protocol::ITEM_STATE_CARRIED);
-		item->set_slot(Protocol::SLOT_NONE);
-	}
+		*invPkt.add_items() = e.ToProto(Protocol::ITEM_STATE_CARRIED, Protocol::SLOT_NONE);
 
 	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
 	{
@@ -1797,13 +1789,7 @@ void Room::SendInventorySync(const PlayerRef& player)
 		if (e.instanceId == 0)
 			continue;
 
-		Protocol::ItemInstance* item = invPkt.add_items();
-		item->set_instance_id(e.instanceId);
-		item->set_item_type_id(e.itemTypeId);
-		item->set_grade(e.grade);
-		item->set_level(e.level);
-		item->set_state(Protocol::ITEM_STATE_EQUIPPED);
-		item->set_slot(static_cast<Protocol::EquipSlot>(i + 1));
+		*invPkt.add_items() = e.ToProto(Protocol::ITEM_STATE_EQUIPPED, static_cast<Protocol::EquipSlot>(i + 1));
 	}
 
 	SEND_PACKET_DECLARATION(invPkt);
