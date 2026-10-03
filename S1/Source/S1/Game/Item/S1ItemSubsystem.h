@@ -103,6 +103,15 @@ public:
 	bool WasEquippedThisSession(uint64 InstanceId) const { return EquippedThisSession.Contains(InstanceId); }
 	ES1DiscardRule DiscardRuleFor(uint64 InstanceId) const;
 
+	/** A request about this item is waiting on the server — dim it and ignore repeat clicks (AC-UI-22). */
+	bool IsPending(uint64 InstanceId) const;
+
+	/** Slots in the carried grid (entities.yaml inventory_slots). */
+	int32 GetCarriedCapacity() const { return CarriedCapacity; }
+
+	/** How long a discard confirm waits for the second Ctrl+click. A data value — § Accessibility. */
+	float GetDiscardConfirmSeconds() const { return DiscardConfirmSeconds; }
+
 	/** Item types read from Server/Data. Empty when the files could not be read — see the log. */
 	const FS1ItemCatalog& GetCatalog() const { return Catalog; }
 
@@ -171,6 +180,12 @@ private:
 	/** Indexed by grade − 1. Comes from config; a missing entry counts as ×1.0 and is logged at load. */
 	UPROPERTY(Config)
 	TArray<float> GradeMultipliers;
+
+	UPROPERTY(Config)
+	int32 CarriedCapacity = 25;
+
+	UPROPERTY(Config)
+	float DiscardConfirmSeconds = 3.f;
 
 	/** Logs every catalog key the String Table lacks. Missing text shows as the key itself. */
 	void CheckStrings() const;

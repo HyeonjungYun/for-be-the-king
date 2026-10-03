@@ -79,3 +79,6 @@ skill.2001,짓쳐들기,skill-system.md
 skill.2001.desc,바라보는 방향으로 4m 돌진한다,
 skill.3001,후려베기,skill-system.md
 skill.3001.desc,주변을 베고 1.5초 동안 느리게 한다,
+skill.1001.family,무기 계열,trinket detail - which part the skill came from (EB:531)
+skill.2001.family,신발 계열,
+skill.3001.family,갑옷 계열,

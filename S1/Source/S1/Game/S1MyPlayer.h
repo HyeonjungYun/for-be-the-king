@@ -8,6 +8,7 @@
 
 class UInputMappingContext;
 class UInputAction;
+class US1ItemUIComponent;
 
 /**
  * Binds one Input Action to one equipment slot.
@@ -212,6 +213,18 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	/**
+	 * The skill action bound to an equip slot, or null. The item UI asks Enhanced Input which
+	 * key it is mapped to, so the key badges follow a rebind (design/ux/item-ui.md AC-UI-24).
+	 */
+	const UInputAction* GetSkillAction(int32 EquipSlot) const;
+
+protected:
+
+	/** Item UI — inventory panel and its keys (design/ux/item-ui.md). */
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<US1ItemUIComponent> ItemUI;
 
 protected:
 

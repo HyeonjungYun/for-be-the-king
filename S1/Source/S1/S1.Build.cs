@@ -10,7 +10,8 @@ public class S1 : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "Sockets", "Networking", "UMG", "Slate" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "ProtobufCore" });
+		// SlateCore — the item UI draws grade outlines (FSlateDrawElement) and picks fonts (FCoreStyle) itself.
+		PrivateDependencyModuleNames.AddRange(new string[] { "ProtobufCore", "SlateCore" });
 
 		PrivateIncludePaths.AddRange(new string[]
 		{

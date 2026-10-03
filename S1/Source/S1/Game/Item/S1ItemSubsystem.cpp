@@ -162,6 +162,11 @@ void US1ItemSubsystem::OnItemResult(const Protocol::S_ITEM_RESULT& Pkt)
 	const FString RequestId = UTF8_TO_TCHAR(Pkt.request_id().c_str());
 	const ES1ItemResult Result = static_cast<ES1ItemResult>(Pkt.result());
 
+	// Clear the pending entry before telling anyone: listeners redraw on the broadcast, and a
+	// cell must not still read "waiting" once its answer is in.
+	FPending Request;
+	const bool bOurs = Pending.RemoveAndCopyValue(RequestId, Request);
+
 	bool bChanged = false;
 	for (const Protocol::ItemInstance& Item : Pkt.changed())
 	{
@@ -169,11 +174,11 @@ void US1ItemSubsystem::OnItemResult(const Protocol::S_ITEM_RESULT& Pkt)
 			bChanged = true;
 	}
 
-	if (bChanged)
+	// A rejection changes no item but still ends the wait — the dim has to go.
+	if (bChanged || bOurs)
 		OnItemsChanged.Broadcast();
 
-	FPending Request;
-	if (Pending.RemoveAndCopyValue(RequestId, Request) == false)
+	if (bOurs == false)
 	{
 		// Debug console commands send their own packets, and late replies to a settled batch
 		// land here too. The changes above still apply; there is no action to word a notice
@@ -396,6 +401,16 @@ const FS1BagView* US1ItemSubsystem::FindBag(uint64 BagId) const
 uint64 US1ItemSubsystem::FindNearestBag(const FVector& From) const
 {
 	return S1ItemLogic::FindNearestBag(Bags, From, LootRangeCm);
+}
+
+bool US1ItemSubsystem::IsPending(uint64 InstanceId) const
+{
+	for (const TPair<FString, FPending>& Pair : Pending)
+	{
+		if (Pair.Value.InstanceId == InstanceId)
+			return true;
+	}
+	return false;
 }
 
 TArray<FS1KeySlotView> US1ItemSubsystem::GetKeySlots() const

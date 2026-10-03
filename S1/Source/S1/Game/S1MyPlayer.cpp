@@ -16,6 +16,7 @@
 #include "S1.h"
 #include "S1GameInstance.h"
 #include "Game/S1SkillTable.h"
+#include "Game/UI/S1ItemUIComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
 
@@ -74,6 +75,8 @@ AS1MyPlayer::AS1MyPlayer()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 	FollowCamera->FieldOfView = 60.0f;
+
+	ItemUI = CreateDefaultSubobject<US1ItemUIComponent>(TEXT("ItemUI"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -173,11 +176,25 @@ void AS1MyPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 
 		UE_LOG(LogTemp, Warning, TEXT("[SKILL INPUT] bound %d of %d entries"),
 			BoundSkillCount, SkillActions.Num());
+
+		// Tab / Esc for the item panels.
+		if (ItemUI != nullptr)
+			ItemUI->SetupInput(EnhancedInputComponent);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
 	}
+}
+
+const UInputAction* AS1MyPlayer::GetSkillAction(int32 EquipSlot) const
+{
+	for (const FSkillInputBinding& Binding : SkillActions)
+	{
+		if (Binding.EquipSlot == EquipSlot)
+			return Binding.Action;
+	}
+	return nullptr;
 }
 
 void AS1MyPlayer::Tick(float DeltaTime)

@@ -1,0 +1,138 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+#include "Game/UI/S1ItemDetailWidget.h"
+#include "Game/UI/S1ItemUIStyle.h"
+#include "Game/Item/S1ItemLogic.h"
+#include "Game/Item/S1ItemSubsystem.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+
+using namespace S1ItemUIStyle;
+
+void US1ItemDetailWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	Lines = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	WidgetTree->RootWidget = Lines;
+}
+
+void US1ItemDetailWidget::Clear()
+{
+	if (Lines != nullptr)
+		Lines->ClearChildren();
+}
+
+void US1ItemDetailWidget::AddLine(const FText& Text, int32 FontSize, const FLinearColor& Color)
+{
+	UTextBlock* Line = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	Line->SetText(Text);
+	Line->SetFont(Font(FontSize));
+	Line->SetColorAndOpacity(FSlateColor(Color));
+	Line->SetAutoWrapText(true);
+
+	if (UVerticalBoxSlot* LineSlot = Lines->AddChildToVerticalBox(Line))
+		LineSlot->SetPadding(FMargin(0.f, 1.f));
+}
+
+FText US1ItemDetailWidget::KeyLabel(int32 KeySlot) const
+{
+	const FText Name = KeyName ? KeyName(KeySlot) : FText::AsNumber(KeySlot);
+	return FText::Format(INVTEXT("[{0}]"), Name);
+}
+
+void US1ItemDetailWidget::AddItemHeader(const US1ItemSubsystem& Items, const FS1ItemView& Item)
+{
+	const FS1ItemTypeDef* Type = Items.GetCatalog().Find(Item.ItemTypeId);
+	if (Type == nullptr)
+		return;
+
+	// ── Skill first (EB:529) ──
+	const TArray<FS1KeySkill> Keys = S1ItemLogic::KeysFor(*Type, Item);
+	if (Keys.Num() == 0)
+	{
+		AddLine(Text(TEXT("label.no_skill")), FontEmphasis, TextSecondary());
+	}
+
+	for (const FS1KeySkill& Key : Keys)
+	{
+		FText Head = FText::Format(INVTEXT("{0} {1}"), KeyLabel(Key.KeySlot), SkillName(Key.SkillId));
+
+		// A trinket takes skills from the other parts. Say which one, or it reads like a mistake (EB:531).
+		if (Type->EquipSlot == 6)
+			Head = FText::Format(INVTEXT("{0} · {1}"), Head, SkillFamily(Key.SkillId));
+
+		AddLine(Head, FontEmphasis, TextPrimary());
+		AddLine(SkillDesc(Key.SkillId), FontSmall, TextSecondary());
+	}
+
+	// ── Name · part · archetype · grade ──
+	AddLine(FText::Format(INVTEXT("{0} · {1} · {2} · {3}"),
+		ItemName(Type, Item.ItemTypeId), PartLabel(Type->EquipSlot), ArchetypeLabel(Type->Archetype), GradeLabel(Item.Grade)),
+		FontBody, TextSecondary());
+}
+
+void US1ItemDetailWidget::ShowItem(const US1ItemSubsystem& Items, const FS1ItemView& Item, const FS1ItemView* Worn)
+{
+	Clear();
+	if (Lines == nullptr)
+		return;
+
+	const FS1ItemTypeDef* Type = Items.GetCatalog().Find(Item.ItemTypeId);
+	if (Type == nullptr)
+	{
+		AddLine(ItemName(nullptr, Item.ItemTypeId), FontEmphasis, TextSecondary());
+		return;
+	}
+
+	AddItemHeader(Items, Item);
+
+	const bool bIsWorn = Item.State == ES1ItemState::Equipped;
+	const FS1ItemView* Compare = bIsWorn ? nullptr : Worn;
+	const FS1ItemTypeDef* CompareType = Compare != nullptr ? Items.GetCatalog().Find(Compare->ItemTypeId) : nullptr;
+
+	// ── Stats, with the delta against what is worn ──
+	const TArray<FS1StatDelta> Stats = S1ItemLogic::StatDeltas(*Type, Item.Grade,
+		CompareType, Compare != nullptr ? Compare->Grade : ES1ItemGrade::None, Items.GetGradeMultipliers());
+
+	for (const FS1StatDelta& Stat : Stats)
+	{
+		if (bIsWorn)
+		{
+			AddLine(FText::Format(INVTEXT("{0} {1}"), StatLabel(Stat.Stat), StatValueText(Stat.Stat, Stat.After)),
+				FontBody, TextPrimary());
+			continue;
+		}
+
+		// The sign carries the direction, so the line reads without color (§ Accessibility).
+		AddLine(FText::Format(INVTEXT("{0} {1} ({2})"), StatLabel(Stat.Stat), StatValueText(Stat.Stat, Stat.After),
+			StatDeltaText(Stat.Stat, Stat.Delta())), FontBody, TextPrimary());
+	}
+
+	// ── Keys that change if this goes on ──
+	if (bIsWorn == false)
+	{
+		const TArray<FS1KeyChange> Changes = S1ItemLogic::KeyChanges(*Type, Item, Compare);
+		for (const FS1KeyChange& Change : Changes)
+		{
+			const FText Before = Change.Before != 0 ? SkillName(Change.Before) : FText::AsCultureInvariant(TEXT("—"));
+			const FText After = Change.After != 0 ? SkillName(Change.After) : FText::AsCultureInvariant(TEXT("—"));
+
+			AddLine(FText::Format(INVTEXT("{0} {1} {2} → {3}"),
+				Text(TEXT("label.keys_changed")), KeyLabel(Change.KeySlot), Before, After), FontBody, TextSecondary());
+		}
+	}
+}
+
+void US1ItemDetailWidget::ShowDiscardConfirm(const US1ItemSubsystem& Items, const FS1ItemView& Item)
+{
+	Clear();
+	if (Lines == nullptr)
+		return;
+
+	const FS1ItemTypeDef* Type = Items.GetCatalog().Find(Item.ItemTypeId);
+	AddLine(ItemName(Type, Item.ItemTypeId), FontEmphasis, TextPrimary());
+	AddLine(Text(TEXT("label.discard_confirm")), FontBody, TextPrimary());
+}
