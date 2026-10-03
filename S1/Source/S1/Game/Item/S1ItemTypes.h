@@ -132,3 +132,20 @@ struct FS1BagView
 	uint64					RemainingMsAtReceive = 0;
 	double					ReceivedAtSeconds = 0.0;
 };
+
+/** Mirrors Protocol::SlotBindState. */
+enum class ES1BindState : uint8
+{
+	Unbound = 0,	// Nothing on the key
+	Bound,
+	Shadowed,		// Same skill already on another key — the key is dead, not broken (EB B5)
+};
+
+/** One of the six keys as the server last described it (S_EQUIP_SYNC). */
+struct FS1KeySlotView
+{
+	int32			KeySlot = 0;		// 1 Shift · 2 Q · 3 E · 4 R · 5 Z · 6 X
+	uint32			SkillId = 0;
+	ES1BindState	Bind = ES1BindState::Unbound;
+	int32			ShadowedBy = 0;		// The key that holds the same skill, when Shadowed
+};

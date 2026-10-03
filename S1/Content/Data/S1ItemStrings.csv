@@ -1,0 +1,81 @@
+﻿Key,SourceString,Comment
+notice.inventory_full,인벤토리가 가득 찼습니다,ITEM_INVENTORY_FULL
+notice.vault_full,보관이 가득 찼습니다,S3 stash
+notice.carried_full,반입이 가득 찼습니다,S3 unstash
+notice.not_found,아이템을 찾을 수 없습니다,ITEM_NOT_FOUND (not for loot)
+notice.must_unequip,먼저 벗어야 합니다,drop on equipped
+notice.too_far,너무 멉니다,loot out of range
+notice.cannot_now,지금은 할 수 없습니다,ITEM_INVALID_STATE fallback
+notice.bad_request,할 수 없는 동작입니다,ITEM_BAD_REQUEST
+notice.retry_later,잠시 후 다시 시도해 주세요,ITEM_DB_ERROR
+notice.loot_partial,{0}개를 가져오지 못했습니다(인벤토리 가득 참),take-all partial - {0} count
+notice.vault_equip,반입으로 옮겨야 착용할 수 있습니다,S3 right-click on a vault item
+bag.title_bag,가방,S2 header
+bag.title_chest,상자,S2 header
+bag.gone,가방이 사라졌습니다,closed by expiry
+bag.refilled,다시 채워졌습니다,closed by chest reset
+bag.empty,비어 있다,empty container
+bag.opening,여는 중,shown after 300 ms
+label.full,가득 참,25/25 header
+label.carried,소지,S1 header
+label.vault,보관,S3 left column
+label.carry_in,반입,S3 right column
+label.take_all,전체 획득,S2 button
+label.enter,입장,S3 button
+label.entering,입장 중…,S3 button pending
+label.loading,불러오는 중,before inventory sync
+label.no_skill,스킬 없음,detail pane first line for skill_id 0
+label.sort_name,이름순,sort toggle
+label.sort_skill,스킬순,sort toggle
+label.equip_total,장비 합산,S3 stat block title until the server sums stats
+label.discard_confirm,버리면 사라집니다 — Ctrl+클릭 한 번 더,inline confirm
+label.unknown_item,알 수 없는 아이템 #{0},type id missing from the catalog - {0} type id
+label.shadowed_by,같은 스킬이 {0}에 있음,S3 only - {0} key name
+label.keys_changed,바뀌는 키,detail pane
+grade.1,일반,
+grade.2,희귀,
+grade.3,영웅,
+grade.4,전설,
+part.1,무기,
+part.3,투구,
+part.4,갑옷,
+part.5,신발,
+part.6,장신구,
+archetype.heavy_weapon,중병기,
+archetype.light_weapon,경병기,
+archetype.helmet_scout,정찰형,
+archetype.helmet_guard,방비형,
+archetype.armor_heavy,중갑,
+archetype.armor_light,경갑,
+archetype.boots_sprint,질주형,
+archetype.boots_endurance,지구형,
+archetype.trinket,장신구,
+damage.physical,물리,
+damage.magic,마법,
+stat.attack_power,공격력,
+stat.magic_power,마법공격력,
+stat.crit_chance,치명타 확률,
+stat.crit_multiplier_bonus,치명타 피해,bonus over the base 1.75
+stat.percent_as_bonus,공격 속도,
+stat.resistance,CC 저항,
+stat.max_hp,최대 체력,
+stat.armor,방어력,
+stat.magic_resist,마법 방어력,
+stat.percent_ms_bonus,이동 속도,
+item.101,월도,TEMP name - narrative-director to confirm (quick-spec § 2)
+item.102,환도,TEMP name
+item.103,육환장,TEMP name
+item.104,신칼,TEMP name
+item.301,전립,TEMP name
+item.302,두구,TEMP name
+item.401,두정갑,TEMP name
+item.402,철릭,TEMP name
+item.501,짚신,TEMP name
+item.502,목화,TEMP name
+item.601,노리개,TEMP name
+skill.1001,후려치기,skill-system.md
+skill.1001.desc,대상 하나를 쳐서 1초 기절시킨다,
+skill.2001,짓쳐들기,skill-system.md
+skill.2001.desc,바라보는 방향으로 4m 돌진한다,
+skill.3001,후려베기,skill-system.md
+skill.3001.desc,주변을 베고 1.5초 동안 느리게 한다,

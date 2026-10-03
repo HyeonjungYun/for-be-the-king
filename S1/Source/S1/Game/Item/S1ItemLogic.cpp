@@ -93,6 +93,113 @@ namespace S1ItemLogic
 
 		return Bag.RemainingMsAtReceive - static_cast<uint64>(ElapsedMs);
 	}
+
+	TArray<FS1KeySkill> KeysFor(const FS1ItemTypeDef& Type, const FS1ItemView& Item)
+	{
+		constexpr int32 WeaponPrimaryKey = 1;	// Shift
+		constexpr int32 WeaponSecondaryKey = 2;	// Q
+
+		TArray<FS1KeySkill> Out;
+
+		for (int32 i = 0; i < Item.Skills.Num(); i++)
+		{
+			const FS1ItemSkill& Skill = Item.Skills[i];
+			if (Skill.SkillId == 0)
+				continue;
+
+			int32 Key = Skill.Slot;
+			if (Key == 0)
+			{
+				if (i == 0)
+					Key = Type.IsWeapon() ? WeaponPrimaryKey : Type.EquipSlot;
+				else if (i == 1 && Type.IsWeapon())
+					Key = WeaponSecondaryKey;
+			}
+
+			// A second skill on a non-weapon has nowhere to go.
+			if (Key != 0)
+				Out.Add(FS1KeySkill{ Key, Skill.SkillId });
+		}
+
+		return Out;
+	}
+
+	TArray<FS1KeyChange> KeyChanges(const FS1ItemTypeDef& Type, const FS1ItemView& Candidate, const FS1ItemView* Equipped)
+	{
+		TArray<int32> Keys;
+		if (Type.IsWeapon())
+			Keys = { 1, 2 };
+		else
+			Keys = { Type.EquipSlot };
+
+		const TArray<FS1KeySkill> After = KeysFor(Type, Candidate);
+		const TArray<FS1KeySkill> Before = Equipped != nullptr ? KeysFor(Type, *Equipped) : TArray<FS1KeySkill>();
+
+		auto SkillOn = [](const TArray<FS1KeySkill>& List, int32 Key) -> uint32
+		{
+			const FS1KeySkill* Found = List.FindByPredicate([Key](const FS1KeySkill& K) { return K.KeySlot == Key; });
+			return Found != nullptr ? Found->SkillId : 0;
+		};
+
+		TArray<FS1KeyChange> Out;
+		for (int32 Key : Keys)
+		{
+			const uint32 BeforeId = SkillOn(Before, Key);
+			const uint32 AfterId = SkillOn(After, Key);
+			if (BeforeId != AfterId)
+				Out.Add(FS1KeyChange{ Key, BeforeId, AfterId });
+		}
+
+		return Out;
+	}
+
+	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers)
+	{
+		const int32 Index = static_cast<int32>(Grade) - 1;
+		const float Multiplier = GradeMultipliers.IsValidIndex(Index) ? GradeMultipliers[Index] : 1.f;
+
+		return Stat.FlatFloor + Stat.BaseStat * Multiplier;
+	}
+
+	TArray<FS1StatDelta> StatDeltas(const FS1ItemTypeDef& CandidateType, ES1ItemGrade CandidateGrade,
+		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers)
+	{
+		TArray<FS1StatDelta> Out;
+
+		auto FindStat = [](const FS1ItemTypeDef* Type, FName Name) -> const FS1ItemStat*
+		{
+			return Type != nullptr ? Type->Stats.FindByPredicate([Name](const FS1ItemStat& S) { return S.Stat == Name; }) : nullptr;
+		};
+
+		for (const FS1ItemStat& Stat : CandidateType.Stats)
+		{
+			FS1StatDelta Line;
+			Line.Stat = Stat.Stat;
+			Line.After = StatValue(Stat, CandidateGrade, GradeMultipliers);
+
+			if (const FS1ItemStat* Worn = FindStat(EquippedType, Stat.Stat))
+				Line.Before = StatValue(*Worn, EquippedGrade, GradeMultipliers);
+
+			Out.Add(Line);
+		}
+
+		// Stats only the worn item has — swapping loses them.
+		if (EquippedType != nullptr)
+		{
+			for (const FS1ItemStat& Worn : EquippedType->Stats)
+			{
+				if (FindStat(&CandidateType, Worn.Stat) != nullptr)
+					continue;
+
+				FS1StatDelta Line;
+				Line.Stat = Worn.Stat;
+				Line.Before = StatValue(Worn, EquippedGrade, GradeMultipliers);
+				Out.Add(Line);
+			}
+		}
+
+		return Out;
+	}
 }
 
 void FS1LootBatch::Record(ES1ItemResult Result)

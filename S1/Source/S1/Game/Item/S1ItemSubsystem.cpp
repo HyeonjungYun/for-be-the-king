@@ -8,9 +8,13 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "HAL/IConsoleManager.h"
+#include "Internationalization/StringTableCore.h"
+#include "Internationalization/StringTableRegistry.h"
 #include "Misc/Guid.h"
+#include "Misc/Paths.h"
 
 // S1ItemTypes.h mirrors Enum.proto by value so the translation below is a cast.
+static_assert(static_cast<int32>(ES1BindState::Shadowed) == Protocol::BIND_SHADOWED, "ES1BindState drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemGrade::Legendary) == Protocol::ITEM_GRADE_LEGENDARY, "ES1ItemGrade drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemState::Carried) == Protocol::ITEM_STATE_CARRIED, "ES1ItemState drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemState::InBag) == Protocol::ITEM_STATE_IN_BAG, "ES1ItemState drifted from Enum.proto");
@@ -47,6 +51,8 @@ namespace
 	constexpr uint64 FakeIdBase = 0xF000000000000000ull;
 }
 
+const FName US1ItemSubsystem::StringTableId(TEXT("S1Items"));
+
 US1ItemSubsystem* US1ItemSubsystem::Get()
 {
 	if (GWorld == nullptr)
@@ -54,6 +60,66 @@ US1ItemSubsystem* US1ItemSubsystem::Get()
 
 	UGameInstance* GameInstance = GWorld->GetGameInstance();
 	return GameInstance != nullptr ? GameInstance->GetSubsystem<US1ItemSubsystem>() : nullptr;
+}
+
+void US1ItemSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	// The registry outlives a game instance (PIE restarts), so register once per process.
+	// The macro wants a literal — it must say the same thing as StringTableId.
+	if (FStringTableRegistry::Get().FindStringTable(StringTableId).IsValid() == false)
+		LOCTABLE_FROMFILE_GAME("S1Items", "S1Items", "Data/S1ItemStrings.csv");
+
+	const FString Directory = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), ItemDataDirectory));
+
+	FString Error;
+	if (ItemDataDirectory.IsEmpty() || Catalog.LoadFromDirectory(Directory, Error) == false)
+	{
+		// Not fatal: every item shows as "알 수 없는 아이템 #id" and cannot be equipped by click.
+		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] item catalog not loaded - dir=%s error=%s"),
+			*Directory, ItemDataDirectory.IsEmpty() ? TEXT("ItemDataDirectory is not set") : *Error);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[ITEMUI] item catalog loaded - %d types from %s"), Catalog.Num(), *Directory);
+	}
+
+	if (GradeMultipliers.Num() < 4)
+		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] GradeMultipliers has %d of 4 entries - missing grades count as x1.0"), GradeMultipliers.Num());
+
+	CheckStrings();
+}
+
+void US1ItemSubsystem::CheckStrings() const
+{
+	FStringTableConstPtr Table = FStringTableRegistry::Get().FindStringTable(StringTableId);
+	if (Table.IsValid() == false)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] String Table %s not found - Content/Data/S1ItemStrings.csv"), *StringTableId.ToString());
+		return;
+	}
+
+	TArray<FString> Missing;
+	for (const TPair<uint32, FS1ItemTypeDef>& Pair : Catalog.GetTypes())
+	{
+		const FS1ItemTypeDef& Type = Pair.Value;
+		for (const FString& Key : { Type.NameKey, FString(TEXT("archetype.")) + Type.Archetype.ToString() })
+		{
+			if (Table->FindEntry(Key).IsValid() == false)
+				Missing.AddUnique(Key);
+		}
+
+		for (const FS1ItemStat& Stat : Type.Stats)
+		{
+			const FString Key = FString(TEXT("stat.")) + Stat.Stat.ToString();
+			if (Table->FindEntry(Key).IsValid() == false)
+				Missing.AddUnique(Key);
+		}
+	}
+
+	if (Missing.Num() > 0)
+		UE_LOG(LogTemp, Warning, TEXT("[ITEMUI] String Table is missing %d keys: %s"), Missing.Num(), *FString::Join(Missing, TEXT(", ")));
 }
 
 void US1ItemSubsystem::Deinitialize()
@@ -187,6 +253,11 @@ void US1ItemSubsystem::OnBagDespawned(uint64 BagId)
 	}
 
 	OnBagChanged.Broadcast(BagId);
+}
+
+void US1ItemSubsystem::OnEquipSync()
+{
+	OnKeysChanged.Broadcast();
 }
 
 // ── Outgoing ─────────────────────────────────────────────────────────────
@@ -327,6 +398,27 @@ uint64 US1ItemSubsystem::FindNearestBag(const FVector& From) const
 	return S1ItemLogic::FindNearestBag(Bags, From, LootRangeCm);
 }
 
+TArray<FS1KeySlotView> US1ItemSubsystem::GetKeySlots() const
+{
+	TArray<FS1KeySlotView> Out;
+
+	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
+	if (GameInstance == nullptr)
+		return Out;
+
+	for (const Protocol::SkillInfo& Info : GameInstance->SkillSlots)
+	{
+		FS1KeySlotView Key;
+		Key.KeySlot		= static_cast<int32>(Info.slot());
+		Key.SkillId		= Info.skill_id();
+		Key.Bind		= static_cast<ES1BindState>(Info.bind_state());
+		Key.ShadowedBy	= static_cast<int32>(Info.shadowed_by());
+		Out.Add(Key);
+	}
+
+	return Out;
+}
+
 ES1DiscardRule US1ItemSubsystem::DiscardRuleFor(uint64 InstanceId) const
 {
 	const FS1ItemView* Item = Items.Find(InstanceId);
@@ -408,11 +500,28 @@ void US1ItemSubsystem::DumpToLog() const
 	{
 		for (const FS1ItemView* Item : GetByState(State))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[ITEMUI]  id=%llu%s type=%u grade=%d state=%d slot=%d skills=%s session_equipped=%d"),
+			const FS1ItemTypeDef* Type = Catalog.Find(Item->ItemTypeId);
+			const FString Name = Type != nullptr ? FText::FromStringTable(StringTableId, Type->NameKey).ToString() : TEXT("?");
+
+			FString Keys;
+			if (Type != nullptr)
+			{
+				for (const FS1KeySkill& Key : S1ItemLogic::KeysFor(*Type, *Item))
+					Keys += FString::Printf(TEXT("%s%d:%u"), Keys.IsEmpty() ? TEXT("") : TEXT(","), Key.KeySlot, Key.SkillId);
+			}
+
+			UE_LOG(LogTemp, Warning, TEXT("[ITEMUI]  id=%llu%s type=%u name=%s part=%d grade=%d state=%d slot=%d skills=%s keys=%s session_equipped=%d"),
 				Item->InstanceId, Item->InstanceId >= FakeIdBase ? TEXT("(fake)") : TEXT(""),
-				Item->ItemTypeId, static_cast<int32>(Item->Grade), static_cast<int32>(Item->State), Item->Slot,
-				*SkillsToString(*Item), WasEquippedThisSession(Item->InstanceId) ? 1 : 0);
+				Item->ItemTypeId, *Name, Type != nullptr ? Type->EquipSlot : 0,
+				static_cast<int32>(Item->Grade), static_cast<int32>(Item->State), Item->Slot,
+				*SkillsToString(*Item), Keys.IsEmpty() ? TEXT("-") : *Keys, WasEquippedThisSession(Item->InstanceId) ? 1 : 0);
 		}
+	}
+
+	for (const FS1KeySlotView& Key : GetKeySlots())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ITEMUI]  key=%d skill=%u bind=%d shadowed_by=%d"),
+			Key.KeySlot, Key.SkillId, static_cast<int32>(Key.Bind), Key.ShadowedBy);
 	}
 
 	const double Now = FPlatformTime::Seconds();

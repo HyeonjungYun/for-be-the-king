@@ -236,6 +236,11 @@ bool Handle_S_EQUIP_SYNC(PacketSessionRef& session, Protocol::S_EQUIP_SYNC& pkt)
 		GameInstance->HandleEquipSync(pkt);
 	}
 
+	if (US1ItemSubsystem* Items = US1ItemSubsystem::Get())
+	{
+		Items->OnEquipSync();
+	}
+
 	return true;
 }
 

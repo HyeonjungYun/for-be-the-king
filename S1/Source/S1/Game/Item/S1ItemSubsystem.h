@@ -21,6 +21,7 @@ DECLARE_MULTICAST_DELEGATE(FOnS1ItemsChanged);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnS1BagChanged, uint64 /*BagId*/);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnS1BagClosed, uint64 /*BagId*/, ES1BagCloseReason);
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnS1ItemNotice, ES1ItemNotice, uint64 /*InstanceId*/, int32 /*Count*/);
+DECLARE_MULTICAST_DELEGATE(FOnS1KeysChanged);
 
 /**
  * The one place the client keeps item state. design/ux/item-ui.md § Data Requirements.
@@ -41,6 +42,11 @@ public:
 	/** Null before the game instance exists. Same lookup as the existing packet handlers. */
 	static US1ItemSubsystem* Get();
 
+	/** String Table with every item UI string — Content/Data/S1ItemStrings.csv. */
+	static const FName StringTableId;
+
+	/** Loads the item catalog and registers the String Table. */
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
 	// ── Incoming (netcode hooks) ─────────────────────────────────────────
@@ -59,6 +65,9 @@ public:
 
 	/** H5. A bag left the world — expiry or removal. Closes the window if it was open. */
 	void OnBagDespawned(uint64 BagId);
+
+	/** H6. S_EQUIP_SYNC arrived — the six keys changed. The state itself stays in US1GameInstance::SkillSlots. */
+	void OnEquipSync();
 
 	// ── Outgoing (UI) ────────────────────────────────────────────────────
 
@@ -94,12 +103,22 @@ public:
 	bool WasEquippedThisSession(uint64 InstanceId) const { return EquippedThisSession.Contains(InstanceId); }
 	ES1DiscardRule DiscardRuleFor(uint64 InstanceId) const;
 
+	/** Item types read from Server/Data. Empty when the files could not be read — see the log. */
+	const FS1ItemCatalog& GetCatalog() const { return Catalog; }
+
+	/** Common, Rare, Epic, Legendary — entities.yaml grade_multiplier. */
+	TArrayView<const float> GetGradeMultipliers() const { return GradeMultipliers; }
+
+	/** The six keys as of the last S_EQUIP_SYNC, without protobuf. Empty before the first one. */
+	TArray<FS1KeySlotView> GetKeySlots() const;
+
 	// ── Change notification ──────────────────────────────────────────────
 
 	FOnS1ItemsChanged	OnItemsChanged;
 	FOnS1BagChanged		OnBagChanged;
 	FOnS1BagClosed		OnBagClosed;
 	FOnS1ItemNotice		OnItemNotice;
+	FOnS1KeysChanged	OnKeysChanged;
 
 	// ── Debug (console: s1.ItemDump · s1.ItemFill) ───────────────────────
 
@@ -141,6 +160,22 @@ private:
 	/** How long "전체 획득" waits for missing replies before reporting what it has. */
 	UPROPERTY(Config)
 	float LootBatchTimeoutSeconds = 3.f;
+
+	/**
+	 * Where item_types.csv lives, relative to the project directory.
+	 * 🔴 Dev only — reads the server's copy so there is one source. Packaging needs its own answer.
+	 */
+	UPROPERTY(Config)
+	FString ItemDataDirectory;
+
+	/** Indexed by grade − 1. Comes from config; a missing entry counts as ×1.0 and is logged at load. */
+	UPROPERTY(Config)
+	TArray<float> GradeMultipliers;
+
+	/** Logs every catalog key the String Table lacks. Missing text shows as the key itself. */
+	void CheckStrings() const;
+
+	FS1ItemCatalog				Catalog;
 
 	TMap<uint64, FS1ItemView>	Items;
 	TMap<uint64, FS1BagView>	Bags;

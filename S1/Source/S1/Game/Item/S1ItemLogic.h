@@ -4,6 +4,32 @@
 
 #include "CoreMinimal.h"
 #include "Game/Item/S1ItemTypes.h"
+#include "Game/Item/S1ItemCatalog.h"
+
+/** A skill and the key it lands on. */
+struct FS1KeySkill
+{
+	int32	KeySlot = 0;	// Protocol::EquipSlot used as a key — 1 Shift · 2 Q · 3 E · 4 R · 5 Z · 6 X
+	uint32	SkillId = 0;
+};
+
+/** One key that reads differently after a swap. SkillId 0 = the key goes empty. */
+struct FS1KeyChange
+{
+	int32	KeySlot = 0;
+	uint32	Before = 0;
+	uint32	After = 0;
+};
+
+/** One stat line of the detail pane. */
+struct FS1StatDelta
+{
+	FName	Stat;
+	float	Before = 0.f;
+	float	After = 0.f;
+
+	float Delta() const { return After - Before; }
+};
 
 /**
  * Item UI decisions that need no world, no packets and no widgets.
@@ -37,6 +63,36 @@ namespace S1ItemLogic
 
 	/** Remaining time for the loot window. Display only — the server decides expiry. */
 	uint64 RemainingMs(const FS1BagView& Bag, double NowSeconds);
+
+	/**
+	 * Which key each of the item's skills lands on when worn.
+	 *
+	 * The server leaves SkillInfo.slot at 0 for item skills — it does not know an item's part
+	 * before the S-1 loader exists. So the rule is part + order: the first skill goes to the
+	 * part's key (weapon → Shift), the second to Q (weapons only). The roll rules guarantee a
+	 * missing first skill means no second one, so the order never shifts. A non-zero slot
+	 * from the server wins.
+	 */
+	TArray<FS1KeySkill> KeysFor(const FS1ItemTypeDef& Type, const FS1ItemView& Item);
+
+	/**
+	 * AC-UI-01. Keys that change when Candidate replaces Equipped (the item worn in the same
+	 * part, or null). Weapons always report Shift and Q. Keys that stay the same are left out.
+	 */
+	TArray<FS1KeyChange> KeyChanges(const FS1ItemTypeDef& Type, const FS1ItemView& Candidate, const FS1ItemView* Equipped);
+
+	/**
+	 * flat_floor + base_stat × grade multiplier (GDD D2-b). GradeMultipliers is indexed by
+	 * grade − 1 (Common first). The level term is 🔒T3 — MVP items are level 0.
+	 */
+	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers);
+
+	/**
+	 * Before/after per stat for the detail pane — the union of both items' stats, the
+	 * candidate's order first. EquippedType null = nothing worn in that part.
+	 */
+	TArray<FS1StatDelta> StatDeltas(const FS1ItemTypeDef& CandidateType, ES1ItemGrade CandidateGrade,
+		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers);
 }
 
 /**
