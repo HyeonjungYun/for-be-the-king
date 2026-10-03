@@ -39,8 +39,8 @@ SELECT 800000 + c.character_id * 10 + k.n, k.type_id, 1, 0, 2, k.slot,
 FROM characters c
 CROSS JOIN (
     SELECT 1 AS n, 101 AS type_id, 1 AS slot, 1001 AS skill_id UNION ALL   -- 무기 · 단일 스턴
-    SELECT 2,      201,            4,         3001             UNION ALL   -- 갑옷 · 광역 감속
-    SELECT 3,      301,            5,         2001                          -- 신발 · 대시
+    SELECT 2,      401,            4,         3001             UNION ALL   -- 갑옷 · 광역 감속
+    SELECT 3,      501,            5,         2001                          -- 신발 · 대시
 ) k
 WHERE c.name LIKE 'bot\_%';
 

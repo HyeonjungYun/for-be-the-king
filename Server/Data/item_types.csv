@@ -1,0 +1,12 @@
+id,name_key,equip_slot,archetype,damage_type,grade_mode,attack_range_cm,skill_pool_id
+101,item.101,1,heavy_weapon,physical,rolled,175,weapon
+102,item.102,1,light_weapon,physical,rolled,175,weapon
+103,item.103,1,heavy_weapon,magic,rolled,175,weapon
+104,item.104,1,light_weapon,magic,rolled,175,weapon
+301,item.301,3,helmet_scout,none,rolled,0,helmet
+302,item.302,3,helmet_guard,none,rolled,0,helmet
+401,item.401,4,armor_heavy,none,rolled,0,armor
+402,item.402,4,armor_light,none,rolled,0,armor
+501,item.501,5,boots_sprint,none,rolled,0,boots
+502,item.502,5,boots_endurance,none,rolled,0,boots
+601,item.601,6,trinket,none,rolled,0,trinket
