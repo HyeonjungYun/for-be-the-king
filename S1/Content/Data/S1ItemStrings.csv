@@ -12,9 +12,6 @@ notice.loot_partial,{0}개를 가져오지 못했습니다(인벤토리 가득 �
 notice.vault_equip,반입으로 옮겨야 착용할 수 있습니다,S3 right-click on a vault item
 bag.title_bag,가방,S2 header
 bag.title_chest,상자,S2 header
-bag.gone,가방이 사라졌습니다,closed by expiry
-bag.refilled,다시 채워졌습니다,closed by chest reset
-bag.empty,비어 있다,empty container
 bag.opening,여는 중,shown after 300 ms
 bag.my_bag,내 가방,S2 header - your own carried count
 label.full,가득 참,25/25 header

@@ -11,7 +11,6 @@
 
 class UBorder;
 class UTextBlock;
-class UVerticalBox;
 class US1ItemSlotWidget;
 class US1ItemSubsystem;
 
@@ -20,13 +19,14 @@ class US1ItemSubsystem;
  * design/ux/item-ui.md.
  *
  *   header      가방 · m:ss            내 가방 n/25
- *   status      notice, or 여는 중 / 비어 있다 (height always reserved)
+ *   status      notice, or 여는 중 (height always reserved)
  *   grid        5 × 6 — a death bag holds up to 30 (25 carried + 5 worn, GDD AC-IE-31)
  *   전체 획득
  *   detail      the hovered item, compared with what you wear
  *
  * Left click takes an item. The window closes itself when you walk out of range — the server
- * drops out-of-range viewers without a packet — and when "전체 획득" emptied it.
+ * drops out-of-range viewers without a packet — when "전체 획득" emptied it, and when the bag
+ * expires. It never says why.
  */
 UCLASS()
 class S1_API US1LootWindowWidget : public UUserWidget
@@ -39,7 +39,7 @@ public:
 
 	void Open(uint64 InBagId);
 
-	/** F again, Esc, walking away, or emptied by take-all. No reason shown — the player did it. */
+	/** F again, Esc, walking away, emptied by take-all, or expired. No reason is shown. */
 	void CloseSilently();
 
 	bool IsOpen() const { return BagId != 0; }
@@ -61,12 +61,6 @@ private:
 	void RefreshHeader();
 	void RefreshDetail();
 
-	/** The bag went away under us (expiry) or was refilled (chest reset). Fold to the header, say why, then go. */
-	void CloseWithReason(const FText& Reason);
-
-	/** Shrinks the window to its header line, or restores its full height. */
-	void SetFolded(bool bFold);
-
 	void HandleSlotClicked(uint64 InstanceId, FKey Button, bool bCtrl);
 	void HandleSlotHovered(uint64 InstanceId);
 	void HandleBagChanged(uint64 InBagId);
@@ -77,7 +71,6 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock>						TitleText;
 	UPROPERTY() TObjectPtr<UTextBlock>						MyBagText;
 	UPROPERTY() TObjectPtr<UTextBlock>						StatusText;
-	UPROPERTY() TObjectPtr<UVerticalBox>					Body;
 	UPROPERTY() TArray<TObjectPtr<US1ItemSlotWidget>>		GridSlots;
 	UPROPERTY() TObjectPtr<UBorder>							TakeAllButton;
 	UPROPERTY() TObjectPtr<UTextBlock>						TakeAllText;
@@ -87,13 +80,8 @@ private:
 	uint64				BagId = 0;
 	uint64				HoveredId = 0;
 	double				OpenedAtSeconds = 0.0;
-	bool				bClosingWithReason = false;
-	bool				bFolded = false;
-	FAnchors			UnfoldedAnchors;
-	FMargin				UnfoldedOffsets;
 	bool				bNoticeShowing = false;
 	float				TickAccumulator = 0.f;
-	FTimerHandle		CloseTimer;
 	FTimerHandle		NoticeTimer;
 
 	FDelegateHandle		BagChangedHandle;

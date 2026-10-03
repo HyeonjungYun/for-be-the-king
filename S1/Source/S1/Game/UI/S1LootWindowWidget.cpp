@@ -7,7 +7,6 @@
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
-#include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
@@ -26,11 +25,7 @@ namespace
 	constexpr float TickSeconds = 0.25f;			// Range check + countdown
 	constexpr double OpeningHintSeconds = 0.3;		// § States — "여는 중" only past 300 ms
 	constexpr uint64 ExpiryEmphasisMs = 60000;		// § States — last minute reads bigger
-	constexpr float ReasonSeconds = 2.f;			// § States — reason stays 2 s before the window goes
 	constexpr float NoticeSeconds = 2.f;
-
-	/** Header line plus the panel padding — the height the window folds to while it shows a reason. */
-	constexpr float FoldedHeight = S1ItemUIStyle::PanelPadding * 2.f + 26.f;
 
 	FText FormatRemaining(uint64 RemainingMs)
 	{
@@ -87,17 +82,12 @@ void US1LootWindowWidget::NativeOnInitialized()
 	if (UVerticalBoxSlot* RowSlot = Column->AddChildToVerticalBox(HeaderRow))
 		RowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 
-	// Everything below the header folds away when the window closes with a reason.
-	Body = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-	if (UVerticalBoxSlot* BodySlot = Column->AddChildToVerticalBox(Body))
-		BodySlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-
 	// ── Status line — height reserved so the grid never jumps ──
 	USizeBox* StatusBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	StatusBox->SetHeightOverride(NoticeLineHeight);
 	StatusText = MakeText(FontBody, TextPrimary());
 	StatusBox->SetContent(StatusText);
-	if (UVerticalBoxSlot* StatusSlot = Body->AddChildToVerticalBox(StatusBox))
+	if (UVerticalBoxSlot* StatusSlot = Column->AddChildToVerticalBox(StatusBox))
 		StatusSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 2.f));
 
 	// ── Contents grid ──
@@ -112,7 +102,7 @@ void US1LootWindowWidget::NativeOnInitialized()
 		Grid->AddChildToUniformGrid(Cell, i / GridColumns, i % GridColumns);
 		GridSlots.Add(Cell);
 	}
-	if (UVerticalBoxSlot* GridSlot = Body->AddChildToVerticalBox(Grid))
+	if (UVerticalBoxSlot* GridSlot = Column->AddChildToVerticalBox(Grid))
 		GridSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
 
 	// ── 전체 획득 — a plain bordered label, hit-tested in NativeOnMouseButtonDown ──
@@ -122,14 +112,14 @@ void US1LootWindowWidget::NativeOnInitialized()
 	TakeAllText = MakeText(FontBody, TextPrimary());
 	TakeAllText->SetText(Text(TEXT("label.take_all")));
 	TakeAllButton->SetContent(TakeAllText);
-	if (UVerticalBoxSlot* ButtonSlot = Body->AddChildToVerticalBox(TakeAllButton))
+	if (UVerticalBoxSlot* ButtonSlot = Column->AddChildToVerticalBox(TakeAllButton))
 		ButtonSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 8.f));
 
 	// ── Detail pane ──
 	Detail = CreateWidget<US1ItemDetailWidget>(this, US1ItemDetailWidget::StaticClass());
 	if (KeyName)
 		Detail->SetKeyNameResolver(KeyName);
-	if (UVerticalBoxSlot* DetailSlot = Body->AddChildToVerticalBox(Detail))
+	if (UVerticalBoxSlot* DetailSlot = Column->AddChildToVerticalBox(Detail))
 		DetailSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 	Detail->SetClipping(EWidgetClipping::ClipToBounds);
 }
@@ -158,10 +148,7 @@ void US1LootWindowWidget::NativeDestruct()
 	}
 
 	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(CloseTimer);
 		World->GetTimerManager().ClearTimer(NoticeTimer);
-	}
 
 	Super::NativeDestruct();
 }
@@ -174,17 +161,12 @@ void US1LootWindowWidget::Open(uint64 InBagId)
 	if (Items == nullptr || InBagId == 0)
 		return;
 
-	if (UWorld* World = GetWorld())
-		World->GetTimerManager().ClearTimer(CloseTimer);
-
 	BagId = InBagId;
 	HoveredId = 0;
 	OpenedAtSeconds = FPlatformTime::Seconds();
-	bClosingWithReason = false;
 	TickAccumulator = 0.f;
 	ClearNotice();
 
-	Body->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	SetVisibility(ESlateVisibility::Visible);
 
 	Items->RequestOpenBag(BagId);
@@ -195,9 +177,6 @@ void US1LootWindowWidget::Open(uint64 InBagId)
 
 void US1LootWindowWidget::CloseSilently()
 {
-	if (UWorld* World = GetWorld())
-		World->GetTimerManager().ClearTimer(CloseTimer);
-
 	if (BagId != 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[ITEMUI] loot window closed bag=%llu"), BagId);
@@ -209,53 +188,7 @@ void US1LootWindowWidget::CloseSilently()
 
 	BagId = 0;
 	HoveredId = 0;
-	bClosingWithReason = false;
-	SetFolded(false);
 	SetVisibility(ESlateVisibility::Collapsed);
-}
-
-void US1LootWindowWidget::SetFolded(bool bFold)
-{
-	// The window is stretched to 70% height by its canvas anchors. Folding pins the bottom anchor
-	// to the top one and gives it one header line of height; unfolding puts the anchors back.
-	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
-	if (CanvasSlot == nullptr || bFolded == bFold)
-		return;
-
-	if (bFold)
-	{
-		UnfoldedAnchors = CanvasSlot->GetAnchors();
-		UnfoldedOffsets = CanvasSlot->GetOffsets();
-
-		const FAnchors& A = UnfoldedAnchors;
-		CanvasSlot->SetAnchors(FAnchors(A.Minimum.X, A.Minimum.Y, A.Maximum.X, A.Minimum.Y));
-		CanvasSlot->SetOffsets(FMargin(UnfoldedOffsets.Left, 0.f, UnfoldedOffsets.Right, FoldedHeight));
-	}
-	else
-	{
-		CanvasSlot->SetAnchors(UnfoldedAnchors);
-		CanvasSlot->SetOffsets(UnfoldedOffsets);
-	}
-
-	bFolded = bFold;
-}
-
-void US1LootWindowWidget::CloseWithReason(const FText& Reason)
-{
-	UE_LOG(LogTemp, Log, TEXT("[ITEMUI] loot window closing bag=%llu reason=%s"), BagId, *Reason.ToString());
-
-	// The reason stays where the window was — the middle of the screen is never used (§ Layout Zones).
-	bClosingWithReason = true;
-	Body->SetVisibility(ESlateVisibility::Collapsed);
-	TitleText->SetText(Reason);
-	MyBagText->SetText(FText::GetEmpty());
-	SetFolded(true);
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(CloseTimer, FTimerDelegate::CreateUObject(this, &US1LootWindowWidget::CloseSilently),
-			ReasonSeconds, false);
-	}
 }
 
 // ── Refresh ──────────────────────────────────────────────────────────────
@@ -263,7 +196,7 @@ void US1LootWindowWidget::CloseWithReason(const FText& Reason)
 void US1LootWindowWidget::RefreshHeader()
 {
 	US1ItemSubsystem* Items = GetItems();
-	if (Items == nullptr || IsOpen() == false || bClosingWithReason)
+	if (Items == nullptr || IsOpen() == false)
 		return;
 
 	const FS1BagView* Bag = Items->FindBag(BagId);
@@ -289,18 +222,15 @@ void US1LootWindowWidget::RefreshHeader()
 		Mine = FText::Format(INVTEXT("{0} · ■ {1}"), Mine, Text(TEXT("label.full")));
 	MyBagText->SetText(Mine);
 
-	// Status line: a live notice wins; otherwise what state the bag is in.
+	// Status line: a live notice wins; otherwise "여는 중" while the contents are on their way.
+	// An empty bag says nothing — the empty grid and the dimmed 전체 획득 already show it.
 	if (bNoticeShowing == false)
 	{
 		FText Status = FText::GetEmpty();
-		if (Bag == nullptr || Bag->bHasContents == false)
+		if ((Bag == nullptr || Bag->bHasContents == false)
+			&& FPlatformTime::Seconds() - OpenedAtSeconds > OpeningHintSeconds)
 		{
-			if (FPlatformTime::Seconds() - OpenedAtSeconds > OpeningHintSeconds)
-				Status = Text(TEXT("bag.opening"));
-		}
-		else if (Bag->Items.Num() == 0)
-		{
-			Status = Text(TEXT("bag.empty"));
+			Status = Text(TEXT("bag.opening"));
 		}
 		StatusText->SetText(Status);
 		StatusText->SetColorAndOpacity(FSlateColor(TextSecondary()));
@@ -310,7 +240,7 @@ void US1LootWindowWidget::RefreshHeader()
 void US1LootWindowWidget::Refresh()
 {
 	US1ItemSubsystem* Items = GetItems();
-	if (Items == nullptr || IsOpen() == false || bClosingWithReason)
+	if (Items == nullptr || IsOpen() == false)
 		return;
 
 	RefreshHeader();
@@ -376,7 +306,7 @@ void US1LootWindowWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (IsOpen() == false || bClosingWithReason)
+	if (IsOpen() == false)
 		return;
 
 	TickAccumulator += InDeltaTime;
@@ -449,20 +379,14 @@ void US1LootWindowWidget::HandleBagChanged(uint64 InBagId)
 
 void US1LootWindowWidget::HandleBagClosed(uint64 InBagId, ES1BagCloseReason Reason)
 {
-	if (InBagId != BagId || bClosingWithReason)
-		return;
-
-	switch (Reason)
-	{
-	case ES1BagCloseReason::Gone:		CloseWithReason(Text(TEXT("bag.gone")));		break;
-	case ES1BagCloseReason::Refilled:	CloseWithReason(Text(TEXT("bag.refilled")));	break;
-	default:							CloseSilently();								break;
-	}
+	// Expired, refilled or emptied — the window simply goes, with no reason line (2026-10-04).
+	if (InBagId == BagId)
+		CloseSilently();
 }
 
 void US1LootWindowWidget::HandleNotice(ES1ItemNotice InNotice, uint64 InstanceId, int32 Count)
 {
-	if (IsOpen() == false || bClosingWithReason)
+	if (IsOpen() == false)
 		return;
 
 	const FText Message = Notice(InNotice, Count);

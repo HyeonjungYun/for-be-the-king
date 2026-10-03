@@ -78,13 +78,13 @@ enum class ES1ItemNotice : uint8
 	LootPartial,		// n개를 가져오지 못했습니다(인벤토리 가득 참) — carries a count
 };
 
-/** Why an open bag window closed. */
+/** Why an open bag window closed. The window closes the same way for all of them — no reason line. */
 enum class ES1BagCloseReason : uint8
 {
-	Gone = 0,		// 가방이 사라졌습니다 — expired or removed
-	Refilled,		// 다시 채워졌습니다 — chest reset. No packet tells us yet
-	AllTaken,		// "전체 획득" emptied it. Silent
-	OutOfRange,		// The player walked away. Silent
+	Gone = 0,		// Expired or removed
+	Refilled,		// Chest reset. No packet tells us yet
+	AllTaken,		// "전체 획득" emptied it
+	OutOfRange,		// The player walked away
 };
 
 /** What a discard click does. design/ux/item-ui.md § Interaction Map, AC-UI-03. */
