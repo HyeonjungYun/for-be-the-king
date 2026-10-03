@@ -9,6 +9,7 @@
 #include "PacketSession.h"
 #include "Protocol.pb.h"
 #include "ClientPacketHandler.h"
+#include "Game/Item/S1ItemSubsystem.h"
 #include "S1MyPlayer.h"
 
 
@@ -137,6 +138,11 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 			objectInfo.object_id(), Pos.x(), Pos.y());
 
 		Bags.Add(objectInfo.object_id());
+
+		if (US1ItemSubsystem* Items = GetSubsystem<US1ItemSubsystem>())
+		{
+			Items->OnBagSpawned(objectInfo);
+		}
 		return;
 	}
 
@@ -205,6 +211,11 @@ void US1GameInstance::HandleDespawn(uint64 ObjectId)
 		// 열어 둔 가방이 사라졌다.
 		if (OpenBags.Remove(ObjectId) > 0)
 			UE_LOG(LogTemp, Warning, TEXT("[BAG] closed id=%llu - bag gone"), ObjectId);
+
+		if (US1ItemSubsystem* Items = GetSubsystem<US1ItemSubsystem>())
+		{
+			Items->OnBagDespawned(ObjectId);
+		}
 
 		return;
 	}

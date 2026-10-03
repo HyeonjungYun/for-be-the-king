@@ -1,6 +1,7 @@
 ﻿#include "ClientPacketHandler.h"
 #include "BufferReader.h"
 #include "S1.h"
+#include "Game/Item/S1ItemSubsystem.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -261,6 +262,9 @@ bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pk
 
 	UE_LOG(LogTemp, Warning, TEXT("%s"), *Line);
 
+	if (US1ItemSubsystem* Items = US1ItemSubsystem::Get())
+		Items->OnItemResult(pkt);
+
 	return true;
 };
 
@@ -279,6 +283,11 @@ bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SY
 			Item.skills_size());
 	}
 
+	if (US1ItemSubsystem* Items = US1ItemSubsystem::Get())
+	{
+		Items->OnInventorySync(pkt);
+	}
+
 	return true;
 }
 
@@ -288,5 +297,11 @@ bool Handle_S_BAG_CONTENTS(PacketSessionRef& session, Protocol::S_BAG_CONTENTS& 
 	{
 		GameInstance->HandleBagContents(pkt);
 	}
+
+	if (US1ItemSubsystem* Items = US1ItemSubsystem::Get())
+	{
+		Items->OnBagContents(pkt);
+	}
+
 	return true;
 }
