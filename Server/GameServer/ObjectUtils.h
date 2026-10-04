@@ -70,6 +70,10 @@ extern atomic<uint32> GBaseCampDelayMs;
 // 첫 사망에 장비를 잃은 봇이 맨몸으로 돌아와 스킬이 막히고 부하가 1/3 로 줄던 문제 (roadmap.md M2-6)
 extern atomic<bool> GBotRegear;
 
+// 부하 측정 · 테스트 픽스처 전용 - 진입 지점 대신 예전처럼 DB 저장 좌표에서 입장한다 (FBTK_ENTRY_FROM_DB=1).
+// 봇이 진입 지점 몇 곳에 몰리면 이전 측정과 비교가 안 된다 (design/ux/entry-point.md)
+extern atomic<bool> GEntryFromDb;
+
 // 맨몸 부위를 채우고 채운 개수를 돌려준다. 이름이 bot_ 으로 시작하지 않으면 0
 int32 RegearBot(Player& player, const string& characterName);
 

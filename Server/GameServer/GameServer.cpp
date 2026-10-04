@@ -14,6 +14,7 @@
 #include "ItemTable.h"
 #include "ItemRoller.h"
 #include "ChestSpawnTable.h"
+#include "EntryPointTable.h"
 #include "Bag.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
@@ -115,6 +116,15 @@ int main()
 			return -1;
 		}
 
+		// 진입 지점 - 층마다 하나 이상이어야 입장할 곳이 있다 (design/ux/entry-point.md)
+		if (EntryPointTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] entry points invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] entry points loaded - " << EntryPointTable::All().size() << '\n';
+
 		// 메모리 전용 - DB 행이 없다. 재시작하면 전층이 Sealed 로 돌아간다 (§ 8, ADR-0003).
 		// 워커가 아직 없으므로 DoAsync 가 이 스레드에서 바로 실행된다 (LoadLiveBags 와 같음).
 		for (const ChestSpawn& spawn : ChestSpawnTable::All())
@@ -201,6 +211,24 @@ int main()
 		char* raw = nullptr;
 		size_t length = 0;
 
+		if (_dupenv_s(&raw, &length, "FBTK_LOG_STALL_MS") == 0 && raw != nullptr)
+		{
+			const uint32 stallMs = static_cast<uint32>(::strtoul(raw, nullptr, 10));
+			::free(raw);
+
+			if (stallMs > 0)
+			{
+				constexpr uint32 STALL_PERIOD_MS = 10'000;
+				GetLogger().SetTestStall(stallMs, STALL_PERIOD_MS);
+				LOG_LINE << "[BOOT] FBTK_LOG_STALL_MS=" << stallMs << " - log writer stalls every " << STALL_PERIOD_MS << "ms (TEST ONLY)\n";
+			}
+		}
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
 		if (_dupenv_s(&raw, &length, "FBTK_BOT_REGEAR") == 0 && raw != nullptr)
 		{
 			GBotRegear.store(raw[0] == '1');
@@ -215,18 +243,14 @@ int main()
 		char* raw = nullptr;
 		size_t length = 0;
 
-		if (_dupenv_s(&raw, &length, "FBTK_LOG_STALL_MS") == 0 && raw != nullptr)
+		if (_dupenv_s(&raw, &length, "FBTK_ENTRY_FROM_DB") == 0 && raw != nullptr)
 		{
-			const uint32 stallMs = static_cast<uint32>(::strtoul(raw, nullptr, 10));
+			GEntryFromDb.store(raw[0] == '1');
 			::free(raw);
-
-			if (stallMs > 0)
-			{
-				constexpr uint32 STALL_PERIOD_MS = 10'000;
-				GetLogger().SetTestStall(stallMs, STALL_PERIOD_MS);
-				LOG_LINE << "[BOOT] FBTK_LOG_STALL_MS=" << stallMs << " - log writer stalls every " << STALL_PERIOD_MS << "ms (TEST ONLY)\n";
-			}
 		}
+
+		if (GEntryFromDb.load())
+			LOG_LINE << "[BOOT] FBTK_ENTRY_FROM_DB=1 - enter at the saved DB position, not an entry point (LOAD TEST / FIXTURE ONLY)\n";
 	}
 
 	{

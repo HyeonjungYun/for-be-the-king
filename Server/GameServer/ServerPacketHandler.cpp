@@ -7,6 +7,7 @@
 #include "Player.h"
 #include "AccountManager.h"
 #include "ItemTable.h"
+#include "EntryPointTable.h"
 #include <thread>
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -543,29 +544,52 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 	// 플레이어 생성
 	PlayerRef player = ObjectUtils::CreatePlayer(gameSession, character.object_info().object_id());
 
-	player->maxHp = character.max_hp();
-	player->hp = character.hp();
+	player->maxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
 
-	const Protocol::PosInfo& saved = character.object_info().pos_info();
-	player->posInfo->set_x(saved.x());
-	player->posInfo->set_y(saved.y());
-	player->posInfo->set_z(saved.z());
-	player->posInfo->set_yaw(saved.yaw());
+	// 입장 체력은 항상 최대치 - 런마다 새로 시작한다. 베이스캠프에 회복 수단이 없다 (entry-point.md · 2026-10-05).
+	// 세션의 characters 는 로그인 때 캐시라 런 사이에 낡는다 - 위치 · 체력을 거기서 읽지 않는다.
+	player->hp = player->maxHp;
 
-	// TEST용 임시 규칙 : 죽은 채로 저장된 캐릭터를 입장 때 되살린다.
-	if (player->hp <= 0)
+	if (GEntryFromDb.load())
 	{
-		if (player->maxHp <= 0)
-			player->maxHp = BaseStats::MAX_HP;
+		// 부하 측정 · 테스트 픽스처 전용(FBTK_ENTRY_FROM_DB=1) - 예전처럼 저장 좌표에서 시작한다.
+		// 봇이 진입 지점 몇 곳에 몰리면 이전 측정과 비교가 안 된다. 원점이면 Room 이 층 기본 위치로 둔다.
+		const Protocol::PosInfo& saved = character.object_info().pos_info();
+		player->posInfo->set_x(saved.x());
+		player->posInfo->set_y(saved.y());
+		player->posInfo->set_z(saved.z());
+		player->posInfo->set_yaw(saved.yaw());
 
-		player->hp = player->maxHp;
+		// 죽은 채로 저장된 캐릭터는 흩뿌려 되살린다 - 이전 측정과 같은 규칙
+		if (character.hp() <= 0)
+		{
+			player->posInfo->set_x(Utils::GetRandom(-2000.f, 2000.f));
+			player->posInfo->set_y(Utils::GetRandom(-2000.f, 2000.f));
+			player->posInfo->set_z(100.f);
+		}
+	}
+	else
+	{
+		// 플레이어가 S4 에서 고른 진입 지점. 0 · 없는 id · 다른 층이면 그 층 지점 중 무작위 (AC-EP-03 · 08)
+		thread_local mt19937 rng{ random_device{}() };
+		bool wasRandom = false;
 
-		player->posInfo->set_x(Utils::GetRandom(-2000.f, 2000.f));
-		player->posInfo->set_y(Utils::GetRandom(-2000.f, 2000.f));
-		player->posInfo->set_z(100.f);
+		if (const EntryPoint* point = EntryPointTable::Resolve(pkt.floor_id(), pkt.entry_point_id(), rng, OUT wasRandom))
+		{
+			player->posInfo->set_x(point->x);
+			player->posInfo->set_y(point->y);
+			player->posInfo->set_z(point->z);
+			player->posInfo->set_yaw(point->yaw);
+			player->spreadOnEnter = true;		// 같은 지점을 고른 사람끼리 겹치지 않게 Room 이 둘레에 펼친다 (AC-EP-04)
 
-		LOG_LINE << "[ENTER] revive char=" << character.object_info().object_id()
-			<< " hp=" << player->hp << '\n';
+			LOG_LINE << "[ENTER] point=" << (wasRandom ? "random" : "chosen") << " entry=" << point->entryId
+				<< " requested=" << pkt.entry_point_id() << " char=" << character.object_info().object_id() << '\n';
+		}
+		else
+		{
+			LOG_LINE << "[ENTER] no entry point on floor " << pkt.floor_id() << " - floor default. char="
+				<< character.object_info().object_id() << '\n';
+		}
 	}
 
 	GDBQueue.Push([gameSession, player, room, name = character.name()](DBConnection* conn)

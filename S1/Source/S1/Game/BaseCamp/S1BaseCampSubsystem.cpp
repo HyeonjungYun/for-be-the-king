@@ -11,6 +11,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -44,6 +45,20 @@ void US1BaseCampSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (US1ItemSubsystem* Items = Collection.InitializeDependency<US1ItemSubsystem>())
 		SyncedHandle = Items->OnInventorySynced.AddUObject(this, &US1BaseCampSubsystem::HandleInventorySynced);
+
+	// S4 (진입 지점 지도) — the server's own entry_points.csv, read the way the item catalog reads item_types.csv
+	const FString Directory = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), EntryDataDirectory));
+	FString Error;
+	if (EntryDataDirectory.IsEmpty() || EntryPoints.LoadFromDirectory(Directory, Error) == false)
+	{
+		// Not fatal: S4 shows an empty map and [무작위] still works — the server picks.
+		UE_LOG(LogTemp, Error, TEXT("[BASECAMP] entry points not loaded - dir=%s error=%s"),
+			*Directory, EntryDataDirectory.IsEmpty() ? TEXT("EntryDataDirectory is not set") : *Error);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[BASECAMP] entry points loaded - %d"), EntryPoints.Num());
+	}
 }
 
 void US1BaseCampSubsystem::Deinitialize()
@@ -120,18 +135,25 @@ void US1BaseCampSubsystem::HandleDied(uint64 VictimId)
 
 // ── UI ───────────────────────────────────────────────────────────────────
 
-void US1BaseCampSubsystem::RequestEnter()
+bool US1BaseCampSubsystem::CanEnter() const
 {
-	if (Place != ES1Place::BaseCamp || bInventoryReady == false)
+	return Place == ES1Place::BaseCamp && bInventoryReady;
+}
+
+void US1BaseCampSubsystem::RequestEnter(uint32 EntryPointId)
+{
+	if (CanEnter() == false)
 		return;
 
-	// One character per account, one floor for now — the same 0 / 0 the old auto-entry sent.
+	// One character per account, one floor for now. entry_point_id 0 = the server picks one of the
+	// floor's points (S4 [무작위]); an id it does not know on this floor is treated the same way.
 	Protocol::C_ENTER_GAME Pkt;
 	Pkt.set_playerindex(0);
-	Pkt.set_floor_id(0);
+	Pkt.set_floor_id(FloorId);
+	Pkt.set_entry_point_id(EntryPointId);
 	SEND_PACKET(Pkt);
 
-	UE_LOG(LogTemp, Log, TEXT("[BASECAMP] enter requested"));
+	UE_LOG(LogTemp, Log, TEXT("[BASECAMP] enter requested - entry point %u%s"), EntryPointId, EntryPointId == 0 ? TEXT(" (random)") : TEXT(""));
 	SetPlace(ES1Place::Entering);
 }
 

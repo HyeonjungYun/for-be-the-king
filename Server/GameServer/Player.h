@@ -58,4 +58,7 @@ public:
 	ItemEntry				equipped[SKILL_SLOT_COUNT];
 	vector<uint64>			droppedIds;
 	uint64					detachedUntilUs = 0;
+
+	// 진입 지점에서 시작한다 - Room::EnterRoom 이 그 둘레 빈자리로 옮기고 내린다 (entry-point.md AC-EP-04)
+	bool					spreadOnEnter = false;
 };

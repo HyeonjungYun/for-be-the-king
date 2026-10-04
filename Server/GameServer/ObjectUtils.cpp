@@ -15,6 +15,7 @@ atomic<bool> GFailDeathCommit = false;
 atomic<uint32> GDeathCommitDelayMs = 0;
 atomic<uint32> GBaseCampDelayMs = 0;
 atomic<bool> GBotRegear = false;
+atomic<bool> GEntryFromDb = false;
 atomic<int32> GFailEscapeCommits = 0;
 DeathCommitTracker GDeathCommits;
 atomic<uint64> GDisconnectGraceUs = 180'000'000;

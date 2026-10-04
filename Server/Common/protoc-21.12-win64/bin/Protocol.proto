@@ -20,6 +20,7 @@ message C_ENTER_GAME
 {
 	uint64 playerIndex = 1;
 	uint32 floor_id = 2;
+	uint32 entry_point_id = 3;
 }
 
 message S_ENTER_GAME

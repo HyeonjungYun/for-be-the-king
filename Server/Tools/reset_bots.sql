@@ -11,6 +11,9 @@
 --    수치만 보면 부하가 19배 준 것처럼 보이지만 봇이 멈춘 것이다.
 --    상세: production/roadmap.md § 0-4
 --
+-- 🔴 2026-10-05 부터 입장 위치는 진입 지점(entry_points.csv)이다. 여기서 흩뿌린 좌표를 쓰려면
+--    서버를 FBTK_ENTRY_FROM_DB=1 로 띄울 것 — 아니면 봇 120명이 층마다 5곳에 몰려 이전 측정과 비교가 안 된다.
+--
 -- 사용법 (PowerShell)
 --    Get-Content .\Server\Tools\reset_bots.sql |
 --        & "C:\mysql-8.0.46-winx64\bin\mysql.exe" -u root -p -D forbetheking

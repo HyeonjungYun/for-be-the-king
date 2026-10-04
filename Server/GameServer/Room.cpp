@@ -161,6 +161,22 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		object->posInfo->set_y(spawnY);
 		object->posInfo->set_z(100.f);
 	}
+	else if (auto entering = dynamic_pointer_cast<Player>(object); entering != nullptr && entering->spreadOnEnter)
+	{
+		// 고른 진입 지점 둘레의 빈자리 - 같은 지점을 고른 사람끼리 겹치지 않게 (entry-point.md AC-EP-04)
+		float spawnX = 0.f;
+		float spawnY = 0.f;
+		const float pointX = object->posInfo->x();
+		const float pointY = object->posInfo->y();
+		FindSpawnPosition(pointX, pointY, spawnX, spawnY);
+
+		object->posInfo->set_x(spawnX);
+		object->posInfo->set_y(spawnY);
+		entering->spreadOnEnter = false;
+
+		LOG_LINE << "[ENTER] placed char=" << object->objectInfo->object_id() << " at=(" << spawnX << "," << spawnY
+			<< ") point=(" << pointX << "," << pointY << ") hp=" << entering->hp << '\n';
+	}
 	bool success = AddObject(object);
 
 	// 랜덤 위치

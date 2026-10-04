@@ -156,6 +156,7 @@
     <ClCompile Include="AccountManager.cpp" />
     <ClCompile Include="Bag.cpp" />
     <ClCompile Include="ChestSpawnTable.cpp" />
+    <ClCompile Include="EntryPointTable.cpp" />
     <ClCompile Include="Creature.cpp" />
     <ClCompile Include="CsvTable.cpp" />
     <ClCompile Include="Enum.pb.cc">
@@ -191,6 +192,7 @@
     <ClInclude Include="AccountManager.h" />
     <ClInclude Include="Bag.h" />
     <ClInclude Include="ChestSpawnTable.h" />
+    <ClInclude Include="EntryPointTable.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />
     <ClInclude Include="Enum.pb.h" />

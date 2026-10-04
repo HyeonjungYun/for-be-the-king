@@ -13,6 +13,7 @@ class UEditableTextBox;
 class UTextBlock;
 class UVerticalBox;
 class US1BaseCampSubsystem;
+class US1EntryMapWidget;
 class US1ItemDetailWidget;
 class US1ItemSlotWidget;
 class US1ItemSubsystem;
@@ -80,6 +81,10 @@ private:
 	void HandlePlaceChanged(ES1Place Place);
 	void HandleEnterRejected();
 
+	/** [입장] → S4, the entry-point map (design/ux/entry-point.md). S4 sends C_ENTER_GAME, not S3. */
+	void OpenEntryMap();
+	void CloseEntryMap();
+
 	void Discard(const FS1ItemView& Item);
 	void CancelConfirm();
 	void ShowNotice(EColumn Column, const FText& Text, uint64 InstanceId);
@@ -110,6 +115,7 @@ private:
 	UPROPERTY() TObjectPtr<US1ItemDetailWidget>				Detail;
 	UPROPERTY() TObjectPtr<UBorder>							EnterButton;
 	UPROPERTY() TObjectPtr<UTextBlock>						EnterText;
+	UPROPERTY() TObjectPtr<US1EntryMapWidget>				EntryMap;
 
 	bool			bVaultBySkill = false;
 	bool			bCarriedBySkill = false;

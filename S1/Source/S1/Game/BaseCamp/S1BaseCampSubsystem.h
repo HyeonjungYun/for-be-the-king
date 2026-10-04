@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
+#include "Game/BaseCamp/S1EntryPoints.h"
 #include "S1BaseCampSubsystem.generated.h"
 
 namespace Protocol
@@ -74,8 +75,21 @@ public:
 
 	// ── UI ───────────────────────────────────────────────────────────────
 
-	/** [입장]. Only from base camp, and only once the base-camp inventory has arrived. */
-	void RequestEnter();
+	/**
+	 * S4 picked a point (or [무작위] = 0). Only from base camp, and only once the base-camp inventory
+	 * has arrived. design/ux/entry-point.md
+	 */
+	void RequestEnter(uint32 EntryPointId);
+
+	/** [입장] may open S4 and S4 may send — base camp, inventory arrived, nothing in flight. */
+	bool CanEnter() const;
+
+	/** The floor S4 shows and C_ENTER_GAME asks for. One floor for now. */
+	uint32 GetFloorId() const { return FloorId; }
+	const FS1EntryPoints& GetEntryPoints() const { return EntryPoints; }
+
+	/** Half the side of the square S4 draws, in cm — the TEMP floor plan until the real map has a picture. */
+	float GetMapHalfExtentCm() const { return MapHalfExtentCm; }
 
 	ES1Place GetPlace() const { return Place; }
 
@@ -106,7 +120,17 @@ private:
 	UPROPERTY(Config)
 	float DeathReturnSeconds = 3.f;
 
+	/** Where entry_points.csv lives, relative to the project — the server's Server/Data, like ItemDataDirectory. */
+	UPROPERTY(Config)
+	FString EntryDataDirectory;
+
+	UPROPERTY(Config)
+	float MapHalfExtentCm = 3000.f;
+
 	UPROPERTY() TObjectPtr<US1BaseCampWidget>	Widget;
+
+	FS1EntryPoints		EntryPoints;
+	uint32				FloorId = 0;
 
 	ES1Place			Place = ES1Place::Connecting;
 	uint64				MyCharacterId = 0;

@@ -1,6 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Game/UI/S1BaseCampWidget.h"
+#include "Game/UI/S1EntryMapWidget.h"
 #include "Game/UI/S1ItemDetailWidget.h"
 #include "Game/UI/S1ItemSlotWidget.h"
 #include "Game/UI/S1ItemUIComponent.h"
@@ -403,6 +404,9 @@ void US1BaseCampWidget::NativeDestruct()
 		World->GetTimerManager().ClearTimer(NoticeTimer);
 	}
 
+	// S3 leaves when the run starts (or the world goes) — S4 sits on top of it and goes too
+	CloseEntryMap();
+
 	Super::NativeDestruct();
 }
 
@@ -714,14 +718,13 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnterButton))
 	{
-		// [입장] — no shortcut on purpose (§ Interaction Map: 실수 방지)
+		// [입장] — no shortcut on purpose (§ Interaction Map: 실수 방지). It opens S4, the entry-point map;
+		// C_ENTER_GAME goes out from there once a point or [무작위] is picked (design/ux/entry-point.md)
 		if (IsLocked() == false)
 		{
 			CancelConfirm();
 			ClearNotices();
-			if (US1BaseCampSubsystem* BaseCamp = GetBaseCamp())
-				BaseCamp->RequestEnter();
-			RefreshEnter();
+			OpenEntryMap();
 		}
 	}
 	else if (IsUnder(VaultSort))
@@ -927,9 +930,32 @@ void US1BaseCampWidget::HandlePlaceChanged(ES1Place Place)
 
 void US1BaseCampWidget::HandleEnterRejected()
 {
-	// The lock is already off (place is BaseCamp again). Say why next to the button.
+	// The lock is already off (place is BaseCamp again). S4 goes away and S3 says why next to the button.
+	CloseEntryMap();
 	ShowNotice(EColumn::Carried, Text(TEXT("notice.enter_rejected")), 0);
 	Refresh();
+}
+
+void US1BaseCampWidget::OpenEntryMap()
+{
+	if (EntryMap == nullptr)
+		EntryMap = CreateWidget<US1EntryMapWidget>(GetOwningPlayer(), US1EntryMapWidget::StaticClass());
+
+	if (EntryMap == nullptr)
+		return;
+
+	// Over S3 (base camp sits at 20). S4 takes the keyboard for 1~9, R and Esc
+	constexpr int32 EntryMapZOrder = 30;
+	if (EntryMap->IsInViewport() == false)
+		EntryMap->AddToViewport(EntryMapZOrder);
+
+	EntryMap->SetKeyboardFocus();
+}
+
+void US1BaseCampWidget::CloseEntryMap()
+{
+	if (EntryMap != nullptr && EntryMap->IsInViewport())
+		EntryMap->Close();
 }
 
 void US1BaseCampWidget::ShowNotice(EColumn Column, const FText& InText, uint64 InstanceId)
