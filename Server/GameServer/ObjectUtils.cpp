@@ -63,6 +63,24 @@ namespace
 		return s;
 	}
 
+	// 이번 런에 생긴 아이템(isNew)은 DB 행이 없다 - 커밋이 새 행으로 넣는다 (상자 S-4).
+	constexpr const char* INSERT_ITEMS =
+		"INSERT INTO item_instances (instance_id, item_type_id, grade, level, state, slot, "
+		"owner_character_id, bag_id, skill_id_primary, skill_id_secondary) VALUES ";
+
+	// INSERT_ITEMS 뒤에 붙일 한 행. 주인과 가방은 둘 중 하나만 있다 (chk_owner_xor_bag) - 없는 쪽은 0 을 넘긴다.
+	void AppendItemValues(OUT string& values, const ItemEntry& e, Protocol::ItemState state, int32 slot, uint32 level, uint64 ownerId, uint64 bagId)
+	{
+		if (values.empty() == false)
+			values += ',';
+
+		values += "(" + to_string(e.instanceId) + "," + to_string(e.itemTypeId) + "," + to_string(static_cast<int32>(e.grade))
+			+ "," + to_string(level) + "," + to_string(static_cast<int32>(state)) + "," + to_string(slot)
+			+ "," + ((ownerId != 0) ? to_string(ownerId) : string("NULL"))
+			+ "," + ((bagId != 0) ? to_string(bagId) : string("NULL"))
+			+ "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + ")";
+	}
+
 	bool TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap)
 	{
 		const uint64 characterId = snap.characterId;
@@ -79,9 +97,17 @@ namespace
 		if (lockRes != nullptr)
 			conn->FreeResult(lockRes);
 
+		// DB 에 이미 있는 것은 소유 · 상태만 바꾸고, 이번 런에 생긴 것은 새 행으로 넣는다.
 		vector<uint64> carriedIds;
+		string newValues;
+
 		for (const ItemEntry& e : snap.carried)
-			carriedIds.push_back(e.instanceId);
+		{
+			if (e.isNew)
+				AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_CARRIED, 0, e.level, characterId, 0);
+			else
+				carriedIds.push_back(e.instanceId);
+		}
 
 		if (ok && carriedIds.empty() == false)
 		{
@@ -93,19 +119,32 @@ namespace
 			ok = conn->Excute(update.c_str());
 		}
 
-		uint64 expected = carriedIds.size();
+		uint64 expected = snap.carried.size();
 		for (int32 i = 0; ok && i < SKILL_SLOT_COUNT; i++)
 		{
 			const ItemEntry& e = snap.equipped[i];
 			if (e.instanceId == 0)
 				continue;
 
+			expected++;
+
+			if (e.isNew)
+			{
+				AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_EQUIPPED, i + 1, e.level, characterId, 0);
+				continue;
+			}
+
 			::snprintf(query, sizeof(query),
 				"UPDATE item_instances SET owner_character_id = %llu, bag_id = NULL, state = %d, slot = %d WHERE instance_id = %llu",
 				characterId, static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED), i + 1, e.instanceId);
 
 			ok = conn->Excute(query);
-			expected++;
+		}
+
+		if (ok && newValues.empty() == false)
+		{
+			const string insert = INSERT_ITEMS + newValues;
+			ok = conn->Excute(insert.c_str());
 		}
 
 		if (ok && snap.droppedIds.empty() == false)
@@ -436,13 +475,19 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 
 bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 {
-	string ids;
-	for (size_t i = 0; i < snap.items.size(); i++)
+	// DB 에 이미 있는 것은 가방으로 옮기고(UPDATE), 이번 런에 생긴 것은 가방 소속 새 행으로 넣는다(INSERT).
+	vector<uint64> existingIds;
+	string newValues;
+
+	for (const ItemEntry& e : snap.items)
 	{
-		if (i > 0)
-			ids += ',';
-		ids += to_string(snap.items[i].instanceId);
+		if (e.isNew)
+			AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_IN_BAG, 0, 0, 0, snap.bagId);
+		else
+			existingIds.push_back(e.instanceId);
 	}
+
+	const string ids = JoinIds(existingIds);
 
 	string dropped;
 	for (size_t i = 0; i < snap.droppedIds.size(); i++)
@@ -475,7 +520,7 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 			ok = false;
 		}
 
-		if (ok && snap.items.empty() == false)
+		if (ok && existingIds.empty() == false)
 		{
 			const string update =
 				"UPDATE item_instances SET owner_character_id = NULL, bag_id = " + to_string(snap.bagId)
@@ -484,12 +529,19 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 
 			ok = conn->Excute(update.c_str());
 
-			// 메모리에 있는 아이템은 전부 DB에 있어야 한다. 모자라면 어딘가 어긋났다 - 커밋하지 않는다.
-			if (ok && conn->GetAffectedRows() != snap.items.size())
+			// DB 에 있어야 할 아이템(isNew 아님)은 전부 있어야 한다. 모자라면 어딘가 어긋났다 - 커밋하지 않는다.
+			if (ok && conn->GetAffectedRows() != existingIds.size())
 			{
-				LOG_LINE << "[DEATH] item count mismatch - expected=" << snap.items.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
+				LOG_LINE << "[DEATH] item count mismatch - expected=" << existingIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
 				ok = false;
 			}
+		}
+
+		// 같은 트랜잭션 - 가방 행 · 소유 이전과 함께 확정되거나 함께 롤백된다 (AC-CH-07)
+		if (ok && newValues.empty() == false)
+		{
+			const string insert = INSERT_ITEMS + newValues;
+			ok = conn->Excute(insert.c_str());
 		}
 
 		//  이번 런에서 버린 아이템을 파기한다. 이미 없으면 목적은 달성된 것이라 개수가 달라도 실패로 보지않는다.

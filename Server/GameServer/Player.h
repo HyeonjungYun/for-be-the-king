@@ -14,6 +14,10 @@ struct ItemEntry
 	uint32				skillIdPrimary = 0;
 	uint32				skillIdSecondary = 0;
 
+	// 이번 런에 서버가 만들었다(상자 · 롤) - DB 행이 아직 없다. 탈출 · 사망 커밋이 UPDATE 대신 INSERT 한다.
+	// 커밋으로 행이 생기면 false 로 돌린다. 메모리 전용이라 클라로 보내지 않는다.
+	bool				isNew = false;
+
 	Protocol::ItemInstance ToProto(Protocol::ItemState state, Protocol::EquipSlot slot = Protocol::SLOT_NONE) const;
 };
 

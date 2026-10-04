@@ -355,6 +355,7 @@ ItemEntry ItemRoller::RollItem(const ChestPool& pool, mt19937& rng, const Instan
 	e.itemTypeId = type->typeId;
 	e.grade = grade;
 	e.level = 0;
+	e.isNew = true;		// 방금 만들었다 - DB 행은 탈출 · 사망 커밋이 INSERT 한다 (S-4)
 	RollSkills(*type, rng, OUT e.skillIdPrimary, OUT e.skillIdSecondary);
 
 	return e;

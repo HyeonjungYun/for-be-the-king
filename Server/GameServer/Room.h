@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "JobQueue.h"
 #include "SkillTable.h"
+#include <random>
 
 struct DeathSnapshot;
 
@@ -102,6 +103,9 @@ private:
 
 	vector<uint64>						_pendingSpawns;
 	vector<PendingTelegraph>			_pendingTelegraphs;
+
+	// 아이템 롤용. Room JobQueue 안에서만 쓰므로 잠그지 않는다.
+	mt19937								_rng{ random_device{}() };
 
 	int32 _enterCount = 0;
 	uint64 _enterTotalUs = 0;

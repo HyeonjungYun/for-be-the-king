@@ -3,6 +3,7 @@
 #include "Player.h"
 #include "SkillTable.h"
 #include "ItemTable.h"
+#include "ItemRoller.h"
 #include "ServerStats.h"
 #include "ObjectUtils.h"
 #include "Bag.h"
@@ -1166,7 +1167,10 @@ void Room::HandleDrop(GameSessionRef session, string requestId, uint64 instanceI
 	const ItemEntry e = *found;
 
 	player->inventory.erase(player->inventory.begin() + invIndex);
-	player->droppedIds.push_back(e.instanceId);
+
+	// 이번 런에 생긴 아이템은 DB 행이 없다 - 지울 것이 없으니 파기 목록에 넣지 않는다. 메모리에서 사라지면 끝이다.
+	if (e.isNew == false)
+		player->droppedIds.push_back(e.instanceId);
 
 	vector<Protocol::ItemInstance> changed;
 	changed.push_back(e.ToProto(Protocol::ITEM_STATE_NONE));
@@ -1236,7 +1240,21 @@ void Room::DebugDropBag(uint64 playerId)
 
 	BagRef bag = ObjectUtils::CreateBag(bagId, _floorId, owner->posInfo->x(), owner->posInfo->y(), owner->posInfo->z(), expiresAtUs, playerId);
 
-	LOG_LINE << "[BAG] debug drop by=" << playerId << " place=" << place << '\n';
+	// 런 중 생성 아이템 검증용 (상자 3단계) - 개활지 상자 한 번 분량을 롤해 넣는다. DB 행이 없다(isNew).
+	// 이 층에 풀이 없으면 예전처럼 빈 가방이다.
+	if (const ChestPool* pool = FloorItemPool::Find(_floorId, ChestTier::Open))
+		bag->items = ItemRoller::RollChest(*pool, _rng, []() { return GNextInstanceId.fetch_add(1); });
+
+	{
+		// 여러 문장으로 한 줄을 찍는다 - 객체 하나에 모아 소멸할 때 한 번에 내보낸다 (LogSlots 와 같은 방식)
+		std::osyncstream out(std::cout);
+		out << "[BAG] debug drop by=" << playerId << " place=" << place << " items=" << bag->items.size();
+
+		for (const ItemEntry& e : bag->items)
+			out << " " << e.instanceId << "(t" << e.itemTypeId << " g" << e.grade << " s" << e.skillIdPrimary << "/" << e.skillIdSecondary << ")";
+
+		out << '\n';
+	}
 
 	AddBag(bag);
 }
@@ -1286,7 +1304,10 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 	snap.bagId = GNextBagId.fetch_add(1);
 	snap.expiresAtUs = Utils::NowMicroseconds() + BAG_LIFETIME_US;
 
-	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size() << " dropped=" << snap.droppedIds.size() << '\n';
+	const int64 newItems = count_if(snap.items.begin(), snap.items.end(), [](const ItemEntry& e) { return e.isNew; });
+
+	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size()
+		<< " new=" << newItems << " dropped=" << snap.droppedIds.size() << '\n';
 
 	RoomRef room = GetRoomRef();
 	GDBQueue.Push([room, snap](DBConnection* conn)
@@ -1313,8 +1334,13 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 	BagRef bag = ObjectUtils::CreateBag(snap.bagId, snap.floorId, snap.x, snap.y, snap.z, snap.expiresAtUs, snap.characterId);
 	bag->items = snap.items;
 
+	// 커밋이 끝났다 - 런 중 생성 아이템도 이제 DB 행이 있다. isNew 를 남기면 이 가방에서 주워 탈출할 때
+	// 같은 id 를 또 INSERT 하려다 실패하고, 탈출 커밋은 무한 재시도에 빠진다.
 	for (ItemEntry& e : bag->items)
+	{
 		e.level = 0;
+		e.isNew = false;
+	}
 
 	AddBag(bag);
 
@@ -1377,8 +1403,15 @@ void Room::BeginEscapeCommit(uint64 playerId)
 	SEND_PACKET_DECLARATION(despawnPkt);
 	Broadcast(sendBuffer);
 
+	int64 newItems = count_if(snap.carried.begin(), snap.carried.end(), [](const ItemEntry& e) { return e.isNew; });
+	for (const ItemEntry& e : snap.equipped)
+	{
+		if (e.instanceId != 0 && e.isNew)
+			newItems++;
+	}
+
 	LOG_LINE << "[ESCAPE] commit begin - char=" << playerId << " carried=" << snap.carried.size()
-		<< " dropped=" << snap.droppedIds.size() << '\n';
+		<< " new=" << newItems << " dropped=" << snap.droppedIds.size() << '\n';
 
 	GDBQueue.Push([session, snap](DBConnection* conn)
 		{
@@ -2106,8 +2139,12 @@ void Room::UpdateBagExpiry(uint64 nowUs)
 
 		bagIds.push_back(bagId);
 
+		// DB 행이 없는 것(디버그 가방의 롤 아이템)은 지울 것이 없다
 		for (const ItemEntry& e : bag->items)
-			instanceIds.push_back(e.instanceId);
+		{
+			if (e.isNew == false)
+				instanceIds.push_back(e.instanceId);
+		}
 	}
 
 	if (bagIds.empty())

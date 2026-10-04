@@ -180,6 +180,7 @@ TEST(ItemRoller, AC_CH_02_상자_아이템_수는_1_이상_등급_상한_이하�
 			{
 				EXPECT_TRUE(ids.insert(e.instanceId).second) << "id " << e.instanceId << " 가 두 번 나왔다";
 				EXPECT_EQ(e.level, 0u);
+				EXPECT_TRUE(e.isNew) << "롤한 아이템은 DB 행이 없다 - 커밋이 INSERT 해야 한다";
 			}
 		}
 
