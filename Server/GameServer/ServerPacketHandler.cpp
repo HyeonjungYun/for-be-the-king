@@ -568,7 +568,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 			<< " hp=" << player->hp << '\n';
 	}
 
-	GDBQueue.Push([gameSession, player, room](DBConnection* conn)
+	GDBQueue.Push([gameSession, player, room, name = character.name()](DBConnection* conn)
 		{
 			if (LoadPlayerItems(conn, player) == false)
 			{
@@ -576,6 +576,13 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 
 				gameSession->Disconnect(L"item load failed");
 				return;
+			}
+
+			// 부하 측정 전용 - 맨몸 봇에 기본 3점 (FBTK_BOT_REGEAR)
+			if (GBotRegear.load())
+			{
+				if (const int32 filled = RegearBot(*player, name); filled > 0)
+					LOG_LINE << "[REGEAR] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
 			}
 
 			// 방에 입장

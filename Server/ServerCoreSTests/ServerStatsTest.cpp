@@ -171,6 +171,59 @@ TEST(ServerStats, 표본이_충분하면_꼬리를_제대로_잡는다)
 }
 
 /*---------------
+	AddSentPacket — 패킷 종류별 송신량 (G2 · SV-5 아이템 몫)
+---------------*/
+
+TEST(ServerStats, 패킷_id별로_따로_쌓인다)
+{
+	ServerStats stats;
+	stats.AddSentPacket(1009, 40);
+	stats.AddSentPacket(1009, 40);
+	stats.AddSentPacket(1034, 300);
+
+	EXPECT_EQ(stats.GetSentPacketBytes(1009), 80u);
+	EXPECT_EQ(stats.GetSentPacketBytes(1034), 300u);
+	EXPECT_EQ(stats.GetSentPacketBytes(1006), 0u);
+}
+
+TEST(ServerStats, 범위_밖_id는_0번_칸에_모인다)
+{
+	// 칸 수를 넘는 id 도 버리지 않는다 - 합계가 sent 와 맞아야 비율이 의미를 가진다
+	ServerStats stats;
+	stats.AddSentPacket(ServerStats::PACKET_ID_LIMIT, 10);
+	stats.AddSentPacket(UINT16_MAX, 5);
+
+	EXPECT_EQ(stats.GetSentPacketBytes(0), 15u);
+	EXPECT_EQ(stats.GetSentPacketBytes(UINT16_MAX), 15u);
+}
+
+TEST(Stress, ServerStats_동시_AddSentPacket이_바이트를_잃지_않는다)
+{
+	ServerStats stats;
+
+	constexpr int32 THREAD_COUNT = 8;
+	constexpr int32 PER_THREAD = 5000;
+
+	vector<std::thread> threads;
+
+	for (int32 t = 0; t < THREAD_COUNT; t++)
+	{
+		// 두 스레드씩 같은 칸을 노려 경합을 만든다
+		threads.emplace_back([&stats, t]()
+			{
+				for (int32 i = 0; i < PER_THREAD; i++)
+					stats.AddSentPacket(static_cast<uint16>(1000 + t % 4), 3);
+			});
+	}
+
+	for (auto& t : threads)
+		t.join();
+
+	for (int32 k = 0; k < 4; k++)
+		EXPECT_EQ(stats.GetSentPacketBytes(static_cast<uint16>(1000 + k)), 2ull * PER_THREAD * 3);
+}
+
+/*---------------
 	스트레스
 ---------------*/
 

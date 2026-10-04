@@ -71,6 +71,16 @@ void ServerStats::SnapshotBuckets(uint64* outBuckets) const
 		outBuckets[i] = _flushBuckets[i].load();
 }
 
+void ServerStats::AddSentPacket(uint16 id, uint64 bytes)
+{
+	_sentByPacket[id < PACKET_ID_LIMIT ? id : 0].fetch_add(bytes);
+}
+
+uint64 ServerStats::GetSentPacketBytes(uint16 id) const
+{
+	return _sentByPacket[id < PACKET_ID_LIMIT ? id : 0].load();
+}
+
 void ServerStats::Dump(int32 sessionCount)
 {
 	const uint64 nowUs = Utils::NowMicroseconds();
@@ -106,6 +116,69 @@ void ServerStats::Dump(int32 sessionCount)
 	// 클락 1인이 받는 양 = 서버가 보낸 총량 % 인원
 	const double perClientKbps = (sessionCount > 0) ? (sentMbps * 1000.0 / sessionCount) : 0.0;
 
+	// 패킷 종류별 - 큐에 넣은 바이트 기준(AddSentPacket). 비율은 이 칸들의 합으로만 나눈다
+	uint64 byPacket[PACKET_ID_LIMIT];
+	uint64 queuedBytes = 0;
+	for (int32 i = 0; i < PACKET_ID_LIMIT; i++)
+	{
+		byPacket[i] = _sentByPacket[i].exchange(0);
+		queuedBytes += byPacket[i];
+	}
+
+	auto toMbps = [elapsedSec](uint64 bytes) { return elapsedSec > 0.0 ? (bytes * 8.0) / elapsedSec / 1000000.0 : 0.0; };
+	auto shareOf = [queuedBytes](uint64 bytes) { return queuedBytes > 0 ? bytes * 100.0 / queuedBytes : 0.0; };
+	auto nameOf = [this](uint16 id) -> string
+	{
+		const char* name = (_packetName != nullptr) ? _packetName(id) : nullptr;
+		return name != nullptr ? string(name) : to_string(id);
+	};
+
+	char line[160];
+	string itemLine;
+	if (_itemPackets.empty() == false)
+	{
+		uint64 itemBytes = 0;
+		string detail;
+		for (uint16 id : _itemPackets)
+		{
+			const uint64 bytes = byPacket[id < PACKET_ID_LIMIT ? id : 0];
+			itemBytes += bytes;
+
+			::snprintf(line, sizeof(line), "  %s=%.1fk", nameOf(id).c_str(), toMbps(bytes) * 1000.0);
+			detail += line;
+		}
+
+		::snprintf(line, sizeof(line), " SV-5 item    %.3f Mbps (%.2f%% of queued %.2f Mbps)",
+			toMbps(itemBytes), shareOf(itemBytes), toMbps(queuedBytes));
+		itemLine = string(line) + detail + "\n";
+	}
+
+	// 상위 6종 - 아이템 몫이 어디에 비해 큰지 작은지를 같은 줄에서 본다
+	string topLine;
+	{
+		vector<pair<uint64, uint16>> ranked;
+		for (int32 i = 0; i < PACKET_ID_LIMIT; i++)
+		{
+			if (byPacket[i] > 0)
+				ranked.emplace_back(byPacket[i], static_cast<uint16>(i));
+		}
+
+		const size_t shown = min<size_t>(ranked.size(), 6);
+		partial_sort(ranked.begin(), ranked.begin() + shown, ranked.end(), greater<>());
+
+		if (shown > 0)
+		{
+			topLine = " SV-5 top    ";
+			for (size_t i = 0; i < shown; i++)
+			{
+				::snprintf(line, sizeof(line), " %s %.2f Mbps (%.1f%%)", nameOf(ranked[i].second).c_str(),
+					toMbps(ranked[i].first), shareOf(ranked[i].first));
+				topLine += line;
+			}
+			topLine += "\n";
+		}
+	}
+
 	PROCESS_MEMORY_COUNTERS_EX pmc = {};
 	::GetProcessMemoryInfo(::GetCurrentProcess(),
 		reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc));
@@ -129,6 +202,8 @@ void ServerStats::Dump(int32 sessionCount)
 	out << " SV-5 band    recv=" << recvMbps << " Mbps"
 		<< "  sent=" << sentMbps << " Mbps " << Verdict(sentMbps <= SENT_LIMIT_MBPS)
 		<< "  per-client=" << perClientKbps << " kbps " << Verdict(perClientKbps <= PER_CLIENT_LIMIT_KBPS) << "\n";
+
+	out << itemLine << topLine;
 
 	out << " SV-6 memory  commit=" << commitMB << " MB " << Verdict(commitMB <= MEMORY_LIMIT_MB)
 		<< "  workingset=" << memMB << " MB\n";

@@ -27,6 +27,13 @@ WHERE name LIKE 'bot\_%';
 
 START TRANSACTION;
 
+-- 🔴 가방은 전부 지운다 (2026-10-04, G2)
+--    봇이 죽으면 장비가 사망 가방으로 간다(owner = NULL, bag_id = X). 아래 주인 기준 DELETE 는 이 행을
+--    못 지워서 INSERT 가 같은 instance_id 로 부딪힌다. bags 에는 주인 칼럼이 없어 봇 것만 고를 수 없다 -
+--    측정 DB 전용 스크립트라 가방은 전부 지운다. 회차마다 가방 0 에서 시작해야 A/B 비교도 공정하다.
+DELETE FROM item_instances WHERE bag_id IS NOT NULL;
+DELETE FROM bags;
+
 DELETE i FROM item_instances i
 JOIN characters c ON c.character_id = i.owner_character_id
 WHERE c.name LIKE 'bot\_%';
@@ -51,6 +58,7 @@ SELECT COUNT(*) n,
        ROUND(STDDEV(pos_x)) sdx,
        ROUND(STDDEV(pos_y)) sdy,
        SUM(pos_x = 0 AND pos_y = 0) at_origin,
-       SUM(hp < max_hp) hurt
+       SUM(hp < max_hp) hurt,
+       (SELECT COUNT(*) FROM bags) bags
 FROM characters
 WHERE name LIKE 'bot\_%';

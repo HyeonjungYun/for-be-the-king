@@ -37,6 +37,14 @@ void Session::Send(SendBufferRef sendBuffer)
 	if (IsConnected() == false)
 		return;
 
+	// 패킷 종류별 송신량 (SV-5 아이템 몫). 버퍼에 통계 칸이 지정돼 있으면 그쪽으로 센다
+	if (sendBuffer->WriteSize() >= static_cast<int32>(sizeof(PacketHeader)))
+	{
+		const uint16 statId = sendBuffer->GetStatId();
+		const uint16 id = (statId != 0) ? statId : reinterpret_cast<PacketHeader*>(sendBuffer->Buffer())->id;
+		GStats.AddSentPacket(id, sendBuffer->WriteSize());
+	}
+
 	bool registerSend = false;
 
 	// 현재 RegisterSend가 걸리지 않은 상태라면, 걸어준다

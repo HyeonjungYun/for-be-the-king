@@ -275,6 +275,7 @@ bool Room::LeaveRoom(ObjectRef object)
 
 bool Room::HandleEnterPlayer(PlayerRef player)
 {
+	JOB_TAG();
 	// 적재하는 사이에 끊겼다 - 런이 시작되기 전이라 몸을 남기지 않는다.
 	GameSessionRef session = player->session.lock();
 	if (session == nullptr || session->IsConnected() == false)
@@ -306,6 +307,7 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 
 bool Room::HandleLeavePlayer(PlayerRef player)
 {
+	JOB_TAG();
 	// 던전에서 살아 있는 채로 나가는 길은 탈출뿐이다 - 나가기로 사망을 피하는 허점을 막는다.
 	if (_objects.find(player->objectInfo->object_id()) != _objects.end() && player->IsAlive())
 	{
@@ -326,6 +328,7 @@ bool Room::HandleLeavePlayer(PlayerRef player)
 
 void Room::HandleMove(Protocol::C_MOVE pkt)
 {
+	JOB_TAG();
 	const uint64 objectId = pkt.info().object_id();
 	
 	auto findIt = _objects.find(objectId);
@@ -437,6 +440,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 
 void Room::HandleAttack(uint64 attackerId, uint64 targetId)
 {
+	JOB_TAG();
 	auto attackerIt = _objects.find(attackerId);
 	if (attackerIt == _objects.end())
 		return;
@@ -488,6 +492,7 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId)
 
 void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 {
+	JOB_TAG();
 	auto casterIt = _objects.find(casterId);
 	if (casterIt == _objects.end())
 		return;
@@ -561,6 +566,7 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 
 void Room::HandleSkillCancel(uint64 casterId)
 {
+	JOB_TAG();
 	auto findIt = _objects.find(casterId);
 	if (findIt == _objects.end())
 		return;
@@ -570,6 +576,7 @@ void Room::HandleSkillCancel(uint64 casterId)
 
 void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, uint32 baseDurationMs, float magnitude)
 {
+	JOB_TAG();
 	auto findIt = _objects.find(targetId);
 	if (findIt == _objects.end())
 		return;
@@ -964,6 +971,7 @@ void Room::FlushCcState(uint64 nowUs)
 
 void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instanceId, Protocol::EquipSlot slot)
 {
+	JOB_TAG();
 	PlayerRef player = session->player.load();
 	if (player == nullptr)
 		return;
@@ -1020,6 +1028,7 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 
 void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instanceId)
 {
+	JOB_TAG();
 	PlayerRef player = session->player.load();
 	if (player == nullptr)
 		return;
@@ -1062,6 +1071,7 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 
 void Room::HandleBagOpen(GameSessionRef session, uint64 bagId)
 {
+	JOB_TAG();
 	PlayerRef player = session->player.load();
 	if (player == nullptr)
 		return;
@@ -1106,6 +1116,7 @@ void Room::HandleBagOpen(GameSessionRef session, uint64 bagId)
 
 void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, uint64 instanceId)
 {
+	JOB_TAG();
 	PlayerRef player = session->player.load();
 	if (player == nullptr)
 		return;
@@ -1169,6 +1180,7 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 
 void Room::HandleDrop(GameSessionRef session, string requestId, uint64 instanceId)
 {
+	JOB_TAG();
 	PlayerRef player = session->player.load();
 	if (player == nullptr)
 		return;
@@ -1218,6 +1230,7 @@ void Room::HandleDrop(GameSessionRef session, string requestId, uint64 instanceI
 
 bool Room::AddBag(BagRef bag)
 {
+	JOB_TAG();
 	if (bag == nullptr)
 		return false;
 
@@ -1237,6 +1250,7 @@ bool Room::AddBag(BagRef bag)
 
 bool Room::RemoveBag(uint64 bagId)
 {
+	JOB_TAG();
 	auto findIt = _objects.find(bagId);
 	if (findIt == _objects.end() || findIt->second->IsBag() == false)
 		return false;
@@ -1249,6 +1263,7 @@ bool Room::RemoveBag(uint64 bagId)
 	despawnPkt.add_object_ids(bagId);
 
 	SEND_PACKET_DECLARATION(despawnPkt);
+	sendBuffer->SetStatId(STAT_ID_BAG_DESPAWN);
 	Broadcast(sendBuffer);
 
 	LOG_LINE << "[BAG] remove id=" << bagId << '\n';
@@ -1258,6 +1273,7 @@ bool Room::RemoveBag(uint64 bagId)
 
 void Room::DebugDropBag(uint64 playerId)
 {
+	JOB_TAG();
 	// 위치를 Room 스레드에서 읽는다. IOCP 스레드에서 posInfo를 읽으면 HandleMove와 경쟁한다.
 	auto findIt = _objects.find(playerId);
 	if (findIt == _objects.end())
@@ -1297,6 +1313,7 @@ void Room::DebugDropBag(uint64 playerId)
 
 void Room::DebugKill(uint64 playerId)
 {
+	JOB_TAG();
 	auto findIt = _objects.find(playerId);
 	if (findIt == _objects.end())
 		return;
@@ -1355,6 +1372,7 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 
 void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 {
+	JOB_TAG();
 	// 성공이든 실패든 재입장을 허용한다. DB는 이미 확정(커밋 또는 롤백)됐다.
 	GDeathCommits.End(snap.characterId);
 
@@ -1418,6 +1436,7 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 
 void Room::BeginEscapeCommit(uint64 playerId)
 {
+	JOB_TAG();
 	auto findIt = _objects.find(playerId);
 	if (findIt == _objects.end())
 		return;
@@ -1482,6 +1501,7 @@ void Room::BeginEscapeCommit(uint64 playerId)
 
 void Room::HandleDisconnect(PlayerRef player)
 {
+	JOB_TAG();
 	const uint64 playerId = player->objectInfo->object_id();
 
 	// 방에 없거나 이미 죽었으면 남길 몸이 없다
@@ -1506,6 +1526,7 @@ void Room::HandleDisconnect(PlayerRef player)
 
 void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 {
+	JOB_TAG();
 	const uint64 playerId = body->objectInfo->object_id();
 
 	// 표에서 꺼낸 뒤 이 Job이 오기 전에 죽었다 - 사망 커밋이 몸을 지운다. 클라는 잠시 뒤 다시 돌아온다.
@@ -1551,6 +1572,7 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 
 void Room::UpdateTick()
 {
+	JOB_TAG();
 	const uint64 nowUs = Utils::NowMicroseconds();
 
 	UpdateSaves(nowUs);
@@ -1564,6 +1586,7 @@ void Room::UpdateTick()
 
 void Room::FlushMoves()
 {
+	JOB_TAG();
 	if (_dirtyMovers.empty() == false)
 	{
 		Protocol::S_MOVE movePkt;
@@ -1591,6 +1614,7 @@ void Room::FlushMoves()
 
 void Room::FlushCombat()
 {
+	JOB_TAG();
 	const uint64 nowUs = Utils::NowMicroseconds();
 
 	UpdateCc(nowUs);
@@ -1694,10 +1718,15 @@ void Room::FlushCombat()
 
 void Room::FlushSpawns()
 {
+	JOB_TAG();
 	if (_pendingSpawns.empty() == false)
 	{
+		// 플레이어와 가방 · 상자를 다른 패킷에 담는다 - 클라 처리는 같고(S_SPAWN 하나), 송신 통계에서
+		// 가방 몫을 따로 셀 수 있다 (G2 · SV-5, STAT_ID_BAG_SPAWN). 둘 다 있으면 패킷이 하나 늘 뿐이다.
 		Protocol::S_SPAWN newPkt;
+		Protocol::S_SPAWN newBagPkt;
 		unordered_set<uint64> newIds;
+		bool newPlayer = false;
 
 		for (uint64 id : _pendingSpawns)
 		{
@@ -1705,7 +1734,16 @@ void Room::FlushSpawns()
 			if (findIt == _objects.end())
 				continue;
 
-			newPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
+			if (findIt->second->IsBag())
+			{
+				newBagPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
+			}
+			else
+			{
+				newPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
+				newPlayer = newPlayer || findIt->second->IsPlayer();
+			}
+
 			newIds.insert(id);
 		}
 
@@ -1715,39 +1753,57 @@ void Room::FlushSpawns()
 		{
 			// 신규 전원을 한 패킷에 담아 기존 전원에게 1회 브로드캐스트
 			// 직렬화 1회
+			if (newPkt.players_size() > 0)
 			{
 				SendBufferRef newBuffer = ServerPacketHandler::MakeSendBuffer(newPkt);
 				Broadcast(newBuffer, newIds);
 			}
 
-			// 전체 목록을 1회만 직렬화해 신규 전원이 같은 버퍼를 나눠쓴다.
+			if (newBagPkt.players_size() > 0)
+			{
+				SendBufferRef newBagBuffer = ServerPacketHandler::MakeSendBuffer(newBagPkt);
+				newBagBuffer->SetStatId(STAT_ID_BAG_SPAWN);
+				Broadcast(newBagBuffer, newIds);
+			}
+
+			// 전체 목록을 1회만 직렬화해 신규 전원이 같은 버퍼를 나눠쓴다. 받을 신규 플레이어가 없으면 만들지 않는다.
+			if (newPlayer)
 			{
 				Protocol::S_SPAWN allPkt;
+				Protocol::S_SPAWN allBagPkt;
 
 				for (auto& item : _objects)
 				{
-					if (item.second->IsPlayer() == false && item.second->IsBag() == false)
-						continue;
-
-					allPkt.add_players()->CopyFrom(*item.second->objectInfo);
+					if (item.second->IsPlayer())
+						allPkt.add_players()->CopyFrom(*item.second->objectInfo);
+					else if (item.second->IsBag())
+						allBagPkt.add_players()->CopyFrom(*item.second->objectInfo);
 				}
 
+				vector<SendBufferRef> allBuffers;
 				if (allPkt.players_size() > 0)
+					allBuffers.push_back(ServerPacketHandler::MakeSendBuffer(allPkt));
+
+				if (allBagPkt.players_size() > 0)
 				{
-					SendBufferRef allBuffer = ServerPacketHandler::MakeSendBuffer(allPkt);
+					allBuffers.push_back(ServerPacketHandler::MakeSendBuffer(allBagPkt));
+					allBuffers.back()->SetStatId(STAT_ID_BAG_SPAWN);
+				}
 
-					for (uint64 id : newIds)
+				for (uint64 id : newIds)
+				{
+					auto findIt = _objects.find(id);
+					if (findIt == _objects.end())
+						continue;
+
+					PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+					if (player == nullptr)
+						continue;
+
+					if (auto session = player->session.lock())
 					{
-						auto findIt = _objects.find(id);
-						if (findIt == _objects.end())
-							continue;
-
-						PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
-						if (player == nullptr)
-							continue;
-
-						if (auto session = player->session.lock())
-							session->Send(allBuffer);
+						for (const SendBufferRef& buffer : allBuffers)
+							session->Send(buffer);
 					}
 				}
 			}
@@ -2230,6 +2286,7 @@ void Room::UpdateChests(uint64 nowUs)
 		Protocol::S_DESPAWN despawnPkt;
 		despawnPkt.add_object_ids(bagId);
 		SEND_PACKET_DECLARATION(despawnPkt);
+		sendBuffer->SetStatId(STAT_ID_BAG_DESPAWN);
 		Broadcast(sendBuffer);
 
 		_pendingSpawns.push_back(bagId);

@@ -62,6 +62,14 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	bot->destY = pos.y();
 
 	bot->objectId.store(pkt.player().object_id());
+
+	if (GItemBehavior.load())
+	{
+		lock_guard<mutex> guard(bot->itemLock);
+		const float escapeSec = Utils::GetRandom(BOT_ESCAPE_MIN_SEC, BOT_ESCAPE_MAX_SEC);
+		bot->escapeAtUs = Utils::NowMicroseconds() + static_cast<uint64>(escapeSec * 1'000'000.f);
+	}
+
 	bot->inGame.store(true);
 
 	return true;
@@ -72,17 +80,55 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 	auto bot = static_pointer_cast<BotSession>(session);
 	bot->inGame.store(false);
 
+	// 탈출 커밋이 끝났다 - 베이스캠프에서 잠깐 쉬고 다시 들어간다. 던전에서 본 가방은 이제 모른다
+	if (GItemBehavior.load())
+	{
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+			bot->bags.clear();
+			bot->openBagId = 0;
+			bot->escapeAtUs = 0;
+		}
+
+		bot->reenterAtUs.store(Utils::NowMicroseconds() + BOT_REENTER_DELAY_US);
+	}
+
 	return true;
 }
 
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 {
+	if (GItemBehavior.load() == false)
+		return true;
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	lock_guard<mutex> guard(bot->itemLock);
+
+	for (const Protocol::ObjectInfo& info : pkt.players())
+	{
+		if (info.object_type() == Protocol::OBJECT_TYPE_BAG)
+			bot->bags[info.object_id()] = { info.pos_info().x(), info.pos_info().y() };
+	}
+
 	return true;
 }
 
 bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 {
-	return false;
+	if (GItemBehavior.load() == false)
+		return true;
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	lock_guard<mutex> guard(bot->itemLock);
+
+	for (uint64 id : pkt.object_ids())
+	{
+		bot->bags.erase(id);
+		if (bot->openBagId == id)
+			bot->openBagId = 0;
+	}
+
+	return true;
 }
 
 bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
@@ -255,17 +301,99 @@ bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& 
 	return true;
 }
 
+namespace
+{
+	bool IsHeld(const Protocol::ItemInstance& item)
+	{
+		return item.state() == Protocol::ITEM_STATE_CARRIED || item.state() == Protocol::ITEM_STATE_EQUIPPED;
+	}
+}
+
 bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pkt)
 {
+	if (GItemBehavior.load() == false)
+		return true;
+
+	if (pkt.result() != Protocol::ITEM_OK)
+	{
+		GItemFail.fetch_add(1);
+		return true;
+	}
+
+	GItemOk.fetch_add(1);
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	lock_guard<mutex> guard(bot->itemLock);
+
+	for (const Protocol::ItemInstance& item : pkt.changed())
+	{
+		if (IsHeld(item))
+			bot->items[item.instance_id()] = item;
+		else
+			bot->items.erase(item.instance_id());
+	}
+
 	return true;
 }
 
 bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SYNC& pkt)
 {
+	if (GItemBehavior.load() == false)
+		return true;
+
+	// 던전 동기화는 소지 · 착용 전체다. 베이스캠프 동기화에는 보관도 있지만 봇은 보관을 쓰지 않는다
+	auto bot = static_pointer_cast<BotSession>(session);
+	lock_guard<mutex> guard(bot->itemLock);
+
+	bot->items.clear();
+	for (const Protocol::ItemInstance& item : pkt.items())
+	{
+		if (IsHeld(item))
+			bot->items[item.instance_id()] = item;
+	}
+
 	return true;
 }
 
 bool Handle_S_BAG_CONTENTS(PacketSessionRef& session, Protocol::S_BAG_CONTENTS& pkt)
 {
+	if (GItemBehavior.load() == false)
+		return true;
+
+	// 내가 연 가방의 첫 내용에만 반응한다. 열어 둔 동안 남이 가져갈 때마다 다시 오는 갱신은 흘려보낸다
+	constexpr int32 TAKE_PER_OPEN = 3;
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	vector<uint64> toTake;
+	{
+		lock_guard<mutex> guard(bot->itemLock);
+		if (bot->openBagId == 0 || pkt.bag_id() != bot->openBagId)
+			return true;
+
+		bot->openBagId = 0;
+
+		int32 carried = 0;
+		for (const auto& [id, item] : bot->items)
+		{
+			if (item.state() == Protocol::ITEM_STATE_CARRIED)
+				carried++;
+		}
+
+		const int32 room = min(BOT_INVENTORY_SLOTS - carried, TAKE_PER_OPEN);
+		for (int32 i = 0; i < pkt.items_size() && static_cast<int32>(toTake.size()) < room; i++)
+			toTake.push_back(pkt.items(i).instance_id());
+	}
+
+	for (uint64 instanceId : toTake)
+	{
+		Protocol::C_LOOT lootPkt;
+		lootPkt.set_request_id(bot->NextRequestId());
+		lootPkt.set_bag_id(pkt.bag_id());
+		lootPkt.set_instance_id(instanceId);
+
+		bot->Send(ClientPacketHandler::MakeSendBuffer(lootPkt));
+		GLootSent.fetch_add(1);
+	}
+
 	return true;
 }

@@ -44,6 +44,21 @@ public:
 	atomic<uint64>		dashUntilUs = 0;
 	float				dashDirX = 0.f;
 	float				dashDirY = 0.f;
+
+	// ── 아이템 행동 (-items · G2) ───────────────────────────────────────────
+	// 패킷 스레드(IOCP)와 틱 스레드가 같이 만진다 - itemLock 아래에서만 읽고 쓴다
+	mutex											itemLock;
+	unordered_map<uint64, pair<float, float>>		bags;			// 아는 가방 · 상자 위치 (S_SPAWN · S_DESPAWN)
+	unordered_map<uint64, Protocol::ItemInstance>	items;			// 내 소지 · 착용 (S_INVENTORY_SYNC · S_ITEM_RESULT)
+	uint64											openBagId = 0;	// 열기를 보내고 내용을 기다리는 가방. 0 = 없음
+	uint64											nextLootAtUs = 0;
+	uint64											nextEquipAtUs = 0;
+	uint64											escapeAtUs = 0;	// 탈출을 보낼 시각. 0 = 예약 없음(보냈거나 아직 입장 전)
+	atomic<uint64>									reenterAtUs = 0;	// 탈출 뒤 다시 입장할 시각. 0 = 없음
+	atomic<uint32>									requestSeq = 0;
+
+	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
+	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };
 
 constexpr float					BOT_SLOW_CAP = 0.4f;
@@ -51,11 +66,31 @@ constexpr float					DASH_SPEED = 1200.f;
 constexpr float					DASH_DIST = 400.f;
 constexpr uint64				DASH_DURATION_US = static_cast<uint64>(DASH_DIST / DASH_SPEED * 1'000'000.0);
 
+// 입장 후 이 범위 안 무작위 시각에 탈출한다. 실제 런(수십 분)보다 훨씬 잦다 - 탈출 커밋 부하를
+// 상한 쪽으로 보려는 값이다. 결과를 쓸 때는 보고 줄의 escapes/s 로 실제 빈도에 맞춰 환산할 것
+constexpr float					BOT_ESCAPE_MIN_SEC = 20.f;
+constexpr float					BOT_ESCAPE_MAX_SEC = 60.f;
+constexpr uint64				BOT_REENTER_DELAY_US = 2'000'000;	// 베이스캠프(S3)에 머무는 시간 흉내
+
 using							BotSessionRef = std::shared_ptr<BotSession>;
 
 extern mutex					GBotsLock;
 extern vector<BotSessionRef>	GBots;
 extern vector<uint32>			GFreeBotIndices;
+
+// -items 일 때만 켜진다. 꺼져 있으면 봇은 예전처럼 싸우기만 한다 (G2 의 A 조건)
+extern atomic<bool> GItemBehavior;
+
+// 10초 창마다 보고하고 0 으로 돌린다
+extern atomic<uint64> GBagOpenSent;
+extern atomic<uint64> GLootSent;
+extern atomic<uint64> GEquipSent;
+extern atomic<uint64> GEscapeSent;
+extern atomic<uint64> GReenterSent;
+extern atomic<uint64> GItemOk;
+extern atomic<uint64> GItemFail;
+
+constexpr int32 BOT_INVENTORY_SLOTS = 25;	// Player::INVENTORY_SLOT_COUNT
 
 extern atomic<uint64> GGrantTargetId;
 extern atomic<uint64> GGrantOk;

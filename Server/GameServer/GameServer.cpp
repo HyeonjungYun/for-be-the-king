@@ -23,6 +23,41 @@ enum
 	WORKER_TICK = 64
 };
 
+namespace
+{
+	// 송신 통계(SV-5 item · top 줄)에 찍을 이름. 서버가 보내는 패킷만 - 목록에 없는 id 는 숫자로 찍힌다
+	const char* PacketName(uint16 id)
+	{
+		switch (id)
+		{
+		case PKT_S_LOGIN:			return "S_LOGIN";
+		case PKT_S_ENTER_GAME:		return "S_ENTER_GAME";
+		case PKT_S_LEAVE_GAME:		return "S_LEAVE_GAME";
+		case PKT_S_SPAWN:			return "S_SPAWN";
+		case PKT_S_DESPAWN:			return "S_DESPAWN";
+		case PKT_S_MOVE:			return "S_MOVE";
+		case PKT_S_ATTACK:			return "S_ATTACK";
+		case PKT_S_ATTACK_CANCEL:	return "S_ATTACK_CANCEL";
+		case PKT_S_DAMAGE:			return "S_DAMAGE";
+		case PKT_S_CC:				return "S_CC";
+		case PKT_S_CC_STATE:		return "S_CC_STATE";
+		case PKT_S_DIED:			return "S_DIED";
+		case PKT_S_CHAT:			return "S_CHAT";
+		case PKT_S_SKILL_CAST:		return "S_SKILL_CAST";
+		case PKT_S_SKILL_CANCEL:	return "S_SKILL_CANCEL";
+		case PKT_S_SKILL_HIT:		return "S_SKILL_HIT";
+		case PKT_S_EQUIP_SYNC:		return "S_EQUIP_SYNC";
+		case PKT_S_GRANT_REWARD:	return "S_GRANT_REWARD";
+		case PKT_S_ITEM_RESULT:		return "S_ITEM_RESULT";
+		case PKT_S_INVENTORY_SYNC:	return "S_INVENTORY_SYNC";
+		case PKT_S_BAG_CONTENTS:	return "S_BAG_CONTENTS";
+		case STAT_ID_BAG_SPAWN:		return "S_SPAWN(bag)";
+		case STAT_ID_BAG_DESPAWN:	return "S_DESPAWN(bag)";
+		default:					return nullptr;
+		}
+	}
+}
+
 void DoWorkerJob(ServerServiceRef& service)
 {
 	while (true)
@@ -46,6 +81,11 @@ int main()
 
 	ServerPacketHandler::Init();
 	SkillTable::Init();
+
+	// G2 · SV-5 - 아이템 이벤트가 만드는 송신량을 따로 본다. 가방 · 상자의 생성 · 소멸은 가상 칸으로 센다
+	GStats.SetPacketNames(PacketName);
+	GStats.SetItemPackets({ STAT_ID_BAG_SPAWN, STAT_ID_BAG_DESPAWN, PKT_S_BAG_CONTENTS,
+		PKT_S_ITEM_RESULT, PKT_S_INVENTORY_SYNC, PKT_S_EQUIP_SYNC });
 
 	{
 		const string dataDir = ItemTable::DefaultDataDir();
@@ -155,6 +195,20 @@ int main()
 
 		if (GFailEscapeCommits.load() > 0)
 			LOG_LINE << "[BOOT] FBTK_FAIL_ESCAPE_COMMIT=" << GFailEscapeCommits.load() << " - first N escape commits fail (TEST ONLY)\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_BOT_REGEAR") == 0 && raw != nullptr)
+		{
+			GBotRegear.store(raw[0] == '1');
+			::free(raw);
+		}
+
+		if (GBotRegear.load())
+			LOG_LINE << "[BOOT] FBTK_BOT_REGEAR=1 - bare bot_ characters get the basic 3 pieces on enter (LOAD TEST ONLY)\n";
 	}
 
 	{

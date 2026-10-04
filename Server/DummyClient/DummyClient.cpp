@@ -14,6 +14,15 @@ vector<BotSessionRef> GBots;
 vector<uint32> GFreeBotIndices;
 std::atomic<uint64> GSentThisWindow{ 0 };
 
+atomic<bool> GItemBehavior = false;
+atomic<uint64> GBagOpenSent = 0;
+atomic<uint64> GLootSent = 0;
+atomic<uint64> GEquipSent = 0;
+atomic<uint64> GEscapeSent = 0;
+atomic<uint64> GReenterSent = 0;
+atomic<uint64> GItemOk = 0;
+atomic<uint64> GItemFail = 0;
+
 atomic<uint64> GGrantTargetId = 0;
 atomic<uint64> GGrantOk = 0;
 atomic<uint64> GGrantAlready = 0;
@@ -45,6 +54,133 @@ namespace
 	constexpr uint64 AREA_TRY_INTERVAL_US = 4'000'000;
 	constexpr uint64 AREA_CAST_HOLD_US = 60'000;
 	constexpr uint64 DASH_CAST_HOLD_US = 100'000;
+
+	// 아이템 행동 (-items). 서버 줍기 사거리는 200 cm (Room.cpp LOOT_RANGE_CM) - 이동 오차만큼 안쪽에서 연다
+	constexpr float BOT_LOOT_RANGE = 180.f;
+	constexpr float BOT_LOOT_RANGE_SQ = BOT_LOOT_RANGE * BOT_LOOT_RANGE;
+	constexpr uint64 LOOT_TRY_INTERVAL_US = 2'000'000;
+	constexpr uint64 EQUIP_TRY_INTERVAL_US = 1'500'000;
+}
+
+namespace
+{
+	// 근처 가방을 하나 연다. 연 가방은 잊는다 - 같은 빈 가방을 2초마다 다시 여는 일이 없게(사람도 그렇다)
+	void TryOpenBag(const BotSessionRef& bot, uint64 nowUs)
+	{
+		if (nowUs < bot->nextLootAtUs)
+			return;
+
+		bot->nextLootAtUs = nowUs + LOOT_TRY_INTERVAL_US;
+
+		uint64 bagId = 0;
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+
+			// 열기가 거절되면(사거리 · 이미 사라짐) 내용이 오지 않는다 - 다음 시도에서 기다림을 푼다
+			bot->openBagId = 0;
+
+			int32 carried = 0;
+			for (const auto& [id, item] : bot->items)
+			{
+				if (item.state() == Protocol::ITEM_STATE_CARRIED)
+					carried++;
+			}
+
+			if (carried >= BOT_INVENTORY_SLOTS)
+				return;
+
+			float bestSq = BOT_LOOT_RANGE_SQ;
+			for (const auto& [id, pos] : bot->bags)
+			{
+				const float dx = pos.first - bot->x;
+				const float dy = pos.second - bot->y;
+				const float distSq = dx * dx + dy * dy;
+				if (distSq <= bestSq)
+				{
+					bestSq = distSq;
+					bagId = id;
+				}
+			}
+
+			if (bagId == 0)
+				return;
+
+			bot->bags.erase(bagId);
+			bot->openBagId = bagId;
+		}
+
+		Protocol::C_BAG_OPEN openPkt;
+		openPkt.set_bag_id(bagId);
+		bot->Send(ClientPacketHandler::MakeSendBuffer(openPkt));
+		GBagOpenSent.fetch_add(1);
+	}
+
+	// 빈 부위가 있거나 더 높은 등급이면 입는다. 부위는 종류 id 의 백의 자리다 (Server/Data/item_types.csv)
+	void TryEquip(const BotSessionRef& bot, uint64 nowUs)
+	{
+		if (nowUs < bot->nextEquipAtUs)
+			return;
+
+		bot->nextEquipAtUs = nowUs + EQUIP_TRY_INTERVAL_US;
+
+		uint64 instanceId = 0;
+		int32 slot = 0;
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+
+			int32 wornGrade[Protocol::SLOT_TRINKET + 1] = {};
+			for (const auto& [id, item] : bot->items)
+			{
+				if (item.state() == Protocol::ITEM_STATE_EQUIPPED && item.slot() <= Protocol::SLOT_TRINKET)
+					wornGrade[item.slot()] = item.grade();
+			}
+
+			int32 bestGrade = 0;
+			for (const auto& [id, item] : bot->items)
+			{
+				if (item.state() != Protocol::ITEM_STATE_CARRIED)
+					continue;
+
+				const int32 part = static_cast<int32>(item.item_type_id() / 100);
+				if (part < Protocol::SLOT_WEAPON_PRIMARY || part > Protocol::SLOT_TRINKET || part == Protocol::SLOT_WEAPON_SECONDARY)
+					continue;
+
+				if (item.grade() <= wornGrade[part] || item.grade() <= bestGrade)
+					continue;
+
+				bestGrade = item.grade();
+				instanceId = id;
+				slot = part;
+			}
+		}
+
+		if (instanceId == 0)
+			return;
+
+		Protocol::C_EQUIP equipPkt;
+		equipPkt.set_request_id(bot->NextRequestId());
+		equipPkt.set_instance_id(instanceId);
+		equipPkt.set_slot(static_cast<Protocol::EquipSlot>(slot));
+		bot->Send(ClientPacketHandler::MakeSendBuffer(equipPkt));
+		GEquipSent.fetch_add(1);
+	}
+
+	void TryEscape(const BotSessionRef& bot, uint64 nowUs)
+	{
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+			if (bot->escapeAtUs == 0 || nowUs < bot->escapeAtUs)
+				return;
+
+			bot->escapeAtUs = 0;
+		}
+
+		// 탈출 구역은 P4 범위라 아직 없다 - 디버그 채팅 명령이 같은 커밋 경로(BeginEscapeCommit)를 탄다
+		Protocol::C_CHAT chatPkt;
+		chatPkt.set_msg("/escape");
+		bot->Send(ClientPacketHandler::MakeSendBuffer(chatPkt));
+		GEscapeSent.fetch_add(1);
+	}
 }
 
 namespace
@@ -187,6 +323,20 @@ static void TickBots(float deltaTime)
 
 	for (BotSessionRef& bot : snapshot)
 	{
+		// 탈출해 베이스캠프에 있는 봇 - 잠깐 뒤 같은 층으로 다시 들어간다
+		const uint64 reenterAt = bot->reenterAtUs.load();
+		if (reenterAt != 0 && nowUs >= reenterAt && bot->inGame.load() == false && bot->alive.load())
+		{
+			bot->reenterAtUs.store(0);
+
+			Protocol::C_ENTER_GAME enterPkt;
+			enterPkt.set_playerindex(0);
+			enterPkt.set_floor_id(bot->floorId);
+			bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
+			GReenterSent.fetch_add(1);
+			continue;
+		}
+
 		if (bot->inGame.load() == false || bot->alive.load() == false)
 			continue;
 
@@ -356,6 +506,14 @@ static void TickBots(float deltaTime)
 			bot->nextAttackAtUs = nowUs + ATTACK_INTERVAL_US;
 			++GAttackSentThisWindow;
 		}
+
+		// 아이템 행동 (G2 의 B 조건). 시전 · 돌진 중에는 하지 않는다 - 사람도 싸우는 손으로 줍지 않는다
+		if (GItemBehavior.load() && casting == false && dashing == false)
+		{
+			TryOpenBag(bot, nowUs);
+			TryEquip(bot, nowUs);
+			TryEscape(bot, nowUs);
+		}
 	}
 }
 
@@ -379,12 +537,15 @@ int main(int argc, char* argv[])
 	{
 		if (::strcmp(argv[i], "-spread") == 0)
 			grantSpread = true;
+		else if (::strcmp(argv[i], "-items") == 0)
+			GItemBehavior.store(true);
 	}
 
 	if (botCount < 1)
 		botCount = 1;
 
-	LOG_LINE << "[BOT] launching " << botCount << " bot(s)" << '\n';
+	LOG_LINE << "[BOT] launching " << botCount << " bot(s)"
+		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF") << '\n';
 
 	// 계정 번호 풀. 끊긴 세션의 번호를 다음 세션이 그대로 물려 받는다
 	{
@@ -473,6 +634,16 @@ int main(int argc, char* argv[])
 				<< " Hz/bot  (target 30)"
 				<< "   attacks = " << (attacks / sec) << "/s"
 				<< "   skills = " << (skills / sec) << "/s" << '\n';
+
+			if (GItemBehavior.load())
+			{
+				LOG_LINE << "[BOT ITEMS] opens = " << GBagOpenSent.exchange(0) / sec << "/s"
+					<< "   loots = " << GLootSent.exchange(0) / sec << "/s"
+					<< "   equips = " << GEquipSent.exchange(0) / sec << "/s"
+					<< "   escapes = " << GEscapeSent.exchange(0) / sec << "/s"
+					<< "   reenters = " << GReenterSent.exchange(0) / sec << "/s"
+					<< "   item ok = " << GItemOk.exchange(0) << "  fail = " << GItemFail.exchange(0) << '\n';
+			}
 
 			lastReportUs = nowUs;
 		}

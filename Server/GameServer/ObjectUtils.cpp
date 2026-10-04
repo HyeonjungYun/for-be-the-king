@@ -14,6 +14,7 @@ atomic<uint64>GNextBagId = BAG_ID_BASE;
 atomic<bool> GFailDeathCommit = false;
 atomic<uint32> GDeathCommitDelayMs = 0;
 atomic<uint32> GBaseCampDelayMs = 0;
+atomic<bool> GBotRegear = false;
 atomic<int32> GFailEscapeCommits = 0;
 DeathCommitTracker GDeathCommits;
 atomic<uint64> GDisconnectGraceUs = 180'000'000;
@@ -710,4 +711,41 @@ bool DetachedBodies::Contains(uint64 characterId)
 {
 	WRITE_LOCK;
 	return _bodies.find(characterId) != _bodies.end();
+}
+
+/*-------------
+	RegearBot
+--------------*/
+
+int32 RegearBot(Player& player, const string& characterName)
+{
+	if (characterName.rfind("bot_", 0) != 0)
+		return 0;
+
+	// reset_bots.sql 이 처음에 입히는 3점과 같다 - 재지급 전후로 봇의 전투가 달라지지 않게
+	struct Gear { Protocol::EquipSlot slot; uint32 itemTypeId; uint32 skillId; };
+	constexpr Gear BASIC_GEAR[] =
+	{
+		{ Protocol::SLOT_WEAPON_PRIMARY,	101, 1001 },	// 무기 · 단일 스턴
+		{ Protocol::SLOT_ARMOR,				401, 3001 },	// 갑옷 · 광역 감속
+		{ Protocol::SLOT_BOOTS,				501, 2001 },	// 신발 · 대시
+	};
+
+	int32 filled = 0;
+	for (const Gear& gear : BASIC_GEAR)
+	{
+		ItemEntry& worn = player.equipped[gear.slot - 1];
+		if (worn.itemTypeId != 0)
+			continue;
+
+		worn = ItemEntry{};
+		worn.instanceId = GNextInstanceId.fetch_add(1);
+		worn.itemTypeId = gear.itemTypeId;
+		worn.grade = Protocol::ITEM_GRADE_COMMON;
+		worn.skillIdPrimary = gear.skillId;
+		worn.isNew = true;		// DB 행은 없다 - 사망이면 가방으로, 탈출이면 소유로 INSERT 된다 (S-4)
+		filled++;
+	}
+
+	return filled;
 }
