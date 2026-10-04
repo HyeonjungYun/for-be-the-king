@@ -527,13 +527,6 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 
 		bool ok = conn->Excute(insert);
 
-		// 가방 INSERT는 성공시킨 뒤에 실패시킨다 - 롤백이 그것까지 되돌리는지가 원자성 검증이다.
-		if (ok && GFailDeathCommit.load())
-		{
-			LOG_LINE << "[DEATH] injected failure after bag insert - bag=" << snap.bagId << '\n';
-			ok = false;
-		}
-
 		if (ok && existingIds.empty() == false)
 		{
 			const string update =
@@ -571,6 +564,14 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 		const uint32 delayMs = GDeathCommitDelayMs.load();
 		if (ok && delayMs > 0)
 			this_thread::sleep_for(chrono::milliseconds(delayMs));
+
+		// 검증 전용 - 쓰기를 전부 성공시킨 뒤에 실패시킨다(가방 INSERT · 소유 이전 · 런 중 생성 INSERT · 파기).
+		// 롤백이 그것들을 모두 되돌리는지가 원자성 검증이다 (AC-CH-07). 탈출 커밋의 주입과 같은 자리다.
+		if (ok && GFailDeathCommit.load())
+		{
+			LOG_LINE << "[DEATH] injected failure after all writes - bag=" << snap.bagId << '\n';
+			ok = false;
+		}
 
 		if (ok && conn->Commit())
 			return true;
