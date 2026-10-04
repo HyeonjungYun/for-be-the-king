@@ -9,6 +9,7 @@
 #include "S1BaseCampWidget.generated.h"
 
 class UBorder;
+class UEditableTextBox;
 class UTextBlock;
 class UVerticalBox;
 class US1BaseCampSubsystem;
@@ -21,7 +22,8 @@ enum class ES1Place : uint8;
  * S3 — 출정 선택, the base-camp screen. design/ux/item-ui.md (B-L | B-C | B-R).
  *
  *   B-L 28%  보관 n/25 · sort      B-C 44%  six keys over the five worn parts    B-R 28%  반입 n/25 · sort
- *            notice                         장비 합산 — the worn stats, summed           notice
+ *            skill-name filter              장비 합산 — the worn stats, summed           skill-name filter
+ *            notice                         스킬 제원 — each key's atomic attributes     notice
  *            vault grid 5×5                 detail pane                                 carried grid 5×5
  *                                                                                       [입장]
  *
@@ -53,8 +55,24 @@ private:
 	void RefreshGrid(bool bVault);
 	void RefreshStrip();
 	void RefreshTotals();
+	void RefreshAtomic();
 	void RefreshEnter();
 	void RefreshDetail();
+
+	/**
+	 * Which skill each key would get from what is worn — key slot → skill id. In base camp there is
+	 * no S_EQUIP_SYNC, so this follows the server's part + order rule (S1ItemLogic::KeysFor).
+	 */
+	TMap<int32, uint32> ComputeKeySkills() const;
+
+	/** The earlier key holding the same skill, or 0. Shadowed keys do nothing (EB B5). */
+	static int32 ShadowedBy(const TMap<int32, uint32>& KeySkills, int32 Key);
+
+	/** Empty filter matches everything. Otherwise one of the item's skill names contains it. */
+	static bool MatchesFilter(const FS1ItemView& Item, const FString& Filter);
+
+	UFUNCTION() void HandleVaultFilterChanged(const FText& InText);
+	UFUNCTION() void HandleCarriedFilterChanged(const FText& InText);
 
 	void HandleSlotClicked(uint64 InstanceId, FKey Button, bool bCtrl);
 	void HandleSlotHovered(uint64 InstanceId);
@@ -77,6 +95,8 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock>						VaultSort;
 	UPROPERTY() TObjectPtr<UTextBlock>						CarriedHeader;
 	UPROPERTY() TObjectPtr<UTextBlock>						CarriedSort;
+	UPROPERTY() TObjectPtr<UEditableTextBox>				VaultFilter;
+	UPROPERTY() TObjectPtr<UEditableTextBox>				CarriedFilter;
 	UPROPERTY() TArray<TObjectPtr<UTextBlock>>				Notices;		// indexed by EColumn
 	UPROPERTY() TArray<TObjectPtr<US1ItemSlotWidget>>		VaultSlots;
 	UPROPERTY() TArray<TObjectPtr<US1ItemSlotWidget>>		CarriedSlots;
@@ -86,12 +106,15 @@ private:
 	TArray<int32>											StripKeySlots;
 	UPROPERTY() TObjectPtr<UTextBlock>						TotalsTitle;
 	UPROPERTY() TObjectPtr<UVerticalBox>					TotalLines;
+	UPROPERTY() TObjectPtr<UVerticalBox>					AtomicLines;
 	UPROPERTY() TObjectPtr<US1ItemDetailWidget>				Detail;
 	UPROPERTY() TObjectPtr<UBorder>							EnterButton;
 	UPROPERTY() TObjectPtr<UTextBlock>						EnterText;
 
 	bool			bVaultBySkill = false;
 	bool			bCarriedBySkill = false;
+	FString			VaultFilterText;
+	FString			CarriedFilterText;
 	uint64			HoveredId = 0;
 	uint64			ConfirmId = 0;
 	FTimerHandle	ConfirmTimer;
