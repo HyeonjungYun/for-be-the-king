@@ -1,6 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Game/Item/S1ItemSubsystem.h"
+#include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "S1.h"
 #include "Protocol.pb.h"
 #include "Engine/World.h"
@@ -140,21 +141,26 @@ void US1ItemSubsystem::Deinitialize()
 
 void US1ItemSubsystem::OnInventorySync(const Protocol::S_INVENTORY_SYNC& Pkt)
 {
-	// Every sync the server sends today is dungeon-side — entry, reattach, death (empty) —
-	// and carries Carried and Equipped only. The vault is not in it, so what we know of the
-	// vault stays. Stage 4 adds a base-camp sync that replaces everything.
+	// Dungeon syncs — entry, reattach, death (empty) — carry Carried and Equipped only, so what
+	// we know of the vault stays. A base-camp sync (login, back from a run) carries the vault
+	// too and replaces everything. The packet does not say which; where we are does — the
+	// server sends the base-camp one only after S_LOGIN or S_LEAVE_GAME.
+	const US1BaseCampSubsystem* BaseCamp = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<US1BaseCampSubsystem>() : nullptr;
+	const bool bBaseCamp = BaseCamp != nullptr && BaseCamp->IsInBaseCamp();
+
 	for (auto It = Items.CreateIterator(); It; ++It)
 	{
-		if (It->Value.State != ES1ItemState::Vaulted)
+		if (bBaseCamp || It->Value.State != ES1ItemState::Vaulted)
 			It.RemoveCurrent();
 	}
 
 	for (const Protocol::ItemInstance& Item : Pkt.items())
 		Apply(ToView(Item));
 
-	UE_LOG(LogTemp, Log, TEXT("[ITEMUI] sync - %d items, model now %d"), Pkt.items_size(), Items.Num());
+	UE_LOG(LogTemp, Log, TEXT("[ITEMUI] sync - %d items, model now %d, %s"), Pkt.items_size(), Items.Num(), bBaseCamp ? TEXT("base camp (full)") : TEXT("dungeon"));
 
 	OnItemsChanged.Broadcast();
+	OnInventorySynced.Broadcast(bBaseCamp);
 }
 
 void US1ItemSubsystem::OnItemResult(const Protocol::S_ITEM_RESULT& Pkt)

@@ -43,6 +43,9 @@ public:
 	/** Esc — closes the last opened item window. Returns false when nothing was open. */
 	bool CloseTopmost();
 
+	/** Death, or leaving the dungeon — both windows go at once. */
+	void CloseAll();
+
 protected:
 
 	virtual void NativeOnInitialized() override;

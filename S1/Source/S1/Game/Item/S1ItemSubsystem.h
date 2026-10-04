@@ -22,6 +22,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FOnS1BagChanged, uint64 /*BagId*/);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnS1BagClosed, uint64 /*BagId*/, ES1BagCloseReason);
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnS1ItemNotice, ES1ItemNotice, uint64 /*InstanceId*/, int32 /*Count*/);
 DECLARE_MULTICAST_DELEGATE(FOnS1KeysChanged);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnS1InventorySynced, bool /*bBaseCamp*/);
 
 /**
  * The one place the client keeps item state. design/ux/item-ui.md § Data Requirements.
@@ -51,7 +52,10 @@ public:
 
 	// ── Incoming (netcode hooks) ─────────────────────────────────────────
 
-	/** H1. Replaces Carried and Equipped. Keeps Vaulted — see the .cpp. */
+	/**
+	 * H1. In the dungeon it replaces Carried and Equipped and keeps Vaulted (a dungeon sync has no
+	 * vault). In base camp it replaces everything — the server sends the vault there (UI stage 4).
+	 */
 	void OnInventorySync(const Protocol::S_INVENTORY_SYNC& Pkt);
 
 	/** H2. Applies `changed`, then words a notice for our own requests. */
@@ -131,6 +135,9 @@ public:
 	FOnS1BagClosed		OnBagClosed;
 	FOnS1ItemNotice		OnItemNotice;
 	FOnS1KeysChanged	OnKeysChanged;
+
+	/** After each S_INVENTORY_SYNC, once the model is updated. True when it was a base-camp sync. */
+	FOnS1InventorySynced OnInventorySynced;
 
 	// ── Debug (console: s1.ItemDump · s1.ItemFill) ───────────────────────
 

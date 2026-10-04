@@ -487,6 +487,11 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 			SEND_PACKET_DECLARATION(loginPkt);
 			gameSession->Send(sendBuffer);
+
+			// 로그인하면 베이스캠프 화면(S3)이 뜬다 - 보관까지 담아 보낸다 (UI 4단계).
+			// 캐릭터는 아직 계정당 하나이고, 입장도 0 번으로 한다.
+			if (loginPkt.success() && loginPkt.characters_size() > 0)
+				SendBaseCampInventory(conn, gameSession, loginPkt.characters(0).object_info().object_id());
 		});
 
 	return true;

@@ -86,6 +86,25 @@ void AS1MyPlayer::BeginPlay()
 {
 	Super::BeginPlay();
 
+	SetupLocalController();
+}
+
+void AS1MyPlayer::NotifyControllerChanged()
+{
+	Super::NotifyControllerChanged();
+
+	// The level's own pawn is possessed before BeginPlay, which does this itself.
+	if (HasActorBegunPlay() == false)
+		return;
+
+	SetupLocalController();
+
+	if (ItemUI != nullptr)
+		ItemUI->InitForLocalController();
+}
+
+void AS1MyPlayer::SetupLocalController()
+{
 	// Add the mapping contexts so the Enhanced Input actions bound below can trigger
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{

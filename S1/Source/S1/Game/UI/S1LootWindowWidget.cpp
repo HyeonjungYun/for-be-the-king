@@ -25,7 +25,6 @@ namespace
 	constexpr float TickSeconds = 0.25f;			// Range check + countdown
 	constexpr double OpeningHintSeconds = 0.3;		// § States — "여는 중" only past 300 ms
 	constexpr uint64 ExpiryEmphasisMs = 60000;		// § States — last minute reads bigger
-	constexpr float NoticeSeconds = 2.f;
 
 	FText FormatRemaining(uint64 RemainingMs)
 	{

@@ -48,7 +48,16 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	/**
+	 * A pawn spawned on re-entry (US1BaseCampSubsystem) has no controller when BeginPlay runs —
+	 * it is possessed right after. The local setup runs again here once it has one.
+	 */
+	virtual void NotifyControllerChanged() override;
+
 	virtual void Tick(float DeltaTime) override;
+
+	/** Mapping contexts and the cursor-aiming input mode for a local controller. Safe to repeat. */
+	void SetupLocalController();
 
 protected:
 

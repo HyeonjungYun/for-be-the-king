@@ -36,6 +36,11 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 
 bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap);
 
+// 베이스캠프 인벤토리(보관 · 반입 · 착용)를 DB 에서 읽어 S_INVENTORY_SYNC 로 보낸다 (UI 4단계 · S3).
+// 베이스캠프에 들어오는 세 지점 - 로그인 · 탈출 커밋 완료 · 던전 퇴장 - 에서 DB 스레드가 부른다.
+// 클라는 베이스캠프에 있을 때 받은 동기화를 전체 교체로 다룬다(던전 동기화에는 보관이 없다).
+void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId);
+
 void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap);
 
 extern atomic<bool> GFailDeathCommit;

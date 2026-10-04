@@ -2,6 +2,7 @@
 #include "BufferReader.h"
 #include "S1.h"
 #include "Game/Item/S1ItemSubsystem.h"
+#include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -19,14 +20,10 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 		return true;
 	}
 
-	const Protocol::CharacterInfo& Character = pkt.characters(0);
-
-	// 로비에서 캐릭터 선택해서 인덱스 전송
-	Protocol::C_ENTER_GAME EnterGamePkt;
-	EnterGamePkt.set_playerindex(0);
-	EnterGamePkt.set_floor_id(0);
-
-	SEND_PACKET(EnterGamePkt);
+	// H7 (UI 4단계) - 자동 입장하지 않는다. 베이스캠프 화면(S3)이 뜨고, [입장]이 C_ENTER_GAME 을 보낸다.
+	// 이전: 여기서 C_ENTER_GAME { playerIndex 0, floor 0 } 을 바로 보냈다 - US1BaseCampSubsystem::RequestEnter 로 옮김
+	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+		BaseCamp->HandleLogin(pkt);
 
 	return true;
 }
@@ -36,8 +33,17 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	if (pkt.success() == false)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[ENTER] rejected by server"));
+
+		// H8 - S3 로 돌아가 사유를 보이고 잠금을 푼다
+		if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+			BaseCamp->HandleEnterRejected();
+
 		return true;
 	}
+
+	// H8 - HandleSpawn 보다 먼저. 지난 런에서 내 폰이 지워졌으면 여기서 새로 만들어 빙의시킨다
+	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+		BaseCamp->HandleEnterAccepted(pkt.player());
 
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
 	{
@@ -49,10 +55,10 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 {
-	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
-	{
-		// TODO : 게임 종료? 로비로?
-	}
+	// H9 (UI 4단계) - 런이 끝났다(탈출 커밋 완료 · 사망 후 퇴장). 베이스캠프 화면(S3)으로.
+	// 서버가 바로 뒤에 베이스캠프 인벤토리(S_INVENTORY_SYNC)를 보낸다.
+	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+		BaseCamp->HandleLeftGame();
 
 	return true;
 }
@@ -188,6 +194,10 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 	{
 		UE_LOG(LogTemp, Error, TEXT("[DIED] victim=%llu by=%llu"),
 			Info.victim_id(), Info.instigator_id());
+
+		// H10 (UI 4단계) - 내가 죽었으면 잠시 뒤 베이스캠프로 돌아간다(C_LEAVE_GAME)
+		if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+			BaseCamp->HandleDied(Info.victim_id());
 	}
 	return true;
 }

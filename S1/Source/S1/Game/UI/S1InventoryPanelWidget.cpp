@@ -24,7 +24,6 @@ namespace
 	/** Worn parts, left to right. The weapon cell covers two keys (Shift, Q). */
 	constexpr int32 StripParts[] = { 1, 3, 4, 5, 6 };
 
-	constexpr float NoticeSeconds = 2.f;	// § Component Inventory — 알림 줄
 
 	TArray<int32> KeysOfPart(int32 Part)
 	{

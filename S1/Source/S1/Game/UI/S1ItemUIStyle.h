@@ -44,6 +44,7 @@ namespace S1ItemUIStyle
 	inline constexpr float CellGap			= 4.f;
 	inline constexpr float PanelPadding		= 12.f;
 	inline constexpr float NoticeLineHeight	= 18.f;		// Reserved even when empty — no layout jump
+	inline constexpr float NoticeSeconds	= 2.f;		// How long a notice line stays (§ Component Inventory — 알림 줄)
 	inline constexpr int32 GridColumns		= 5;
 	inline constexpr int32 LootGridCells	= 30;		// A death bag holds up to 25 carried + 5 worn (GDD AC-IE-31)
 	inline constexpr int32 FontSmall		= 11;

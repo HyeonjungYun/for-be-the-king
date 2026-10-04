@@ -3,9 +3,11 @@
 #include "Game/UI/S1ItemUIComponent.h"
 #include "Game/UI/S1ItemHudRootWidget.h"
 #include "Game/UI/S1InventoryPanelWidget.h"
+#include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/S1MyPlayer.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
@@ -49,11 +51,25 @@ void US1ItemUIComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	const APawn* Pawn = Cast<APawn>(GetOwner());
-	APlayerController* PC = Pawn != nullptr ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
-	if (PC == nullptr || PC->IsLocalController() == false)
+	if (US1BaseCampSubsystem* BaseCamp = GetWorld() != nullptr && GetWorld()->GetGameInstance() != nullptr
+		? GetWorld()->GetGameInstance()->GetSubsystem<US1BaseCampSubsystem>() : nullptr)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[ITEMUI] ui skipped - owner=%s has no local controller"), *GetNameSafe(GetOwner()));
+		PlaceChangedHandle = BaseCamp->OnPlaceChanged.AddUObject(this, &US1ItemUIComponent::HandlePlaceChanged);
+		LocalDeathHandle = BaseCamp->OnLocalDeath.AddUObject(this, &US1ItemUIComponent::HandleLocalDeath);
+	}
+
+	InitForLocalController();
+}
+
+void US1ItemUIComponent::InitForLocalController()
+{
+	if (Root != nullptr)
+		return;
+
+	APlayerController* PC = GetLocalController();
+	if (PC == nullptr)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[ITEMUI] ui waits - owner=%s has no local controller yet"), *GetNameSafe(GetOwner()));
 		return;
 	}
 
@@ -65,8 +81,8 @@ void US1ItemUIComponent::BeginPlay()
 		return;
 
 	Root->SetKeyNameResolver(
-		[this](int32 KeySlot) { return KeyNameFor(KeySlot); },
-		[this]() { return KeyNameOf(OpenAction, FText::AsCultureInvariant(TEXT("F"))); });
+		[this](int32 KeySlot) { return KeyNameForController(GetLocalController(), KeySlot); },
+		[this]() { return KeyNameOf(GetLocalController(), OpenAction, FText::AsCultureInvariant(TEXT("F"))); });
 
 	Root->AddToViewport(ItemUIZOrder);
 
@@ -75,6 +91,15 @@ void US1ItemUIComponent::BeginPlay()
 
 void US1ItemUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (UWorld* World = GetWorld())
+	{
+		if (US1BaseCampSubsystem* BaseCamp = World->GetGameInstance() != nullptr ? World->GetGameInstance()->GetSubsystem<US1BaseCampSubsystem>() : nullptr)
+		{
+			BaseCamp->OnPlaceChanged.Remove(PlaceChangedHandle);
+			BaseCamp->OnLocalDeath.Remove(LocalDeathHandle);
+		}
+	}
+
 	// The pawn goes when the server despawns us at the start of an escape commit — the panels go
 	// with it, which is exactly the close design/ux/item-ui.md § Entry & Exit asks for (B2).
 	if (Root != nullptr)
@@ -83,8 +108,7 @@ void US1ItemUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Root = nullptr;
 	}
 
-	const APawn* Pawn = Cast<APawn>(GetOwner());
-	if (const APlayerController* PC = Pawn != nullptr ? Cast<APlayerController>(Pawn->GetController()) : nullptr)
+	if (const APlayerController* PC = GetLocalController())
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Input = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 			Input->RemoveMappingContext(Context);
@@ -93,15 +117,39 @@ void US1ItemUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+bool US1ItemUIComponent::CanUseDungeonKeys() const
+{
+	const UWorld* World = GetWorld();
+	const US1BaseCampSubsystem* BaseCamp = World != nullptr && World->GetGameInstance() != nullptr
+		? World->GetGameInstance()->GetSubsystem<US1BaseCampSubsystem>() : nullptr;
+
+	// No flow subsystem (a test map) — behave as before stage 4.
+	return BaseCamp == nullptr || (BaseCamp->GetPlace() == ES1Place::Dungeon && BaseCamp->IsLocalDead() == false);
+}
+
+void US1ItemUIComponent::HandlePlaceChanged(ES1Place Place)
+{
+	// Leaving the dungeon any way at all shuts S1 and S2 (§ Entry & Exit).
+	if (Place != ES1Place::Dungeon && Root != nullptr)
+		Root->CloseAll();
+}
+
+void US1ItemUIComponent::HandleLocalDeath()
+{
+	// S1 and S2 close the moment we die — the death itself is the reason (§ Entry & Exit).
+	if (Root != nullptr)
+		Root->CloseAll();
+}
+
 void US1ItemUIComponent::OnInventoryKey()
 {
-	if (Root != nullptr)
+	if (Root != nullptr && CanUseDungeonKeys())
 		Root->SetInventoryOpen(Root->IsInventoryOpen() == false);
 }
 
 void US1ItemUIComponent::OnOpenKey()
 {
-	if (Root != nullptr)
+	if (Root != nullptr && CanUseDungeonKeys())
 		Root->ToggleLootNearest();
 }
 
@@ -111,20 +159,25 @@ void US1ItemUIComponent::OnCloseKey()
 		Root->CloseTopmost();
 }
 
-FText US1ItemUIComponent::KeyNameFor(int32 KeySlot) const
+APlayerController* US1ItemUIComponent::GetLocalController() const
+{
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	APlayerController* PC = Pawn != nullptr ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
+	return (PC != nullptr && PC->IsLocalController()) ? PC : nullptr;
+}
+
+FText US1ItemUIComponent::KeyNameForController(const APlayerController* PC, int32 KeySlot)
 {
 	// Fixed names only when nothing is bound — equipment-skill-binding.md B1 order.
 	static const TCHAR* Fallback[] = { TEXT("?"), TEXT("Shift"), TEXT("Q"), TEXT("E"), TEXT("R"), TEXT("Z"), TEXT("X") };
 	const FText FallbackName = FText::AsCultureInvariant(Fallback[FMath::Clamp(KeySlot, 0, 6)]);
 
-	const AS1MyPlayer* Player = Cast<AS1MyPlayer>(GetOwner());
-	return KeyNameOf(Player != nullptr ? Player->GetSkillAction(KeySlot) : nullptr, FallbackName);
+	const AS1MyPlayer* Player = PC != nullptr ? Cast<AS1MyPlayer>(PC->GetPawn()) : nullptr;
+	return KeyNameOf(PC, Player != nullptr ? Player->GetSkillAction(KeySlot) : nullptr, FallbackName);
 }
 
-FText US1ItemUIComponent::KeyNameOf(const UInputAction* Action, const FText& Fallback) const
+FText US1ItemUIComponent::KeyNameOf(const APlayerController* PC, const UInputAction* Action, const FText& Fallback)
 {
-	const APawn* Pawn = Cast<APawn>(GetOwner());
-	const APlayerController* PC = Pawn != nullptr ? Cast<APlayerController>(Pawn->GetController()) : nullptr;
 	if (Action == nullptr || PC == nullptr)
 		return Fallback;
 

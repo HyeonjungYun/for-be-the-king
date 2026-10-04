@@ -164,6 +164,15 @@ bool US1ItemHudRootWidget::CloseTopmost()
 	return false;
 }
 
+void US1ItemHudRootWidget::CloseAll()
+{
+	if (IsLootOpen())
+		Loot->CloseSilently();
+
+	SetInventoryOpen(false);
+	LastOpened = EOpened::None;
+}
+
 // ── Prompt badge ─────────────────────────────────────────────────────────
 
 void US1ItemHudRootWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -180,7 +189,7 @@ void US1ItemHudRootWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 	const US1ItemSubsystem* Items = GameInstance != nullptr ? GameInstance->GetSubsystem<US1ItemSubsystem>() : nullptr;
 	const FS1BagView* Bag = (BagId != 0 && Items != nullptr) ? Items->FindBag(BagId) : nullptr;
 
-	FVector2D ScreenPosition;
+	FVector2D ScreenPosition = FVector2D::ZeroVector;
 	const bool bOnScreen = Bag != nullptr
 		&& UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(GetOwningPlayer(), Bag->Location + PromptLift, ScreenPosition, false);
 

@@ -44,6 +44,10 @@ namespace
 	}
 
 	constexpr int32 DEATH_COMMIT_ATTEMPTS = 3;
+
+	// 베이스캠프 동기화가 사망 커밋을 기다리는 한도 - 100 ms × 100 = 10 초
+	constexpr int32 BASECAMP_SYNC_WAIT_TRIES = 100;
+	constexpr uint32 BASECAMP_SYNC_WAIT_MS = 100;
 }
 
 namespace
@@ -581,6 +585,71 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 	}
 
 	return false;
+}
+
+void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId)
+{
+	if (session == nullptr || characterId == 0)
+		return;
+
+	// 사망 커밋이 도는 중이면 DB 는 아직 사망 전 상태다. 커밋은 보통 수 ms 라 잠깐 기다린다.
+	// 끝내 안 끝나면(실패 주입 · DB 지연) 지금 확정된 상태를 보낸다 - 커밋이 실패하면 그게 맞는 상태이고,
+	// 그동안 베이스캠프 조작과 입장은 GDeathCommits 검사가 막는다.
+	for (int32 i = 0; i < BASECAMP_SYNC_WAIT_TRIES && GDeathCommits.IsPending(characterId); i++)
+		this_thread::sleep_for(chrono::milliseconds(BASECAMP_SYNC_WAIT_MS));
+
+	if (GDeathCommits.IsPending(characterId))
+		LOG_LINE << "[BASECAMP] sync while death commit pending - char=" << characterId << " (sending committed state)\n";
+
+	char query[320];
+	::snprintf(query, sizeof(query),
+		"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary "
+		"FROM item_instances WHERE owner_character_id = %llu AND state IN (%d, %d, %d)",
+		characterId,
+		static_cast<int32>(Protocol::ITEM_STATE_VAULTED),
+		static_cast<int32>(Protocol::ITEM_STATE_CARRIED),
+		static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED));
+
+	MYSQL_RES* res = conn->Query(query);
+	if (res == nullptr)
+	{
+		LOG_LINE << "[BASECAMP] sync query failed - char=" << characterId << " err=" << conn->GetError() << '\n';
+		return;
+	}
+
+	Protocol::S_INVENTORY_SYNC pkt;
+	int32 vaulted = 0;
+	int32 carried = 0;
+	int32 equipped = 0;
+
+	while (MYSQL_ROW row = ::mysql_fetch_row(res))
+	{
+		ItemEntry e;
+		e.instanceId = ::strtoull(row[0], nullptr, 10);
+		e.itemTypeId = static_cast<uint32>(::atoi(row[1]));
+		e.grade = static_cast<Protocol::ItemGrade>(::atoi(row[2]));
+		e.level = static_cast<uint32>(::atoi(row[3]));
+		e.skillIdPrimary = static_cast<uint32>(::atoi(row[6]));
+		e.skillIdSecondary = static_cast<uint32>(::atoi(row[7]));
+
+		const Protocol::ItemState state = static_cast<Protocol::ItemState>(::atoi(row[4]));
+		const Protocol::EquipSlot slot = static_cast<Protocol::EquipSlot>(::atoi(row[5]));
+		*pkt.add_items() = e.ToProto(state, slot);
+
+		if (state == Protocol::ITEM_STATE_VAULTED)
+			vaulted++;
+		else if (state == Protocol::ITEM_STATE_CARRIED)
+			carried++;
+		else
+			equipped++;
+	}
+
+	conn->FreeResult(res);
+
+	SEND_PACKET_DECLARATION(pkt);
+	session->Send(sendBuffer);
+
+	LOG_LINE << "[BASECAMP] sync - char=" << characterId << " vaulted=" << vaulted << " carried=" << carried << " equipped=" << equipped << '\n';
 }
 
 void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap)

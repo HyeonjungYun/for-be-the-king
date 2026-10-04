@@ -7,6 +7,7 @@
 #include "ServerStats.h"
 #include "ObjectUtils.h"
 #include "Bag.h"
+#include "GameSessionManager.h"
 
 namespace
 {
@@ -27,6 +28,7 @@ namespace
 	constexpr int32		SPAWN_MAX_RINGS = 6;
 	constexpr float		SPAWN_PI = 3.14159265f;
 	constexpr float		LOOT_RANGE_CM = 200.f;
+	constexpr uint64	LEAVE_RETRY_MS = 100;		// 사망 커밋을 기다리는 퇴장 재시도 간격
 }
 
 namespace
@@ -242,7 +244,16 @@ bool Room::LeaveRoom(ObjectRef object)
 
 		SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(leaveGamePkt);
 		if (auto session = player->session.lock())
+		{
 			session->Send(sendBuffer);
+
+			// 베이스캠프로 돌아왔다 - S3 에 DB 상태를 보낸다 (UI 4단계). 죽은 뒤 나가는 경우엔 HandleLeavePlayer 가
+			// 사망 커밋이 끝날 때까지 이 호출을 미뤘다.
+			GDBQueue.Push([session, objectId](DBConnection* conn)
+				{
+					SendBaseCampInventory(conn, session, objectId);
+				});
+		}
 	}
 
 	// 퇴장 사실을 알린다.
@@ -300,6 +311,14 @@ bool Room::HandleLeavePlayer(PlayerRef player)
 	{
 		LOG_LINE << "[LEAVE] rejected - alive in dungeon. char=" << player->objectInfo->object_id() << '\n';
 		return false;
+	}
+
+	// 죽은 뒤 나가는 경우 - 사망 커밋이 끝난 뒤에 내보낸다. 그래야 S_LEAVE_GAME 이 "DB 가 확정됐다"를 뜻하고,
+	// 베이스캠프 화면이 사망 결과(가방으로 간 소지품)를 보여 준다. 커밋은 보통 수 ms 다.
+	if (GDeathCommits.IsPending(player->objectInfo->object_id()))
+	{
+		DoTimer(LEAVE_RETRY_MS, &Room::HandleLeavePlayer, player);
+		return true;
 	}
 
 	return LeaveRoom(player);
@@ -1361,6 +1380,19 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 
 	AddBag(bag);
 
+	// 사망 커밋 중에 끊겼다가 다시 로그인한 세션은 커밋 전 상태를 받았다(SendBaseCampInventory 가 기다리다 보낸 것).
+	// 확정된 결과를 다시 보낸다 - 안 보내면 가방으로 간 아이템이 베이스캠프 화면에 남는다 (UI 4단계).
+	if (GameSessionRef baseCamp = GSessionManager.FindInBaseCamp(snap.characterId))
+	{
+		const uint64 characterId = snap.characterId;
+		GDBQueue.Push([baseCamp, characterId](DBConnection* conn)
+			{
+				SendBaseCampInventory(conn, baseCamp, characterId);
+			});
+
+		LOG_LINE << "[DEATH] committed while in base camp - resending inventory. char=" << characterId << '\n';
+	}
+
 	// 죽은 플레이어가 아직 방에 있으면 메모리도 비운다. 봇은 이미 끊고 나갔을 수 있다.
 	auto findIt = _objects.find(snap.characterId);
 	if (findIt == _objects.end())
@@ -1442,6 +1474,9 @@ void Room::BeginEscapeCommit(uint64 playerId)
 			session->Send(sendBuffer);
 
 			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << '\n';
+
+			// 베이스캠프로 돌아왔다 - 방금 커밋한 결과를 S3 에 보낸다 (UI 4단계)
+			SendBaseCampInventory(conn, session, snap.characterId);
 		});
 }
 

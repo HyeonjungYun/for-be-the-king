@@ -6,10 +6,12 @@
 #include "Components/ActorComponent.h"
 #include "S1ItemUIComponent.generated.h"
 
+class APlayerController;
 class UEnhancedInputComponent;
 class UInputAction;
 class UInputMappingContext;
 class US1ItemHudRootWidget;
+enum class ES1Place : uint8;
 
 /**
  * Puts the item UI on screen for the local player and routes its keys.
@@ -33,6 +35,20 @@ public:
 	/** From AS1MyPlayer::SetupPlayerInputComponent. */
 	void SetupInput(UEnhancedInputComponent* Input);
 
+	/**
+	 * Puts the HUD up and the key context on, once the pawn has a local controller. From BeginPlay
+	 * for the level's own pawn, and from AS1MyPlayer::NotifyControllerChanged for a pawn spawned
+	 * on re-entry — that one has no controller yet when BeginPlay runs. Safe to call twice.
+	 */
+	void InitForLocalController();
+
+	/**
+	 * The key bound to an equip slot's skill for this controller's pawn, as the player would read it.
+	 * The fixed name (equipment-skill-binding.md B1) when there is no pawn or nothing is bound —
+	 * S3 asks from base camp, where our pawn may be gone.
+	 */
+	static FText KeyNameForController(const APlayerController* PC, int32 KeySlot);
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -44,15 +60,22 @@ private:
 	void OnOpenKey();
 	void OnCloseKey();
 
-	/** The key currently bound to an equip slot's skill action, as the player would read it. */
-	FText KeyNameFor(int32 KeySlot) const;
+	/** Tab and F belong to the dungeon. Not in base camp, not while we lie dead. */
+	bool CanUseDungeonKeys() const;
+	void HandlePlaceChanged(ES1Place Place);
+	void HandleLocalDeath();
 
 	/** The first key mapped to Action, or Fallback when nothing is. */
-	FText KeyNameOf(const UInputAction* Action, const FText& Fallback) const;
+	static FText KeyNameOf(const APlayerController* PC, const UInputAction* Action, const FText& Fallback);
+
+	APlayerController* GetLocalController() const;
 
 	UPROPERTY() TObjectPtr<UInputAction>			InventoryAction;
 	UPROPERTY() TObjectPtr<UInputAction>			OpenAction;
 	UPROPERTY() TObjectPtr<UInputAction>			CloseAction;
 	UPROPERTY() TObjectPtr<UInputMappingContext>	Context;
 	UPROPERTY() TObjectPtr<US1ItemHudRootWidget>	Root;
+
+	FDelegateHandle		PlaceChangedHandle;
+	FDelegateHandle		LocalDeathHandle;
 };

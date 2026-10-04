@@ -10,6 +10,7 @@ notice.bad_request,할 수 없는 동작입니다,ITEM_BAD_REQUEST
 notice.retry_later,잠시 후 다시 시도해 주세요,ITEM_DB_ERROR
 notice.loot_partial,{0}개를 가져오지 못했습니다(인벤토리 가득 참),take-all partial - {0} count
 notice.vault_equip,반입으로 옮겨야 착용할 수 있습니다,S3 right-click on a vault item
+notice.enter_rejected,지금은 입장할 수 없습니다,S3 - S_ENTER_GAME refused (one message for every reason - 2026-10-04)
 bag.title_bag,가방,S2 header
 bag.title_chest,상자,S2 header
 bag.opening,여는 중,shown after 300 ms
