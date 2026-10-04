@@ -13,6 +13,8 @@
 #include "SkillTable.h"
 #include "ItemTable.h"
 #include "ItemRoller.h"
+#include "ChestSpawnTable.h"
+#include "Bag.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
 
@@ -65,6 +67,20 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] floor item pool loaded - pools=" << FloorItemPool::Count() << '\n';
+
+		// 상자 배치 - 층 풀 다음이어야 한다. 상자마다 그 층 · 등급의 풀이 있는지 검사한다.
+		if (ChestSpawnTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] chest spawns invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		// 메모리 전용 - DB 행이 없다. 재시작하면 전층이 Sealed 로 돌아간다 (§ 8, ADR-0003).
+		// 워커가 아직 없으므로 DoAsync 가 이 스레드에서 바로 실행된다 (LoadLiveBags 와 같음).
+		for (const ChestSpawn& spawn : ChestSpawnTable::All())
+			GRooms[spawn.floorId]->DoAsync(&Room::AddBag, ObjectUtils::CreateChest(spawn));
+
+		LOG_LINE << "[BOOT] chests spawned - " << ChestSpawnTable::All().size() << '\n';
 	}
 
 	string dbPassword;

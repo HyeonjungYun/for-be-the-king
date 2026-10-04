@@ -201,8 +201,10 @@ void US1LootWindowWidget::RefreshHeader()
 
 	const FS1BagView* Bag = Items->FindBag(BagId);
 
-	// Chests have no timer (remaining_ms 0) — the countdown is simply not there.
-	FText Title = Text(TEXT("bag.title_bag"));
+	// A chest is a bag that never expires: remaining_ms 0 → "상자" and no countdown (§ States — 기본 · 상자).
+	// Until the contents arrive we cannot tell, so it reads "가방" for that moment.
+	const bool bChest = Bag != nullptr && Bag->bHasContents && Bag->RemainingMsAtReceive == 0;
+	FText Title = Text(bChest ? TEXT("bag.title_chest") : TEXT("bag.title_bag"));
 	bool bUrgent = false;
 	if (Bag != nullptr && Bag->bHasContents && Bag->RemainingMsAtReceive > 0)
 	{

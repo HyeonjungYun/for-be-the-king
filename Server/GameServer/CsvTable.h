@@ -21,6 +21,7 @@ namespace Csv
 	bool	FindColumns(const CsvTable& table, const char* fileName, const vector<const char*>& names, OUT vector<int32>& out, OUT string& error);
 
 	bool	ParseUInt(const string& s, OUT uint32& out);
+	bool	ParseFloat(const string& s, OUT float& out);
 
 	// 파일 전체를 바이트 그대로 읽는다. 열 수 없으면 false
 	bool	ReadFile(const string& path, OUT string& text);

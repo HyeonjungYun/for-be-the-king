@@ -2,6 +2,7 @@
 
 struct DeathSnapshot;
 struct EscapeSnapshot;
+struct ChestSpawn;
 
 class ObjectUtils
 {
@@ -9,12 +10,16 @@ public:
 	static PlayerRef CreatePlayer(GameSessionRef session, uint64 characterId);
 	static BagRef CreateBag(uint64 bagId, uint32 floorId, float x, float y, float z, uint64 expiresAtUs, uint64 ownerCharacterId);
 
+	// 상자 = 만료 없고 주인 없는 가방. 처음 열 때 롤한다 (Room::HandleBagOpen)
+	static BagRef CreateChest(const ChestSpawn& spawn);
+
 private:
 	static atomic<int64> s_idGenerator;
 };
 
 constexpr uint64 RUNTIME_ID_BASE = 1'000'000'000;
 constexpr uint64 BAG_ID_BASE = 2'000'000'000;
+constexpr uint64 CHEST_ID_BASE = 3'000'000'000;	// + chest_id 로 고정 - 로그에서 몇 번 상자인지 바로 보인다. 재시작해도 같다
 
 extern atomic<uint64> GNextInstanceId;
 extern atomic<uint64> GNextBagId;

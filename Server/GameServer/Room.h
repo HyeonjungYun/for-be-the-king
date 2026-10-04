@@ -89,6 +89,7 @@ private:
 	void	SavePlayer(PlayerRef player);
 	void	UpdateSaves(uint64 nowUs);
 	void	UpdateBagExpiry(uint64 nowUs);
+	void	UpdateChests(uint64 nowUs);
 	
 	void	FindSpawnPosition(float baseX, float baseY, float& outX, float& outY);
 

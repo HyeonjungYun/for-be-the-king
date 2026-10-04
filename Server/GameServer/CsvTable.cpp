@@ -105,6 +105,15 @@ bool Csv::ParseUInt(const string& s, OUT uint32& out)
 	return ec == errc() && ptr == last;
 }
 
+bool Csv::ParseFloat(const string& s, OUT float& out)
+{
+	const char* first = s.data();
+	const char* last = s.data() + s.size();
+
+	auto [ptr, ec] = from_chars(first, last, out);
+	return ec == errc() && ptr == last;
+}
+
 bool Csv::ReadFile(const string& path, OUT string& text)
 {
 	ifstream file(path, ios::binary);

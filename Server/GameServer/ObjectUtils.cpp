@@ -5,6 +5,7 @@
 #include "GameSession.h"
 #include "Room.h"
 #include "ItemTable.h"
+#include "ChestSpawnTable.h"
 #include <thread>
 
 atomic<int64> ObjectUtils::s_idGenerator = RUNTIME_ID_BASE;
@@ -212,6 +213,19 @@ BagRef ObjectUtils::CreateBag(uint64 bagId, uint32 floorId, float x, float y, fl
 	bag->ownerCharacterId = ownerCharacterId;
 
 	return bag;
+}
+
+BagRef ObjectUtils::CreateChest(const ChestSpawn& spawn)
+{
+	// 만료 없음(expiresAtUs 0 → S_BAG_CONTENTS.remaining_ms 0 → 클라가 타이머를 숨기고 "상자"로 본다) · 주인 없음
+	BagRef chest = CreateBag(CHEST_ID_BASE + spawn.chestId, spawn.floorId, spawn.x, spawn.y, spawn.z, 0, 0);
+	chest->posInfo->set_yaw(spawn.yaw);
+
+	chest->chestId = spawn.chestId;
+	chest->tier = spawn.tier;
+	chest->respawnUs = static_cast<uint64>(spawn.respawnSeconds) * 1'000'000;
+
+	return chest;
 }
 
 bool RestoreIdCounters(DBConnection* conn)

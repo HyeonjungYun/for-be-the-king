@@ -1066,6 +1066,19 @@ void Room::HandleBagOpen(GameSessionRef session, uint64 bagId)
 		return;
 	}
 
+	// 상자는 처음 열 때 롤한다 (§ 8 지연 롤). JobQueue 가 직렬이라 둘이 동시에 열어도 한 번만 롤된다.
+	// 부팅이 상자마다 그 층 · 등급의 풀이 있는지 확인했다 (ChestSpawnTable).
+	if (bag->IsChest() && bag->rolled == false)
+	{
+		if (const ChestPool* pool = FloorItemPool::Find(_floorId, bag->tier))
+		{
+			bag->RollIfNeeded(*pool, _rng, []() { return GNextInstanceId.fetch_add(1); });
+
+			LOG_LINE << "[CHEST] rolled chest=" << bag->chestId << " tier=" << FloorItemPool::TierName(bag->tier)
+				<< " items=" << bag->items.size() << " by=" << playerId << '\n';
+		}
+	}
+
 	bag->viewers.insert(playerId);
 	session->Send(MakeBagContents(bag, Utils::NowMicroseconds()));
 
@@ -1120,6 +1133,10 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 	ItemEntry e = *itemIt;
 	bag->items.erase(itemIt);
 	player->inventory.push_back(e);
+
+	// 상자는 첫 "획득"에서 Looted 가 되고 리스폰 시계가 돈다 (§ 8). 열기만 해서는 바뀌지 않는다.
+	if (bag->MarkTaken(Utils::NowMicroseconds()))
+		LOG_LINE << "[CHEST] looted chest=" << bag->chestId << " by=" << playerId << " reset_in=" << bag->respawnUs / 1'000'000 << "s\n";
 
 	vector<Protocol::ItemInstance> changed;
 	changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
@@ -1503,6 +1520,7 @@ void Room::UpdateTick()
 
 	UpdateSaves(nowUs);
 	UpdateBagExpiry(nowUs);
+	UpdateChests(nowUs);
 	UpdateDetached(nowUs);
 	
 	// 0.1초 경과했으면, UpdateTick()
@@ -2134,7 +2152,8 @@ void Room::UpdateBagExpiry(uint64 nowUs)
 
 	for (auto& [bagId, bag] : _bags)
 	{
-		if (nowUs < bag->expiresAtUs)
+		// 상자는 만료가 없다 - 리셋은 UpdateChests 가 한다
+		if (bag->IsChest() || nowUs < bag->expiresAtUs)
 			continue;
 
 		bagIds.push_back(bagId);
@@ -2159,6 +2178,29 @@ void Room::UpdateBagExpiry(uint64 nowUs)
 		{
 			DeleteExpiredBags(conn, bagIds, instanceIds);
 		});
+}
+
+void Room::UpdateChests(uint64 nowUs)
+{
+	for (auto& [bagId, bag] : _bags)
+	{
+		if (bag->IsDueForReset(nowUs) == false)
+			continue;
+
+		// 남은 내용물은 롤 아이템이라 DB 행이 없다 - 메모리에서 버리면 끝이다.
+		const size_t discarded = bag->ResetChest();
+
+		// 사라졌다가 다시 나타나게 한다. 닫기 전용 패킷이 없어서, 열어 둔 창은 "사라짐"으로 받아 문구 없이
+		// 닫힌다(클라 2026-10-04 결정). 다시 나타나는 것은 다음 FlushSpawns(33ms 안)다.
+		Protocol::S_DESPAWN despawnPkt;
+		despawnPkt.add_object_ids(bagId);
+		SEND_PACKET_DECLARATION(despawnPkt);
+		Broadcast(sendBuffer);
+
+		_pendingSpawns.push_back(bagId);
+
+		LOG_LINE << "[CHEST] reset chest=" << bag->chestId << " discarded=" << discarded << '\n';
+	}
 }
 
 void Room::FindSpawnPosition(float baseX, float baseY, float& outX, float& outY)

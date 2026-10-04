@@ -86,6 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CcTest.cpp" />
+    <ClCompile Include="ChestTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="ItemRollerTest.cpp" />
     <ClCompile Include="ItemTableTest.cpp" />
@@ -106,6 +107,8 @@
     <ClCompile Include="..\GameServer\ItemTable.cpp" />
     <ClCompile Include="..\GameServer\ItemRoller.cpp" />
     <ClCompile Include="..\GameServer\CsvTable.cpp" />
+    <ClCompile Include="..\GameServer\Bag.cpp" />
+    <ClCompile Include="..\GameServer\ChestSpawnTable.cpp" />
     <ClCompile Include="..\GameServer\Enum.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
