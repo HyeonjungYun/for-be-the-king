@@ -279,6 +279,10 @@ void AS1MyPlayer::Tick(float DeltaTime)
 			Info->set_state(GetMoveState());
 		}
 
+		// When it was sent, on a monotonic clock — the server measures the gap between moves with this, so a
+		// hitch on either side that delivers several moves at once is not mistaken for a speed hack (MoveClock.h)
+		MovePkt.set_client_ms(static_cast<uint64>(FPlatformTime::Seconds() * 1000.0));
+
 		SEND_PACKET(MovePkt);
 	}
 }

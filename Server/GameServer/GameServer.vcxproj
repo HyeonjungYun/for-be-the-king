@@ -193,6 +193,7 @@
     <ClInclude Include="Bag.h" />
     <ClInclude Include="ChestSpawnTable.h" />
     <ClInclude Include="EntryPointTable.h" />
+    <ClInclude Include="MoveClock.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />
     <ClInclude Include="Enum.pb.h" />

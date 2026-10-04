@@ -1535,6 +1535,7 @@ class C_MOVE final :
 
   enum : int {
     kInfoFieldNumber = 1,
+    kClientMsFieldNumber = 2,
   };
   // .Protocol.PosInfo info = 1;
   bool has_info() const;
@@ -1554,6 +1555,15 @@ class C_MOVE final :
       ::Protocol::PosInfo* info);
   ::Protocol::PosInfo* unsafe_arena_release_info();
 
+  // uint64 client_ms = 2;
+  void clear_client_ms();
+  uint64_t client_ms() const;
+  void set_client_ms(uint64_t value);
+  private:
+  uint64_t _internal_client_ms() const;
+  void _internal_set_client_ms(uint64_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_MOVE)
  private:
   class _Internal;
@@ -1563,6 +1573,7 @@ class C_MOVE final :
   typedef void DestructorSkippable_;
   struct Impl_ {
     ::Protocol::PosInfo* info_;
+    uint64_t client_ms_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -6489,6 +6500,26 @@ inline void C_MOVE::set_allocated_info(::Protocol::PosInfo* info) {
   }
   _impl_.info_ = info;
   // @@protoc_insertion_point(field_set_allocated:Protocol.C_MOVE.info)
+}
+
+// uint64 client_ms = 2;
+inline void C_MOVE::clear_client_ms() {
+  _impl_.client_ms_ = uint64_t{0u};
+}
+inline uint64_t C_MOVE::_internal_client_ms() const {
+  return _impl_.client_ms_;
+}
+inline uint64_t C_MOVE::client_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_MOVE.client_ms)
+  return _internal_client_ms();
+}
+inline void C_MOVE::_internal_set_client_ms(uint64_t value) {
+  
+  _impl_.client_ms_ = value;
+}
+inline void C_MOVE::set_client_ms(uint64_t value) {
+  _internal_set_client_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_MOVE.client_ms)
 }
 
 // -------------------------------------------------------------------

@@ -52,6 +52,7 @@ message S_DESPAWN
 message C_MOVE
 {
 	PosInfo info = 1;
+	uint64 client_ms = 2;
 }
 
 message S_MOVE

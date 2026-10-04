@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Creature.h"
+#include "MoveClock.h"
 
 class GameSession;
 class Room;
@@ -45,6 +46,7 @@ public:
 public:
 	uint64					lastMoveUs = 0;
 	double					moveBudget = 0.0;
+	MoveClock				moveClock;		// 이동 검증 경과 시간 - C_MOVE.client_ms 기준 (MoveClock.h)
 	float					moveExceptionSpeed = 0.f;
 	uint64					moveExceptionEndUs = 0;
 

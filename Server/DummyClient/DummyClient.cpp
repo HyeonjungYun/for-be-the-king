@@ -15,6 +15,9 @@ vector<uint32> GFreeBotIndices;
 std::atomic<uint64> GSentThisWindow{ 0 };
 
 atomic<bool> GItemBehavior = false;
+atomic<bool> GNoClientMs = false;
+atomic<bool> GBurst = false;
+uint64 GBurstStartUs = 0;
 atomic<uint64> GBagOpenSent = 0;
 atomic<uint64> GLootSent = 0;
 atomic<uint64> GEquipSent = 0;
@@ -64,6 +67,29 @@ namespace
 
 namespace
 {
+	// -burst: 20초마다 1.5초 동안 모든 봇이 이동을 쥐고 있다가 한꺼번에 보낸다. 같은 PC 경합으로 봇 프로세스가
+	// 멈췄다 몰아 보낸 G2 soak2 의 SV-3 109건을 일부러 만든다 (roadmap.md § 0-11 후속)
+	constexpr uint64 BURST_PERIOD_US = 20'000'000;
+	constexpr uint64 BURST_HOLD_US = 1'500'000;
+
+	bool InBurstHold(uint64 nowUs)
+	{
+		if (GBurst.load() == false || nowUs < GBurstStartUs)
+			return false;
+
+		return ((nowUs - GBurstStartUs) % BURST_PERIOD_US) >= (BURST_PERIOD_US - BURST_HOLD_US);
+	}
+
+	// -burst 동안에는 그 봇의 모든 패킷을 순서대로 쥔다 - 멈춘 프로세스 · TCP 처럼 스킬과 이동이 함께 늦는다.
+	// 이동만 쥐면 대시 스킬이 먼저 도착해 서버의 대시 창이 이동보다 먼저 끝나는, 실제로는 없는 순서가 생긴다
+	void SendOrHold(const BotSessionRef& bot, SendBufferRef buffer, uint64 nowUs)
+	{
+		if (InBurstHold(nowUs))
+			bot->heldPackets.push_back(buffer);
+		else
+			bot->Send(buffer);
+	}
+
 	// 근처 가방을 하나 연다. 연 가방은 잊는다 - 같은 빈 가방을 2초마다 다시 여는 일이 없게(사람도 그렇다)
 	void TryOpenBag(const BotSessionRef& bot, uint64 nowUs)
 	{
@@ -111,7 +137,7 @@ namespace
 
 		Protocol::C_BAG_OPEN openPkt;
 		openPkt.set_bag_id(bagId);
-		bot->Send(ClientPacketHandler::MakeSendBuffer(openPkt));
+		SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(openPkt), nowUs);
 		GBagOpenSent.fetch_add(1);
 	}
 
@@ -161,7 +187,7 @@ namespace
 		equipPkt.set_request_id(bot->NextRequestId());
 		equipPkt.set_instance_id(instanceId);
 		equipPkt.set_slot(static_cast<Protocol::EquipSlot>(slot));
-		bot->Send(ClientPacketHandler::MakeSendBuffer(equipPkt));
+		SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(equipPkt), nowUs);
 		GEquipSent.fetch_add(1);
 	}
 
@@ -178,7 +204,7 @@ namespace
 		// 탈출 구역은 P4 범위라 아직 없다 - 디버그 채팅 명령이 같은 커밋 경로(BeginEscapeCommit)를 탄다
 		Protocol::C_CHAT chatPkt;
 		chatPkt.set_msg("/escape");
-		bot->Send(ClientPacketHandler::MakeSendBuffer(chatPkt));
+		SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(chatPkt), nowUs);
 		GEscapeSent.fetch_add(1);
 	}
 }
@@ -340,6 +366,14 @@ static void TickBots(float deltaTime)
 		if (bot->inGame.load() == false || bot->alive.load() == false)
 			continue;
 
+		// 쥐고 있던 이동을 한꺼번에 - 서버에는 간격 0 으로 몰려 도착한다
+		if (bot->heldPackets.empty() == false && InBurstHold(nowUs) == false)
+		{
+			for (SendBufferRef& held : bot->heldPackets)
+				bot->Send(held);
+			bot->heldPackets.clear();
+		}
+
 		if (nowUs < bot->hardCcUntilUs.load())
 			continue;
 
@@ -438,7 +472,13 @@ static void TickBots(float deltaTime)
 				info->set_state(Protocol::MOVE_STATE_RUN);
 			}
 
-			bot->Send(ClientPacketHandler::MakeSendBuffer(pkt));
+			// 보낸 시각 - 서버 이동 검증이 패킷 간격을 이걸로 잰다. -noclientms 면 비운다(예전 방식과 비교용)
+			if (GNoClientMs.load() == false)
+				pkt.set_client_ms(nowUs / 1000);
+
+			// -burst: 송신이 멈춘 프로세스 흉내 - 쥐고 있다가 창이 끝나면 한꺼번에 보낸다 (G2 soak2 재현)
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(pkt), nowUs);
+
 			++GSentThisWindow;
 		}
 
@@ -459,7 +499,7 @@ static void TickBots(float deltaTime)
 				dashPkt.set_aim_x(bot->x + dirX * DASH_DIST);
 				dashPkt.set_aim_y(bot->y + dirY * DASH_DIST);
 
-				bot->Send(ClientPacketHandler::MakeSendBuffer(dashPkt));
+				SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(dashPkt), nowUs);
 
 				bot->dashDirX = dirX;
 				bot->dashDirY = dirY;
@@ -476,7 +516,7 @@ static void TickBots(float deltaTime)
 			areaPkt.set_aim_x(bot->x);
 			areaPkt.set_aim_y(bot->y);
 
-			bot->Send(ClientPacketHandler::MakeSendBuffer(areaPkt));
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(areaPkt), nowUs);
 
 			bot->nextAreaAtUs = nowUs + AREA_TRY_INTERVAL_US;
 			bot->dashUntilUs = nowUs + AREA_CAST_HOLD_US;
@@ -490,7 +530,7 @@ static void TickBots(float deltaTime)
 			skillPkt.set_aim_x(target->x);
 			skillPkt.set_aim_y(target->y);
 
-			bot->Send(ClientPacketHandler::MakeSendBuffer(skillPkt));
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(skillPkt), nowUs);
 
 			bot->nextSkillAtUs = nowUs + SKILL_TRY_INTERVAL_US;
 			bot->castUnitlUs = nowUs + BOT_CAST_HOLD_US;
@@ -501,7 +541,7 @@ static void TickBots(float deltaTime)
 			Protocol::C_ATTACK attackPkt;
 			attackPkt.set_target_id(target->objectId.load());
 
-			bot->Send(ClientPacketHandler::MakeSendBuffer(attackPkt));
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(attackPkt), nowUs);
 
 			bot->nextAttackAtUs = nowUs + ATTACK_INTERVAL_US;
 			++GAttackSentThisWindow;
@@ -539,13 +579,21 @@ int main(int argc, char* argv[])
 			grantSpread = true;
 		else if (::strcmp(argv[i], "-items") == 0)
 			GItemBehavior.store(true);
+		else if (::strcmp(argv[i], "-noclientms") == 0)
+			GNoClientMs.store(true);
+		else if (::strcmp(argv[i], "-burst") == 0)
+			GBurst.store(true);
 	}
+
+	GBurstStartUs = Utils::NowMicroseconds();
 
 	if (botCount < 1)
 		botCount = 1;
 
 	LOG_LINE << "[BOT] launching " << botCount << " bot(s)"
-		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF") << '\n';
+		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF")
+		<< (GNoClientMs.load() ? " - client_ms OFF" : " - client_ms ON")
+		<< (GBurst.load() ? " - burst ON (all packets held 1.5s every 20s)" : "") << '\n';
 
 	// 계정 번호 풀. 끊긴 세션의 번호를 다음 세션이 그대로 물려 받는다
 	{

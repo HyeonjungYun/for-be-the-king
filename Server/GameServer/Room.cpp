@@ -193,6 +193,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 	{
 		const uint64 enterUs = Utils::NowMicroseconds();
 		player->lastMoveUs = enterUs;
+		player->moveClock.Reset();
 		player->lastSaveUs = enterUs;
 
 
@@ -388,10 +389,24 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 
 	if (rejected == false)
 	{
-		const double deltaSec = static_cast<double>(nowUs - player->lastMoveUs) / 1000000.0;
+		// 경과 시간은 클라가 보낸 시각 간격으로 - 밀린 이동이 한꺼번에 처리돼도 정상 간격으로 본다 (MoveClock.h)
+		const uint64 serverDtUs = nowUs - player->lastMoveUs;
+
+		// 입장 후 첫 이동 - 이 접속이 보낸 시각을 싣는지 한 번 남긴다(구버전 클라는 no = 서버 간격으로 검증)
+		if (player->moveClock.announced == false)
+		{
+			player->moveClock.announced = true;
+			LOG_LINE << "[MOVE] clock char=" << objectId << " client_ms=" << (pkt.client_ms() != 0 ? "yes" : "no") << '\n';
+		}
+
+		const double deltaSec = player->moveClock.Interval(serverDtUs, pkt.client_ms());
 		player->lastMoveUs = nowUs;
 
-		const double ceiling = player->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN;
+		// 속도 상한도 "보낸 때" 기준 - 늦게 도착한 패킷은 뒤처진 만큼 이른 시각으로 본다. 대시 창이 끝난 뒤 처리된
+		// 대시 중 이동이 일반 속도로 검사되지 않게 (leadUs < 0 = 클라가 뒤처졌다 = 패킷이 늦게 왔다)
+		const int64 leadUs = player->moveClock.leadUs;
+		const uint64 sentUs = (leadUs < 0) ? nowUs - min<uint64>(static_cast<uint64>(-leadUs), nowUs) : nowUs;
+		const double ceiling = player->GetSpeedCeiling(sentUs) * VALIDATION_MARGIN;
 
 		player->moveBudget += ceiling * deltaSec;
 
@@ -411,7 +426,9 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 			LOG_LINE << "[MOVE REJECT] id=" << objectId
 				<< " dist=" << distance
 				<< " budget=" << player->moveBudget
-				<< " dt=" << deltaSec << '\n';
+				<< " dt=" << deltaSec
+				<< " server_dt=" << (serverDtUs / 1'000'000.0)
+				<< " lead_ms=" << (player->moveClock.leadUs / 1000) << '\n';
 		}
 		else
 		{
@@ -1569,6 +1586,7 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	// 끊긴 동안의 시간이 이동 예산으로 쌓이지 않게 지금을 기준으로 다시 잡는다.
 	const uint64 nowUs = Utils::NowMicroseconds();
 	body->lastMoveUs = nowUs;
+	body->moveClock.Reset();		// 새 접속의 클라 시계는 이전 것과 이어지지 않는다
 	body->moveBudget = body->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
 
 	Protocol::S_ENTER_GAME enterPkt;

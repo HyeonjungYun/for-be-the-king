@@ -57,6 +57,9 @@ public:
 	atomic<uint64>									reenterAtUs = 0;	// 탈출 뒤 다시 입장할 시각. 0 = 없음
 	atomic<uint32>									requestSeq = 0;
 
+	// -burst 동안 쥐고 있는 패킷 - 보낼 순서 그대로 (틱 스레드 전용)
+	vector<SendBufferRef>							heldPackets;
+
 	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
 	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };
@@ -80,6 +83,10 @@ extern vector<uint32>			GFreeBotIndices;
 
 // -items 일 때만 켜진다. 꺼져 있으면 봇은 예전처럼 싸우기만 한다 (G2 의 A 조건)
 extern atomic<bool> GItemBehavior;
+
+// -noclientms: C_MOVE.client_ms 를 비운다(예전 이동 검증과 비교용) · -burst: 이동을 주기적으로 쥐었다 몰아 보낸다
+extern atomic<bool> GNoClientMs;
+extern atomic<bool> GBurst;
 
 // 10초 창마다 보고하고 0 으로 돌린다
 extern atomic<uint64> GBagOpenSent;

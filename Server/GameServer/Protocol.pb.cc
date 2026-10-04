@@ -129,6 +129,7 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORIT
 PROTOBUF_CONSTEXPR C_MOVE::C_MOVE(
     ::_pbi::ConstantInitialized): _impl_{
     /*decltype(_impl_.info_)*/nullptr
+  , /*decltype(_impl_.client_ms_)*/uint64_t{0u}
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct C_MOVEDefaultTypeInternal {
   PROTOBUF_CONSTEXPR C_MOVEDefaultTypeInternal()
@@ -585,6 +586,7 @@ const uint32_t TableStruct_Protocol_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE
   ~0u,  // no _weak_field_map_
   ~0u,  // no _inlined_string_donated_
   PROTOBUF_FIELD_OFFSET(::Protocol::C_MOVE, _impl_.info_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_MOVE, _impl_.client_ms_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_MOVE, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -808,33 +810,33 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 44, -1, -1, sizeof(::Protocol::S_SPAWN)},
   { 51, -1, -1, sizeof(::Protocol::S_DESPAWN)},
   { 58, -1, -1, sizeof(::Protocol::C_MOVE)},
-  { 65, -1, -1, sizeof(::Protocol::S_MOVE)},
-  { 73, -1, -1, sizeof(::Protocol::C_ATTACK)},
-  { 80, -1, -1, sizeof(::Protocol::S_ATTACK)},
-  { 87, -1, -1, sizeof(::Protocol::S_ATTACK_CANCEL)},
-  { 94, -1, -1, sizeof(::Protocol::S_DAMAGE)},
-  { 101, -1, -1, sizeof(::Protocol::S_CC)},
-  { 110, -1, -1, sizeof(::Protocol::S_CC_STATE)},
-  { 117, -1, -1, sizeof(::Protocol::S_DIED)},
-  { 124, -1, -1, sizeof(::Protocol::C_CHAT)},
-  { 131, -1, -1, sizeof(::Protocol::S_CHAT)},
-  { 139, -1, -1, sizeof(::Protocol::C_SKILL)},
-  { 149, -1, -1, sizeof(::Protocol::C_SKILL_CANCEL)},
-  { 155, -1, -1, sizeof(::Protocol::S_SKILL_CAST)},
-  { 162, -1, -1, sizeof(::Protocol::S_SKILL_CANCEL)},
-  { 169, -1, -1, sizeof(::Protocol::S_SKILL_HIT)},
-  { 176, -1, -1, sizeof(::Protocol::S_EQUIP_SYNC)},
-  { 183, -1, -1, sizeof(::Protocol::C_GRANT_REWARD)},
-  { 193, -1, -1, sizeof(::Protocol::S_GRANT_REWARD)},
-  { 202, -1, -1, sizeof(::Protocol::C_EQUIP)},
-  { 211, -1, -1, sizeof(::Protocol::C_UNEQUIP)},
-  { 219, -1, -1, sizeof(::Protocol::C_LOOT)},
-  { 228, -1, -1, sizeof(::Protocol::C_DROP)},
-  { 236, -1, -1, sizeof(::Protocol::S_ITEM_RESULT)},
-  { 245, -1, -1, sizeof(::Protocol::C_STASH)},
-  { 254, -1, -1, sizeof(::Protocol::S_INVENTORY_SYNC)},
-  { 261, -1, -1, sizeof(::Protocol::S_BAG_CONTENTS)},
-  { 270, -1, -1, sizeof(::Protocol::C_BAG_OPEN)},
+  { 66, -1, -1, sizeof(::Protocol::S_MOVE)},
+  { 74, -1, -1, sizeof(::Protocol::C_ATTACK)},
+  { 81, -1, -1, sizeof(::Protocol::S_ATTACK)},
+  { 88, -1, -1, sizeof(::Protocol::S_ATTACK_CANCEL)},
+  { 95, -1, -1, sizeof(::Protocol::S_DAMAGE)},
+  { 102, -1, -1, sizeof(::Protocol::S_CC)},
+  { 111, -1, -1, sizeof(::Protocol::S_CC_STATE)},
+  { 118, -1, -1, sizeof(::Protocol::S_DIED)},
+  { 125, -1, -1, sizeof(::Protocol::C_CHAT)},
+  { 132, -1, -1, sizeof(::Protocol::S_CHAT)},
+  { 140, -1, -1, sizeof(::Protocol::C_SKILL)},
+  { 150, -1, -1, sizeof(::Protocol::C_SKILL_CANCEL)},
+  { 156, -1, -1, sizeof(::Protocol::S_SKILL_CAST)},
+  { 163, -1, -1, sizeof(::Protocol::S_SKILL_CANCEL)},
+  { 170, -1, -1, sizeof(::Protocol::S_SKILL_HIT)},
+  { 177, -1, -1, sizeof(::Protocol::S_EQUIP_SYNC)},
+  { 184, -1, -1, sizeof(::Protocol::C_GRANT_REWARD)},
+  { 194, -1, -1, sizeof(::Protocol::S_GRANT_REWARD)},
+  { 203, -1, -1, sizeof(::Protocol::C_EQUIP)},
+  { 212, -1, -1, sizeof(::Protocol::C_UNEQUIP)},
+  { 220, -1, -1, sizeof(::Protocol::C_LOOT)},
+  { 229, -1, -1, sizeof(::Protocol::C_DROP)},
+  { 237, -1, -1, sizeof(::Protocol::S_ITEM_RESULT)},
+  { 246, -1, -1, sizeof(::Protocol::C_STASH)},
+  { 255, -1, -1, sizeof(::Protocol::S_INVENTORY_SYNC)},
+  { 262, -1, -1, sizeof(::Protocol::S_BAG_CONTENTS)},
+  { 271, -1, -1, sizeof(::Protocol::C_BAG_OPEN)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -887,49 +889,50 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "\024.Protocol.ObjectInfo\"\016\n\014C_LEAVE_GAME\"\016\n"
   "\014S_LEAVE_GAME\"0\n\007S_SPAWN\022%\n\007players\030\001 \003("
   "\0132\024.Protocol.ObjectInfo\"\037\n\tS_DESPAWN\022\022\n\n"
-  "object_ids\030\001 \003(\004\")\n\006C_MOVE\022\037\n\004info\030\001 \001(\013"
-  "2\021.Protocol.PosInfo\">\n\006S_MOVE\022 \n\005infos\030\001"
-  " \003(\0132\021.Protocol.PosInfo\022\022\n\ncorrection\030\002 "
-  "\001(\010\"\035\n\010C_ATTACK\022\021\n\ttarget_id\030\001 \001(\004\"1\n\010S_"
-  "ATTACK\022%\n\007attacks\030\001 \003(\0132\024.Protocol.Attac"
-  "kInfo\"\'\n\017S_ATTACK_CANCEL\022\024\n\014attacker_ids"
-  "\030\001 \003(\004\"1\n\010S_DAMAGE\022%\n\007damages\030\001 \003(\0132\024.Pr"
-  "otocol.DamageInfo\"\203\001\n\004S_CC\022&\n\007applied\030\001 "
-  "\003(\0132\025.Protocol.CcEventInfo\022&\n\007expired\030\002 "
-  "\003(\0132\025.Protocol.CcEventInfo\022+\n\nknockbacks"
-  "\030\003 \003(\0132\027.Protocol.KnockbackInfo\"3\n\nS_CC_"
-  "STATE\022%\n\006states\030\001 \003(\0132\025.Protocol.CcState"
-  "Info\",\n\006S_DIED\022\"\n\006deaths\030\001 \003(\0132\022.Protoco"
-  "l.DiedInfo\"\025\n\006C_CHAT\022\013\n\003msg\030\001 \001(\t\"\'\n\006S_C"
-  "HAT\022\020\n\010playerId\030\001 \001(\004\022\013\n\003msg\030\002 \001(\t\"]\n\007C_"
-  "SKILL\022!\n\004slot\030\001 \001(\0162\023.Protocol.EquipSlot"
-  "\022\021\n\ttarget_id\030\002 \001(\004\022\r\n\005aim_x\030\003 \001(\002\022\r\n\005ai"
-  "m_y\030\004 \001(\002\"\020\n\016C_SKILL_CANCEL\"6\n\014S_SKILL_C"
-  "AST\022&\n\005casts\030\001 \003(\0132\027.Protocol.SkillCastI"
-  "nfo\"$\n\016S_SKILL_CANCEL\022\022\n\ncaster_ids\030\001 \003("
-  "\004\"3\n\013S_SKILL_HIT\022$\n\004hits\030\001 \003(\0132\026.Protoco"
-  "l.SkillHitInfo\"3\n\014S_EQUIP_SYNC\022#\n\006skills"
-  "\030\001 \003(\0132\023.Protocol.SkillInfo\"X\n\016C_GRANT_R"
-  "EWARD\022\022\n\nrequest_id\030\001 \001(\t\022\024\n\014character_i"
-  "d\030\002 \001(\004\022\014\n\004gold\030\003 \001(\004\022\016\n\006reason\030\004 \001(\t\"H\n"
-  "\016S_GRANT_REWARD\022\022\n\nrequest_id\030\001 \001(\t\022\016\n\006r"
-  "esult\030\002 \001(\r\022\022\n\ngold_after\030\003 \001(\004\"U\n\007C_EQU"
-  "IP\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013instance_id\030\002 "
-  "\001(\004\022!\n\004slot\030\003 \001(\0162\023.Protocol.EquipSlot\"4"
-  "\n\tC_UNEQUIP\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013insta"
-  "nce_id\030\002 \001(\004\"A\n\006C_LOOT\022\022\n\nrequest_id\030\001 \001"
-  "(\t\022\016\n\006bag_id\030\002 \001(\004\022\023\n\013instance_id\030\003 \001(\004\""
-  "1\n\006C_DROP\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013instanc"
-  "e_id\030\002 \001(\004\"r\n\rS_ITEM_RESULT\022\022\n\nrequest_i"
-  "d\030\001 \001(\t\022$\n\006result\030\002 \001(\0162\024.Protocol.ItemR"
-  "esult\022\'\n\007changed\030\003 \003(\0132\026.Protocol.ItemIn"
-  "stance\"D\n\007C_STASH\022\022\n\nrequest_id\030\001 \001(\t\022\023\n"
-  "\013instance_id\030\002 \001(\004\022\020\n\010to_vault\030\003 \001(\010\"9\n\020"
-  "S_INVENTORY_SYNC\022%\n\005items\030\001 \003(\0132\026.Protoc"
-  "ol.ItemInstance\"]\n\016S_BAG_CONTENTS\022\016\n\006bag"
-  "_id\030\001 \001(\004\022%\n\005items\030\002 \003(\0132\026.Protocol.Item"
-  "Instance\022\024\n\014remaining_ms\030\003 \001(\004\"\034\n\nC_BAG_"
-  "OPEN\022\016\n\006bag_id\030\001 \001(\004b\006proto3"
+  "object_ids\030\001 \003(\004\"<\n\006C_MOVE\022\037\n\004info\030\001 \001(\013"
+  "2\021.Protocol.PosInfo\022\021\n\tclient_ms\030\002 \001(\004\">"
+  "\n\006S_MOVE\022 \n\005infos\030\001 \003(\0132\021.Protocol.PosIn"
+  "fo\022\022\n\ncorrection\030\002 \001(\010\"\035\n\010C_ATTACK\022\021\n\tta"
+  "rget_id\030\001 \001(\004\"1\n\010S_ATTACK\022%\n\007attacks\030\001 \003"
+  "(\0132\024.Protocol.AttackInfo\"\'\n\017S_ATTACK_CAN"
+  "CEL\022\024\n\014attacker_ids\030\001 \003(\004\"1\n\010S_DAMAGE\022%\n"
+  "\007damages\030\001 \003(\0132\024.Protocol.DamageInfo\"\203\001\n"
+  "\004S_CC\022&\n\007applied\030\001 \003(\0132\025.Protocol.CcEven"
+  "tInfo\022&\n\007expired\030\002 \003(\0132\025.Protocol.CcEven"
+  "tInfo\022+\n\nknockbacks\030\003 \003(\0132\027.Protocol.Kno"
+  "ckbackInfo\"3\n\nS_CC_STATE\022%\n\006states\030\001 \003(\013"
+  "2\025.Protocol.CcStateInfo\",\n\006S_DIED\022\"\n\006dea"
+  "ths\030\001 \003(\0132\022.Protocol.DiedInfo\"\025\n\006C_CHAT\022"
+  "\013\n\003msg\030\001 \001(\t\"\'\n\006S_CHAT\022\020\n\010playerId\030\001 \001(\004"
+  "\022\013\n\003msg\030\002 \001(\t\"]\n\007C_SKILL\022!\n\004slot\030\001 \001(\0162\023"
+  ".Protocol.EquipSlot\022\021\n\ttarget_id\030\002 \001(\004\022\r"
+  "\n\005aim_x\030\003 \001(\002\022\r\n\005aim_y\030\004 \001(\002\"\020\n\016C_SKILL_"
+  "CANCEL\"6\n\014S_SKILL_CAST\022&\n\005casts\030\001 \003(\0132\027."
+  "Protocol.SkillCastInfo\"$\n\016S_SKILL_CANCEL"
+  "\022\022\n\ncaster_ids\030\001 \003(\004\"3\n\013S_SKILL_HIT\022$\n\004h"
+  "its\030\001 \003(\0132\026.Protocol.SkillHitInfo\"3\n\014S_E"
+  "QUIP_SYNC\022#\n\006skills\030\001 \003(\0132\023.Protocol.Ski"
+  "llInfo\"X\n\016C_GRANT_REWARD\022\022\n\nrequest_id\030\001"
+  " \001(\t\022\024\n\014character_id\030\002 \001(\004\022\014\n\004gold\030\003 \001(\004"
+  "\022\016\n\006reason\030\004 \001(\t\"H\n\016S_GRANT_REWARD\022\022\n\nre"
+  "quest_id\030\001 \001(\t\022\016\n\006result\030\002 \001(\r\022\022\n\ngold_a"
+  "fter\030\003 \001(\004\"U\n\007C_EQUIP\022\022\n\nrequest_id\030\001 \001("
+  "\t\022\023\n\013instance_id\030\002 \001(\004\022!\n\004slot\030\003 \001(\0162\023.P"
+  "rotocol.EquipSlot\"4\n\tC_UNEQUIP\022\022\n\nreques"
+  "t_id\030\001 \001(\t\022\023\n\013instance_id\030\002 \001(\004\"A\n\006C_LOO"
+  "T\022\022\n\nrequest_id\030\001 \001(\t\022\016\n\006bag_id\030\002 \001(\004\022\023\n"
+  "\013instance_id\030\003 \001(\004\"1\n\006C_DROP\022\022\n\nrequest_"
+  "id\030\001 \001(\t\022\023\n\013instance_id\030\002 \001(\004\"r\n\rS_ITEM_"
+  "RESULT\022\022\n\nrequest_id\030\001 \001(\t\022$\n\006result\030\002 \001"
+  "(\0162\024.Protocol.ItemResult\022\'\n\007changed\030\003 \003("
+  "\0132\026.Protocol.ItemInstance\"D\n\007C_STASH\022\022\n\n"
+  "request_id\030\001 \001(\t\022\023\n\013instance_id\030\002 \001(\004\022\020\n"
+  "\010to_vault\030\003 \001(\010\"9\n\020S_INVENTORY_SYNC\022%\n\005i"
+  "tems\030\001 \003(\0132\026.Protocol.ItemInstance\"]\n\016S_"
+  "BAG_CONTENTS\022\016\n\006bag_id\030\001 \001(\004\022%\n\005items\030\002 "
+  "\003(\0132\026.Protocol.ItemInstance\022\024\n\014remaining"
+  "_ms\030\003 \001(\004\"\034\n\nC_BAG_OPEN\022\016\n\006bag_id\030\001 \001(\004b"
+  "\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -937,7 +940,7 @@ static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_de
 };
 static ::_pbi::once_flag descriptor_table_Protocol_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Protocol_2eproto = {
-    false, false, 2108, descriptor_table_protodef_Protocol_2eproto,
+    false, false, 2127, descriptor_table_protodef_Protocol_2eproto,
     "Protocol.proto",
     &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 36,
     schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
@@ -2324,12 +2327,14 @@ C_MOVE::C_MOVE(const C_MOVE& from)
   C_MOVE* const _this = this; (void)_this;
   new (&_impl_) Impl_{
       decltype(_impl_.info_){nullptr}
+    , decltype(_impl_.client_ms_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   if (from._internal_has_info()) {
     _this->_impl_.info_ = new ::Protocol::PosInfo(*from._impl_.info_);
   }
+  _this->_impl_.client_ms_ = from._impl_.client_ms_;
   // @@protoc_insertion_point(copy_constructor:Protocol.C_MOVE)
 }
 
@@ -2339,6 +2344,7 @@ inline void C_MOVE::SharedCtor(
   (void)is_message_owned;
   new (&_impl_) Impl_{
       decltype(_impl_.info_){nullptr}
+    , decltype(_impl_.client_ms_){uint64_t{0u}}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -2371,6 +2377,7 @@ void C_MOVE::Clear() {
     delete _impl_.info_;
   }
   _impl_.info_ = nullptr;
+  _impl_.client_ms_ = uint64_t{0u};
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -2384,6 +2391,14 @@ const char* C_MOVE::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
       case 1:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
           ptr = ctx->ParseMessage(_internal_mutable_info(), ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 client_ms = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
+          _impl_.client_ms_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -2424,6 +2439,12 @@ uint8_t* C_MOVE::_InternalSerialize(
         _Internal::info(this).GetCachedSize(), target, stream);
   }
 
+  // uint64 client_ms = 2;
+  if (this->_internal_client_ms() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(2, this->_internal_client_ms(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -2445,6 +2466,11 @@ size_t C_MOVE::ByteSizeLong() const {
     total_size += 1 +
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::MessageSize(
         *_impl_.info_);
+  }
+
+  // uint64 client_ms = 2;
+  if (this->_internal_client_ms() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_client_ms());
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -2469,6 +2495,9 @@ void C_MOVE::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBU
     _this->_internal_mutable_info()->::Protocol::PosInfo::MergeFrom(
         from._internal_info());
   }
+  if (from._internal_client_ms() != 0) {
+    _this->_internal_set_client_ms(from._internal_client_ms());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -2486,7 +2515,12 @@ bool C_MOVE::IsInitialized() const {
 void C_MOVE::InternalSwap(C_MOVE* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  swap(_impl_.info_, other->_impl_.info_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(C_MOVE, _impl_.client_ms_)
+      + sizeof(C_MOVE::_impl_.client_ms_)
+      - PROTOBUF_FIELD_OFFSET(C_MOVE, _impl_.info_)>(
+          reinterpret_cast<char*>(&_impl_.info_),
+          reinterpret_cast<char*>(&other->_impl_.info_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata C_MOVE::GetMetadata() const {
