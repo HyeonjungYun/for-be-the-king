@@ -87,6 +87,7 @@
   <ItemGroup>
     <ClCompile Include="CcTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
+    <ClCompile Include="ItemTableTest.cpp" />
     <ClCompile Include="SkillTableTest.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -101,6 +102,7 @@
     <ClCompile Include="..\GameServer\Object.cpp" />
     <ClCompile Include="..\GameServer\Creature.cpp" />
     <ClCompile Include="..\GameServer\SkillTable.cpp" />
+    <ClCompile Include="..\GameServer\ItemTable.cpp" />
     <ClCompile Include="..\GameServer\Enum.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>

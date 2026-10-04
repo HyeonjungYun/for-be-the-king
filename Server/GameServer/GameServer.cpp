@@ -11,6 +11,7 @@
 #include "Room.h"
 #include "ServerStats.h"
 #include "SkillTable.h"
+#include "ItemTable.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
 
@@ -42,6 +43,19 @@ int main()
 
 	ServerPacketHandler::Init();
 	SkillTable::Init();
+
+	{
+		const string dataDir = ItemTable::DefaultDataDir();
+		string error;
+
+		if (ItemTable::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] item data invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] item data loaded - types=" << ItemTable::All().size() << " pools=" << ItemTable::PoolCount() << '\n';
+	}
 
 	string dbPassword;
 	{
@@ -146,7 +160,7 @@ int main()
 			return -1;
 		}
 
-		const bool ok = RestoreIdCounters(conn) && PurgeExpiredBags(conn) && LoadLiveBags(conn);
+		const bool ok = RestoreIdCounters(conn) && PurgeExpiredBags(conn) && ValidateItemRows(conn) && LoadLiveBags(conn);
 		GDBPool.Push(conn);
 
 		if (ok == false)

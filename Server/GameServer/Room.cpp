@@ -2,6 +2,7 @@
 #include "Room.h"
 #include "Player.h"
 #include "SkillTable.h"
+#include "ItemTable.h"
 #include "ServerStats.h"
 #include "ObjectUtils.h"
 #include "Bag.h"
@@ -963,6 +964,12 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 	if (found == nullptr)
 	{
 		session->SendItemResult(requestId, Protocol::ITEM_NOT_FOUND, {});
+		return;
+	}
+
+	if (ItemTable::CanEquip(found->itemTypeId, slot) == false)
+	{
+		session->SendItemResult(requestId, Protocol::ITEM_BAD_REQUEST, {});
 		return;
 	}
 

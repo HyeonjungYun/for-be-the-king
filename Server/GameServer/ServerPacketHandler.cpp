@@ -6,6 +6,7 @@
 #include "Room.h"
 #include "Player.h"
 #include "AccountManager.h"
+#include "ItemTable.h"
 #include <thread>
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -287,6 +288,13 @@ namespace
 			if (state != Protocol::ITEM_STATE_CARRIED)
 			{
 				result = Protocol::ITEM_INVALID_STATE;
+				break;
+			}
+
+			// 종류의 부위와 요청 슬롯이 같아야 한다 - Room::HandleEquip 과 같은 검사 (quick-spec § 3)
+			if (ItemTable::CanEquip(e.itemTypeId, equipSlot) == false)
+			{
+				result = Protocol::ITEM_BAD_REQUEST;
 				break;
 			}
 

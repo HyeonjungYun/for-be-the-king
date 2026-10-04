@@ -23,6 +23,8 @@ bool RestoreIdCounters(DBConnection* conn);
 
 bool PurgeExpiredBags(DBConnection* conn);
 
+bool ValidateItemRows(DBConnection* conn);
+
 bool LoadLiveBags(DBConnection* conn);
 
 bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const vector<uint64>& instanceIds);

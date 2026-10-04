@@ -4,6 +4,7 @@
 #include "Bag.h"
 #include "GameSession.h"
 #include "Room.h"
+#include "ItemTable.h"
 #include <thread>
 
 atomic<int64> ObjectUtils::s_idGenerator = RUNTIME_ID_BASE;
@@ -223,6 +224,82 @@ bool PurgeExpiredBags(DBConnection* conn)
 		<< " items=" << removedItems << " orphan_items=" << conn->GetAffectedRows() << '\n';
 
 	return true;
+}
+
+bool ValidateItemRows(DBConnection* conn)
+{
+	// 조합별로 묶어 읽는다 - 행이 늘어도 결과는 (종류 × 상태 × 슬롯 × 스킬) 조합 수다.
+	MYSQL_RES* res = conn->Query(
+		"SELECT item_type_id, state, slot, skill_id_primary, skill_id_secondary, COUNT(*), MIN(instance_id) "
+		"FROM item_instances GROUP BY item_type_id, state, slot, skill_id_primary, skill_id_secondary");
+
+	if (res == nullptr)
+	{
+		LOG_LINE << "[BOOT] item row query failed: " << conn->GetError() << '\n';
+		return false;
+	}
+
+	bool valid = true;
+	uint64 warnings = 0;
+
+	while (MYSQL_ROW row = ::mysql_fetch_row(res))
+	{
+		const uint32 typeId = static_cast<uint32>(::strtoul(row[0], nullptr, 10));
+		const int32 state = ::atoi(row[1]);
+		const int32 slot = ::atoi(row[2]);
+		const uint32 skillIds[2] = { static_cast<uint32>(::strtoul(row[3], nullptr, 10)), static_cast<uint32>(::strtoul(row[4], nullptr, 10)) };
+		const char* rows = row[5];
+		const char* sample = row[6];
+
+		// 표에 없는 종류 - 클라가 그릴 수도, 서버가 착용을 판정할 수도 없다.
+		const ItemTypeDef* def = ItemTable::Find(typeId);
+		if (def == nullptr)
+		{
+			LOG_LINE << "[BOOT] item rows with unknown type - type=" << typeId << " rows=" << rows << " e.g. instance=" << sample << '\n';
+			valid = false;
+			continue;
+		}
+
+		// 착용 슬롯이 종류의 부위와 다르다 - 착용 검사 없이 들어간 행이다.
+		if (state == Protocol::ITEM_STATE_EQUIPPED && slot != def->equipSlot)
+		{
+			LOG_LINE << "[BOOT] equipped rows in wrong slot - type=" << typeId << " slot=" << slot
+				<< " expected=" << def->equipSlot << " rows=" << rows << " e.g. instance=" << sample << '\n';
+			valid = false;
+			continue;
+		}
+
+		// 스킬이 그 종류의 풀에 없다 - 시드 픽스처(102 · 502)가 일부러 그렇다. 경고만 남긴다.
+		const vector<SkillPoolEntry>* pool = ItemTable::FindPool(def->skillPoolId);
+
+		for (uint32 skillId : skillIds)
+		{
+			if (skillId == 0)
+				continue;
+
+			bool inPool = false;
+			if (pool != nullptr)
+			{
+				for (const SkillPoolEntry& e : *pool)
+				{
+					if (e.skillId == skillId)
+						inPool = true;
+				}
+			}
+
+			if (inPool == false)
+			{
+				LOG_LINE << "[BOOT] warning - skill " << skillId << " is not in pool '" << def->skillPoolId
+					<< "' type=" << typeId << " rows=" << rows << " e.g. instance=" << sample << '\n';
+				warnings++;
+			}
+		}
+	}
+
+	conn->FreeResult(res);
+
+	LOG_LINE << "[BOOT] item rows checked - " << (valid ? "ok" : "INVALID") << " warnings=" << warnings << '\n';
+	return valid;
 }
 
 bool LoadLiveBags(DBConnection* conn)

@@ -19,8 +19,8 @@
     <Filter Include="Game\Object">
       <UniqueIdentifier>{f88b3ea3-206e-4d14-bfba-99d03bcf37cd}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Skill">
-      <UniqueIdentifier>{698a4332-f271-4df2-b4ba-0139995b2599}</UniqueIdentifier>
+    <Filter Include="Data">
+      <UniqueIdentifier>{61e8e6af-5221-47b7-b9cb-cbfbf33523a9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -63,9 +63,6 @@
     <ClCompile Include="Object.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
-    <ClCompile Include="SkillTable.cpp">
-      <Filter>Skill</Filter>
-    </ClCompile>
     <ClCompile Include="Player.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
@@ -74,6 +71,12 @@
     </ClCompile>
     <ClCompile Include="Bag.cpp">
       <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="SkillTable.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
+    <ClCompile Include="ItemTable.cpp">
+      <Filter>Data</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -113,9 +116,6 @@
     <ClInclude Include="Object.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
-    <ClInclude Include="SkillTable.h">
-      <Filter>Skill</Filter>
-    </ClInclude>
     <ClInclude Include="Player.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
@@ -124,6 +124,12 @@
     </ClInclude>
     <ClInclude Include="Bag.h">
       <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="SkillTable.h">
+      <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="ItemTable.h">
+      <Filter>Data</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -140,5 +146,14 @@
       <Filter>Protocol</Filter>
     </None>
     <None Include="cpp.hint" />
+    <None Include="..\Data\item_type_stats.csv">
+      <Filter>Data</Filter>
+    </None>
+    <None Include="..\Data\item_types.csv">
+      <Filter>Data</Filter>
+    </None>
+    <None Include="..\Data\skill_pools.csv">
+      <Filter>Data</Filter>
+    </None>
   </ItemGroup>
 </Project>
