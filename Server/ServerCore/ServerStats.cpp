@@ -186,8 +186,8 @@ void ServerStats::Dump(int32 sessionCount)
 	const double commitMB = static_cast<double>(pmc.PrivateUsage) / (1024.0 * 1024.0);
 
 	// 🔴 판정 줄이다. 여러 문장으로 나눠 찍으면 다른 스레드 출력이 사이에 끼어
-	//    게이트 판정이 뒤집힌다(2026-09-20 실제로 2건). 블록 전체를 한 번에 내보낸다.
-	std::osyncstream out(std::cout);
+	//    게이트 판정이 뒤집힌다(2026-09-20 실제로 2건). 블록 전체를 한 덩어리로 로거에 넣는다.
+	LogLine out;
 
 	out << "\n===== SERVER STATS (window " << elapsedSec << "s, sessions " << sessionCount << ") =====\n";
 

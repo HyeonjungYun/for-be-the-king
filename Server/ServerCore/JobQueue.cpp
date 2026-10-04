@@ -106,9 +106,8 @@ void JobQueue::Execute()
 			{
 				const uint64 cpuUs = static_cast<uint64>((ThreadCycles() - flushStartCycles) / GCyclesPerUs);
 
-				// 표준 오류로 낸다 - 표준 출력(LOG_LINE)의 잠금 · 파일 쓰기가 용의자라, 그것과 다른 길로 남겨야
-				// 표준 출력을 버린 실험에서도 이 줄이 살아남는다
-				std::osyncstream(std::cerr) << "[SLOW FLUSH] us=" << flushUs << " cpu=" << cpuUs << "us jobs=" << jobCount
+				// 표준 오류로 낸다 - 표준 출력을 버리고 돌리는 실험(roadmap.md § 0-11)에서도 이 줄은 남아야 한다
+				LogLine(true) << "[SLOW FLUSH] us=" << flushUs << " cpu=" << cpuUs << "us jobs=" << jobCount
 					<< " slowest=" << slowestUs << "us tag=" << (slowestTag != nullptr ? slowestTag : "untagged") << '\n';
 			}
 		}

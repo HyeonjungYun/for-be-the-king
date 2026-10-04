@@ -215,6 +215,24 @@ int main()
 		char* raw = nullptr;
 		size_t length = 0;
 
+		if (_dupenv_s(&raw, &length, "FBTK_LOG_STALL_MS") == 0 && raw != nullptr)
+		{
+			const uint32 stallMs = static_cast<uint32>(::strtoul(raw, nullptr, 10));
+			::free(raw);
+
+			if (stallMs > 0)
+			{
+				constexpr uint32 STALL_PERIOD_MS = 10'000;
+				GetLogger().SetTestStall(stallMs, STALL_PERIOD_MS);
+				LOG_LINE << "[BOOT] FBTK_LOG_STALL_MS=" << stallMs << " - log writer stalls every " << STALL_PERIOD_MS << "ms (TEST ONLY)\n";
+			}
+		}
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
 		if (_dupenv_s(&raw, &length, "FBTK_DISCONNECT_GRACE_MS") == 0 && raw != nullptr)
 		{
 			GDisconnectGraceUs.store(::strtoull(raw, nullptr, 10) * 1000);

@@ -50,7 +50,7 @@ namespace
 	void LogSlots(const PlayerRef& player, const char* tag)
 	{
 		// 한 이벤트를 여러 문장으로 찍으므로 객체를 직접 둔다. 소멸할 때 한 번에 나간다.
-		std::osyncstream out(std::cout);
+		LogLine out;
 
 		out << "[ITEM] " << tag << " char=" << player->objectInfo->object_id()
 			<< " inv=" << player->inventory.size() << " slots=";
@@ -1299,7 +1299,7 @@ void Room::DebugDropBag(uint64 playerId)
 
 	{
 		// 여러 문장으로 한 줄을 찍는다 - 객체 하나에 모아 소멸할 때 한 번에 내보낸다 (LogSlots 와 같은 방식)
-		std::osyncstream out(std::cout);
+		LogLine out;
 		out << "[BAG] debug drop by=" << playerId << " place=" << place << " items=" << bag->items.size();
 
 		for (const ItemEntry& e : bag->items)

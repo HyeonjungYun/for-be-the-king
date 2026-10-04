@@ -96,6 +96,9 @@
     <ClInclude Include="ServerStats.h">
       <Filter>Utils</Filter>
     </ClInclude>
+    <ClInclude Include="AsyncLogger.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
     <ClInclude Include="DBConnection.h">
       <Filter>DB</Filter>
     </ClInclude>
@@ -174,6 +177,9 @@
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="ServerStats.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="AsyncLogger.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="DBConnection.cpp">
