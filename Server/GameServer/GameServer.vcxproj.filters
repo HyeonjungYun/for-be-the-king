@@ -78,6 +78,12 @@
     <ClCompile Include="ItemTable.cpp">
       <Filter>Data</Filter>
     </ClCompile>
+    <ClCompile Include="ItemRoller.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
+    <ClCompile Include="CsvTable.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -131,6 +137,12 @@
     <ClInclude Include="ItemTable.h">
       <Filter>Data</Filter>
     </ClInclude>
+    <ClInclude Include="ItemRoller.h">
+      <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="CsvTable.h">
+      <Filter>Data</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Common\protoc-21.12-win64\bin\Protocol.proto">
@@ -153,6 +165,9 @@
       <Filter>Data</Filter>
     </None>
     <None Include="..\Data\skill_pools.csv">
+      <Filter>Data</Filter>
+    </None>
+    <None Include="..\Data\floor_item_pool.csv">
       <Filter>Data</Filter>
     </None>
   </ItemGroup>

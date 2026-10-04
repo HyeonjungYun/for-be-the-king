@@ -156,6 +156,7 @@
     <ClCompile Include="AccountManager.cpp" />
     <ClCompile Include="Bag.cpp" />
     <ClCompile Include="Creature.cpp" />
+    <ClCompile Include="CsvTable.cpp" />
     <ClCompile Include="Enum.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
@@ -163,6 +164,7 @@
     <ClCompile Include="GameServer.cpp" />
     <ClCompile Include="GameSession.cpp" />
     <ClCompile Include="GameSessionManager.cpp" />
+    <ClCompile Include="ItemRoller.cpp" />
     <ClCompile Include="ItemTable.cpp" />
     <ClCompile Include="Monster.cpp" />
     <ClCompile Include="Object.cpp" />
@@ -188,9 +190,11 @@
     <ClInclude Include="AccountManager.h" />
     <ClInclude Include="Bag.h" />
     <ClInclude Include="Creature.h" />
+    <ClInclude Include="CsvTable.h" />
     <ClInclude Include="Enum.pb.h" />
     <ClInclude Include="GameSession.h" />
     <ClInclude Include="GameSessionManager.h" />
+    <ClInclude Include="ItemRoller.h" />
     <ClInclude Include="ItemTable.h" />
     <ClInclude Include="Monster.h" />
     <ClInclude Include="Object.h" />
@@ -208,6 +212,7 @@
     <None Include="..\Common\protoc-21.12-win64\bin\GenPackets.bat" />
     <None Include="..\Common\protoc-21.12-win64\bin\Protocol.proto" />
     <None Include="..\Common\protoc-21.12-win64\bin\Struct.proto" />
+    <None Include="..\Data\floor_item_pool.csv" />
     <None Include="..\Data\item_types.csv" />
     <None Include="..\Data\item_type_stats.csv" />
     <None Include="..\Data\skill_pools.csv" />

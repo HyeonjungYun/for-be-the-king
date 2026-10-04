@@ -12,6 +12,7 @@
 #include "ServerStats.h"
 #include "SkillTable.h"
 #include "ItemTable.h"
+#include "ItemRoller.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
 
@@ -55,6 +56,15 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] item data loaded - types=" << ItemTable::All().size() << " pools=" << ItemTable::PoolCount() << '\n';
+
+		// 층 아이템 풀 - ItemTable 다음이어야 한다. 부위 · 물리/마법 행에 뽑을 종류가 있는지 ItemTable 로 검사한다.
+		if (FloorItemPool::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] floor item pool invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] floor item pool loaded - pools=" << FloorItemPool::Count() << '\n';
 	}
 
 	string dbPassword;
