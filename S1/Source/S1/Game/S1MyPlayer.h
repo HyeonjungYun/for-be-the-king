@@ -217,6 +217,14 @@ public:
 	UFUNCTION(Exec)
 	void DebugDashNoNotice();
 
+	/**
+	 * Logs what the fixed top-down camera actually shows, in metres from our character: where each screen
+	 * edge meets the ground, and how far ahead a thing of a given height can still be on screen.
+	 * The level design (tower sightlines, landmark heights, room sizes) is sized from this — design/gdd/level-map.md.
+	 */
+	UFUNCTION(Exec)
+	void DebugCameraFootprint();
+
 public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }

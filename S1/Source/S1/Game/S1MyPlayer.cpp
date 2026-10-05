@@ -1095,3 +1095,76 @@ void AS1MyPlayer::DebugDashNoNotice()
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] dash without C_SKILL - expect [MOVE REJECT] on the server"));
 	RequestDash(GetActorForwardVector(), Dash->MoveDistCm, Dash->MoveSpeedCms);
 }
+
+void AS1MyPlayer::DebugCameraFootprint()
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC == nullptr || FollowCamera == nullptr)
+		return;
+
+	int32 Width = 0, Height = 0;
+	PC->GetViewportSize(Width, Height);
+
+	// The ground under our feet — the capsule's bottom, not its centre
+	const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	const FVector CameraAt = FollowCamera->GetComponentLocation();
+
+	UE_LOG(LogTemp, Warning, TEXT("[CAMERA] viewport=%dx%d fov=%.1f arm=%.0f camera=(%.1f, %.1f, %.1f)m from feet (x fwd/back, y side, z up)"),
+		Width, Height, FollowCamera->FieldOfView, CameraBoom != nullptr ? CameraBoom->TargetArmLength : 0.f,
+		(CameraAt.X - Feet.X) / 100.f, (CameraAt.Y - Feet.Y) / 100.f, (CameraAt.Z - Feet.Z) / 100.f);
+
+	// Where a screen point's ray meets a horizontal plane HeightCm above our feet, as metres from our feet
+	auto Hit = [&](float ScreenX, float ScreenY, float HeightCm, FVector& OutMetres) -> bool
+	{
+		FVector Origin, Direction;
+		if (PC->DeprojectScreenPositionToWorld(ScreenX, ScreenY, Origin, Direction) == false || FMath::Abs(Direction.Z) < UE_KINDA_SMALL_NUMBER)
+			return false;
+
+		const double T = (Feet.Z + HeightCm - Origin.Z) / Direction.Z;
+		if (T <= 0.0)
+			return false;
+
+		OutMetres = (Origin + Direction * T - Feet) / 100.f;
+		return true;
+	};
+
+	struct FScreenPoint { const TCHAR* Name; float X; float Y; };
+	const FScreenPoint Points[] =
+	{
+		{ TEXT("top-left"),		0.f,			0.f },
+		{ TEXT("top-centre"),	Width * 0.5f,	0.f },
+		{ TEXT("top-right"),	float(Width),	0.f },
+		{ TEXT("centre"),		Width * 0.5f,	Height * 0.5f },
+		{ TEXT("bottom-left"),	0.f,			float(Height) },
+		{ TEXT("bottom-centre"),Width * 0.5f,	float(Height) },
+		{ TEXT("bottom-right"),	float(Width),	float(Height) },
+	};
+
+	for (const FScreenPoint& Point : Points)
+	{
+		FVector At;
+		if (Hit(Point.X, Point.Y, 0.f, At))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CAMERA] ground %-13s x=%6.1f m  y=%6.1f m"), Point.Name, At.X, At.Y);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CAMERA] ground %-13s does not reach the ground"), Point.Name);
+		}
+	}
+
+	// A thing of this height stays on screen only while its top is below the top edge's ray — this is how far
+	// ahead (along the top-centre ray) its top can be and still show
+	for (const float HeightM : { 1.8f, 3.f, 5.f, 10.f, 20.f })
+	{
+		FVector At;
+		if (Hit(Width * 0.5f, 0.f, HeightM * 100.f, At))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CAMERA] top of a %4.1f m object leaves the screen past x=%6.1f m ahead"), HeightM, At.X);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CAMERA] a %4.1f m object never reaches the top edge"), HeightM);
+		}
+	}
+}
