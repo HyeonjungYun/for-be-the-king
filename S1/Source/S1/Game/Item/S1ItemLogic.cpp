@@ -166,6 +166,19 @@ namespace S1ItemLogic
 		return Stat.FlatFloor + Stat.BaseStat * Multiplier;
 	}
 
+	float MoveSpeedBonus(const FS1ItemTypeDef& Type, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers)
+	{
+		static const FName PercentMs(TEXT("percent_ms_bonus"));
+
+		float Bonus = 0.f;
+		for (const FS1ItemStat& Stat : Type.Stats)
+		{
+			if (Stat.Stat == PercentMs)
+				Bonus += StatValue(Stat, Grade, GradeMultipliers);
+		}
+		return FMath::Min(Bonus, MoveSpeedBonusPerItemMax);
+	}
+
 	TArray<FS1StatDelta> StatDeltas(const FS1ItemTypeDef& CandidateType, ES1ItemGrade CandidateGrade,
 		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers)
 	{

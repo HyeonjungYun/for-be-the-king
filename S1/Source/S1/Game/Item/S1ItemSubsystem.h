@@ -137,6 +137,9 @@ public:
 	/** Common, Rare, Epic, Legendary — Server/Data/item_grades.csv, the file the server fights with. */
 	TArrayView<const float> GetGradeMultipliers() const;
 
+	/** Σ percent_ms_bonus over the worn parts (each capped) — recomputed whenever the items change. */
+	float GetMoveSpeedBonus() const { return MoveSpeedBonus; }
+
 	/** The six keys as of the last S_EQUIP_SYNC, without protobuf. Empty before the first one. */
 	TArray<FS1KeySlotView> GetKeySlots() const;
 
@@ -198,6 +201,10 @@ private:
 	 */
 	UPROPERTY(Config)
 	FString ItemDataDirectory;
+
+	/** Bound to our own OnItemsChanged in Initialize, so it runs before any widget reads the bonus. */
+	void RecomputeMoveSpeedBonus();
+	float MoveSpeedBonus = 0.f;
 
 	UPROPERTY(Config)
 	int32 CarriedCapacity = 25;

@@ -19,6 +19,7 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Game/Monster/S1MonsterCatalog.h"
+#include "Game/Item/S1ItemSubsystem.h"
 
 AS1Player::AS1Player()
 {
@@ -174,8 +175,11 @@ void AS1Player::TickCc()
 	if (Movement == nullptr)
 		return;
 
-	// Formula C5 — the server aggregates slow sources and sends the max; we only apply it.
-	Movement->MaxWalkSpeed = BaseWalkSpeed * (1.f - ActiveSlow);
+	// Formula C5 — the server aggregates slow sources and sends the max; we only apply it. The equipment bonus goes
+	// in once, before the slow — the same order as the server's Player::ComputeMoveSpeed (its ceiling for our moves)
+	const US1ItemSubsystem* Items = US1ItemSubsystem::Get();
+	const float Bonus = Items != nullptr ? Items->GetMoveSpeedBonus() : 0.f;
+	Movement->MaxWalkSpeed = BaseWalkSpeed * (1.f + Bonus) * (1.f - ActiveSlow);
 
 	if (CanMove() == false)
 		Movement->StopMovementImmediately();

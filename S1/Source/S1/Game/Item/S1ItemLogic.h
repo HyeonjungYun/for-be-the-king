@@ -93,6 +93,16 @@ namespace S1ItemLogic
 	 */
 	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers);
 
+	/** Per-item cap on percent_ms_bonus — the server's EquipStats::MS_BONUS_PER_ITEM_MAX (item-equipment-system.md § 합산 표). */
+	inline constexpr float MoveSpeedBonusPerItemMax = 0.15f;
+
+	/**
+	 * One worn item's share of percent_ms_bonus, capped per item. The wearer's bonus is the sum over the parts,
+	 * applied once: speed = 340 × (1 + Σ) × (1 − slow) — the same order as the server's Player::ComputeMoveSpeed,
+	 * so the client never walks faster than the server's ceiling (a faster client is a rejected move).
+	 */
+	float MoveSpeedBonus(const FS1ItemTypeDef& Type, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers);
+
 	/**
 	 * Before/after per stat for the detail pane — the union of both items' stats, the
 	 * candidate's order first. EquippedType null = nothing worn in that part.

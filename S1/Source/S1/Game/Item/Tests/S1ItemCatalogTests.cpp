@@ -277,6 +277,36 @@ bool FS1StatValueTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1MoveSpeedBonusTest,
+	"S1.Item.Logic.MoveSpeedBonus_PerItemCap_MatchesServerEquipStats", GS1CatalogTestFlags)
+bool FS1MoveSpeedBonusTest::RunTest(const FString& Parameters)
+{
+	using S1ItemLogic::MoveSpeedBonus;
+	const TArrayView<const float> GM = MakeArrayView(GGradeMultipliers);
+
+	// Sprint boots (501): percent_ms_bonus 0.0441 — the real Server/Data value
+	FS1ItemTypeDef Boots;
+	Boots.Id = 501;
+	Boots.EquipSlot = 5;
+	Boots.Stats.Add(FS1ItemStat{ TEXT("percent_ms_bonus"), 0.0441f, 0.f });
+	Boots.Stats.Add(FS1ItemStat{ TEXT("resistance"), 0.5f, 0.f });		// other stats never leak into the speed
+
+	TestEqual(TEXT("common"), MoveSpeedBonus(Boots, ES1ItemGrade::Common, GM), 0.0441f, 0.0001f);
+	TestEqual(TEXT("legendary x2.2"), MoveSpeedBonus(Boots, ES1ItemGrade::Legendary, GM), 0.09702f, 0.0001f);
+
+	// The server caps each item at 0.15 (EquipStats::MS_BONUS_PER_ITEM_MAX) — a faster client is a rejected move
+	FS1ItemTypeDef Fast = Boots;
+	Fast.Stats[0].BaseStat = 0.2f;
+	TestEqual(TEXT("capped per item"), MoveSpeedBonus(Fast, ES1ItemGrade::Legendary, GM), S1ItemLogic::MoveSpeedBonusPerItemMax, 0.0001f);
+
+	FS1ItemTypeDef Weapon;
+	Weapon.Id = 101;
+	Weapon.EquipSlot = 1;
+	Weapon.Stats.Add(FS1ItemStat{ TEXT("attack_power"), 4.7059f, 0.f });
+	TestEqual(TEXT("no ms stat = 0"), MoveSpeedBonus(Weapon, ES1ItemGrade::Legendary, GM), 0.f, 0.0001f);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1StatDeltasTest,
 	"S1.Item.Logic.StatDeltas_TwoWeapons_ShowsGainsAndLosses", GS1CatalogTestFlags)
 bool FS1StatDeltasTest::RunTest(const FString& Parameters)

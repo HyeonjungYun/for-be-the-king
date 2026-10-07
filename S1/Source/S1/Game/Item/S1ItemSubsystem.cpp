@@ -90,11 +90,31 @@ void US1ItemSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] grade multipliers not loaded (item_grades.csv) - every grade counts as x1.0"));
 
 	CheckStrings();
+
+	OnItemsChanged.AddUObject(this, &US1ItemSubsystem::RecomputeMoveSpeedBonus);
 }
 
 TArrayView<const float> US1ItemSubsystem::GetGradeMultipliers() const
 {
 	return Catalog.GetGradeMultipliers();
+}
+
+void US1ItemSubsystem::RecomputeMoveSpeedBonus()
+{
+	constexpr int32 WornParts[] = { 1, 3, 4, 5, 6 };		// weapon · helmet · armor · boots · trinket (slot 2 is a key, not a part)
+
+	float Sum = 0.f;
+	for (int32 Part : WornParts)
+	{
+		const FS1ItemView* Worn = GetEquipped(Part);
+		const FS1ItemTypeDef* Type = Worn != nullptr ? Catalog.Find(Worn->ItemTypeId) : nullptr;
+		if (Type != nullptr)
+			Sum += S1ItemLogic::MoveSpeedBonus(*Type, Worn->Grade, GetGradeMultipliers());
+	}
+
+	if (FMath::IsNearlyEqual(Sum, MoveSpeedBonus) == false)
+		UE_LOG(LogTemp, Log, TEXT("[ITEMUI] move speed bonus %.4f -> %.4f"), MoveSpeedBonus, Sum);
+	MoveSpeedBonus = Sum;
 }
 
 void US1ItemSubsystem::CheckStrings() const
