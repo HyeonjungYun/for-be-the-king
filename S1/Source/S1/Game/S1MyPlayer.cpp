@@ -17,6 +17,9 @@
 #include "S1GameInstance.h"
 #include "Game/S1SkillTable.h"
 #include "Game/UI/S1ItemUIComponent.h"
+#include "Game/UI/S1RadarWidget.h"
+#include "Game/Escape/S1EscapeSubsystem.h"
+#include "Game/Radar/S1RadarLogic.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
 
@@ -1094,6 +1097,49 @@ void AS1MyPlayer::DebugDashNoNotice()
 
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] dash without C_SKILL - expect [MOVE REJECT] on the server"));
 	RequestDash(GetActorForwardVector(), Dash->MoveDistCm, Dash->MoveSpeedCms);
+}
+
+void AS1MyPlayer::DebugRadar()
+{
+	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
+	const US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get();
+	const US1RadarWidget* Radar = Escape != nullptr ? Escape->GetRadar() : nullptr;
+	if (GameInstance == nullptr || Radar == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[RADAR] no radar yet"));
+		return;
+	}
+
+	const FVector2D Self(GetActorLocation());
+	constexpr float RadiusCm = 2250.f;
+
+	// What is in range in the world — counted without the radar's filter
+	int32 Players = 0;
+	int32 Monsters = 0;
+	for (const TPair<uint64, TWeakObjectPtr<AS1Player>>& Pair : GameInstance->Players)
+	{
+		const AS1Player* Other = Pair.Value.Get();
+		if (Other == nullptr || Other == this || S1RadarLogic::IsInRadarRange(Self, FVector2D(Other->GetActorLocation()), RadiusCm) == false)
+			continue;
+		(Other->IsMonster() ? Monsters : Players)++;
+	}
+
+	int32 Towers = 0;
+	int32 Chests = 0;
+	int32 Party = 0;
+	for (const FS1RadarBlip& Blip : Radar->GetBlips())
+	{
+		switch (Blip.Kind)
+		{
+		case ES1RadarBlip::Tower: Towers++; break;
+		case ES1RadarBlip::Chest: Chests++; break;
+		case ES1RadarBlip::Party: Party++; break;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[RADAR] in range - players=%d monsters=%d (not drawable) at=(%.0f, %.0f) showing=%d"),
+		Players, Monsters, Self.X, Self.Y, Radar->IsShowing() ? 1 : 0);
+	UE_LOG(LogTemp, Log, TEXT("[RADAR] blips - tower=%d chest=%d party=%d"), Towers, Chests, Party);
 }
 
 void AS1MyPlayer::DebugCameraFootprint()

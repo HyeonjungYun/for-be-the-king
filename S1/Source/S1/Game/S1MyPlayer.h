@@ -225,6 +225,14 @@ public:
 	UFUNCTION(Exec)
 	void DebugCameraFootprint();
 
+	/**
+	 * radar.md AC-RD-25 — the enemy-hidden evidence. Logs two lines: what is *in range* (players, monsters,
+	 * towers, chests — counted from the world) and what the radar *drew*. Players and monsters must never
+	 * appear in the second line however many are in the first.
+	 */
+	UFUNCTION(Exec)
+	void DebugRadar();
+
 public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }

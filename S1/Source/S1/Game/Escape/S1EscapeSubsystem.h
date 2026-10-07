@@ -15,6 +15,7 @@ namespace Protocol
 }
 
 class US1RunHudWidget;
+class US1RadarWidget;
 
 /**
  * The client half of design/gdd/escape-timer.md — time left, tower gauges, the alarm, the run result.
@@ -44,6 +45,9 @@ public:
 
 	/** Seconds left in this run, or -1 outside a run. */
 	double GetRemainingSeconds() const;
+
+	/** The radar disc (radar.md) — created with the run HUD so both live for the whole session. */
+	const US1RadarWidget* GetRadar() const { return Radar; }
 
 	// ── FTickableGameObject ───────────────────────────────────────────────
 	virtual void Tick(float DeltaTime) override;
@@ -75,4 +79,5 @@ private:
 	bool						bInitialized = false;
 
 	UPROPERTY() TObjectPtr<US1RunHudWidget> Hud;
+	UPROPERTY() TObjectPtr<US1RadarWidget> Radar;
 };

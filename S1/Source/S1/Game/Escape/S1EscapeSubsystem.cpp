@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/UI/S1RunHudWidget.h"
+#include "Game/UI/S1RadarWidget.h"
 #include "HAL/PlatformTime.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/ConfigCacheIni.h"
@@ -64,7 +65,10 @@ void US1EscapeSubsystem::Deinitialize()
 	bInitialized = false;
 	if (Hud != nullptr)
 		Hud->RemoveFromParent();
+	if (Radar != nullptr)
+		Radar->RemoveFromParent();
 	Hud = nullptr;
+	Radar = nullptr;
 	GEscape = nullptr;
 	Super::Deinitialize();
 }
@@ -158,6 +162,11 @@ void US1EscapeSubsystem::EnsureHud()
 	Hud = CreateWidget<US1RunHudWidget>(PC, US1RunHudWidget::StaticClass());
 	if (Hud != nullptr)
 		Hud->AddToViewport(RunHudZOrder);
+
+	// Below the item panels' modal layers, above the world. It hides itself outside the dungeon
+	Radar = CreateWidget<US1RadarWidget>(PC, US1RadarWidget::StaticClass());
+	if (Radar != nullptr)
+		Radar->AddToViewport(RunHudZOrder - 1);
 }
 
 void US1EscapeSubsystem::UpdateHud(double Now)
