@@ -86,6 +86,10 @@ namespace
 	}
 
 	const char* const KIND_NAMES[] = { "wall", "door_post", "pillar", "free_pillar", "cover", "tower" };
+
+	constexpr float		PUSH_EPS_CM = 0.5f;		// 밀어낸 점이 면 위에 걸치지 않게 - "벽 안" 은 열린 집합이다
+	constexpr float		RING_STEP_CM = 10.f;
+	constexpr int32		RING_DIRECTIONS = 32;
 }
 
 const char* WallKindName(WallKind kind)
@@ -325,6 +329,112 @@ float WallMap::SweepFirstHit(float ax, float ay, float bx, float by, float r, OU
 bool WallMap::SweepBlocked(float ax, float ay, float bx, float by, float r, OUT WallKind* hitKind) const
 {
 	return SweepFirstHit(ax, ay, bx, by, r, hitKind) < 1.f;
+}
+
+bool WallMap::FindNearestFree(float x, float y, float r, float maxSearch, OUT float& outX, OUT float& outY) const
+{
+	if (std::isfinite(x) == false || std::isfinite(y) == false || std::isfinite(r) == false || std::isfinite(maxSearch) == false)
+		return false;
+
+	r = (std::max)(r, 0.f);
+	maxSearch = (std::max)(maxSearch, 0.f);
+
+	// 층 경계도 벽이다 - 원이 경계를 넘지 않는 범위 (ADR-0006 § ⑦ 넉백 · 대시와 같다)
+	const float inset = FloorBounds::HALF_CM - r;
+	if (inset <= 0.f)
+		return false;
+
+	auto clampToFloor = [inset](float& px, float& py)
+	{
+		px = (std::min)((std::max)(px, -inset), inset);
+		py = (std::min)((std::max)(py, -inset), inset);
+	};
+
+	bool found = false;
+	float bestX = 0.f;
+	float bestY = 0.f;
+	float bestD2 = maxSearch * maxSearch;
+
+	auto consider = [&](float px, float py)
+	{
+		clampToFloor(px, py);
+		const float d2 = (px - x) * (px - x) + (py - y) * (py - y);
+		if (d2 <= bestD2 && Overlaps(px, py, r) == false)
+		{
+			found = true;
+			bestX = px;
+			bestY = py;
+			bestD2 = d2;
+		}
+	};
+
+	// 1. 그 자리 - 층 밖이면 층 안의 가장 가까운 점. 비어 있으면 그것이 답이다
+	float cx = x;
+	float cy = y;
+	clampToFloor(cx, cy);
+	consider(cx, cy);
+	if (found && bestX == cx && bestY == cy)
+	{
+		outX = bestX;
+		outY = bestY;
+		return true;
+	}
+
+	// 2. 겹친 벽마다 그 벽 밖으로 밀어낸 점 - 면 넷 방향 + 모서리 원 방향. 벽 하나에 걸린 흔한 경우는 이것이 정확한 답이다
+	ForEachCandidate(cx - r, cy - r, cx + r, cy + r, [&](const WallBox& w)
+	{
+		if (WallGeom::SignedDistance(w, cx, cy) >= r)
+			return;
+
+		const LocalPoint p = ToLocal(w, cx, cy);
+		const double reachL = w.halfLength + r + PUSH_EPS_CM;
+		const double reachT = w.halfThickness + r + PUSH_EPS_CM;
+
+		auto toWorld = [&w](double l, double t)
+		{
+			return make_pair(static_cast<float>(w.cx + l * w.ux - t * w.uy), static_cast<float>(w.cy + l * w.uy + t * w.ux));
+		};
+
+		for (const auto& [l, t] : { make_pair(reachL, p.y), make_pair(-reachL, p.y), make_pair(p.x, reachT), make_pair(p.x, -reachT) })
+		{
+			const auto q = toWorld(l, t);
+			consider(q.first, q.second);
+		}
+
+		// 모서리 바깥 - 가장 가까운 모서리에서 멀어지는 방향으로 r 만큼
+		const double qx = (p.x >= 0.0) ? w.halfLength : -w.halfLength;
+		const double qy = (p.y >= 0.0) ? w.halfThickness : -w.halfThickness;
+		const double dx = p.x - qx;
+		const double dy = p.y - qy;
+		const double len = std::sqrt(dx * dx + dy * dy);
+		if (std::fabs(p.x) > w.halfLength && std::fabs(p.y) > w.halfThickness && len > 0.0)
+		{
+			const auto q = toWorld(qx + dx / len * (r + PUSH_EPS_CM), qy + dy / len * (r + PUSH_EPS_CM));
+			consider(q.first, q.second);
+		}
+	});
+
+	// 3. 여러 벽이 맞물린 곳 - 밀어낸 점이 다른 벽에 걸렸거나 더 가까운 빈 곳이 있을 수 있다. 지금 답보다 가까운 고리만 훑는다
+	const float limit = std::sqrt(bestD2);
+	for (float s = RING_STEP_CM; s <= limit; s += RING_STEP_CM)
+	{
+		const bool hadBest = found;
+		const float before = bestD2;
+		for (int32 k = 0; k < RING_DIRECTIONS; k++)
+		{
+			const float a = 6.2831853f * k / RING_DIRECTIONS;
+			consider(cx + s * std::cos(a), cy + s * std::sin(a));
+		}
+		if (found && (hadBest == false || bestD2 < before))
+			break;		// 이 고리에서 찾았다 - 더 먼 고리는 볼 필요가 없다
+	}
+
+	if (found == false)
+		return false;
+
+	outX = bestX;
+	outY = bestY;
+	return true;
 }
 
 float WallMap::PenetrationDepth(float x, float y) const

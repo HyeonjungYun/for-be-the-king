@@ -338,6 +338,97 @@ TEST(WallMap, NaN_좌표는_막힌_것으로_본다)
 	EXPECT_TRUE(map.Overlaps(nan, 0.f, 0.f));
 }
 
+/*-------- 블링크 도착점 보정 (skill-system R13 · ADR-0006 § ⑦) --------*/
+
+TEST(WallMap, 블링크_도착점이_비어_있으면_그대로_쓴다)
+{
+	const WallMap map = OneWall();
+	float x = 0.f, y = 0.f;
+
+	ASSERT_TRUE(map.FindNearestFree(0.f, 100.f, 42.f, 300.f, OUT x, OUT y));
+	EXPECT_FLOAT_EQ(x, 0.f);
+	EXPECT_FLOAT_EQ(y, 100.f);
+}
+
+TEST(WallMap, 블링크_도착점이_벽_안이면_가장_가까운_면_밖으로_당긴다)
+{
+	// 4 m × 0.5 m 벽, 반지름 42 - 둥근 상자 밖 = 두께 방향 25 + 42, 길이 방향 200 + 42
+	const WallMap map = OneWall();
+	float x = 0.f, y = 0.f;
+
+	// 두께 쪽이 가깝다 - (0, 10) → (0, 67)
+	ASSERT_TRUE(map.FindNearestFree(0.f, 10.f, 42.f, 300.f, OUT x, OUT y));
+	EXPECT_NEAR(x, 0.f, 0.01f);
+	EXPECT_NEAR(y, 67.f, 0.6f);
+	EXPECT_FALSE(map.Overlaps(x, y, 42.f));
+
+	// 끝 쪽이 가깝다 - (190, 0) → (242, 0)
+	ASSERT_TRUE(map.FindNearestFree(190.f, 0.f, 42.f, 300.f, OUT x, OUT y));
+	EXPECT_NEAR(x, 242.f, 0.6f);
+	EXPECT_NEAR(y, 0.f, 0.01f);
+
+	// 모서리 (200, 25) 바깥 11 cm - 모서리에서 멀어지는 방향으로 42 cm (면 방향 밀기 32.5 · 37.5 보다 가깝다)
+	ASSERT_TRUE(map.FindNearestFree(210.f, 30.f, 42.f, 300.f, OUT x, OUT y));
+	const float fromCorner = std::sqrt((x - 200.f) * (x - 200.f) + (y - 25.f) * (y - 25.f));
+	EXPECT_NEAR(fromCorner, 42.f, 0.6f);
+	EXPECT_LT(std::sqrt((x - 210.f) * (x - 210.f) + (y - 30.f) * (y - 30.f)), 32.f);
+}
+
+TEST(WallMap, 블링크_도착점이_층_밖이면_층_안으로_당긴다)
+{
+	const WallMap map = OneWall();
+	float x = 0.f, y = 0.f;
+
+	ASSERT_TRUE(map.FindNearestFree(14000.f, 5000.f, 42.f, 300.f, OUT x, OUT y));
+	EXPECT_FLOAT_EQ(x, 14000.f - 42.f);
+	EXPECT_FLOAT_EQ(y, 5000.f);
+}
+
+TEST(WallMap, 블링크_도착점_근처에_빈_곳이_없으면_실패한다)
+{
+	// 안쪽 면 사이 60 cm 틈 - 지름 84 cm 원이 들어갈 곳이 없다. 가장 가까운 빈 곳은 바깥 면에서 42 cm = 122.5 cm 거리
+	const WallMap map = Build({ Box(0.f, 55.f, 1000.f, 25.f, 0.f), Box(0.f, -55.f, 1000.f, 25.f, 0.f) });
+	float x = 0.f, y = 0.f;
+
+	EXPECT_FALSE(map.FindNearestFree(0.f, 0.f, 42.f, 50.f, OUT x, OUT y));		// 쿨다운 미소모 · 발동 실패
+
+	ASSERT_TRUE(map.FindNearestFree(0.f, 0.f, 42.f, 200.f, OUT x, OUT y));
+	EXPECT_FALSE(map.Overlaps(x, y, 42.f));
+	EXPECT_NEAR(std::fabs(y), 122.f, 1.f);
+}
+
+TEST(WallMap, 블링크_보정_결과는_언제나_비어_있고_탐색_반경_안이다)
+{
+	// 실제 1층 - 무작위 도착점 2,000개 (집이 있는 띠)
+	string error;
+	ASSERT_TRUE(LoadFloor1(OUT error)) << error;
+	const WallMap& map = WallTable::Get(0);
+
+	mt19937 rng(5);
+	uniform_real_distribution<float> houseX(-4000.f, 2400.f);
+	uniform_real_distribution<float> houseY(-11600.f, 11600.f);
+
+	int32 corrected = 0;
+	for (int32 i = 0; i < 2000; i++)
+	{
+		const float tx = houseX(rng);
+		const float ty = houseY(rng);
+		float x = 0.f, y = 0.f;
+
+		if (map.FindNearestFree(tx, ty, 42.f, 300.f, OUT x, OUT y) == false)
+			continue;
+
+		EXPECT_FALSE(map.Overlaps(x, y, 42.f)) << tx << "," << ty;
+		EXPECT_LE(std::sqrt((x - tx) * (x - tx) + (y - ty) * (y - ty)), 300.f + 0.01f);
+		if (map.Overlaps(tx, ty, 42.f))
+			corrected++;
+		else
+			EXPECT_TRUE(x == tx && y == ty);		// 비어 있던 도착점은 건드리지 않는다
+	}
+
+	EXPECT_GT(corrected, 100);		// 실제로 벽에 걸린 도착점을 고쳤다
+}
+
 /*-------- 격자 = 전수 --------*/
 
 TEST(WallMap, 격자_결과는_전수_검사와_같다)

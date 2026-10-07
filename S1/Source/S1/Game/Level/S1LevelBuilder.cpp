@@ -776,6 +776,16 @@ bool AS1LevelBuilder::Export(FS1LevelReport& OutReport, FString& OutDirectory, F
 		OutError = TEXT("the builder actor is moved, rotated or scaled — press Build Graybox, it puts the builder back at the origin (ADR-0006 E5)");
 		return false;
 	}
+	// The collision is instance x component transform — a module component moved inside the builder shifts its rows too (review D2)
+	for (const UHierarchicalInstancedStaticMeshComponent* Component : Modules)
+	{
+		if (Component != nullptr && !Component->GetComponentTransform().Equals(FTransform::Identity, 0.01))
+		{
+			OutError = FString::Printf(TEXT("module component %s is moved, rotated or scaled inside the builder — reset it to the origin (ADR-0006 E5)"),
+				*Component->GetName());
+			return false;
+		}
+	}
 	TArray<FString> Blockers;
 	FindClientOnlyBlockers(Blockers);
 	if (Blockers.Num() > 0)
@@ -903,8 +913,18 @@ bool AS1LevelBuilder::CollectServerWalls(TArray<FString>& OutRows, FString& OutE
 				return false;
 			}
 
+			// Chaos scales a box element along its own axes (FKBoxElem::GetFinalScaled) — with the element unrotated (E2)
+			// that is exactly half = (X·Sx, Y·Sy) / 2 and centre = T(C). A zero or mirrored scale is refused (review B1)
+			const FVector RawScale = T.GetScale3D();
+			if (RawScale.X <= 0.0 || RawScale.Y <= 0.0 || RawScale.Z <= 0.0)
+			{
+				OutError = FString::Printf(TEXT("%s #%d has scale %s — zero or mirrored scale is not allowed on a server wall (ADR-0006 E1)"),
+					ModuleName(Spec.Module), i, *RawScale.ToString());
+				return false;
+			}
+
 			// FKBoxElem X / Y are full lengths, not half (BodySetup.cpp halves them the same way)
-			const FVector Scale = T.GetScale3D().GetAbs();
+			const FVector Scale = RawScale;
 			const double HalfLength = Box.X * 0.5 * Scale.X;
 			const double HalfThickness = Box.Y * 0.5 * Scale.Y;
 			const FVector Centre = T.TransformPosition(Box.Center);
@@ -936,12 +956,15 @@ bool AS1LevelBuilder::CollectServerWalls(TArray<FString>& OutRows, FString& OutE
 	}
 
 	// E9: the instance order is not part of the data — sort so the same level always writes the same bytes (AC-LM-20)
+	// Every column is in the key (review D4) — two rows that tie on position and yaw still sort the same way every time
 	Rows.Sort([](const FRow& A, const FRow& B)
 	{
-		if (A.Kind != B.Kind)	return A.Kind < B.Kind;
-		if (A.X != B.X)			return A.X < B.X;
-		if (A.Y != B.Y)			return A.Y < B.Y;
-		return A.YawCenti < B.YawCenti;
+		if (A.Kind != B.Kind)					return A.Kind < B.Kind;
+		if (A.X != B.X)							return A.X < B.X;
+		if (A.Y != B.Y)							return A.Y < B.Y;
+		if (A.YawCenti != B.YawCenti)			return A.YawCenti < B.YawCenti;
+		if (A.HalfLength != B.HalfLength)		return A.HalfLength < B.HalfLength;
+		return A.HalfThickness < B.HalfThickness;
 	});
 
 	OutRows.Reset(Rows.Num());

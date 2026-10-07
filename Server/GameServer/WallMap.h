@@ -68,6 +68,12 @@ public:
 	// 점이 벽 안이면 가장 깊이 들어간 벽의 침투 깊이 (cm), 아니면 0. 테스트 · 로그용
 	float	PenetrationDepth(float x, float y) const;
 
+	// 블링크 도착점 보정 (skill-system R13 · movement-camera § Edge Cases · ADR-0006 § ⑦).
+	// (x, y) 의 반지름 r 원이 벽이나 층 경계(r 만큼 줄인 사각형)와 겹치면 (x, y) 에서 maxSearch 안의 가장 가까운 빈 점을 찾는다.
+	// 겹치지 않으면 그 자리. 못 찾으면 false - 블링크 발동 실패 · 쿨다운 미소모.
+	// 벽 하나에 걸린 경우는 정확하고, 여러 벽이 맞물린 곳은 고리 탐색(10 cm · 32 방향)이라 최대 약 10 cm 멀 수 있다
+	bool	FindNearestFree(float x, float y, float r, float maxSearch, OUT float& outX, OUT float& outY) const;
+
 	int32					Count() const { return static_cast<int32>(_walls.size()); }
 	const vector<WallBox>&	Walls() const { return _walls; }
 

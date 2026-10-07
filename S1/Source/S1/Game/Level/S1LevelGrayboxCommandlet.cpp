@@ -5,8 +5,12 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Game/Level/S1LevelBuilder.h"
+#include "Game/S1Player.h"
+#include "Misc/ConfigCacheIni.h"
+#include "S1GameInstance.h"
 #include "Game/Level/S1LevelLayout.h"
 #include "Math/RandomStream.h"
 #include "Misc/FileHelper.h"
@@ -26,15 +30,34 @@ namespace S1LevelParity
 	// AC-LM-21 · docs/architecture/adr-0006-server-2d-walls.md § Validation — the character capsule sweeps seeded segments
 	// over the saved level and writes where it stops. The server test (WallMapTest.cpp) runs the same segments through
 	// WallMap (r = 42) and compares. The server code is not copied into UE — each side answers with its own geometry.
-	constexpr float		CapsuleRadius = 42.f;		// the character capsule — the server's knockback / dash radius
-	constexpr float		CapsuleHalfHeight = 96.f;
-	constexpr double	SweepZ = CapsuleHalfHeight + 25.0;	// bottom 0.25 m (over 0.2 m rubble), top 2.17 m (under 2.5 m cover)
+	constexpr float		ServerRadius = 42.f;		// ADR-0006 § ⑦ — knockback · dash · blink radius on the server
+	constexpr double	SweepLift = 25.0;			// capsule bottom 0.25 m (over 0.2 m rubble); top stays under 2.5 m cover
 	constexpr int32		Samples = 2000;
 	constexpr int32		Seed = 20261007;
 
 	double Round2(double V)
 	{
 		return FMath::RoundToDouble(V * 100.0) / 100.0;
+	}
+
+	// The capsule of the character players actually get (review C7): the game instance's player class — a Blueprint —
+	// else the C++ AS1Player. Size and collision profile both come from it, not from constants here
+	const UCapsuleComponent* PlayerCapsule()
+	{
+		const AS1Player* Player = GetDefault<AS1Player>();
+		FString GameInstancePath;
+		if (GConfig->GetString(TEXT("/Script/EngineSettings.GameMapsSettings"), TEXT("GameInstanceClass"), GameInstancePath, GEngineIni))
+		{
+			if (UClass* Class = LoadClass<US1GameInstance>(nullptr, *GameInstancePath))
+			{
+				const US1GameInstance* Instance = Class->GetDefaultObject<US1GameInstance>();
+				if (Instance->OtherPlayerClass != nullptr)
+				{
+					Player = Instance->OtherPlayerClass->GetDefaultObject<AS1Player>();
+				}
+			}
+		}
+		return Player->GetCapsuleComponent();
 	}
 
 	bool Record(UWorld& World, const FString& OutFile)
@@ -48,7 +71,6 @@ namespace S1LevelParity
 		FStaticMeshCompilingManager::Get().FinishAllCompilation();
 #endif
 		int32 Recreated = 0;
-		int32 Bodies = 0;
 		for (TActorIterator<AActor> It(&World); It; ++It)
 		{
 			TInlineComponentArray<UPrimitiveComponent*> Primitives(*It);
@@ -59,21 +81,60 @@ namespace S1LevelParity
 					Primitive->RecreatePhysicsState();
 					Recreated++;
 				}
-				if (const UInstancedStaticMeshComponent* Instanced = Cast<UInstancedStaticMeshComponent>(Primitive))
-				{
-					Bodies += Instanced->GetInstanceBodies().Num();		// 5.8: the InstanceBodies member is deprecated and stays empty
-				}
 			}
 		}
 		if (FPhysScene* Scene = World.GetPhysicsScene())
 		{
 			Scene->Flush();
 		}
-		UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity — physics scene %d · physics state created for %d component(s) · %d instance bodies"),
-			World.GetPhysicsScene() != nullptr ? 1 : 0, Recreated, Bodies);
 
-		const FCollisionShape Capsule = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
-		const FName Profile = TEXT("Pawn");
+		AS1LevelBuilder* Builder = nullptr;
+		for (TActorIterator<AS1LevelBuilder> It(&World); It; ++It)
+		{
+			Builder = *It;
+		}
+		if (Builder == nullptr)
+		{
+			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity: the map has no S1LevelBuilder"));
+			return false;
+		}
+
+		// Every colliding module has one body per instance (review A6) — a missing body is a wall the sweeps cannot see.
+		// 5.8: read GetInstanceBodies(); the InstanceBodies member is deprecated and stays empty
+		int32 Bodies = 0;
+		TInlineComponentArray<UInstancedStaticMeshComponent*> Modules(Builder);
+		for (const UInstancedStaticMeshComponent* Module : Modules)
+		{
+			if (!Module->IsCollisionEnabled())
+			{
+				continue;
+			}
+			Bodies += Module->GetInstanceBodies().Num();
+			if (Module->GetInstanceBodies().Num() != Module->GetInstanceCount())
+			{
+				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity: %s has %d bodies for %d instances — nothing written"),
+					*Module->GetName(), Module->GetInstanceBodies().Num(), Module->GetInstanceCount());
+				return false;
+			}
+		}
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity — physics state created for %d component(s) · %d instance bodies, one per instance"),
+			Recreated, Bodies);
+
+		// The real character capsule (C7). The server judges with r = 42 — if the character changes, the ADR and the server must too
+		const UCapsuleComponent* CharacterCapsule = PlayerCapsule();
+		const float Radius = CharacterCapsule->GetUnscaledCapsuleRadius();
+		const float HalfHeight = CharacterCapsule->GetUnscaledCapsuleHalfHeight();
+		const FName Profile = CharacterCapsule->GetCollisionProfileName();
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity — character capsule %.1f x %.1f cm, profile %s"), Radius, HalfHeight, *Profile.ToString());
+		if (!FMath::IsNearlyEqual(Radius, ServerRadius, 0.01f))
+		{
+			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity: the character capsule radius is %.1f cm but the server judges with %.1f — "
+				"update ADR-0006 § ⑦ and the server first; nothing written"), Radius, ServerRadius);
+			return false;
+		}
+
+		const double SweepZ = HalfHeight + SweepLift;
+		const FCollisionShape Capsule = FCollisionShape::MakeCapsule(Radius, HalfHeight);
 		const FCollisionQueryParams Params(SCENE_QUERY_STAT(S1LevelParity), /*bTraceComplex*/ false);
 
 		auto Sweep = [&](const FVector2D& A, const FVector2D& B, FHitResult& Hit)
@@ -81,18 +142,57 @@ namespace S1LevelParity
 			return World.SweepSingleByProfile(Hit, FVector(A, SweepZ), FVector(B, SweepZ), FQuat::Identity, Profile, Capsule, Params);
 		};
 
-		// Canary: straight at tower Tc (-78, 0) m, a 3 x 3 m box — must stop at 600 - 150 - 42 = 408 cm. If physics queries
-		// did not work headless every sweep would "miss", and the comparison would pass for nothing
+		// Canaries, one per server-wall kind (review A6): from 1 m outside the first box of each kind straight at it — some side
+		// must stop the capsule at 100 cm. If physics did not see the level every sweep would "miss" and the comparison would
+		// pass for nothing (that is what the first spike did)
 		{
-			FHitResult Hit;
-			const bool bHit = Sweep(FVector2D(-7800.0, -600.0), FVector2D(-7800.0, 0.0), Hit);
-			const double Expected = 600.0 - 150.0 - CapsuleRadius;
-			const double Got = bHit ? Hit.Time * 600.0 : -1.0;
-			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity canary — hit %d at %.2f cm (expected %.2f)"), bHit ? 1 : 0, Got, Expected);
-			if (!bHit || FMath::Abs(Got - Expected) > 5.0)
+			TArray<FString> WallRows;
+			FString Error;
+			if (!Builder->CollectServerWalls(WallRows, Error))
 			{
-				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity canary failed — physics queries do not see the level; nothing written"));
+				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity: server walls: %s"), *Error);
 				return false;
+			}
+
+			TSet<FString> Checked;
+			for (const FString& Row : WallRows)
+			{
+				TArray<FString> Cells;
+				Row.ParseIntoArray(Cells, TEXT(","));		// kind,cx,cy,half_length,half_thickness,yaw
+				if (Cells.Num() != 6 || Checked.Contains(Cells[0]))
+				{
+					continue;
+				}
+
+				const FVector2D Centre(FCString::Atod(*Cells[1]), FCString::Atod(*Cells[2]));
+				const double Half[2] = { FCString::Atod(*Cells[3]), FCString::Atod(*Cells[4]) };
+				const double YawRad = FMath::DegreesToRadians(FCString::Atod(*Cells[5]));
+				const FVector2D Axis[2] = { FVector2D(FMath::Cos(YawRad), FMath::Sin(YawRad)), FVector2D(-FMath::Sin(YawRad), FMath::Cos(YawRad)) };
+
+				double Best = -1.0;
+				for (int32 a = 0; a < 2 && Best < 0.0; a++)
+				{
+					for (const double Side : { -1.0, 1.0 })
+					{
+						const FVector2D Start = Centre + Axis[a] * Side * (Half[a] + Radius + 100.0);
+						FHitResult Hit;
+						if (!World.OverlapBlockingTestByProfile(FVector(Start, SweepZ), FQuat::Identity, Profile, Capsule, Params)
+							&& Sweep(Start, Centre, Hit) && FMath::Abs(Hit.Time * FVector2D::Distance(Start, Centre) - 100.0) <= 5.0)
+						{
+							Best = Hit.Time * FVector2D::Distance(Start, Centre);
+							break;
+						}
+					}
+				}
+
+				UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity canary %s — %s"), *Cells[0],
+					Best >= 0.0 ? *FString::Printf(TEXT("stopped at %.2f cm (expected 100)"), Best) : TEXT("MISSED"));
+				if (Best < 0.0)
+				{
+					UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity canary failed — physics queries do not see the %s module; nothing written"), *Cells[0]);
+					return false;
+				}
+				Checked.Add(Cells[0]);
 			}
 		}
 
