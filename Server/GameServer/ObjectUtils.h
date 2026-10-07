@@ -83,6 +83,21 @@ constexpr uint16 STAT_ID_BAG_DESPAWN = 1901;
 
 extern atomic<uint64> GDisconnectGraceUs;
 
+// /gold N - 런 골드 디버그 (FBTK_DEBUG_GOLD=1, escape-timer.md Core Rule 18). 꺼져 있으면 명령을 무시한다
+extern atomic<bool> GDebugGold;
+
+// 체류 시간 만료 (escape-timer.md Core Rule 16 · 17) - 소지 · 착용 · 주운 아이템을 id 로 지우고 골드 30 % 를 더한다. 가방은 없다
+struct ExpirySnapshot
+{
+	uint64				characterId = 0;
+	vector<uint64>		rowIds;				// DB 행이 있는 것 - 소지 · 착용(isNew 제외) ∪ droppedIds
+	uint32				itemsDestroyed = 0;	// 결과 안내용 - 소지 + 착용 개수 (isNew 포함)
+	uint64				goldKept = 0;
+};
+
+// 성공할 때까지 재시도 (탈출 커밋과 같은 100 ms → ×2 → 5 s)
+void CommitExpiry(DBConnection* conn, const ExpirySnapshot& snap);
+
 /*------------------
 	DetachedBodies
 -------------------*/

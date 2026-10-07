@@ -13,6 +13,8 @@
 #include "WallTable.h"
 #include "Monster.h"
 #include "MonsterTable.h"
+#include "TowerTable.h"
+#include "Telemetry.h"
 
 namespace
 {
@@ -198,6 +200,29 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->moveClock.Reset();
 		player->lastSaveUs = enterUs;
 
+		// 체류 타이머는 방에 놓인 순간부터 - DB 적재 지연이 30 분을 깎지 않는다 (escape-timer.md Core Rule 13)
+		if (success)
+		{
+			player->runStartUs = enterUs;
+			player->runDeadlineUs = enterUs + EscapeConfig::Get().runLimitUs;
+			player->runGold = 0;
+			player->zoneTower = -1;
+			memset(player->gaugeAudience, 0, sizeof(player->gaugeAudience));
+			memset(player->lastGaugeSentUs, 0, sizeof(player->lastGaugeSentUs));
+			player->statZoneVisits = player->statZoneLeavesVoluntary = player->statZoneLeavesForced = player->statGaugeReversals = 0;
+			player->statZoneDwellUs = player->statAlertDwellUs = 0;
+			player->statLastTowerId.clear();
+
+			// 텔레메트리 F8 - 들고 들어온 것의 등급 점수 (1 · 2 · 4 · 8)
+			player->statBroughtInSum = 0;
+			auto points = [](const ItemEntry& e) { return e.grade > 0 ? (1u << (static_cast<int32>(e.grade) - 1)) : 0u; };
+			for (const ItemEntry& e : player->inventory)
+				player->statBroughtInSum += points(e);
+			for (const ItemEntry& e : player->equipped)
+				if (e.instanceId != 0)
+					player->statBroughtInSum += points(e);
+		}
+
 
 		if (auto session = player->session.lock())
 		{
@@ -216,6 +241,8 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(success);
+		if (success)
+			enterGamePkt.set_run_remaining_ms(static_cast<uint32>(EscapeConfig::Get().runLimitUs / 1000));
 
 		Protocol::ObjectInfo* playerInfo = new Protocol::ObjectInfo();
 		playerInfo->CopyFrom(*player->objectInfo);
@@ -225,6 +252,9 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(enterGamePkt);
 		if (auto session = player->session.lock())
 			session->Send(sendBuffer);
+
+		if (success)
+			SendChestSnapshot(player);
 
 		{
 			player->RebuildSkillSlotsFromEquipment();
@@ -1240,7 +1270,16 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 
 	// 상자는 첫 "획득"에서 Looted 가 되고 리스폰 시계가 돈다 (§ 8). 열기만 해서는 바뀌지 않는다.
 	if (bag->MarkTaken(Utils::NowMicroseconds()))
+	{
 		LOG_LINE << "[CHEST] looted chest=" << bag->chestId << " by=" << playerId << " reset_in=" << bag->respawnUs / 1'000'000 << "s\n";
+
+		// 층 전원에게 변경분 - 레이더가 털린 상자를 지운다 (radar.md OQ-1). 리셋은 기존 S_DESPAWN → S_SPAWN 이 곧 Sealed 다
+		Protocol::S_CHEST_STATE statePkt;
+		statePkt.add_looted_ids(bagId);
+		statePkt.set_snapshot(false);
+		SEND_PACKET_DECLARATION(statePkt);
+		Broadcast(sendBuffer);
+	}
 
 	vector<Protocol::ItemInstance> changed;
 	changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
@@ -1532,6 +1571,10 @@ void Room::BeginEscapeCommit(uint64 playerId)
 	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
 		snap.equipped[i] = player->equipped[i];
 	snap.droppedIds = player->droppedIds;
+	snap.gold = player->runGold;
+
+	WriteRunTelemetry(player, "ESCAPED", 0, snap.gold, Utils::NowMicroseconds());
+	player->runDeadlineUs = 0;
 
 	// 방에서 뺀다 - 이 순간부터 공격, CC, 조작의 대상이 아니다(무적대기).
 	// 베이스캠프로는 커밋이 끝난 뒤에 보낸다. - 보낸 뒤 되돌리는 것이 가장 나쁘다.
@@ -1563,10 +1606,12 @@ void Room::BeginEscapeCommit(uint64 playerId)
 			GDeathCommits.End(snap.characterId);
 
 			Protocol::S_LEAVE_GAME leavePkt;
+			leavePkt.set_reason(Protocol::RUN_END_ESCAPED);
+			leavePkt.set_gold_kept(snap.gold);
 			SEND_PACKET_DECLARATION(leavePkt);
 			session->Send(sendBuffer);
 
-			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << '\n';
+			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << " gold=" << snap.gold << '\n';
 
 			// 베이스캠프로 돌아왔다 - 방금 커밋한 결과를 S3 에 보낸다 (UI 4단계)
 			SendBaseCampInventory(conn, session, snap.characterId);
@@ -1633,11 +1678,17 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	Protocol::S_ENTER_GAME enterPkt;
 	enterPkt.set_success(true);
 	enterPkt.mutable_player()->CopyFrom(*body->objectInfo);
+	// 마감은 그대로 - 끊긴 동안에도 시간은 흘렀다 (escape-timer.md Core Rule 14)
+	enterPkt.set_run_remaining_ms(static_cast<uint32>(EscapeLogic::RemainingUs(body->runDeadlineUs, nowUs) / 1000));
 	SEND_PACKET_DECLARATION(enterPkt);
 	session->Send(sendBuffer);
 
 	SendEquipSync(body);
 	SendInventorySync(body);
+	SendChestSnapshot(body);
+
+	// 게이지는 처음부터 다시 받게 한다 - 새 접속의 클라는 아무것도 모른다
+	memset(body->gaugeAudience, 0, sizeof(body->gaugeAudience));
 
 	// 방 전체 스냅샷을 다시 받게 한다. 다른 클라에는 이미 있는 몸이라 S_SPAWN 은 무시한다.
 	_pendingSpawns.push_back(playerId);
@@ -1653,6 +1704,11 @@ void Room::UpdateTick()
 	UpdateSaves(nowUs);
 	UpdateBagExpiry(nowUs);
 	UpdateChests(nowUs);
+
+	// 같은 틱에 완충과 마감이 오면 탈출이 이긴다 - 게이지가 먼저다 (escape-timer.md Core Rule 16 · AC-ET-12)
+	UpdateEscapeTowers(nowUs);
+	UpdateRunTimers(nowUs);
+
 	UpdateDetached(nowUs);
 	UpdateMonsters(nowUs);
 
@@ -2020,6 +2076,21 @@ void Room::SendEquipSync(const PlayerRef& player)
 		session->Send(sendBuffer);
 }
 
+void Room::SendChestSnapshot(const PlayerRef& player)
+{
+	Protocol::S_CHEST_STATE pkt;
+	pkt.set_snapshot(true);
+	for (auto& [bagId, bag] : _bags)
+	{
+		if (bag->IsChest() && bag->lootedAtUs != 0)
+			pkt.add_looted_ids(bagId);
+	}
+
+	SEND_PACKET_DECLARATION(pkt);
+	if (auto session = player->session.lock())
+		session->Send(sendBuffer);
+}
+
 void Room::SendInventorySync(const PlayerRef& player)
 {
 	Protocol::S_INVENTORY_SYNC invPkt;
@@ -2056,6 +2127,13 @@ void Room::KillPlayer(const PlayerRef& victim, uint64 instigatorId, Protocol::De
 	CancelCast(victim);
 
 	LOG_LINE << "[DIED] victim=" << victimId << " by=" << by << '\n';
+
+	if (victim->runDeadlineUs != 0)
+	{
+		WriteRunTelemetry(victim, cause == Protocol::DEATH_CAUSE_NONE ? "DISCONNECT_DEATH" : "DIED", instigatorId, 0, Utils::NowMicroseconds());
+		victim->runDeadlineUs = 0;
+	}
+
 	BeginDeathCommit(victim);
 }
 
@@ -2439,6 +2517,12 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 	{
 		if (instigator != nullptr && instigator->IsMonster())
 			GMonsterStats.playerKills.fetch_add(1);
+
+		if (PlayerRef player = dynamic_pointer_cast<Player>(victim); player != nullptr && player->runDeadlineUs != 0)
+		{
+			WriteRunTelemetry(player, "DIED", instigatorId, 0, nowUs);
+			player->runDeadlineUs = 0;
+		}
 
 		BeginDeathCommit(victim);
 	}
@@ -2825,4 +2909,365 @@ bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint
 
 	LOG_LINE << "[MON] cast id=" << id << " skill=" << def.skillId << '\n';
 	return true;
+}
+
+/*-------- 탈출 & 체류 타이머 (design/gdd/escape-timer.md) --------*/
+
+void Room::InitEscape()
+{
+	JOB_TAG();
+	_towers.clear();
+
+	for (const TowerDef& def : TowerTable::All())
+	{
+		if (def.floorId != _floorId)
+			continue;
+
+		EscapeTowerState& t = _towers.emplace_back();
+		t.towerId = def.towerId;
+		t.x = def.x;
+		t.y = def.y;
+	}
+
+	// 와이어 id = CSV 문자열 id 오름차순 순번 (Ta=1 · Tb=2 · Tc=3) - Core Rule 1
+	sort(_towers.begin(), _towers.end(), [](const EscapeTowerState& a, const EscapeTowerState& b) { return a.towerId < b.towerId; });
+	if (static_cast<int32>(_towers.size()) > Player::MAX_TOWERS)
+		_towers.resize(Player::MAX_TOWERS);
+	for (size_t i = 0; i < _towers.size(); i++)
+		_towers[i].wireId = static_cast<uint32>(i + 1);
+
+	if (_towers.empty())
+		LOG_LINE << "[ESCAPE] floor=" << _floorId << " towers=0 (TEMP)\n";
+	else
+		LOG_LINE << "[ESCAPE] floor=" << _floorId << " towers=" << _towers.size() << '\n';
+}
+
+void Room::DebugAddRunGold(uint64 playerId, uint64 amount)
+{
+	JOB_TAG();
+	auto findIt = _objects.find(playerId);
+	if (findIt == _objects.end() || findIt->second->IsPlayer() == false)
+		return;
+
+	PlayerRef player = static_pointer_cast<Player>(findIt->second);
+	player->runGold += amount;
+	LOG_LINE << "[GOLD] debug run gold char=" << playerId << " +" << amount << " = " << player->runGold << '\n';
+}
+
+void Room::SendGauge(const PlayerRef& player, uint32 towerWireId, Protocol::EscapeGaugeState state, uint32 permille, float ratePerS, bool selfInZone)
+{
+	GameSessionRef session = player->session.lock();
+	if (session == nullptr)
+		return;
+
+	Protocol::S_ESCAPE_GAUGE pkt;
+	pkt.set_tower_id(towerWireId);
+	pkt.set_state(state);
+	pkt.set_progress_permille(permille);
+	pkt.set_rate_per_s(ratePerS);
+	pkt.set_self_in_zone(selfInZone);
+
+	SEND_PACKET_DECLARATION(pkt);
+	session->Send(sendBuffer);
+}
+
+void Room::UpdateEscapeTowers(uint64 nowUs)
+{
+	if (_towers.empty())
+		return;
+
+	const EscapeConfig& cfg = EscapeConfig::Get();
+	const uint64 dtUs = (_lastEscapeTickUs != 0 && nowUs > _lastEscapeTickUs) ? nowUs - _lastEscapeTickUs : 0;
+	_lastEscapeTickUs = nowUs;
+
+	// 점유자 · 받는 사람 후보 = 살아 있고 세션이 붙은 플레이어 (끊긴 몸 · 시체 · 몬스터 제외, Core Rule 4)
+	vector<PlayerRef> players;
+	for (auto& [id, object] : _objects)
+	{
+		if (object->IsPlayer() == false)
+			continue;
+
+		PlayerRef p = static_pointer_cast<Player>(object);
+		if (p->IsAlive() && p->detachedUntilUs == 0 && p->session.lock() != nullptr)
+			players.push_back(p);
+		else
+			p->zoneTower = -1;
+	}
+
+	for (int32 i = 0; i < static_cast<int32>(_towers.size()); i++)
+	{
+		EscapeTowerState& t = _towers[i];
+
+		struct Seen { PlayerRef p; float d; bool wasIn; bool in; };
+		vector<Seen> seen;
+		seen.reserve(players.size());
+		vector<uint64> occupants;
+
+		for (const PlayerRef& p : players)
+		{
+			const float dx = p->posInfo->x() - t.x;
+			const float dy = p->posInfo->y() - t.y;
+			const float d = ::sqrtf(dx * dx + dy * dy);
+			const bool wasIn = (p->zoneTower == i);
+			const bool in = EscapeLogic::InZone(wasIn, d, cfg);
+
+			if (in && wasIn == false)
+			{
+				p->zoneTower = i;
+				p->statZoneVisits++;
+				p->statLastTowerId = t.towerId;
+			}
+			else if (in == false && wasIn)
+			{
+				p->zoneTower = -1;
+				// 나가기 직전 1 초 안에 넉백을 받았으면 밀려난 것 (텔레메트리 망설임 지표, § G)
+				if (p->knockbackEndUs + 1'000'000 > nowUs)
+					p->statZoneLeavesForced++;
+				else
+					p->statZoneLeavesVoluntary++;
+			}
+
+			if (in)
+			{
+				occupants.push_back(p->objectInfo->object_id());
+				p->statZoneDwellUs += dtUs;
+			}
+			else if (d <= cfg.alertCm)
+			{
+				p->statAlertDwellUs += dtUs;
+			}
+
+			seen.push_back({ p, d, wasIn, in });
+		}
+
+		sort(occupants.begin(), occupants.end());
+
+		const EscapeLogic::StepResult r = EscapeLogic::Step(t.gauge, static_cast<int32>(occupants.size()), dtUs, cfg);
+		const bool stateChanged = (r.before != r.after);
+		const uint32 permille = r.completed ? 1000 : EscapeLogic::Permille(t.gauge, cfg);
+
+		if (stateChanged)
+		{
+			const char* event = nullptr;
+			if (r.completed)
+				event = "COMPLETE";
+			else if (r.before == Protocol::ESCAPE_GAUGE_IDLE && r.after == Protocol::ESCAPE_GAUGE_FILLING)
+				event = "FILL_START";
+			else if (r.before == Protocol::ESCAPE_GAUGE_FILLING && r.after == Protocol::ESCAPE_GAUGE_DRAINING)
+				event = "REVERSAL";
+			else if (r.before == Protocol::ESCAPE_GAUGE_DRAINING && r.after == Protocol::ESCAPE_GAUGE_FILLING)
+				event = "RESUME";
+			else if (r.after == Protocol::ESCAPE_GAUGE_IDLE)
+				event = "DRAIN_END";
+
+			if (event != nullptr)
+			{
+				GTelemetry.AppendGauge(_floorId, t.towerId, event, permille, static_cast<uint32>(occupants.size()));
+				LOG_LINE << "[ESCAPE] gauge tower=" << t.towerId << " " << event << " permille=" << permille << " occupants=" << occupants.size() << '\n';
+			}
+
+			// 역행 - 직전 틱 점유자(마지막으로 떠난 사람)가 "게이지를 버렸다"
+			if (r.before == Protocol::ESCAPE_GAUGE_FILLING && r.after == Protocol::ESCAPE_GAUGE_DRAINING)
+			{
+				for (uint64 id : t.lastOccupants)
+				{
+					auto it = _objects.find(id);
+					if (it != _objects.end() && it->second->IsPlayer())
+						static_pointer_cast<Player>(it->second)->statGaugeReversals++;
+				}
+			}
+		}
+
+		const Protocol::EscapeGaugeState alertNow =
+			(t.gauge.state == Protocol::ESCAPE_GAUGE_FILLING && r.completed == false) ? Protocol::ESCAPE_GAUGE_FILLING : Protocol::ESCAPE_GAUGE_IDLE;
+		const bool alertChanged = (alertNow != t.alertState);
+		t.alertState = alertNow;
+
+		const Protocol::EscapeGaugeState shownState = r.completed ? Protocol::ESCAPE_GAUGE_COMPLETED : t.gauge.state;
+		const float rate = EscapeLogic::RatePerSecond(shownState, cfg);
+		const bool moving = (t.gauge.state == Protocol::ESCAPE_GAUGE_FILLING || t.gauge.state == Protocol::ESCAPE_GAUGE_DRAINING);
+
+		// 받는 사람마다 - 변화가 있을 때만 (Core Rule 11)
+		for (const Seen& s : seen)
+		{
+			const EscapeLogic::Audience audience = EscapeLogic::AudienceFor(s.in, s.d, cfg);
+			const EscapeLogic::Audience prev = static_cast<EscapeLogic::Audience>(s.p->gaugeAudience[i]);
+			uint64& lastSent = s.p->lastGaugeSentUs[i];
+
+			if (audience == EscapeLogic::Audience::Full)
+			{
+				const bool heartbeat = moving && nowUs - lastSent >= cfg.heartbeatUs;
+				if (prev != EscapeLogic::Audience::Full || stateChanged || r.completed || s.in != s.wasIn || heartbeat)
+				{
+					SendGauge(s.p, t.wireId, shownState, permille, rate, s.in);
+					lastSent = nowUs;
+				}
+			}
+			else
+			{
+				// 전체 집합에서 나갔다 - 보이던 링을 지우게 한다 (새 정보는 없다)
+				if (prev == EscapeLogic::Audience::Full)
+					SendGauge(s.p, t.wireId, Protocol::ESCAPE_GAUGE_IDLE, 0, 0.f, false);
+
+				if (audience == EscapeLogic::Audience::Alert)
+				{
+					// 경보 - 타워 · 진행도 · 방향 없이 "누가 채우기 시작했다 / 끝났다"만 (Core Rule 10)
+					if ((prev != EscapeLogic::Audience::Alert && alertNow == Protocol::ESCAPE_GAUGE_FILLING)
+						|| (prev == EscapeLogic::Audience::Alert && alertChanged))
+					{
+						SendGauge(s.p, 0, alertNow, 0, 0.f, false);
+					}
+				}
+				else if (prev == EscapeLogic::Audience::Alert)
+				{
+					SendGauge(s.p, 0, Protocol::ESCAPE_GAUGE_IDLE, 0, 0.f, false);
+				}
+			}
+
+			s.p->gaugeAudience[i] = static_cast<uint8>(audience);
+		}
+
+		t.lastOccupants = occupants;
+
+		// 완충 - 그 틱의 점유자 전원을 id 오름차순으로 탈출 커밋 (Core Rule 9, AC-ET-08). 이미 죽는 중이면 건너뛴다
+		if (r.completed)
+		{
+			for (uint64 id : occupants)
+				BeginEscapeCommit(id);
+
+			t.lastOccupants.clear();
+		}
+	}
+}
+
+void Room::UpdateRunTimers(uint64 nowUs)
+{
+	vector<PlayerRef> expired;
+	for (auto& [id, object] : _objects)
+	{
+		if (object->IsPlayer() == false)
+			continue;
+
+		PlayerRef p = static_pointer_cast<Player>(object);
+		if (p->IsAlive() && EscapeLogic::Expired(p->runDeadlineUs, nowUs))
+			expired.push_back(p);
+	}
+
+	for (const PlayerRef& p : expired)
+		BeginExpiryCommit(p, nowUs);
+}
+
+void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
+{
+	const uint64 playerId = player->objectInfo->object_id();
+
+	// 끊긴 몸 - 재접속과 경쟁한다. 먼저 꺼낸 쪽만 이긴다 (Core Rule 16-1, AC-ET-11)
+	if (player->detachedUntilUs != 0)
+	{
+		if (GDetachedBodies.TryTake(playerId) == nullptr)
+			return;
+		_detached.erase(playerId);
+	}
+
+	// 이미 죽는 중 · 탈출 중이면 그 결과가 이긴다 (AC-ET-21 · 22)
+	if (GDeathCommits.TryBegin(playerId) == false)
+		return;
+
+	ExpirySnapshot snap;
+	snap.characterId = playerId;
+	for (const ItemEntry& e : player->inventory)
+	{
+		snap.itemsDestroyed++;
+		if (e.isNew == false)
+			snap.rowIds.push_back(e.instanceId);
+	}
+	for (const ItemEntry& e : player->equipped)
+	{
+		if (e.instanceId == 0)
+			continue;
+		snap.itemsDestroyed++;
+		if (e.isNew == false)
+			snap.rowIds.push_back(e.instanceId);
+	}
+	snap.rowIds.insert(snap.rowIds.end(), player->droppedIds.begin(), player->droppedIds.end());
+	snap.goldKept = EscapeLogic::GoldKept(player->runGold, EscapeConfig::Get().expiryGoldKeptPct);
+
+	WriteRunTelemetry(player, "EXPIRED", 0, snap.goldKept, nowUs);
+	player->runDeadlineUs = 0;
+
+	// 탈출 대기와 같다 - 방에서 빼고, 커밋이 끝난 뒤 베이스캠프로. 전투 사망 경로(S_DIED · 가방)를 거치지 않는다
+	GameSessionRef session = player->session.lock();
+	CancelCast(player);
+	SavePlayer(player);
+	RemoveObject(playerId);
+	if (session != nullptr)
+		session->place.store(SessionPlace::Escaping);
+
+	Protocol::S_DESPAWN despawnPkt;
+	despawnPkt.add_object_ids(playerId);
+	SEND_PACKET_DECLARATION(despawnPkt);
+	Broadcast(sendBuffer);
+
+	LOG_LINE << "[EXPIRE] commit begin - char=" << playerId << " destroyed=" << snap.itemsDestroyed << " rows=" << snap.rowIds.size()
+		<< " gold_kept=" << snap.goldKept << " detached=" << (session == nullptr ? 1 : 0) << '\n';
+
+	GDBQueue.Push([session, snap](DBConnection* conn)
+		{
+			CommitExpiry(conn, snap);
+			GDeathCommits.End(snap.characterId);
+
+			LOG_LINE << "[EXPIRE] committed - char=" << snap.characterId << '\n';
+
+			// 끊긴 몸이면 보낼 곳이 없다 - 다음 접속이 DB 에서 새로 적재한다
+			if (session == nullptr)
+				return;
+
+			session->place.store(SessionPlace::BaseCamp);
+
+			Protocol::S_LEAVE_GAME leavePkt;
+			leavePkt.set_reason(Protocol::RUN_END_EXPIRED);
+			leavePkt.set_gold_kept(snap.goldKept);
+			leavePkt.set_items_destroyed(snap.itemsDestroyed);
+			SEND_PACKET_DECLARATION(leavePkt);
+			session->Send(sendBuffer);
+
+			SendBaseCampInventory(conn, session, snap.characterId);
+		});
+}
+
+void Room::WriteRunTelemetry(const PlayerRef& player, const char* reason, uint64 killerId, uint64 goldKept, uint64 nowUs)
+{
+	RunRow row;
+	row.charId = player->objectInfo->object_id();
+	row.floorId = _floorId;
+	row.entryPoint = player->entryPointId;
+	row.reason = reason;
+	row.runMs = (player->runStartUs != 0 && nowUs > player->runStartUs) ? (nowUs - player->runStartUs) / 1000 : 0;
+	row.broughtInSum = player->statBroughtInSum;
+
+	auto account = [&row](const ItemEntry& e)
+	{
+		const uint32 grade = static_cast<uint32>(e.grade);
+		row.endCarriedCount++;
+		row.endCarriedSum += grade > 0 ? (1u << (grade - 1)) : 0u;
+		row.endCarriedMaxGrade = max(row.endCarriedMaxGrade, grade);
+	};
+	for (const ItemEntry& e : player->inventory)
+		account(e);
+	for (const ItemEntry& e : player->equipped)
+		if (e.instanceId != 0)
+			account(e);
+
+	row.runGold = player->runGold;
+	row.goldKept = goldKept;
+	row.zoneVisits = player->statZoneVisits;
+	row.zoneLeavesVoluntary = player->statZoneLeavesVoluntary;
+	row.zoneLeavesForced = player->statZoneLeavesForced;
+	row.zoneDwellMs = player->statZoneDwellUs / 1000;
+	row.gaugeReversalsPresent = player->statGaugeReversals;
+	row.alertDwellMs = player->statAlertDwellUs / 1000;
+	row.lastTowerId = player->statLastTowerId;
+	row.killerId = killerId;
+
+	GTelemetry.AppendRun(row);
 }

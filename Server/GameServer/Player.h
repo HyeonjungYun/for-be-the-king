@@ -63,4 +63,26 @@ public:
 
 	// 진입 지점에서 시작한다 - Room::EnterRoom 이 그 둘레 빈자리로 옮기고 내린다 (entry-point.md AC-EP-04)
 	bool					spreadOnEnter = false;
+
+public:
+	// ── 런 (design/gdd/escape-timer.md) ── Room JobQueue 안에서만 읽고 쓴다
+	static constexpr int32	MAX_TOWERS = 4;
+
+	uint64					runStartUs = 0;			// 방에 놓인 순간 (EnterRoom). 재접속은 바꾸지 않는다
+	uint64					runDeadlineUs = 0;		// 0 = 런 밖
+	uint64					runGold = 0;			// 던전 메모리 골드 - MVP 는 /gold 로만 는다 (Core Rule 18)
+	uint32					entryPointId = 0;
+	int32					zoneTower = -1;			// 점유 중인 타워 순번, -1 = 없음 (이력 판정용)
+	uint8					gaugeAudience[MAX_TOWERS] = {};		// EscapeLogic::Audience - 집합에 새로 들어왔는지 본다
+	uint64					lastGaugeSentUs[MAX_TOWERS] = {};
+
+	// 텔레메트리 (§ G) - 런 시작에 0
+	uint32					statBroughtInSum = 0;
+	uint32					statZoneVisits = 0;
+	uint32					statZoneLeavesVoluntary = 0;
+	uint32					statZoneLeavesForced = 0;
+	uint64					statZoneDwellUs = 0;
+	uint32					statGaugeReversals = 0;
+	uint64					statAlertDwellUs = 0;
+	string					statLastTowerId;
 };

@@ -73,6 +73,16 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	bot->inGame.store(true);
 
+	LOG_LINE << "[BOT] entered char=" << bot->objectId.load() << " at=(" << bot->x << "," << bot->y << ") run_left=" << pkt.run_remaining_ms() << "ms\n";
+
+	// -gold N: 런 골드 (서버 FBTK_DEBUG_GOLD=1 일 때만 받는다) - 만료 30 % · 탈출 100 % 시험 (AC-ET-20)
+	if (const uint64 gold = GRunGold.load(); gold > 0)
+	{
+		Protocol::C_CHAT chat;
+		chat.set_msg("/gold " + to_string(gold));
+		bot->Send(ClientPacketHandler::MakeSendBuffer(chat));
+	}
+
 	return true;
 }
 
@@ -80,6 +90,13 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);
 	bot->inGame.store(false);
+
+	LOG_LINE << "[BOT LEAVE] char=" << bot->objectId.load() << " reason=" << pkt.reason() << " gold_kept=" << pkt.gold_kept()
+		<< " destroyed=" << pkt.items_destroyed() << '\n';
+	if (pkt.reason() == Protocol::RUN_END_ESCAPED)
+		GLeaveEscaped.fetch_add(1);
+	else if (pkt.reason() == Protocol::RUN_END_EXPIRED)
+		GLeaveExpired.fetch_add(1);
 
 	// 탈출 커밋이 끝났다 - 베이스캠프에서 잠깐 쉬고 다시 들어간다. 던전에서 본 가방은 이제 모른다
 	if (GItemBehavior.load())
@@ -272,6 +289,23 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 }
 
 bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt)
+{
+	return true;
+}
+
+// 봇은 게이지 · 상자 상태를 그리지 않는다 - 받아서 로그만 (escape-timer.md · radar.md 패킷)
+bool Handle_S_ESCAPE_GAUGE(PacketSessionRef& session, Protocol::S_ESCAPE_GAUGE& pkt)
+{
+	if (GTowerMode.load())
+	{
+		auto bot = static_pointer_cast<BotSession>(session);
+		LOG_LINE << "[BOT GAUGE] char=" << bot->objectId.load() << " tower=" << pkt.tower_id() << " state=" << pkt.state()
+			<< " permille=" << pkt.progress_permille() << " self=" << (pkt.self_in_zone() ? 1 : 0) << '\n';
+	}
+	return true;
+}
+
+bool Handle_S_CHEST_STATE(PacketSessionRef& session, Protocol::S_CHEST_STATE& pkt)
 {
 	return true;
 }

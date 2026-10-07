@@ -8,6 +8,7 @@
 #include "AccountManager.h"
 #include "ItemTable.h"
 #include "EntryPointTable.h"
+#include "EscapeLogic.h"
 #include <thread>
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -581,6 +582,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 			player->posInfo->set_z(point->z);
 			player->posInfo->set_yaw(point->yaw);
 			player->spreadOnEnter = true;		// 같은 지점을 고른 사람끼리 겹치지 않게 Room 이 둘레에 펼친다 (AC-EP-04)
+			player->entryPointId = point->entryId;	// 텔레메트리 - 어디서 시작한 런인가
 
 			LOG_LINE << "[ENTER] point=" << (wasRandom ? "random" : "chosen") << " entry=" << point->entryId
 				<< " requested=" << pkt.entry_point_id() << " char=" << character.object_info().object_id() << '\n';
@@ -717,9 +719,22 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 		return true;
 	}
 
+	// 즉시 탈출은 FBTK_DEBUG_ESCAPE=1 일 때만 - 정식 탈출(타워 게이지)이 생겼으니 공짜 탈출은 끈다 (escape-timer.md Core Rule 19)
 	if (msg.rfind("/escape", 0) == 0)
 	{
-		room->DoAsync(&Room::BeginEscapeCommit, player->objectInfo->object_id());
+		if (EscapeConfig::Get().debugEscapeCommand)
+			room->DoAsync(&Room::BeginEscapeCommit, player->objectInfo->object_id());
+		else
+			LOG_LINE << "[ESCAPE] /escape ignored - FBTK_DEBUG_ESCAPE is off. char=" << player->objectInfo->object_id() << '\n';
+		return true;
+	}
+
+	// 런 골드 - MVP 에는 던전 골드 획득 경로가 없어 디버그로만 넣는다 (Core Rule 18 · AC-ET-20). FBTK_DEBUG_GOLD=1
+	if (msg.rfind("/gold", 0) == 0)
+	{
+		uint64 amount = 0;
+		if (GDebugGold.load() && ::sscanf_s(msg.c_str(), "/gold %llu", &amount) == 1)
+			room->DoAsync(&Room::DebugAddRunGold, player->objectInfo->object_id(), amount);
 		return true;
 	}
 

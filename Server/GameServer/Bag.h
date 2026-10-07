@@ -24,6 +24,7 @@ struct EscapeSnapshot
 	vector<ItemEntry>	carried;
 	ItemEntry			equipped[SKILL_SLOT_COUNT];
 	vector<uint64>		droppedIds;
+	uint64				gold = 0;		// 런 골드 전액이 계정으로 (escape-timer.md Core Rule 18)
 };
 
 class Bag : public Object

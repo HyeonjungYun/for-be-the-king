@@ -378,6 +378,59 @@ inline bool ItemState_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ItemState>(
     ItemState_descriptor(), name, value);
 }
+enum EscapeGaugeState : int {
+  ESCAPE_GAUGE_IDLE = 0,
+  ESCAPE_GAUGE_FILLING = 1,
+  ESCAPE_GAUGE_DRAINING = 2,
+  ESCAPE_GAUGE_COMPLETED = 3,
+  EscapeGaugeState_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  EscapeGaugeState_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool EscapeGaugeState_IsValid(int value);
+constexpr EscapeGaugeState EscapeGaugeState_MIN = ESCAPE_GAUGE_IDLE;
+constexpr EscapeGaugeState EscapeGaugeState_MAX = ESCAPE_GAUGE_COMPLETED;
+constexpr int EscapeGaugeState_ARRAYSIZE = EscapeGaugeState_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* EscapeGaugeState_descriptor();
+template<typename T>
+inline const std::string& EscapeGaugeState_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, EscapeGaugeState>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function EscapeGaugeState_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    EscapeGaugeState_descriptor(), enum_t_value);
+}
+inline bool EscapeGaugeState_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, EscapeGaugeState* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<EscapeGaugeState>(
+    EscapeGaugeState_descriptor(), name, value);
+}
+enum RunEndReason : int {
+  RUN_END_NONE = 0,
+  RUN_END_ESCAPED = 1,
+  RUN_END_EXPIRED = 2,
+  RunEndReason_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  RunEndReason_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool RunEndReason_IsValid(int value);
+constexpr RunEndReason RunEndReason_MIN = RUN_END_NONE;
+constexpr RunEndReason RunEndReason_MAX = RUN_END_EXPIRED;
+constexpr int RunEndReason_ARRAYSIZE = RunEndReason_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunEndReason_descriptor();
+template<typename T>
+inline const std::string& RunEndReason_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, RunEndReason>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function RunEndReason_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    RunEndReason_descriptor(), enum_t_value);
+}
+inline bool RunEndReason_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, RunEndReason* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<RunEndReason>(
+    RunEndReason_descriptor(), name, value);
+}
 enum ItemResult : int {
   ITEM_OK = 0,
   ITEM_ALREADY = 1,
@@ -489,6 +542,16 @@ template <> struct is_proto_enum< ::Protocol::ItemState> : ::std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ItemState>() {
   return ::Protocol::ItemState_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::EscapeGaugeState> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::EscapeGaugeState>() {
+  return ::Protocol::EscapeGaugeState_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::RunEndReason> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::RunEndReason>() {
+  return ::Protocol::RunEndReason_descriptor();
 }
 template <> struct is_proto_enum< ::Protocol::ItemResult> : ::std::true_type {};
 template <>

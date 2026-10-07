@@ -21,6 +21,12 @@ atomic<bool> GMonsterPull = false;
 atomic<uint32> GEntryPointId = 0;
 atomic<uint64> GMonsterKills = 0;
 atomic<uint64> GMonsterAttacksSent = 0;
+atomic<bool> GTowerMode = false;
+float GTowerX = 0.f;
+float GTowerY = 0.f;
+atomic<uint64> GRunGold = 0;
+atomic<uint64> GLeaveEscaped = 0;
+atomic<uint64> GLeaveExpired = 0;
 uint64 GBurstStartUs = 0;
 atomic<uint64> GBagOpenSent = 0;
 atomic<uint64> GLootSent = 0;
@@ -425,6 +431,16 @@ static void TickBots(float deltaTime)
 			}
 		}
 
+		// -tower: 싸우지 않고 그 지점으로 걸어가 선다 - 서버 게이지가 채워 탈출시킨다
+		if (GTowerMode.load())
+		{
+			target = nullptr;
+			monsterId = 1;			// 배회 분기를 막는다 - 아래 이동은 dest 로만 간다 (공격은 안 한다: bestDistSq 가 크다)
+			bestDistSq = FLT_MAX;
+			bot->destX = GTowerX;
+			bot->destY = GTowerY;
+		}
+
 		if (target != nullptr)
 		{
 			bot->destX = target->x;
@@ -508,7 +524,11 @@ static void TickBots(float deltaTime)
 			++GSentThisWindow;
 		}
 
-		if (casting == false && dashing == false && nowUs >= bot->nextDashAtUs)
+		if (GTowerMode.load())
+		{
+			// 스킬도 쓰지 않는다 - 이동만 (대시가 구역 밖으로 튀어 나가지 않게)
+		}
+		else if (casting == false && dashing == false && nowUs >= bot->nextDashAtUs)
 		{
 			float dirX = (target != nullptr) ? (target->x - bot->x) : dx;
 			float dirY = (target != nullptr) ? (target->y - bot->y) : dy;
@@ -609,6 +629,14 @@ int main(int argc, char* argv[])
 			grantUnique = ::atoi(argv[i + 1]);
 		else if (::strcmp(argv[i], "-entry") == 0)
 			GEntryPointId.store(static_cast<uint32>(::atoi(argv[i + 1])));
+		else if (::strcmp(argv[i], "-gold") == 0)
+			GRunGold.store(::strtoull(argv[i + 1], nullptr, 10));
+		else if (::strcmp(argv[i], "-tower") == 0 && i + 2 < argc)
+		{
+			GTowerMode.store(true);
+			GTowerX = static_cast<float>(::atof(argv[i + 1]));
+			GTowerY = static_cast<float>(::atof(argv[i + 2]));
+		}
 	}
 
 	bool grantSpread = false;
@@ -636,7 +664,8 @@ int main(int argc, char* argv[])
 		<< (GNoClientMs.load() ? " - client_ms OFF" : " - client_ms ON")
 		<< (GBurst.load() ? " - burst ON (all packets held 1.5s every 20s)" : "")
 		<< (GMonsterPull.load() ? " - monster pull ON (chase + hit the nearest monster)" : "")
-		<< " - entry=" << GEntryPointId.load() << '\n';
+		<< (GTowerMode.load() ? " - tower mode (walk to " + to_string(static_cast<int32>(GTowerX)) + "," + to_string(static_cast<int32>(GTowerY)) + " and stand)" : string())
+		<< " - entry=" << GEntryPointId.load() << " gold=" << GRunGold.load() << '\n';
 
 	// 계정 번호 풀. 끊긴 세션의 번호를 다음 세션이 그대로 물려 받는다
 	{

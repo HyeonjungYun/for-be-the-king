@@ -2,9 +2,22 @@
 #include "JobQueue.h"
 #include "SkillTable.h"
 #include "MonsterBrain.h"
+#include "EscapeLogic.h"
 #include <random>
 
 struct DeathSnapshot;
+
+// 층의 탈출 타워 하나 (design/gdd/escape-timer.md § A · B)
+struct EscapeTowerState
+{
+	string						towerId;			// CSV 문자열 (Ta …)
+	uint32						wireId = 0;			// S_ESCAPE_GAUGE.tower_id - 층 안 순번 1..
+	float						x = 0.f;
+	float						y = 0.f;
+	EscapeLogic::Gauge			gauge;
+	Protocol::EscapeGaugeState	alertState = Protocol::ESCAPE_GAUGE_IDLE;	// 경보 집합이 마지막으로 받은 것 (FILLING / IDLE)
+	vector<uint64>				lastOccupants;		// 직전 틱 점유자 - 역행(REVERSAL) 텔레메트리
+};
 
 // 몬스터 자리 하나 (monster-ai.md § States - Alive(id) ↔ DeadWaiting(respawnAtUs))
 struct MonsterSlot
@@ -71,6 +84,12 @@ public:
 	// 부팅 때 한 번 - MonsterTable 의 이 층 자리를 전부 만피 Idle 로 낳는다 (monster-ai.md Core Rule 22)
 	void	InitMonsters();
 
+	// 부팅 때 한 번 - TowerTable 의 이 층 타워로 게이지를 만든다 (escape-timer.md). 타워 없는 층은 구역 없이 돈다
+	void	InitEscape();
+
+	// /gold N (FBTK_DEBUG_GOLD=1) - 런 골드를 더한다
+	void	DebugAddRunGold(uint64 playerId, uint64 amount);
+
 public:
 	void	UpdateTick();
 	void	FlushMoves();
@@ -90,6 +109,9 @@ private:
 	bool	CancelCast(const CreatureRef& caster);
 	void	SendEquipSync(const PlayerRef& player);
 	void	SendInventorySync(const PlayerRef& player);
+
+	// 털린 상자 전체 목록 - 입장 · 재접속 때 (radar.md OQ-1). 목록에 없으면 Sealed
+	void	SendChestSnapshot(const PlayerRef& player);
 	void	KillPlayer(const PlayerRef& victim, uint64 instigatorId, Protocol::DeathCause cause, const char* by);
 	void	UpdateDetached(uint64 nowUs);
 	void	ReleaseDetachedBody(uint64 characterId);
@@ -116,6 +138,15 @@ private:
 	void	OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 damage, uint64 nowUs);
 	void	OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 nowUs);
 	bool	BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs);
+
+	// 탈출 (escape-timer.md § Core Rules). UpdateTick 에서 게이지 → 타이머 → (기존) 끊긴 몸 순서
+	void	UpdateEscapeTowers(uint64 nowUs);
+	void	UpdateRunTimers(uint64 nowUs);
+	void	BeginExpiryCommit(const PlayerRef& player, uint64 nowUs);
+	void	SendGauge(const PlayerRef& player, uint32 towerWireId, Protocol::EscapeGaugeState state, uint32 permille, float ratePerS, bool selfInZone);
+
+	// 런 하나가 끝났다 - runs.csv 한 줄 (§ G). reason: ESCAPED · EXPIRED · DIED · DISCONNECT_DEATH
+	void	WriteRunTelemetry(const PlayerRef& player, const char* reason, uint64 killerId, uint64 goldKept, uint64 nowUs);
 
 public:
 	uint32								_floorId = 0;
@@ -152,6 +183,9 @@ private:
 	unordered_map<uint64, MonsterRef>	_monsters;			// 시체 유예 중인 것 포함
 	vector<MonsterSlot>					_monsterSlots;
 	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
+
+	vector<EscapeTowerState>			_towers;
+	uint64								_lastEscapeTickUs = 0;
 
 	unordered_set<uint64>				_ccTargets;
 	vector<Protocol::CcEventInfo>		_pendingCcApplied;

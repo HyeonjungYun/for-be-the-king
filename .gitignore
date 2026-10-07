@@ -86,3 +86,5 @@ Server/Data/export/
 #    찾지 못해 링크가 깨졌다. packages 는 예외로 둔다.
 !Server/packages/**/x64/
 !Server/packages/**/x64/**
+# 텔레메트리 · 테스트 출력 (design/gdd/escape-timer.md § G) - 원격 푸시에 들어가면 안 된다
+Server/Logs/

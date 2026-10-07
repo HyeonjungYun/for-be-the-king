@@ -112,3 +112,11 @@ skill.3001.family,갑옷 계열,
 monster.hound,떠돌이 들개,monster-ai.md roster 1 (임시 이름 - narrative 확정 전)
 monster.husk,허깨비 병사,monster-ai.md roster 2 (임시)
 monster.house_boss,집 보스,monster-ai.md roster 3 (임시)
+run.timer,남은 시간 {0},escape-timer.md run HUD
+run.warning,{0} 남았다 - 타워로 가라,run_warning_s 단계
+run.gauge,탈출 {0}%,타워 게이지
+run.alarm.self,경보 중 - 근처 사람들이 알고 있다,점유자 · 채우는 중 (Core Rule 12)
+run.alarm.nearby,근처에서 누군가 탈출을 시작했다,경보 집합 - 위치 비공개
+run.result.escaped,탈출 성공,S_LEAVE_GAME ESCAPED
+run.result.escaped_gold,탈출 성공 - 골드 +{0},
+run.result.expired,시간 초과 - 소지품 {0}개를 잃었다 (골드 +{1}),S_LEAVE_GAME EXPIRED

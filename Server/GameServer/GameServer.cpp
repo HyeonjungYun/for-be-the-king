@@ -19,6 +19,8 @@
 #include "TowerTable.h"
 #include "MonsterTable.h"
 #include "Monster.h"
+#include "EscapeLogic.h"
+#include "Telemetry.h"
 #include "Bag.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
@@ -56,6 +58,8 @@ namespace
 		case PKT_S_ITEM_RESULT:		return "S_ITEM_RESULT";
 		case PKT_S_INVENTORY_SYNC:	return "S_INVENTORY_SYNC";
 		case PKT_S_BAG_CONTENTS:	return "S_BAG_CONTENTS";
+		case PKT_S_ESCAPE_GAUGE:	return "S_ESCAPE_GAUGE";
+		case PKT_S_CHEST_STATE:		return "S_CHEST_STATE";
 		case STAT_ID_BAG_SPAWN:		return "S_SPAWN(bag)";
 		case STAT_ID_BAG_DESPAWN:	return "S_DESPAWN(bag)";
 		default:					return nullptr;
@@ -162,6 +166,41 @@ int main()
 
 		LOG_LINE << "[BOOT] towers=" << TowerTable::All().size() << " monster types=" << MonsterTable::TypeCount()
 			<< " spawns=" << MonsterTable::Spawns().size() << '\n';
+
+		// 탈출 & 체류 타이머 - escape_config.csv, 그다음 FBTK_RUN_LIMIT_S · FBTK_ESCAPE_FILL_S · FBTK_DEBUG_ESCAPE (AC-ET-28)
+		{
+			EscapeConfig& cfg = EscapeConfig::Get();
+			if (cfg.Load(dataDir, OUT error) == false
+				|| TowerTable::ValidateForEscape(cfg.zoneLeaveCm, cfg.alertCm, FLOOR_COUNT, OUT error) == false)
+			{
+				LOG_LINE << "[ESCAPE] reject " << error << " (dir=" << dataDir << ")\n";
+				return -1;
+			}
+
+			LOG_LINE << "[ESCAPE] config zone=" << cfg.zoneEnterCm << "/" << cfg.zoneLeaveCm << "cm fill=" << cfg.fillUs / 1000 << "ms reverse=x"
+				<< cfg.reverseMultX100 / 100.f << " visible=" << cfg.visibleCm << "cm alert=" << cfg.alertCm << "cm run_limit=" << cfg.runLimitUs / 1'000'000
+				<< "s kept=" << cfg.expiryGoldKeptPct << "% debug_escape=" << (cfg.debugEscapeCommand ? "on" : "off") << '\n';
+
+			for (int32 i = 0; i < FLOOR_COUNT; i++)
+				GRooms[i]->DoAsync(&Room::InitEscape);
+
+			char* raw = nullptr;
+			size_t length = 0;
+			if (_dupenv_s(&raw, &length, "FBTK_DEBUG_GOLD") == 0 && raw != nullptr)
+			{
+				GDebugGold.store(raw[0] == '1');
+				::free(raw);
+			}
+			if (GDebugGold.load())
+				LOG_LINE << "[BOOT] FBTK_DEBUG_GOLD=1 - /gold N adds run gold (TEST ONLY)\n";
+
+			// 측정 전용 - 못 열어도 서버는 돈다
+			const string telemetryDir = dataDir + "\\..\\Logs\\telemetry";
+			if (GTelemetry.Open(telemetryDir))
+				LOG_LINE << "[TELEM] writing " << telemetryDir << " boot=" << GTelemetry.BootId() << '\n';
+			else
+				LOG_LINE << "[TELEM] cannot open " << telemetryDir << " - telemetry off\n";
+		}
 
 		// G3 켬/끔 비교 - 같은 데이터로 몬스터만 끈다 (FBTK_MONSTERS=0)
 		bool monstersOn = true;

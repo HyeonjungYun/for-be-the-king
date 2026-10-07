@@ -26,6 +26,10 @@ public:
 
 	static const vector<TowerDef>& All() { return s_towers; }
 
+	// 탈출 규칙 검사 (escape-timer.md Core Rule 17) - 타워가 있는 층은 정확히 3개, 서로 2 × R_leave 와
+	// 2 × R_alert 보다 멀어야 한다(구역 · 경보 집합이 겹치지 않음). 타워 없는 층(TEMP)은 통과
+	static bool		ValidateForEscape(float leaveCm, float alertCm, uint32 floorCount, OUT string& error);
+
 private:
 	static vector<TowerDef>	s_towers;
 };

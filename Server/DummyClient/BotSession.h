@@ -98,6 +98,14 @@ extern atomic<uint32> GEntryPointId;
 extern atomic<uint64> GMonsterKills;
 extern atomic<uint64> GMonsterAttacksSent;
 
+// -tower <x> <y>: 그 지점으로 걸어가 서 있는다 (탈출 게이지 시험, escape-timer.md AC-ET-26 · 30) · -gold <N>: 입장하자마자 /gold N
+extern atomic<bool> GTowerMode;
+extern float GTowerX;
+extern float GTowerY;
+extern atomic<uint64> GRunGold;
+extern atomic<uint64> GLeaveEscaped;
+extern atomic<uint64> GLeaveExpired;
+
 // 10초 창마다 보고하고 0 으로 돌린다
 extern atomic<uint64> GBagOpenSent;
 extern atomic<uint64> GLootSent;

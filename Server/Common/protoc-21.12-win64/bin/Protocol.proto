@@ -1,4 +1,4 @@
-﻿syntax = "proto3";
+syntax = "proto3";
 package Protocol;
 
 import "Enum.proto";
@@ -27,6 +27,7 @@ message S_ENTER_GAME
 {
 	bool success = 1;
 	ObjectInfo player = 2;
+	uint32 run_remaining_ms = 3;	// stay timer left, also on reattach. 0 = unknown (escape-timer.md Core Rule 15)
 }
 
 message C_LEAVE_GAME
@@ -36,7 +37,9 @@ message C_LEAVE_GAME
 
 message S_LEAVE_GAME
 {
-
+	RunEndReason reason = 1;		// escaped / expired - for the result notice
+	uint64 gold_kept = 2;			// gold credited to the account (escape 100 %, expiry 30 %)
+	uint32 items_destroyed = 3;		// items destroyed by expiry
 }
 
 message S_SPAWN
@@ -211,4 +214,23 @@ message S_BAG_CONTENTS
 message C_BAG_OPEN
 {
 	uint64 bag_id = 1;
+}
+
+// New messages go at the end only - packet ids follow declaration order (ADR-0005)
+
+// Escape tower gauge and alert (escape-timer.md Core Rule 10-12)
+message S_ESCAPE_GAUGE
+{
+	uint32 tower_id = 1;				// 0 = alert only (position hidden). 1.. = tower on the floor (Ta=1, Tb=2, Tc=3)
+	EscapeGaugeState state = 2;
+	uint32 progress_permille = 3;		// 0..1000, 0 for alert only
+	float rate_per_s = 4;				// progress per second (+1/60, -2/60, 0) - the client extrapolates
+	bool self_in_zone = 5;				// the receiver is in the zone now
+}
+
+// Chest looted state (radar.md OQ-1) - radar and chest look know Sealed / Looted
+message S_CHEST_STATE
+{
+	repeated uint64 looted_ids = 1;		// looted chest object ids (CHEST_ID_BASE + chest_id)
+	bool snapshot = 2;					// true: the full list (absent = Sealed), false: just looted
 }

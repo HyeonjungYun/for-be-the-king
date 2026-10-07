@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[13];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[15];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -63,7 +63,12 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "RY\020\004*\200\001\n\tItemState\022\023\n\017ITEM_STATE_NONE\020\000\022"
   "\026\n\022ITEM_STATE_CARRIED\020\001\022\027\n\023ITEM_STATE_EQ"
   "UIPPED\020\002\022\026\n\022ITEM_STATE_VAULTED\020\003\022\025\n\021ITEM"
-  "_STATE_IN_BAG\020\004*\231\001\n\nItemResult\022\013\n\007ITEM_O"
+  "_STATE_IN_BAG\020\004*z\n\020EscapeGaugeState\022\025\n\021E"
+  "SCAPE_GAUGE_IDLE\020\000\022\030\n\024ESCAPE_GAUGE_FILLI"
+  "NG\020\001\022\031\n\025ESCAPE_GAUGE_DRAINING\020\002\022\032\n\026ESCAP"
+  "E_GAUGE_COMPLETED\020\003*J\n\014RunEndReason\022\020\n\014R"
+  "UN_END_NONE\020\000\022\023\n\017RUN_END_ESCAPED\020\001\022\023\n\017RU"
+  "N_END_EXPIRED\020\002*\231\001\n\nItemResult\022\013\n\007ITEM_O"
   "K\020\000\022\020\n\014ITEM_ALREADY\020\001\022\022\n\016ITEM_NOT_FOUND\020"
   "\002\022\026\n\022ITEM_INVALID_STATE\020\003\022\027\n\023ITEM_INVENT"
   "ORY_FULL\020\004\022\024\n\020ITEM_BAD_REQUEST\020\005\022\021\n\rITEM"
@@ -71,7 +76,7 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 1539, descriptor_table_protodef_Enum_2eproto,
+    false, false, 1739, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -284,9 +289,40 @@ bool ItemState_IsValid(int value) {
   }
 }
 
-const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor() {
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* EscapeGaugeState_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
   return file_level_enum_descriptors_Enum_2eproto[12];
+}
+bool EscapeGaugeState_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunEndReason_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[13];
+}
+bool RunEndReason_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[14];
 }
 bool ItemResult_IsValid(int value) {
   switch (value) {

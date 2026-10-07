@@ -20,6 +20,7 @@ atomic<int32> GFailEscapeCommits = 0;
 DeathCommitTracker GDeathCommits;
 atomic<uint64> GDisconnectGraceUs = 180'000'000;
 DetachedBodies GDetachedBodies;
+atomic<bool> GDebugGold = false;
 
 namespace
 {
@@ -159,6 +160,13 @@ namespace
 			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
 			ok = conn->Excute(del.c_str());
 		 }
+
+		// 런 골드 전액 (escape-timer.md Core Rule 18) - 정상 플레이에서는 0 이라 문장을 보내지 않는다
+		if (ok && snap.gold > 0)
+		{
+			::snprintf(query, sizeof(query), "UPDATE characters SET gold = gold + %llu WHERE character_id = %llu", snap.gold, characterId);
+			ok = conn->Excute(query);
+		}
 
 		if (ok)
 		{
@@ -652,6 +660,72 @@ void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 ch
 	session->Send(sendBuffer);
 
 	LOG_LINE << "[BASECAMP] sync - char=" << characterId << " vaulted=" << vaulted << " carried=" << carried << " equipped=" << equipped << '\n';
+}
+
+namespace
+{
+	// 만료 커밋 한 번 (escape-timer.md Core Rule 17). 가방을 만들지 않는다 - bags 테이블은 건드리지 않는다 (AC-9)
+	bool TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap)
+	{
+		char query[256];
+
+		if (conn->BeginTransaction() == false)
+			return false;
+
+		::snprintf(query, sizeof(query), "SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", snap.characterId);
+		MYSQL_RES* lockRes = conn->Query(query);
+		bool ok = (lockRes != nullptr);
+		if (lockRes != nullptr)
+			conn->FreeResult(lockRes);
+
+		// 소유자가 아니라 id 로 - 주운 사망 가방 아이템은 DB 에서 아직 그 가방 소속(IN_BAG)이다. 지우지 않으면 재시작 때
+		// LoadLiveBags 가 가방을 되살려 복제가 된다. 창고(VAULTED)는 상태 조건으로 어떤 경우에도 못 지운다 (AC-ET-25)
+		if (ok && snap.rowIds.empty() == false)
+		{
+			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.rowIds) + ") AND state IN ("
+				+ to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED)) + ","
+				+ to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ","
+				+ to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG)) + ")";
+
+			ok = conn->Excute(del.c_str());
+			if (ok && conn->GetAffectedRows() != snap.rowIds.size())
+				LOG_LINE << "[EXPIRE] row mismatch - expected=" << snap.rowIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
+		}
+
+		if (ok && snap.goldKept > 0)
+		{
+			::snprintf(query, sizeof(query), "UPDATE characters SET gold = gold + %llu WHERE character_id = %llu", snap.goldKept, snap.characterId);
+			ok = conn->Excute(query);
+		}
+
+		// 검증 전용 - 탈출 커밋 실패 주입과 같은 자리 (AC-ET-24 롤백)
+		if (ok && GFailEscapeCommits.fetch_sub(1) > 0)
+		{
+			LOG_LINE << "[EXPIRE] injected failure - char=" << snap.characterId << '\n';
+			ok = false;
+		}
+
+		if (ok && conn->Commit())
+			return true;
+
+		conn->Rollback();
+		return false;
+	}
+}
+
+void CommitExpiry(DBConnection* conn, const ExpirySnapshot& snap)
+{
+	uint32 backoffMs = ESCAPE_RETRY_FIRST_MS;
+
+	for (int32 attempt = 1; ; attempt++)
+	{
+		if (TryCommitExpiry(conn, snap))
+			return;
+
+		LOG_LINE << "[EXPIRE] attempt " << attempt << " failed - char=" << snap.characterId << " retry in " << backoffMs << "ms\n";
+		this_thread::sleep_for(chrono::milliseconds(backoffMs));
+		backoffMs = (backoffMs * 2 < ESCAPE_RETRY_MAX_MS) ? backoffMs * 2 : ESCAPE_RETRY_MAX_MS;
+	}
 }
 
 void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap)

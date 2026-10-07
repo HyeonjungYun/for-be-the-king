@@ -46,6 +46,8 @@ enum : uint16
 	PKT_S_INVENTORY_SYNC = 1033,
 	PKT_S_BAG_CONTENTS = 1034,
 	PKT_C_BAG_OPEN = 1035,
+	PKT_S_ESCAPE_GAUGE = 1036,
+	PKT_S_CHEST_STATE = 1037,
 };
 
 // Custom Handlers
@@ -116,6 +118,8 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_ITEM_RESULT& pkt) { return MakeSendBuffer(pkt, PKT_S_ITEM_RESULT); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_INVENTORY_SYNC& pkt) { return MakeSendBuffer(pkt, PKT_S_INVENTORY_SYNC); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_BAG_CONTENTS& pkt) { return MakeSendBuffer(pkt, PKT_S_BAG_CONTENTS); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_ESCAPE_GAUGE& pkt) { return MakeSendBuffer(pkt, PKT_S_ESCAPE_GAUGE); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_CHEST_STATE& pkt) { return MakeSendBuffer(pkt, PKT_S_CHEST_STATE); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

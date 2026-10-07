@@ -46,6 +46,8 @@ enum : uint16
 	PKT_S_INVENTORY_SYNC = 1033,
 	PKT_S_BAG_CONTENTS = 1034,
 	PKT_C_BAG_OPEN = 1035,
+	PKT_S_ESCAPE_GAUGE = 1036,
+	PKT_S_CHEST_STATE = 1037,
 };
 
 // Custom Handlers
@@ -71,6 +73,8 @@ bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& 
 bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pkt);
 bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SYNC& pkt);
 bool Handle_S_BAG_CONTENTS(PacketSessionRef& session, Protocol::S_BAG_CONTENTS& pkt);
+bool Handle_S_ESCAPE_GAUGE(PacketSessionRef& session, Protocol::S_ESCAPE_GAUGE& pkt);
+bool Handle_S_CHEST_STATE(PacketSessionRef& session, Protocol::S_CHEST_STATE& pkt);
 
 class ClientPacketHandler
 {
@@ -100,6 +104,8 @@ public:
 		GPacketHandler[PKT_S_ITEM_RESULT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ITEM_RESULT>(Handle_S_ITEM_RESULT, session, buffer, len); };
 		GPacketHandler[PKT_S_INVENTORY_SYNC] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_INVENTORY_SYNC>(Handle_S_INVENTORY_SYNC, session, buffer, len); };
 		GPacketHandler[PKT_S_BAG_CONTENTS] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_BAG_CONTENTS>(Handle_S_BAG_CONTENTS, session, buffer, len); };
+		GPacketHandler[PKT_S_ESCAPE_GAUGE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ESCAPE_GAUGE>(Handle_S_ESCAPE_GAUGE, session, buffer, len); };
+		GPacketHandler[PKT_S_CHEST_STATE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CHEST_STATE>(Handle_S_CHEST_STATE, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

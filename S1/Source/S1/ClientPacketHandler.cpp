@@ -3,6 +3,7 @@
 #include "S1.h"
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
+#include "Game/Escape/S1EscapeSubsystem.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -45,6 +46,10 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
 		BaseCamp->HandleEnterAccepted(pkt.player());
 
+	// 체류 타이머 (escape-timer.md Core Rule 15, 2026-10-07 에이전트 - YOLO 세션 위임)
+	if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+		Escape->HandleEnterGame(pkt.run_remaining_ms());
+
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
 	{
 		GameInstance->HandleSpawn(pkt);
@@ -59,6 +64,33 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 	// 서버가 바로 뒤에 베이스캠프 인벤토리(S_INVENTORY_SYNC)를 보낸다.
 	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
 		BaseCamp->HandleLeftGame();
+
+	// 결과 안내 - 탈출 성공 / 시간 초과 (escape-timer.md § Packets, 2026-10-07 에이전트)
+	if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+		Escape->HandleLeftGame(pkt);
+
+	return true;
+}
+
+bool Handle_S_ESCAPE_GAUGE(PacketSessionRef& session, Protocol::S_ESCAPE_GAUGE& pkt)
+{
+	// 탈출 타워 게이지 · 경보 (escape-timer.md Core Rule 10-12, 2026-10-07 에이전트)
+	if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+		Escape->HandleGauge(pkt);
+
+	return true;
+}
+
+bool Handle_S_CHEST_STATE(PacketSessionRef& session, Protocol::S_CHEST_STATE& pkt)
+{
+	// 털린 상자 (radar.md OQ-1, 2026-10-07 에이전트)
+	if (US1ItemSubsystem* Items = US1ItemSubsystem::Get())
+	{
+		TArray<uint64> Looted;
+		for (uint64 Id : pkt.looted_ids())
+			Looted.Add(Id);
+		Items->OnChestState(Looted, pkt.snapshot());
+	}
 
 	return true;
 }

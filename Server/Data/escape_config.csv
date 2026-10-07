@@ -1,0 +1,16 @@
+key,value
+zone_enter_radius_cm,1000
+zone_leave_radius_cm,1100
+gauge_fill_s,60
+gauge_reverse_mult_x100,200
+gauge_alert_radius_m,40
+gauge_visible_radius_m,25
+gauge_heartbeat_ms,1000
+gauge_dt_clamp_ms,250
+run_limit_s,1800
+run_warning_s,600;300;120;60;10
+expiry_gold_kept_pct,30
+escape_debug_command,off
+telemetry_min_run_s,60
+telemetry_grade_points,1;2;4;8
+telemetry_alert_camp_alarm_pct,25

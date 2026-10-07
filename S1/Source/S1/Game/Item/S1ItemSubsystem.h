@@ -73,6 +73,12 @@ public:
 	/** H6. S_EQUIP_SYNC arrived — the six keys changed. The state itself stays in US1GameInstance::SkillSlots. */
 	void OnEquipSync();
 
+	/**
+	 * S_CHEST_STATE — which chests are Looted (radar.md OQ-1). A snapshot replaces the set; a diff adds to it.
+	 * A chest that resets is despawned and spawned again by the server, and a new spawn is Sealed.
+	 */
+	void OnChestState(const TArray<uint64>& LootedIds, bool bSnapshot);
+
 	// ── Outgoing (UI) ────────────────────────────────────────────────────
 
 	void RequestEquip(uint64 InstanceId, int32 Slot);
@@ -100,6 +106,12 @@ public:
 
 	const FS1BagView* FindBag(uint64 BagId) const;
 	uint64 GetOpenBagId() const { return OpenBagId; }
+
+	/** Every bag and chest the server has spawned for us — the radar picks the chests out (radar.md § Data). */
+	const TMap<uint64, FS1BagView>& GetBags() const { return Bags; }
+
+	/** True once the server said this chest was taken from; false again after it resets (respawn). */
+	bool IsChestLooted(uint64 ChestObjectId) const { return LootedChests.Contains(ChestObjectId); }
 
 	/** The bag F would open from here, or 0. */
 	uint64 FindNearestBag(const FVector& From) const;
@@ -205,6 +217,7 @@ private:
 	TMap<uint64, FS1ItemView>	Items;
 	TMap<uint64, FS1BagView>	Bags;
 	uint64						OpenBagId = 0;
+	TSet<uint64>				LootedChests;
 
 	/** Items seen equipped while this process lived. Survives reattach. AC-UI-03. */
 	TSet<uint64>				EquippedThisSession;

@@ -104,6 +104,23 @@ enum ItemState
 	ITEM_STATE_IN_BAG = 4;
 }
 
+// 탈출 타워 게이지 (design/gdd/escape-timer.md § Packets, 2026-10-07)
+enum EscapeGaugeState
+{
+	ESCAPE_GAUGE_IDLE = 0;
+	ESCAPE_GAUGE_FILLING = 1;
+	ESCAPE_GAUGE_DRAINING = 2;
+	ESCAPE_GAUGE_COMPLETED = 3;
+}
+
+// 런이 어떻게 끝났나 - S_LEAVE_GAME 결과 안내 (escape-timer.md)
+enum RunEndReason
+{
+	RUN_END_NONE = 0;			// 기존 C_LEAVE_GAME 응답 등 - 호환
+	RUN_END_ESCAPED = 1;
+	RUN_END_EXPIRED = 2;
+}
+
 enum ItemResult
 {
 	ITEM_OK = 0;

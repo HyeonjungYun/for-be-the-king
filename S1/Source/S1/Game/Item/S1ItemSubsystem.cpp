@@ -251,8 +251,25 @@ void US1ItemSubsystem::OnBagSpawned(const Protocol::ObjectInfo& Info)
 	OnBagChanged.Broadcast(BagId);
 }
 
+void US1ItemSubsystem::OnChestState(const TArray<uint64>& LootedIds, bool bSnapshot)
+{
+	if (bSnapshot)
+		LootedChests.Reset();
+
+	for (uint64 Id : LootedIds)
+	{
+		LootedChests.Add(Id);
+		OnBagChanged.Broadcast(Id);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[CHEST] state %s - %d looted (now %d)"), bSnapshot ? TEXT("snapshot") : TEXT("diff"), LootedIds.Num(), LootedChests.Num());
+}
+
 void US1ItemSubsystem::OnBagDespawned(uint64 BagId)
 {
+	// A chest that resets despawns and spawns again — Sealed (server UpdateChests)
+	LootedChests.Remove(BagId);
+
 	if (Bags.Remove(BagId) == 0)
 		return;
 

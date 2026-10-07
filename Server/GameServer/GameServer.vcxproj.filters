@@ -105,6 +105,12 @@
     <ClCompile Include="MonsterBrain.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
+    <ClCompile Include="EscapeLogic.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Telemetry.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -193,6 +199,12 @@
     </ClInclude>
     <ClInclude Include="MonsterBrain.h">
       <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="EscapeLogic.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Telemetry.h">
+      <Filter>Data</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
