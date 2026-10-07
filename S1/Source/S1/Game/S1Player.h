@@ -93,6 +93,10 @@ public:
 
 	bool IsMonster() const { return bIsMonster; }
 
+	/** The monster's display name (String Table) — empty for players. Drawn by US1WorldLabelWidget, not here. */
+	const FText& GetMonsterName() const { return MonsterName; }
+	bool IsDown() const { return CurrentHp <= 0; }
+
 public:
 	/**
 	 * Mirrors a server CC event locally. The client never decides duration or whether the
@@ -243,8 +247,11 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> MonsterDisc = nullptr;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UTextRenderComponent> MonsterLabel = nullptr;
+	/**
+	 * Not a UTextRenderComponent: its default font (RobotoDistanceField) has no Hangul and every name
+	 * rendered as boxes (2026-10-07 screenshot). The label is painted in screen space with the UI font.
+	 */
+	FText MonsterName;
 
 	/** Pooled — components are reused rather than created and destroyed per hit. */
 	UPROPERTY(Transient)

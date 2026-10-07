@@ -8,6 +8,7 @@
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/UI/S1RunHudWidget.h"
 #include "Game/UI/S1RadarWidget.h"
+#include "Game/UI/S1WorldLabelWidget.h"
 #include "HAL/PlatformTime.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/ConfigCacheIni.h"
@@ -67,8 +68,11 @@ void US1EscapeSubsystem::Deinitialize()
 		Hud->RemoveFromParent();
 	if (Radar != nullptr)
 		Radar->RemoveFromParent();
+	if (WorldLabels != nullptr)
+		WorldLabels->RemoveFromParent();
 	Hud = nullptr;
 	Radar = nullptr;
+	WorldLabels = nullptr;
 	GEscape = nullptr;
 	Super::Deinitialize();
 }
@@ -167,6 +171,11 @@ void US1EscapeSubsystem::EnsureHud()
 	Radar = CreateWidget<US1RadarWidget>(PC, US1RadarWidget::StaticClass());
 	if (Radar != nullptr)
 		Radar->AddToViewport(RunHudZOrder - 1);
+
+	// Monster names over heads — painted in screen space because the world text font has no Hangul
+	WorldLabels = CreateWidget<US1WorldLabelWidget>(PC, US1WorldLabelWidget::StaticClass());
+	if (WorldLabels != nullptr)
+		WorldLabels->AddToViewport(RunHudZOrder - 2);
 }
 
 void US1EscapeSubsystem::UpdateHud(double Now)

@@ -111,19 +111,6 @@ void AS1Player::Tick(float DeltaTime)
 	DrawCombatDebug();
 	TickDamagePopups();
 
-	// Monster name reads flat to the fixed camera, same trick as the damage numbers
-	if (MonsterLabel != nullptr)
-	{
-		if (APlayerController* PC = GetWorld() != nullptr ? GetWorld()->GetFirstPlayerController() : nullptr)
-		{
-			FVector CamLoc;
-			FRotator CamRot;
-			PC->GetPlayerViewPoint(CamLoc, CamRot);
-			const FMatrix CamMatrix = FRotationMatrix(CamRot);
-			MonsterLabel->SetWorldRotation(FRotationMatrix::MakeFromXZ(-CamMatrix.GetUnitAxis(EAxis::X), CamMatrix.GetUnitAxis(EAxis::Z)).Rotator());
-		}
-	}
-
 	{
 		FVector Location = GetActorLocation();
 		PlayerInfo->set_x(Location.X);
@@ -682,15 +669,8 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 		MonsterDisc->RegisterComponent();
 	}
 
-	MonsterLabel = NewObject<UTextRenderComponent>(this);
-	MonsterLabel->SetupAttachment(RootComponent);
-	MonsterLabel->SetHorizontalAlignment(EHTA_Center);
-	MonsterLabel->SetVerticalAlignment(EVRTA_TextCenter);
-	MonsterLabel->SetTextRenderColor(FColor(25, 158, 112));
-	MonsterLabel->SetWorldSize(28.f);
-	MonsterLabel->SetRelativeLocation(FVector(-70.f, 0.f, 120.f));
-	MonsterLabel->SetText(Def != nullptr ? FText::FromStringTable(TEXT("S1Items"), Def->NameKey) : FText::FromString(TEXT("?")));
-	MonsterLabel->RegisterComponent();
+	// Painted by US1WorldLabelWidget in screen space with the UI font (the world text font has no Hangul)
+	MonsterName = Def != nullptr ? FText::FromStringTable(TEXT("S1Items"), Def->NameKey) : FText::FromString(TEXT("?"));
 
 	UE_LOG(LogTemp, Log, TEXT("[MON] spawn id=%llu type=%u hp=%d/%d"), Info.object_id(), MonsterTypeId, CurrentHp, MaxHp);
 }
