@@ -63,6 +63,7 @@ bool EscapeConfig::Parse(const string& csv, OUT string& error)
 		else if (key == "run_limit_s") { if (needUInt() == false) return false; runLimitUs = static_cast<uint64>(u) * 1'000'000; }
 		else if (key == "expiry_gold_kept_pct") { if (needUInt() == false) return false; expiryGoldKeptPct = u; }
 		else if (key == "telemetry_min_run_s") { if (needUInt() == false) return false; telemetryMinRunUs = static_cast<uint64>(u) * 1'000'000; }
+		else if (key == "spawn_invulnerability_ms") { if (needUInt() == false) return false; spawnInvulnerabilityUs = static_cast<uint64>(u) * 1000; }
 		else if (key == "escape_debug_command")
 		{
 			if (value != "on" && value != "off")
@@ -98,7 +99,8 @@ bool EscapeConfig::Validate(OUT string& error) const
 		&& InRange(dtClampUs, 100'000ull, 500'000ull, "gauge_dt_clamp (us)", error)
 		&& InRange(runLimitUs, 30ull * 1'000'000, 3600ull * 1'000'000, "run_limit (us)", error)
 		&& InRange(expiryGoldKeptPct, 0u, 100u, "expiry_gold_kept_pct", error)
-		&& InRange(telemetryMinRunUs, 0ull, 300ull * 1'000'000, "telemetry_min_run (us)", error);
+		&& InRange(telemetryMinRunUs, 0ull, 300ull * 1'000'000, "telemetry_min_run (us)", error)
+		&& InRange(spawnInvulnerabilityUs, 0ull, 5'000'000ull, "spawn_invulnerability (us, 0 .. 5 s)", error);
 }
 
 bool EscapeConfig::Load(const string& dataDir, OUT string& error)

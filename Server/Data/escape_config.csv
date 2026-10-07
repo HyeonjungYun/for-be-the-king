@@ -14,3 +14,4 @@ escape_debug_command,off
 telemetry_min_run_s,60
 telemetry_grade_points,1;2;4;8
 telemetry_alert_camp_alarm_pct,25
+spawn_invulnerability_ms,3000

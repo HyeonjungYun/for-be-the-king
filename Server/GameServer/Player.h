@@ -71,6 +71,11 @@ public:
 	uint64					runStartUs = 0;			// 방에 놓인 순간 (EnterRoom). 재접속은 바꾸지 않는다
 	uint64					runDeadlineUs = 0;		// 0 = 런 밖
 	uint64					runGold = 0;			// 던전 메모리 골드 - MVP 는 /gold 로만 는다 (Core Rule 18)
+
+	// 진입 직후 무적 (game-concept AC-10 · registry spawn_invulnerability_duration 3 s) - 이동 · 공격 · 스킬로 즉시 풀린다.
+	// 그동안 피해 · CC · 몬스터 감지의 대상이 아니다. 0 = 무적 아님
+	uint64					spawnInvulnUntilUs = 0;
+	bool					IsSpawnInvulnerable(uint64 nowUs) const { return spawnInvulnUntilUs != 0 && nowUs < spawnInvulnUntilUs; }
 	uint32					entryPointId = 0;
 	int32					zoneTower = -1;			// 점유 중인 타워 순번, -1 = 없음 (이력 판정용)
 	uint8					gaugeAudience[MAX_TOWERS] = {};		// EscapeLogic::Audience - 집합에 새로 들어왔는지 본다

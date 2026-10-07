@@ -128,6 +128,9 @@ private:
 	
 	void	FindSpawnPosition(float baseX, float baseY, float& outX, float& outY);
 
+	// 진입 무적을 푼다 (AC-10) - 이동 · 공격 · 스킬. 이미 없으면 아무것도 하지 않는다
+	void	ClearSpawnInvulnerability(const PlayerRef& player, const char* by);
+
 	// 사망 처리 공용 - S_DIED · 원인(가해자 기준) · 시전 취소, 그다음 몬스터면 드랍 · 플레이어면 사망 커밋
 	void	OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
 

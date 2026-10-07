@@ -22,6 +22,7 @@ atomic<uint32> GEntryPointId = 0;
 atomic<uint64> GMonsterKills = 0;
 atomic<uint64> GMonsterAttacksSent = 0;
 atomic<bool> GTowerMode = false;
+atomic<bool> GIdleOne = false;
 float GTowerX = 0.f;
 float GTowerY = 0.f;
 atomic<uint64> GRunGold = 0;
@@ -388,6 +389,22 @@ static void TickBots(float deltaTime)
 		if (nowUs < bot->hardCcUntilUs.load())
 			continue;
 
+		// -idleone: 1 번 봇은 같은 자리를 보내기만 한다 - 서버에는 "움직이지 않음"으로 보인다
+		if (GIdleOne.load() && bot->botIndex == 1)
+		{
+			Protocol::C_MOVE pkt;
+			Protocol::PosInfo* info = pkt.mutable_info();
+			info->set_object_id(bot->objectId.load());
+			info->set_x(bot->x);
+			info->set_y(bot->y);
+			info->set_z(bot->z);
+			info->set_state(Protocol::MOVE_STATE_IDLE);
+			if (GNoClientMs.load() == false)
+				pkt.set_client_ms(nowUs / 1000);
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(pkt), nowUs);
+			continue;
+		}
+
 		BotSessionRef target = nullptr;
 		float bestDistSq = FLT_MAX;
 
@@ -652,6 +669,8 @@ int main(int argc, char* argv[])
 			GBurst.store(true);
 		else if (::strcmp(argv[i], "-monsterpull") == 0)
 			GMonsterPull.store(true);
+		else if (::strcmp(argv[i], "-idleone") == 0)
+			GIdleOne.store(true);
 	}
 
 	GBurstStartUs = Utils::NowMicroseconds();

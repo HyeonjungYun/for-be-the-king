@@ -205,6 +205,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		{
 			player->runStartUs = enterUs;
 			player->runDeadlineUs = enterUs + EscapeConfig::Get().runLimitUs;
+			player->spawnInvulnUntilUs = EscapeConfig::Get().spawnInvulnerabilityUs > 0 ? enterUs + EscapeConfig::Get().spawnInvulnerabilityUs : 0;
 			player->runGold = 0;
 			player->zoneTower = -1;
 			memset(player->gaugeAudience, 0, sizeof(player->gaugeAudience));
@@ -543,6 +544,20 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		}
 	}
 
+	// 진입 무적은 움직이면 풀린다 (AC-10) - 제자리 회전 · 같은 좌표 재전송은 이동이 아니다
+	if (player->spawnInvulnUntilUs != 0)
+	{
+		const float mdx = pkt.info().x() - player->posInfo->x();
+		const float mdy = pkt.info().y() - player->posInfo->y();
+		if (mdx * mdx + mdy * mdy > 1.f)
+		{
+			const uint64 nowInvUs = Utils::NowMicroseconds();
+			LOG_LINE << "[INVULN] cleared char=" << objectId << " by=move left="
+				<< (player->spawnInvulnUntilUs > nowInvUs ? (player->spawnInvulnUntilUs - nowInvUs) / 1000 : 0) << "ms\n";
+			player->spawnInvulnUntilUs = 0;
+		}
+	}
+
 	// 검증 통과, 이동
 	player->posInfo->CopyFrom(pkt.info());
 	_dirtyMovers.insert(objectId);
@@ -584,9 +599,20 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId)
 	if (target == nullptr || target->IsAlive() == false)
 		return;
 
+	// 진입 무적 - 때릴 수 없다 (AC-10). 3 초 동안만 생기는 줄이라 로그로 남긴다
+	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+	{
+		LOG_LINE << "[INVULN] blocked attack on char=" << targetId << " by=" << attackerId << '\n';
+		return;
+	}
+
 	// 대상 락 시점에도 사거리를 본다. 히트 시점에 한 번 더 재검증
 	if (IsInAttackRange(attacker, target) == false)
 		return;
+
+	// 공격하면 내 무적이 풀린다 (AC-10)
+	if (attacker->IsPlayer())
+		ClearSpawnInvulnerability(static_pointer_cast<Player>(attacker), "attack");
 
 	const uint32 windupMs = attacker->GetAttackWindupMs();
 
@@ -658,6 +684,10 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		_pendingAttackCancels.push_back(casterId);
 	}
 
+	// 스킬도 공격이다 - 무적이 풀린다 (AC-10)
+	if (caster->IsPlayer())
+		ClearSpawnInvulnerability(static_pointer_cast<Player>(caster), "skill");
+
 	caster->castSkillId = def->skillId;
 	caster->castSlot = pkt.slot();
 	caster->castTargetId = pkt.target_id();
@@ -696,6 +726,10 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 		return;
 
 	const uint64 nowUs = Utils::NowMicroseconds();
+
+	// 진입 무적 - CC 도 받지 않는다 (AC-10)
+	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+		return;
 
 	const uint32 effectiveMs = target->ComputeCcDurationMs(baseDurationMs);
 	if (effectiveMs == 0)
@@ -768,11 +802,12 @@ void Room::ResolveAttacks(uint64 nowUs)
 			target = dynamic_pointer_cast<Creature>(targetIt->second);
 
 
-		// 공격자 사망, 대상 소명, 대상 사망, 사거리 이탈-> 취소. 쿨다운을 소모 하지 않는다.
+		// 공격자 사망, 대상 소명, 대상 사망, 사거리 이탈, 대상 진입 무적 -> 취소. 쿨다운을 소모 하지 않는다.
 		if (attacker->IsAlive() == false
 			|| target == nullptr
 			|| target->IsAlive() == false
-			|| IsInAttackRange(attacker, target) == false)
+			|| IsInAttackRange(attacker, target) == false
+			|| (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs)))
 		{
 			_pendingAttackCancels.push_back(attackerId);
 			continue;
@@ -2225,6 +2260,9 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 		if (target == nullptr || target->IsAlive() == false)
 			return;
 
+		if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(Utils::NowMicroseconds()))
+			return;
+
 		const float dx = target->posInfo->x() - originX;
 		const float dy = target->posInfo->y() - originY;
 		if ((dx * dx + dy * dy) > (def.rangeCm * def.rangeCm))
@@ -2249,6 +2287,10 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 
 			// 몬스터 광역은 몬스터를 맞히지 않는다 - 보스 내려치기가 병사를 죽이지 않게 (monster-ai.md Core Rule 18 ②)
 			if (caster->IsMonster() && target->IsMonster())
+				continue;
+
+			// 진입 무적 (AC-10)
+			if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(Utils::NowMicroseconds()))
 				continue;
 
 			const float dx = target->posInfo->x() - originX;
@@ -2491,6 +2533,17 @@ void Room::FindSpawnPosition(float baseX, float baseY, float& outX, float& outY)
 	SpawnPlacement::Find(baseX, baseY, occupied, [] { return Utils::GetRandom(0.f, 1.f); }, outX, outY);
 }
 
+void Room::ClearSpawnInvulnerability(const PlayerRef& player, const char* by)
+{
+	if (player->spawnInvulnUntilUs == 0)
+		return;
+
+	const uint64 nowUs = Utils::NowMicroseconds();
+	LOG_LINE << "[INVULN] cleared char=" << player->objectInfo->object_id() << " by=" << by << " left="
+		<< (player->spawnInvulnUntilUs > nowUs ? (player->spawnInvulnUntilUs - nowUs) / 1000 : 0) << "ms\n";
+	player->spawnInvulnUntilUs = 0;
+}
+
 void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs)
 {
 	const uint64 victimId = victim->objectInfo->object_id();
@@ -2608,8 +2661,9 @@ void Room::UpdateMonsters(uint64 nowUs)
 		if (object->IsPlayer() == false)
 			continue;
 
+		// 진입 무적 중인 플레이어는 감지 · 목표가 아니다 (monster-ai.md Core Rule 12)
 		const Player* player = static_cast<const Player*>(object.get());
-		if (player->IsAlive())
+		if (player->IsAlive() && player->IsSpawnInvulnerable(nowUs) == false)
 			_brainPlayers.push_back({ id, player->posInfo->x(), player->posInfo->y() });
 	}
 

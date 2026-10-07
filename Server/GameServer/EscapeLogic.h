@@ -21,6 +21,7 @@ struct EscapeConfig
 	uint32		expiryGoldKeptPct = 30;
 	bool		debugEscapeCommand = false;		// /escape 즉시 탈출 - 꺼져 있어야 P5 가 산다
 	uint64		telemetryMinRunUs = 60'000'000;
+	uint64		spawnInvulnerabilityUs = 3'000'000;	// 런 시작 무적 (AC-10) - 이동 · 공격에 풀린다
 
 	// escape_config.csv (key,value). 모르는 키 · 범위 밖 값은 error 를 남기고 false. 없는 키는 기본값
 	bool		Parse(const string& csv, OUT string& error);
