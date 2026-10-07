@@ -8,7 +8,10 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Game/Level/S1LevelBuilder.h"
+#include "Game/Level/S1LevelMarkers.h"
+#include "Game/Level/S1NetworkPump.h"
 #include "Game/S1Player.h"
+#include "GameFramework/PlayerStart.h"
 #include "Misc/ConfigCacheIni.h"
 #include "S1GameInstance.h"
 #include "Game/Level/S1LevelLayout.h"
@@ -18,8 +21,15 @@
 #include "Misc/Paths.h"
 #include "Physics/Experimental/PhysScene_Chaos.h"
 #include "UObject/Package.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameFramework/HUD.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/WorldSettings.h"
 #if WITH_EDITOR
 #include "StaticMeshCompiler.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
+#include "Engine/LevelScriptBlueprint.h"
 #endif
 #include "UObject/SavePackage.h"
 
@@ -242,6 +252,120 @@ namespace S1LevelParity
 	}
 }
 
+namespace S1LevelGameSetup
+{
+	const TCHAR* GameModePath = TEXT("/Game/Blueprints/BP_GameMode.BP_GameMode_C");
+
+	// What DevMap carried besides geometry (read with -Inspect, 2026-10-07): the BP_GameMode override, a PlayerStart and a
+	// level blueprint that connects and pumps packets — here an AS1NetworkPump. Without these the client opens Floor1
+	// and never talks to the server (ADR-0006 Migration 4)
+	bool Place(UWorld& World, FString& OutError)
+	{
+		UClass* GameMode = LoadClass<AGameModeBase>(nullptr, GameModePath);
+		if (GameMode == nullptr)
+		{
+			OutError = FString::Printf(TEXT("cannot load the game mode %s"), GameModePath);
+			return false;
+		}
+		World.GetWorldSettings()->DefaultGameMode = GameMode;
+
+		// The game mode spawns the pawn here before the server places the player. Entry point 1, not the origin — the
+		// origin is inside house H2
+		FVector Start(0.0, 0.0, 100.0);
+		for (TActorIterator<AS1EntryPointMarker> It(&World); It; ++It)
+		{
+			if (It->EntryId == 1)
+			{
+				Start = FVector(It->GetActorLocation().X, It->GetActorLocation().Y, 100.0);
+				break;
+			}
+		}
+
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		APlayerStart* PlayerStart = World.SpawnActor<APlayerStart>(Start, FRotator::ZeroRotator, Params);
+		AS1NetworkPump* Pump = World.SpawnActor<AS1NetworkPump>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+		if (PlayerStart == nullptr || Pump == nullptr)
+		{
+			OutError = TEXT("cannot spawn the player start or the network pump");
+			return false;
+		}
+#if WITH_EDITOR
+		PlayerStart->SetActorLabel(TEXT("PlayerStart"));
+		Pump->SetActorLabel(TEXT("S1NetworkPump"));
+#endif
+		return true;
+	}
+
+	// The saved map must still be playable: the game mode, one pump (two would connect twice), a player start
+	bool Check(UWorld& World, FString& OutError)
+	{
+		const TSubclassOf<AGameModeBase> GameMode = World.GetWorldSettings()->DefaultGameMode;
+		int32 Pumps = 0;
+		int32 Starts = 0;
+		for (TActorIterator<AS1NetworkPump> It(&World); It; ++It)
+		{
+			Pumps++;
+		}
+		for (TActorIterator<APlayerStart> It(&World); It; ++It)
+		{
+			Starts++;
+		}
+		if (GameMode == nullptr || GameMode->GetPathName() != GameModePath || Pumps != 1 || Starts < 1)
+		{
+			OutError = FString::Printf(TEXT("game setup — game mode %s · network pumps %d (need 1) · player starts %d"),
+				GameMode != nullptr ? *GameMode->GetPathName() : TEXT("none"), Pumps, Starts);
+			return false;
+		}
+		return true;
+	}
+}
+
+#if WITH_EDITOR
+namespace S1LevelInspect
+{
+	// What a map carries besides geometry — game mode override, actors, level blueprint nodes. Written to move DevMap's
+	// setup into Floor1 (ADR-0006 Migration 4); any map can be inspected
+	void Dump(UWorld& World)
+	{
+		const AWorldSettings* Settings = World.GetWorldSettings();
+		const TSubclassOf<AGameModeBase> GameMode = Settings != nullptr ? Settings->DefaultGameMode : nullptr;
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[INSPECT] game mode override: %s"), GameMode != nullptr ? *GameMode->GetPathName() : TEXT("none"));
+		if (GameMode != nullptr)
+		{
+			const AGameModeBase* Defaults = GameMode->GetDefaultObject<AGameModeBase>();
+			UE_LOG(LogS1LevelGraybox, Display, TEXT("[INSPECT]   pawn %s · controller %s · hud %s"),
+				Defaults->DefaultPawnClass != nullptr ? *Defaults->DefaultPawnClass->GetPathName() : TEXT("none"),
+				Defaults->PlayerControllerClass != nullptr ? *Defaults->PlayerControllerClass->GetPathName() : TEXT("none"),
+				Defaults->HUDClass != nullptr ? *Defaults->HUDClass->GetPathName() : TEXT("none"));
+		}
+
+		int32 Actors = 0;
+		for (TActorIterator<AActor> It(&World); It; ++It)
+		{
+			Actors++;
+			UE_LOG(LogS1LevelGraybox, Display, TEXT("[INSPECT] actor %s (%s) at %s"), *It->GetActorNameOrLabel(), *It->GetClass()->GetPathName(), *It->GetActorLocation().ToString());
+		}
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[INSPECT] %d actors"), Actors);
+
+		ULevelScriptBlueprint* Script = World.PersistentLevel->GetLevelScriptBlueprint(/*bDontCreate*/ true);
+		int32 Nodes = 0;
+		if (Script != nullptr)
+		{
+			for (UEdGraph* Graph : Script->UbergraphPages)
+			{
+				for (UEdGraphNode* Node : Graph->Nodes)
+				{
+					Nodes++;
+					UE_LOG(LogS1LevelGraybox, Display, TEXT("[INSPECT] level blueprint %s: %s"), *Graph->GetName(), *Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString().Replace(TEXT("\n"), TEXT(" / ")));
+				}
+			}
+		}
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[INSPECT] level blueprint: %s · %d nodes"), Script != nullptr ? TEXT("present") : TEXT("none"), Nodes);
+	}
+}
+#endif
+
 US1LevelGrayboxCommandlet::US1LevelGrayboxCommandlet()
 {
 	IsClient = false;
@@ -264,8 +388,11 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 	FString ParityFile;
 	const bool bParity = FParse::Value(*Params, TEXT("Parity="), ParityFile);
 
+	// -Inspect: print what the map carries besides geometry (game mode, actors, level blueprint) and change nothing
+	const bool bInspect = FParse::Param(*Params, TEXT("Inspect"));
+
 	// -Verify: load the saved map from disk and run the same round trip — proves what was saved, not what was built.
-	if (FParse::Param(*Params, TEXT("Verify")) || bParity)
+	if (FParse::Param(*Params, TEXT("Verify")) || bParity || bInspect)
 	{
 		UPackage* Saved = LoadPackage(nullptr, *MapName, LOAD_None);
 		UWorld* Loaded = Saved != nullptr ? UWorld::FindWorldInPackage(Saved) : nullptr;
@@ -281,6 +408,14 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 		// Register components so actor locations are computed — without this every marker reads as the origin.
 		// Construction scripts are NOT re-run: we check what was saved, not what a rebuild would make.
 		Loaded->UpdateWorldComponents(/*bRerunConstructionScripts*/ false, /*bCurrentLevelOnly*/ false);
+
+		if (bInspect)
+		{
+			S1LevelInspect::Dump(*Loaded);
+			GEngine->DestroyWorldContext(Loaded);
+			Loaded->DestroyWorld(false);
+			return 0;
+		}
 
 		if (bParity)
 		{
@@ -338,6 +473,16 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] verify: expected one S1LevelBuilder, found %d"), Builders);
 			VerifyResult = 1;
 		}
+		FString SetupError;
+		if (!S1LevelGameSetup::Check(*Loaded, SetupError))
+		{
+			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] verify: %s"), *SetupError);
+			VerifyResult = 1;
+		}
+		else
+		{
+			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] verify: game setup ok — %s · one network pump · player start"), S1LevelGameSetup::GameModePath);
+		}
 		GEngine->DestroyWorldContext(Loaded);
 		Loaded->DestroyWorld(false);
 		return VerifyResult;
@@ -377,6 +522,11 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 		if (!Builder->Build(Error))
 		{
 			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] build failed: %s"), *Error);
+			Result = 1;
+		}
+		else if (!S1LevelGameSetup::Place(*World, Error))
+		{
+			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] game setup failed: %s"), *Error);
 			Result = 1;
 		}
 		else
