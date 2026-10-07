@@ -6,7 +6,9 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Engine/Brush.h"
 #include "Engine/DirectionalLight.h"
+#include "Engine/Level.h"
 #include "Engine/SkyLight.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -16,6 +18,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
+#include "PhysicsEngine/BodySetup.h"
 #include "UObject/ConstructorHelpers.h"
 
 #include <type_traits>
@@ -35,6 +38,42 @@ namespace S1LevelBuild
 	const FVector FloorTileSize(400.0, 400.0, 3.0);
 	const FVector CoverSize(600.0, 100.0, 250.0);
 	const FVector BoundarySize(400.0, 100.0, 400.0);
+	const FVector TowerBodySize(300.0, 300.0, 800.0);
+
+	// Server walls (docs/architecture/adr-0006-server-2d-walls.md § ①): every module that blocks movement except the
+	// ground and the boundary (the server checks the floor rectangle instead). Kind = the walls.csv kind column.
+	struct FServerWallModule
+	{
+		ES1LevelModule	Module;
+		const TCHAR*	Kind;
+		FVector			DesignSize;		// length x thickness the layout rules assume (E3); zero = not checked
+	};
+
+	const FServerWallModule ServerWallModules[] =
+	{
+		{ ES1LevelModule::Wall,			TEXT("wall"),			WallSize },
+		{ ES1LevelModule::DoorPost,		TEXT("door_post"),		PostSize },
+		{ ES1LevelModule::Pillar,		TEXT("pillar"),			PillarSize },
+		{ ES1LevelModule::FreePillar,	TEXT("free_pillar"),	PillarSize },
+		{ ES1LevelModule::Cover,		TEXT("cover"),			CoverSize },
+		{ ES1LevelModule::TowerBody,	TEXT("tower"),			FVector::ZeroVector },
+	};
+
+	constexpr double AngleToleranceDeg = 0.01;
+	constexpr double SizeToleranceCm = 1.0;		// E3
+	constexpr double StepHeightCm = 20.0;		// Core Rule 2 — anything taller that blocks must be a server wall (E7)
+
+	bool IsServerWall(ES1LevelModule Module)
+	{
+		for (const FServerWallModule& Spec : ServerWallModules)
+		{
+			if (Spec.Module == Module)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 	const TCHAR* ModuleName(ES1LevelModule Module)
 	{
@@ -68,9 +107,15 @@ namespace S1LevelBuild
 		}
 	}
 
+	// The tower body is a box: a server wall is one oriented box (ADR-0006). The art pass may round its look, not its collision.
 	bool IsCylinder(ES1LevelModule Module)
 	{
-		return Module == ES1LevelModule::TowerBody || Module == ES1LevelModule::TowerPlaza;
+		return Module == ES1LevelModule::TowerPlaza;
+	}
+
+	UStaticMesh* BasicShape(ES1LevelModule Module)
+	{
+		return LoadObject<UStaticMesh>(nullptr, IsCylinder(Module) ? TEXT("/Engine/BasicShapes/Cylinder.Cylinder") : TEXT("/Engine/BasicShapes/Cube.Cube"));
 	}
 
 	FString Join(const TArray<FString>& Rows)
@@ -91,6 +136,10 @@ AS1LevelBuilder::AS1LevelBuilder()
 	PrimaryActorTick.bCanEverTick = false;
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
+	// Static like the modules — a movable root refuses static children ("AttachTo ... Aborting"), and the modules
+	// would then stay put when the builder moves while the markers do not (ADR-0006 E5)
+	RootComponent->SetMobility(EComponentMobility::Static);
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 
@@ -102,6 +151,10 @@ AS1LevelBuilder::AS1LevelBuilder()
 		Component->SetupAttachment(RootComponent);
 		Component->SetStaticMesh(IsCylinder(Module) ? Cylinder.Object : Cube.Object);
 		Component->SetCollisionProfileName(BlocksMovement(Module) ? TEXT("BlockAll") : TEXT("NoCollision"));
+		if (IsServerWall(Module) || Module == ES1LevelModule::Boundary)
+		{
+			Component->CanCharacterStepUpOn = ECB_No;	// never step onto a wall or cover (ADR-0006 E8)
+		}
 		Component->SetMobility(EComponentMobility::Static);
 		Modules.Add(Component);
 	}
@@ -186,11 +239,17 @@ void AS1LevelBuilder::ClearGenerated()
 	}
 }
 
+bool AS1LevelBuilder::HasModuleMesh(ES1LevelModule Module) const
+{
+	const TObjectPtr<UStaticMesh>* Mesh = ModuleMeshes.Find(Module);
+	return Mesh != nullptr && *Mesh != nullptr;
+}
+
 void AS1LevelBuilder::AddModule(ES1LevelModule Module, const FVector& BottomCentreCm, double YawDeg, const FVector& SizeCm)
 {
 	UHierarchicalInstancedStaticMeshComponent* Component = Modules[static_cast<int32>(Module)];
 	const FRotator Yaw(0.0, YawDeg, 0.0);
-	if (ModuleMeshes.Contains(Module))
+	if (HasModuleMesh(Module))
 	{
 		// A real module mesh is authored at module size with its pivot at the bottom centre.
 		Component->AddInstance(FTransform(Yaw, BottomCentreCm, FVector::OneVector), /*bWorldSpace*/ true);
@@ -237,14 +296,15 @@ bool AS1LevelBuilder::Build(FString& OutError)
 	}
 
 	ClearGenerated();
-	SetActorLocation(FVector::ZeroVector);
+
+	// The whole transform, not just the location — a rotated or scaled builder shifts every exported row (ADR-0006 E5)
+	SetActorTransform(FTransform::Identity);
+
+	// Real mesh if there is one, otherwise the basic shape — also when a mesh was removed from ModuleMeshes
 	for (int32 i = 0; i < NumModules; i++)
 	{
 		const ES1LevelModule Module = static_cast<ES1LevelModule>(i);
-		if (TObjectPtr<UStaticMesh>* Mesh = ModuleMeshes.Find(Module))
-		{
-			Modules[i]->SetStaticMesh(*Mesh);
-		}
+		Modules[i]->SetStaticMesh(HasModuleMesh(Module) ? ModuleMeshes[Module].Get() : BasicShape(Module));
 	}
 
 	// Ground: the 280 m floor plus 24 m of dark fill past the boundary (level-map.md § Visual "경계 띠").
@@ -320,7 +380,7 @@ bool AS1LevelBuilder::Build(FString& OutError)
 	{
 		const FVector At(Tower.P.X * Cm, Tower.P.Y * Cm, 0.0);
 		AddModule(ES1LevelModule::TowerPlaza, At + FVector(0.0, 0.0, 1.0), 0.0, FVector(2400.0, 2400.0, 4.0));
-		AddModule(ES1LevelModule::TowerBody, At, 0.0, FVector(300.0, 300.0, 800.0));
+		AddModule(ES1LevelModule::TowerBody, At, 0.0, TowerBodySize);
 		if (AS1TowerMarker* Marker = SpawnMarker<AS1TowerMarker>(Tower.P, Tower.Id, FColor(80, 120, 255)))
 		{
 			Marker->TowerId = Tower.Id;
@@ -709,21 +769,32 @@ bool AS1LevelBuilder::Export(FS1LevelReport& OutReport, FString& OutDirectory, F
 		Houses.Add(FString::Printf(TEXT("%s,%s,%d,%d,%d,%d"), *H.Id, *Floor, RoundCm(H.X0), RoundCm(H.X1), RoundCm(H.Y0), RoundCm(H.Y1)));
 	}
 
-	// Server walls — PROVISIONAL format until level-map.md OQ-1 (ADR) decides it: one oriented box per row, cm.
-	// Walls, door posts, free pillars and cover; not the boundary (the server checks the rectangle, Core Rule 15).
-	TArray<FString> Walls;
-	Walls.Add(TEXT("floor_id,cx,cy,half_length,half_thickness,yaw"));
-	for (const ES1LevelModule Module : { ES1LevelModule::Wall, ES1LevelModule::DoorPost, ES1LevelModule::FreePillar, ES1LevelModule::Cover })
+	// Server walls (docs/architecture/adr-0006-server-2d-walls.md). The builder must sit at the origin (E5) and nothing
+	// outside the builder may block characters (E7) — otherwise the server's walls are not the walls players see.
+	if (!GetActorTransform().Equals(FTransform::Identity, 0.01))
 	{
-		const UHierarchicalInstancedStaticMeshComponent* Component = Modules[static_cast<int32>(Module)];
-		const FVector Size = Module == ES1LevelModule::Wall ? WallSize : Module == ES1LevelModule::Cover ? CoverSize : PostSize;
-		for (int32 i = 0; i < Component->GetInstanceCount(); i++)
-		{
-			FTransform T;
-			Component->GetInstanceTransform(i, T, true);
-			Walls.Add(FString::Printf(TEXT("%s,%d,%d,%d,%d,%d"), *Floor, FMath::RoundToInt(T.GetLocation().X), FMath::RoundToInt(T.GetLocation().Y),
-				FMath::RoundToInt(Size.X * 0.5), FMath::RoundToInt(Size.Y * 0.5), FMath::RoundToInt(T.Rotator().Yaw)));
-		}
+		OutError = TEXT("the builder actor is moved, rotated or scaled — press Build Graybox, it puts the builder back at the origin (ADR-0006 E5)");
+		return false;
+	}
+	TArray<FString> Blockers;
+	FindClientOnlyBlockers(Blockers);
+	if (Blockers.Num() > 0)
+	{
+		OutError = FString::Printf(TEXT("%d primitive(s) block characters above %.0f cm but are not server walls — make them builder modules, "
+			"turn their collision off or keep them under %.0f cm (ADR-0006 E7): %s"),
+			Blockers.Num(), StepHeightCm, StepHeightCm, *FString::Join(Blockers, TEXT(", ")));
+		return false;
+	}
+	TArray<FString> WallRows;
+	if (!CollectServerWalls(WallRows, OutError))
+	{
+		return false;
+	}
+	TArray<FString> Walls;
+	Walls.Add(TEXT("floor_id,kind,cx,cy,half_length,half_thickness,yaw"));
+	for (const FString& Row : WallRows)
+	{
+		Walls.Add(Floor + TEXT(",") + Row);
 	}
 
 	TArray<TPair<FString, FString>> Files;
@@ -752,7 +823,172 @@ bool AS1LevelBuilder::Export(FS1LevelReport& OutReport, FString& OutDirectory, F
 			return false;
 		}
 	}
-	FFileHelper::SaveStringToFile(LastDataVersion + TEXT("\r\n"), *FPaths::Combine(OutDirectory, TEXT("data_version.txt")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	// The version is the hash of the files above, so it is written after them and is not part of the hash.
+	// level_versions.csv also tells the server this floor has a level — then it refuses to boot without its walls.
+	TArray<FString> Versions;
+	Versions.Add(TEXT("floor_id,data_version"));
+	Versions.Add(Floor + TEXT(",") + LastDataVersion);
+	if (!FFileHelper::SaveStringToFile(Join(Versions), *FPaths::Combine(OutDirectory, TEXT("level_versions.csv")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		OutError = TEXT("cannot write level_versions.csv");
+		return false;
+	}
+	IFileManager::Get().Delete(*FPaths::Combine(OutDirectory, TEXT("data_version.txt")), /*RequireExists*/ false, /*EvenReadOnly*/ false, /*Quiet*/ true);
+
+	UE_LOG(LogS1Level, Display, TEXT("[LEVEL] server walls %d → walls.csv"), WallRows.Num());
 	MarkPackageDirty();
 	return true;
+}
+
+bool AS1LevelBuilder::CollectServerWalls(TArray<FString>& OutRows, FString& OutError) const
+{
+	using namespace S1LevelBuild;
+
+	struct FRow
+	{
+		FString	Kind;
+		int32	X = 0;
+		int32	Y = 0;
+		int32	YawCenti = 0;			// hundredths of a degree, [0, 18000)
+		int32	HalfLength = 0;
+		int32	HalfThickness = 0;
+	};
+	TArray<FRow> Rows;
+
+	for (const FServerWallModule& Spec : ServerWallModules)
+	{
+		const UHierarchicalInstancedStaticMeshComponent* Component = Modules[static_cast<int32>(Spec.Module)];
+		if (Component == nullptr || Component->GetInstanceCount() == 0)
+		{
+			continue;
+		}
+
+		// E1–E2: the box comes from the mesh's simple collision — what the character capsule actually hits
+		const UStaticMesh* Mesh = Component->GetStaticMesh();
+		const UBodySetup* Body = Mesh != nullptr ? Mesh->GetBodySetup() : nullptr;
+		const FString MeshName = Mesh != nullptr ? Mesh->GetPathName() : TEXT("(none)");
+		if (Body == nullptr)
+		{
+			OutError = FString::Printf(TEXT("%s mesh %s has no collision (ADR-0006 E2)"), ModuleName(Spec.Module), *MeshName);
+			return false;
+		}
+		if (Body->GetCollisionTraceFlag() == CTF_UseComplexAsSimple)
+		{
+			OutError = FString::Printf(TEXT("%s mesh %s uses complex collision as simple — give it one simple box (ADR-0006 E2)"), ModuleName(Spec.Module), *MeshName);
+			return false;
+		}
+		const FKAggregateGeom& Geom = Body->AggGeom;
+		if (Geom.BoxElems.Num() != 1 || Geom.GetElementCount() != 1)
+		{
+			OutError = FString::Printf(TEXT("%s mesh %s has %d simple shape(s), %d box(es) — a server wall needs exactly one box (ADR-0006 E2)"),
+				ModuleName(Spec.Module), *MeshName, Geom.GetElementCount(), Geom.BoxElems.Num());
+			return false;
+		}
+		const FKBoxElem& Box = Geom.BoxElems[0];
+		if (!Box.Rotation.IsNearlyZero(AngleToleranceDeg))
+		{
+			OutError = FString::Printf(TEXT("%s mesh %s has a rotated collision box — keep it axis-aligned in the mesh (ADR-0006 E2)"), ModuleName(Spec.Module), *MeshName);
+			return false;
+		}
+
+		for (int32 i = 0; i < Component->GetInstanceCount(); i++)
+		{
+			FTransform T;
+			Component->GetInstanceTransform(i, T, /*bWorldSpace*/ true);
+			const FRotator R = T.Rotator();
+			if (FMath::Abs(R.Pitch) > AngleToleranceDeg || FMath::Abs(R.Roll) > AngleToleranceDeg)
+			{
+				OutError = FString::Printf(TEXT("%s #%d is tilted (pitch %.2f, roll %.2f) — tilt the mesh shape, not the instance (ADR-0006 E6)"),
+					ModuleName(Spec.Module), i, R.Pitch, R.Roll);
+				return false;
+			}
+
+			// FKBoxElem X / Y are full lengths, not half (BodySetup.cpp halves them the same way)
+			const FVector Scale = T.GetScale3D().GetAbs();
+			const double HalfLength = Box.X * 0.5 * Scale.X;
+			const double HalfThickness = Box.Y * 0.5 * Scale.Y;
+			const FVector Centre = T.TransformPosition(Box.Center);
+
+			// E3: the layout rules (3 m door gaps, wall lines) assume the design size
+			if (!Spec.DesignSize.IsZero()
+				&& (FMath::Abs(HalfLength * 2.0 - Spec.DesignSize.X) > SizeToleranceCm || FMath::Abs(HalfThickness * 2.0 - Spec.DesignSize.Y) > SizeToleranceCm))
+			{
+				OutError = FString::Printf(TEXT("%s #%d collision box is %.1f x %.1f cm, the design size is %.0f x %.0f cm (ADR-0006 E3)"),
+					ModuleName(Spec.Module), i, HalfLength * 2.0, HalfThickness * 2.0, Spec.DesignSize.X, Spec.DesignSize.Y);
+				return false;
+			}
+
+			// E9: a box is the same box turned 180°, so the yaw is written in [0, 180) with two decimals
+			int32 YawCenti = static_cast<int32>(FMath::RoundToInt(FMath::Fmod(R.Yaw, 180.0) * 100.0));
+			if (YawCenti < 0)
+			{
+				YawCenti += 18000;
+			}
+			if (YawCenti >= 18000)
+			{
+				YawCenti -= 18000;
+			}
+
+			// RoundToInt(double) is int64 in UE5 — every value here is well inside ±14,000 cm
+			Rows.Add({ Spec.Kind, static_cast<int32>(FMath::RoundToInt(Centre.X)), static_cast<int32>(FMath::RoundToInt(Centre.Y)), YawCenti,
+				static_cast<int32>(FMath::RoundToInt(HalfLength)), static_cast<int32>(FMath::RoundToInt(HalfThickness)) });
+		}
+	}
+
+	// E9: the instance order is not part of the data — sort so the same level always writes the same bytes (AC-LM-20)
+	Rows.Sort([](const FRow& A, const FRow& B)
+	{
+		if (A.Kind != B.Kind)	return A.Kind < B.Kind;
+		if (A.X != B.X)			return A.X < B.X;
+		if (A.Y != B.Y)			return A.Y < B.Y;
+		return A.YawCenti < B.YawCenti;
+	});
+
+	OutRows.Reset(Rows.Num());
+	for (const FRow& Row : Rows)
+	{
+		OutRows.Add(FString::Printf(TEXT("%s,%d,%d,%d,%d,%d.%02d"), *Row.Kind, Row.X, Row.Y, Row.HalfLength, Row.HalfThickness,
+			Row.YawCenti / 100, Row.YawCenti % 100));
+	}
+	return true;
+}
+
+void AS1LevelBuilder::FindClientOnlyBlockers(TArray<FString>& OutNames) const
+{
+	using namespace S1LevelBuild;
+
+	OutNames.Reset();
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		// The builder's modules are server walls, the boundary (the server's rectangle) or walkable floor
+		if (It->IsA<AS1LevelBuilder>())
+		{
+			continue;
+		}
+		// Every level has a default BSP builder brush — an editor tool, not geometry. Blocking volumes still count
+		if (const ULevel* Level = It->GetLevel(); Level != nullptr && Level->GetDefaultBrush() == *It)
+		{
+			continue;
+		}
+
+		TInlineComponentArray<UPrimitiveComponent*> Primitives(*It);
+		for (const UPrimitiveComponent* Primitive : Primitives)
+		{
+			if (!Primitive->IsCollisionEnabled() || Primitive->GetCollisionResponseToChannel(ECC_Pawn) != ECR_Block)
+			{
+				continue;
+			}
+			if (Primitive->Bounds.GetBox().Max.Z <= StepHeightCm)
+			{
+				continue;	// floor-level dressing — walkable (Core Rule 2)
+			}
+			OutNames.Add(FString::Printf(TEXT("%s.%s"), *It->GetActorNameOrLabel(), *Primitive->GetName()));
+		}
+	}
 }

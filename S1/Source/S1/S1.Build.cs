@@ -16,6 +16,9 @@ public class S1 : ModuleRules
 		// Json — the level tools read the floor layout (tools/level/floor1.json, design/levels/floor-1.md).
 		PrivateDependencyModuleNames.Add("Json");
 
+		// PhysicsCore — the level export reads each server-wall mesh's collision trace flag (UBodySetupCore, ADR-0006 E2).
+		PrivateDependencyModuleNames.Add("PhysicsCore");
+
 		PrivateIncludePaths.AddRange(new string[]
 		{
 			"S1/",

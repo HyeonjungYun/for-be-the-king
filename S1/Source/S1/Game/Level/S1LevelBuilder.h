@@ -18,11 +18,11 @@ enum class ES1LevelModule : uint8
 	Boundary,		// impassable earth wall around the floor (not a server wall — the server uses the rectangle)
 	Wall,			// W / WB — 4 m, server wall
 	DoorPost,		// DF — two posts per 3 m opening, server wall
-	Pillar,			// P at grid joints
+	Pillar,			// P at grid joints — server wall
 	FreePillar,		// free-standing pillar (boss room) — server wall
 	FloorTile,		// FT — 4 x 4 m, per room material
 	Rubble,			// RB — flat, passable
-	TowerBody,
+	TowerBody,		// 3 x 3 m box collision — server wall (ADR-0006: one box per server wall, so not a cylinder)
 	TowerPlaza,		// 12 m paved ring
 	Cover,			// open-field cover piece — server wall
 	Count UMETA(Hidden)
@@ -51,8 +51,9 @@ public:
 	FString LayoutFile = TEXT("../tools/level/floor1.json");
 
 	/**
-	 * Where the export goes, relative to the project directory. Not Server/Data itself until the server reads
-	 * walls (level-map.md OQ-1) — the live entry points would otherwise jump to floor-1 spots on DevMap.
+	 * Where the export goes, relative to the project directory. Not Server/Data itself until activation
+	 * (docs/architecture/adr-0006-server-2d-walls.md § Migration 4) — the server would otherwise load floor-1 walls
+	 * while the client still opens DevMap, and players would hit invisible walls.
 	 */
 	UPROPERTY(EditAnywhere, Category = "Level")
 	FString ExportDirectory = TEXT("../Server/Data/export");
@@ -100,12 +101,22 @@ public:
 	/** Validates, then writes the CSVs. Writes nothing if a rule fails (level-map.md Edge Cases). */
 	bool Export(FS1LevelReport& OutReport, FString& OutDirectory, FString& OutError);
 
+	/**
+	 * walls.csv rows (without the header) — one oriented box per server-wall module instance, sized from the mesh's
+	 * simple collision, sorted (ADR-0006 § ⑧ E1–E4, E6, E9). False with the reason if a mesh or instance breaks a rule.
+	 */
+	bool CollectServerWalls(TArray<FString>& OutRows, FString& OutError) const;
+
+	/** Primitives that block characters above floor height but are not builder modules — "client-only walls" (E7). */
+	void FindClientOnlyBlockers(TArray<FString>& OutNames) const;
+
 	FString LayoutPath() const;
 
 	int32 NumInstances(ES1LevelModule Module) const;
 
 private:
 	void ClearGenerated();
+	bool HasModuleMesh(ES1LevelModule Module) const;
 	void AddModule(ES1LevelModule Module, const FVector& BottomCentreCm, double YawDeg, const FVector& SizeCm);
 	void BuildHouse(const FS1LevelHouse& House, const FS1HouseGrid& Grid, const TArray<FString>& OpenAirRooms);
 

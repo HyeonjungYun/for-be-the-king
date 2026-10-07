@@ -72,10 +72,25 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] verify: %s"), *Diff);
 			}
 			It->Validate(Collected, Report);
-			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] verify %s — differences %d · rules %d checks, %d failed · wall %d · cover %d"),
+
+			// Server walls of the saved map — the same rows Export would write (ADR-0006 E1–E9)
+			TArray<FString> WallRows, Blockers;
+			FString WallError;
+			const bool bWallsOk = It->CollectServerWalls(WallRows, WallError);
+			It->FindClientOnlyBlockers(Blockers);
+			if (!bWallsOk)
+			{
+				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] verify: server walls: %s"), *WallError);
+			}
+			for (const FString& Blocker : Blockers)
+			{
+				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] verify: blocks characters but is not a server wall (E7): %s"), *Blocker);
+			}
+
+			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] verify %s — differences %d · rules %d checks, %d failed · wall %d · cover %d · server walls %d"),
 				*MapName, Diffs.Num(), Report.Checks.Num(), Report.NumFailed(),
-				It->NumInstances(ES1LevelModule::Wall), It->NumInstances(ES1LevelModule::Cover));
-			VerifyResult = (Diffs.Num() == 0 && Report.NumFailed() == 0) ? 0 : 1;
+				It->NumInstances(ES1LevelModule::Wall), It->NumInstances(ES1LevelModule::Cover), WallRows.Num());
+			VerifyResult = (Diffs.Num() == 0 && Report.NumFailed() == 0 && bWallsOk && Blockers.Num() == 0) ? 0 : 1;
 		}
 		if (Builders != 1)
 		{
@@ -88,6 +103,10 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 	}
 
 	UPackage* Package = CreatePackage(*MapName);
+
+	// The map is rebuilt from nothing. Without this, an existing Floor1.umap on disk makes the new package count as
+	// "only partially loaded" and SavePackage refuses to overwrite it (2026-10-07)
+	Package->MarkAsFullyLoaded();
 	UWorld* World = UWorld::CreateWorld(EWorldType::Editor, /*bInformEngineOfWorld*/ false, FName(*FPackageName::GetShortName(MapName)), Package);
 	if (World == nullptr)
 	{
@@ -175,7 +194,8 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 		const FString Filename = FPackageName::LongPackageNameToFilename(MapName, FPackageName::GetMapPackageExtension());
 		FSavePackageArgs Args;
 		Args.TopLevelFlags = RF_Public | RF_Standalone;
-		Args.SaveFlags = SAVE_NoError;
+		Args.SaveFlags = SAVE_None;		// not SAVE_NoError — that hides why a save failed
+		Args.Error = GWarn;				// the default GError would make a save error fatal
 		if (UPackage::SavePackage(Package, World, *Filename, Args))
 		{
 			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] saved %s"), *Filename);

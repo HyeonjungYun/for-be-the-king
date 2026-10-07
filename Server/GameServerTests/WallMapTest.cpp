@@ -3,6 +3,7 @@
 #include "WallTable.h"
 #include "EntryPointTable.h"
 #include "ItemTable.h"
+#include "CsvTable.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -143,6 +144,31 @@ namespace
 		for (const WallBox& w : map.Walls())
 			depth = (std::max)(depth, -WallGeom::SignedDistance(w, x, y));
 		return depth;
+	}
+
+	// 1층 황금 파일 - 레벨 빌더 내보내기(Server/Data/export/floor0)를 그대로 복사했다. 데이터 버전 b716c8a5e4af.
+	// 🔴 레벨을 바꿔 다시 내보내면 Server/GameServerTests/Data/floor1_*.csv 도 같이 바꾼다
+	string FixturePath(const char* name)
+	{
+		return ItemTable::DefaultDataDir() + "\\..\\GameServerTests\\Data\\" + name;
+	}
+
+	// 1층 = floor_id 0. 실제 진입 지점 9곳으로 부팅 검사(9 m 무벽 원)까지 거친다
+	bool LoadFloor1(OUT string& error)
+	{
+		string walls, versions, entries;
+		if (Csv::ReadFile(FixturePath("floor1_walls.csv"), OUT walls) == false
+			|| Csv::ReadFile(FixturePath("floor1_level_versions.csv"), OUT versions) == false
+			|| Csv::ReadFile(FixturePath("floor1_entry_points.csv"), OUT entries) == false)
+		{
+			error = "fixture missing under " + FixturePath("");
+			return false;
+		}
+
+		if (EntryPointTable::Parse(entries, 1, OUT error) == false)
+			return false;
+
+		return WallTable::Parse(&walls, &versions, 1, EntryPointTable::All(), OUT error);
 	}
 }
 
@@ -360,6 +386,46 @@ TEST(WallMap, 격자_결과는_전수_검사와_같다)
 	EXPECT_GT(hits, 300);		// 의미 있는 비교였다 - 거의 다 빗나가면 같아도 소용없다
 }
 
+TEST(WallMap, 1층_황금_벽에서도_격자_결과는_전수_검사와_같다)
+{
+	// 실제 레벨 771개 - 집 3채에 몰려 있다. 질의도 집이 있는 띠에 몰아 빽빽한 곳을 본다
+	string error;
+	ASSERT_TRUE(LoadFloor1(OUT error)) << error;
+	const WallMap& map = WallTable::Get(0);
+
+	mt19937 rng(11);
+	uniform_real_distribution<float> houseX(-4000.f, 2400.f);
+	uniform_real_distribution<float> houseY(-11600.f, 11600.f);
+	uniform_real_distribution<float> anyXY(-14000.f, 14000.f);
+	uniform_real_distribution<float> angle(0.f, 6.2831853f);
+	uniform_real_distribution<float> coin(0.f, 1.f);
+	const float radii[] = { 0.f, 42.f };
+
+	int32 mismatch = 0;
+	int32 hits = 0;
+
+	for (int32 i = 0; i < 10000; i++)
+	{
+		const bool inHouses = coin(rng) < 0.8f;
+		const float ax = inHouses ? houseX(rng) : anyXY(rng);
+		const float ay = inHouses ? houseY(rng) : anyXY(rng);
+		const float a = angle(rng);
+		const float length = coin(rng) * ((coin(rng) < 0.9f) ? 300.f : 3000.f);
+		const float bx = ax + length * std::cos(a);
+		const float by = ay + length * std::sin(a);
+		const float r = radii[i % 2];
+
+		const float t = map.SweepFirstHit(ax, ay, bx, by, r);
+		if (t != BruteSweep(map, ax, ay, bx, by, r) || map.Overlaps(ax, ay, r) != BruteOverlaps(map, ax, ay, r))
+			mismatch++;
+		if (t < 1.f)
+			hits++;
+	}
+
+	EXPECT_EQ(mismatch, 0);
+	EXPECT_GT(hits, 1000);
+}
+
 /*-------- 만들기 검증 --------*/
 
 TEST(WallMap, 상한을_넘거나_층_밖으로_나가거나_크기가_0이면_만들지_않는다)
@@ -507,6 +573,33 @@ TEST(WallTable, 진입_지점_9m_안에_벽이_있으면_부팅을_거부한다)
 	EXPECT_NE(error.find("entry point 1"), string::npos) << error;
 }
 
+TEST(WallTable, 1층_황금_벽이_부팅_검사를_통과한다)
+{
+	// 실제 레벨 - 진입 지점 9곳 모두 9 m 안에 벽이 없어야 서버가 뜬다 (Core Rule 15 · ADR-0006 § Migration 2)
+	string error;
+	ASSERT_TRUE(LoadFloor1(OUT error)) << error;
+
+	const WallMap& map = WallTable::Get(0);
+	EXPECT_EQ(map.Count(), 771);		// 벽 309 · 문 기둥 58 · 격자점 기둥 328 · 독립 기둥 4 · 엄폐 69 · 타워 3 (floor-1.md § 8)
+	EXPECT_EQ(WallTable::DataVersion(0), "b716c8a5e4af");
+
+	int32 perKind[6] = {};
+	for (const WallBox& w : map.Walls())
+		perKind[static_cast<int32>(w.kind)]++;
+
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Wall)], 309);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::DoorPost)], 58);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Pillar)], 328);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::FreePillar)], 4);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Cover)], 69);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Tower)], 3);
+
+	// 타워 Tc (-78, 0) m 본체를 가로지르는 이동은 막힌다 - 원기둥이 아니라 3 x 3 m 상자다
+	WallKind kind = WallKind::Wall;
+	EXPECT_TRUE(map.SweepBlocked(-7800.f, -500.f, -7800.f, 500.f, 0.f, OUT &kind));
+	EXPECT_EQ(kind, WallKind::Tower);
+}
+
 TEST(WallTable, 실제_데이터_파일이_부팅_검사를_통과한다)
 {
 	// Server/Data - 서버가 실제로 읽는 파일. 레벨이 올라가기 전에는 walls.csv 가 없다
@@ -529,6 +622,13 @@ TEST(WallMapBench, DISABLED_이동_1회_벽_검사_시간)
 	};
 
 	vector<Case> cases;
+
+	string error;
+	if (LoadFloor1(OUT error))
+		cases.push_back({ "floor-1 (golden)", WallTable::Get(0).Walls(), -3600.f, 2000.f, -11200.f, 11200.f });
+	else
+		ADD_FAILURE() << error;
+
 	cases.push_back({ "floor-1-like", HouseLikeWalls(11), -3600.f, 2000.f, -11200.f, 11200.f });
 	cases.push_back({ "synthetic-2000", RandomWalls(WallMap::MAX_WALLS, 20261007), -13000.f, 13000.f, -13000.f, 13000.f });
 
