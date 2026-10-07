@@ -15,6 +15,7 @@
 #include "ItemRoller.h"
 #include "ChestSpawnTable.h"
 #include "EntryPointTable.h"
+#include "WallTable.h"
 #include "Bag.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
@@ -124,6 +125,23 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] entry points loaded - " << EntryPointTable::All().size() << '\n';
+
+		// 서버 벽 - 진입 지점 다음이어야 한다. 지점 9 m 안에 벽이 있는지 검사한다 (ADR-0006 · level-map.md Core Rule 15)
+		if (WallTable::Load(dataDir, FLOOR_COUNT, EntryPointTable::All(), OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] walls invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		for (uint32 floor = 0; floor < FLOOR_COUNT; floor++)
+		{
+			const string& version = WallTable::DataVersion(floor);
+			if (version.empty() && WallTable::Get(floor).Count() == 0)
+				LOG_LINE << "[LEVEL] floor=" << floor << " walls=0 (TEMP)\n";
+			else
+				LOG_LINE << "[LEVEL] floor=" << floor << " walls=" << WallTable::Get(floor).Count()
+					<< " version=" << (version.empty() ? "none" : version) << '\n';
+		}
 
 		// 메모리 전용 - DB 행이 없다. 재시작하면 전층이 Sealed 로 돌아간다 (§ 8, ADR-0003).
 		// 워커가 아직 없으므로 DoAsync 가 이 스레드에서 바로 실행된다 (LoadLiveBags 와 같음).
@@ -264,6 +282,20 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] disconnect grace=" << GDisconnectGraceUs.load() / 1000 << "ms\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_WALLS") == 0 && raw != nullptr)
+		{
+			GWallCheck.store(raw[0] != '0');
+			::free(raw);
+		}
+
+		if (GWallCheck.load() == false)
+			LOG_LINE << "[BOOT] FBTK_WALLS=0 - move validation skips the wall check (SOAK COMPARISON / EMERGENCY ONLY)\n";
 	}
 
 	constexpr int32 DB_THREAD_COUNT = 4;

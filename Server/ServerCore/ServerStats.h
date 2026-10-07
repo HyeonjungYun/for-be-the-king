@@ -31,6 +31,9 @@ public:
 	void			AddMoveReject() { _moveRejects.fetch_add(1); }
 	void			AddMoveBlocked() { _moveBlocked.fetch_add(1); }
 
+	// 서버 벽에 막힌 이동 (reason=wall). SV-3 판정에 넣지 않는다 - 봇은 벽을 모른다 (ADR-0006 § Risks)
+	void			AddMoveWallReject() { _moveWallRejects.fetch_add(1); }
+
 	void			Dump(int32 sessionCount);
 
 	static uint64	PercentileUpperUs(const uint64* buckets, uint64 total, double p);
@@ -52,6 +55,7 @@ private:
 
 	atomic<uint64>	_moveRejects = 0;
 	atomic<uint64>	_moveBlocked = 0;
+	atomic<uint64>	_moveWallRejects = 0;
 
 	atomic<uint64>	_sentByPacket[PACKET_ID_LIMIT];
 	PacketNameFn	_packetName = nullptr;

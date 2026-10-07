@@ -10,6 +10,7 @@
 #include "GameSessionManager.h"
 #include "FloorBounds.h"
 #include "SpawnPlacement.h"
+#include "WallTable.h"
 
 namespace
 {
@@ -385,6 +386,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	// 서버 이동 검증
 	const uint64 nowUs = Utils::NowMicroseconds();
 	bool rejected = (player->lastMoveUs == 0);
+	bool wallRejected = false;
 
 	if (rejected == false)
 	{
@@ -447,13 +449,41 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		}
 		else
 		{
-			player->moveBudget -= distance;
+			// 벽 - 속도 다음이다. 속도 검사가 선분 길이를 묶어 둬야 벽 질의가 보는 격자 칸 수가 묶인다 (ADR-0006 § ⑥).
+			// 캐릭터 중심 경로(r = 0)만 본다 - 정상 클라의 캡슐 중심은 벽면에서 42 cm 밖에 있으므로 중심이 벽 안으로
+			// 들어가면 조작이다. 벽 데이터가 없는 층(TEMP)은 빈 맵이라 늘 통과한다.
+			const float x0 = player->posInfo->x();
+			const float y0 = player->posInfo->y();
+			WallKind hitKind = WallKind::Wall;
+
+			if (GWallCheck.load(memory_order_relaxed)
+				&& WallTable::Get(_floorId).SweepBlocked(x0, y0, pkt.info().x(), pkt.info().y(), 0.f, OUT &hitKind))
+			{
+				rejected = true;
+				wallRejected = true;
+
+				LOG_LINE << "[MOVE REJECT] id=" << objectId
+					<< " reason=wall"
+					<< " x0=" << x0
+					<< " y0=" << y0
+					<< " x1=" << pkt.info().x()
+					<< " y1=" << pkt.info().y()
+					<< " kind=" << WallKindName(hitKind) << '\n';
+			}
+			else
+			{
+				player->moveBudget -= distance;
+			}
 		}
 	}
-	
+
 	if (rejected)
 	{
-		GStats.AddMoveReject();
+		// 벽 거부는 따로 센다 - 봇(DummyClient)은 벽을 몰라 소크에서 SV-3 판정을 흐린다 (ADR-0006 § Risks)
+		if (wallRejected)
+			GStats.AddMoveWallReject();
+		else
+			GStats.AddMoveReject();
 
 		// 검증 실패 - posInfo를 갱신하지 않고 마지막 유효 위치를 되돌려 보낸다.
 			// 브로캐스트 X

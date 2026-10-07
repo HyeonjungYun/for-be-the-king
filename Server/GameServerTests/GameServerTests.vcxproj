@@ -90,6 +90,7 @@
     <ClCompile Include="EntryPointTest.cpp" />
     <ClCompile Include="MoveClockTest.cpp" />
     <ClCompile Include="LevelRulesTest.cpp" />
+    <ClCompile Include="WallMapTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="ItemRollerTest.cpp" />
     <ClCompile Include="ItemTableTest.cpp" />
@@ -113,6 +114,8 @@
     <ClCompile Include="..\GameServer\Bag.cpp" />
     <ClCompile Include="..\GameServer\ChestSpawnTable.cpp" />
     <ClCompile Include="..\GameServer\EntryPointTable.cpp" />
+    <ClCompile Include="..\GameServer\WallMap.cpp" />
+    <ClCompile Include="..\GameServer\WallTable.cpp" />
     <ClCompile Include="..\GameServer\Enum.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>

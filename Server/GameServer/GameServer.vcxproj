@@ -157,6 +157,8 @@
     <ClCompile Include="Bag.cpp" />
     <ClCompile Include="ChestSpawnTable.cpp" />
     <ClCompile Include="EntryPointTable.cpp" />
+    <ClCompile Include="WallMap.cpp" />
+    <ClCompile Include="WallTable.cpp" />
     <ClCompile Include="Creature.cpp" />
     <ClCompile Include="CsvTable.cpp" />
     <ClCompile Include="Enum.pb.cc">
@@ -196,6 +198,8 @@
     <ClInclude Include="MoveClock.h" />
     <ClInclude Include="FloorBounds.h" />
     <ClInclude Include="SpawnPlacement.h" />
+    <ClInclude Include="WallMap.h" />
+    <ClInclude Include="WallTable.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />
     <ClInclude Include="Enum.pb.h" />
