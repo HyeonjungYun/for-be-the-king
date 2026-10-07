@@ -83,6 +83,17 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 		bot->Send(ClientPacketHandler::MakeSendBuffer(chat));
 	}
 
+	if (GSwapArmor.load())
+		bot->swapAtUs.store(Utils::NowMicroseconds() + 3'000'000);
+
+	// -chat "<명령>": 입장마다 한 번 보낸다 - 디버그 명령 게이트(FBTK_DEBUG_COMMANDS) 시험
+	if (GEnterChat.empty() == false)
+	{
+		Protocol::C_CHAT chat;
+		chat.set_msg(GEnterChat);
+		bot->Send(ClientPacketHandler::MakeSendBuffer(chat));
+	}
+
 	return true;
 }
 
@@ -97,6 +108,10 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 		GLeaveEscaped.fetch_add(1);
 	else if (pkt.reason() == Protocol::RUN_END_EXPIRED)
 		GLeaveExpired.fetch_add(1);
+
+	// -tower 루프: 탈출하면 베이스캠프에서 잠깐 쉬고 다시 들어가 같은 타워로 (AC-ET-30 · 26)
+	if (GTowerMode.load() && GItemBehavior.load() == false)
+		bot->reenterAtUs.store(Utils::NowMicroseconds() + BOT_REENTER_DELAY_US);
 
 	// 탈출 커밋이 끝났다 - 베이스캠프에서 잠깐 쉬고 다시 들어간다. 던전에서 본 가방은 이제 모른다
 	if (GItemBehavior.load())
@@ -199,6 +214,22 @@ bool Handle_S_ATTACK_CANCEL(PacketSessionRef& session, Protocol::S_ATTACK_CANCEL
 
 bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 {
+	// 맞은 것은 처음 30건만 - 장비 스탯이 판정에 들어갔는지 숫자로 본다 (서버 [STATS] 와 맞춰 읽는다, 2026-10-07).
+	// 피해 0(체력 재동기화 - 착용 교체 · 몬스터 귀환)은 드물어서 전부 찍는다
+	static atomic<int32> logged = 0;
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	for (const Protocol::DamageInfo& info : pkt.damages())
+	{
+		if (info.target_id() != bot->objectId.load())
+			continue;
+		if (info.damage() != 0 && logged.fetch_add(1) >= 30)
+			continue;
+
+		cout << "[BOT HIT] target=" << info.target_id() << " attacker=" << info.attacker_id() << " dmg=" << info.damage()
+			<< " hp=" << info.remaining_hp() << " crit=" << info.is_crit()
+			<< " type=" << (info.damage_type() == Protocol::DAMAGE_TYPE_MAGIC ? "magic" : "physical") << '\n';
+	}
 	return true;
 }
 
@@ -371,7 +402,7 @@ namespace
 
 bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pkt)
 {
-	if (GItemBehavior.load() == false)
+	if (GItemBehavior.load() == false && GSwapArmor.load() == false)
 		return true;
 
 	if (pkt.result() != Protocol::ITEM_OK)
@@ -398,7 +429,7 @@ bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pk
 
 bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SYNC& pkt)
 {
-	if (GItemBehavior.load() == false)
+	if (GItemBehavior.load() == false && GSwapArmor.load() == false)
 		return true;
 
 	// 던전 동기화는 소지 · 착용 전체다. 베이스캠프 동기화에는 보관도 있지만 봇은 보관을 쓰지 않는다

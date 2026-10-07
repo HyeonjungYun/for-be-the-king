@@ -26,6 +26,8 @@ atomic<bool> GIdleOne = false;
 float GTowerX = 0.f;
 float GTowerY = 0.f;
 atomic<uint64> GRunGold = 0;
+string GEnterChat;
+atomic<bool> GSwapArmor = false;
 atomic<uint64> GLeaveEscaped = 0;
 atomic<uint64> GLeaveExpired = 0;
 uint64 GBurstStartUs = 0;
@@ -200,6 +202,56 @@ namespace
 		equipPkt.set_slot(static_cast<Protocol::EquipSlot>(slot));
 		SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(equipPkt), nowUs);
 		GEquipSent.fetch_add(1);
+	}
+
+	// -swap: 입장 3 초 뒤 갑옷을 벗고, 2 초 뒤 같은 갑옷을 다시 입는다. 서버 [STATS] unequip · equip 줄과
+	// [BOT HIT] dmg=0 (체력 재동기화) 으로 장비 스탯 · 체력 비율 유지가 던전 안에서 도는지 본다 (2026-10-07)
+	void TrySwapArmor(const BotSessionRef& bot, uint64 nowUs)
+	{
+		const uint64 at = bot->swapAtUs.load();
+		if (at == 0 || nowUs < at)
+			return;
+
+		if (bot->swapStep == 0)
+		{
+			uint64 armorId = 0;
+			{
+				lock_guard<mutex> guard(bot->itemLock);
+				for (const auto& [id, item] : bot->items)
+				{
+					if (item.state() == Protocol::ITEM_STATE_EQUIPPED && item.slot() == Protocol::SLOT_ARMOR)
+						armorId = id;
+				}
+			}
+
+			bot->swapAtUs.store(0);
+			if (armorId == 0)
+				return;
+
+			Protocol::C_UNEQUIP pkt;
+			pkt.set_request_id(bot->NextRequestId());
+			pkt.set_instance_id(armorId);
+			bot->Send(ClientPacketHandler::MakeSendBuffer(pkt));
+
+			bot->swapItemId = armorId;
+			bot->swapStep = 1;
+			bot->swapAtUs.store(nowUs + 2'000'000);
+			LOG_LINE << "[BOT SWAP] unequip char=" << bot->objectId.load() << " item=" << armorId << '\n';
+			return;
+		}
+
+		if (bot->swapStep == 1)
+		{
+			Protocol::C_EQUIP pkt;
+			pkt.set_request_id(bot->NextRequestId());
+			pkt.set_instance_id(bot->swapItemId);
+			pkt.set_slot(Protocol::SLOT_ARMOR);
+			bot->Send(ClientPacketHandler::MakeSendBuffer(pkt));
+
+			bot->swapStep = 0;
+			bot->swapAtUs.store(0);
+			LOG_LINE << "[BOT SWAP] equip char=" << bot->objectId.load() << " item=" << bot->swapItemId << '\n';
+		}
 	}
 
 	void TryEscape(const BotSessionRef& bot, uint64 nowUs)
@@ -628,6 +680,9 @@ static void TickBots(float deltaTime)
 			TryEquip(bot, nowUs);
 			TryEscape(bot, nowUs);
 		}
+
+		if (GSwapArmor.load())
+			TrySwapArmor(bot, nowUs);
 	}
 }
 
@@ -648,6 +703,8 @@ int main(int argc, char* argv[])
 			GEntryPointId.store(static_cast<uint32>(::atoi(argv[i + 1])));
 		else if (::strcmp(argv[i], "-gold") == 0)
 			GRunGold.store(::strtoull(argv[i + 1], nullptr, 10));
+		else if (::strcmp(argv[i], "-chat") == 0)
+			GEnterChat = argv[i + 1];
 		else if (::strcmp(argv[i], "-tower") == 0 && i + 2 < argc)
 		{
 			GTowerMode.store(true);
@@ -671,6 +728,8 @@ int main(int argc, char* argv[])
 			GMonsterPull.store(true);
 		else if (::strcmp(argv[i], "-idleone") == 0)
 			GIdleOne.store(true);
+		else if (::strcmp(argv[i], "-swap") == 0)
+			GSwapArmor.store(true);
 	}
 
 	GBurstStartUs = Utils::NowMicroseconds();
@@ -778,6 +837,11 @@ int main(int argc, char* argv[])
 			{
 				LOG_LINE << "[BOT MON] attacks = " << GMonsterAttacksSent.exchange(0) / sec << "/s"
 					<< "   kills total = " << GMonsterKills.load() << '\n';
+			}
+
+			if (GTowerMode.load())
+			{
+				LOG_LINE << "[BOT RUN] escaped total = " << GLeaveEscaped.load() << "   expired total = " << GLeaveExpired.load() << '\n';
 			}
 
 			if (GItemBehavior.load())

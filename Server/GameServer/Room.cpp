@@ -1650,7 +1650,10 @@ void Room::BeginEscapeCommit(uint64 playerId)
 	LOG_LINE << "[ESCAPE] commit begin - char=" << playerId << " carried=" << snap.carried.size()
 		<< " new=" << newItems << " dropped=" << snap.droppedIds.size() << '\n';
 
-	GDBQueue.Push([session, snap](DBConnection* conn)
+	// 큐에 넣은 순간부터 커밋 완료까지 - 동시 완충 때 큐가 비는 시간 (escape-timer.md AC-ET-26)
+	const uint64 queuedUs = Utils::NowMicroseconds();
+
+	GDBQueue.Push([session, snap, queuedUs](DBConnection* conn)
 		{
 			// 성공할 때까지 재시도. 돌아왔으면 커밋된 것
 			CommitEscape(conn, snap);
@@ -1663,7 +1666,8 @@ void Room::BeginEscapeCommit(uint64 playerId)
 			SEND_PACKET_DECLARATION(leavePkt);
 			session->Send(sendBuffer);
 
-			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << " gold=" << snap.gold << '\n';
+			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << " gold=" << snap.gold
+				<< " queued_to_done=" << (Utils::NowMicroseconds() - queuedUs) / 1000 << "ms\n";
 
 			// 베이스캠프로 돌아왔다 - 방금 커밋한 결과를 S3 에 보낸다 (UI 4단계)
 			SendBaseCampInventory(conn, session, snap.characterId);

@@ -63,6 +63,11 @@ public:
 	// -monsterpull - 아는 몬스터 위치 (S_SPAWN · S_MOVE · S_DESPAWN · S_DIED). itemLock 아래에서만
 	unordered_map<uint64, pair<float, float>>		monsters;
 
+	// -swap - 입장 3 초 뒤 갑옷을 벗고 2 초 뒤 다시 입는다 (장비 스탯 · 체력 비율 유지 시험). 틱 스레드 전용, swapAtUs 만 패킷 스레드가 쓴다
+	atomic<uint64>									swapAtUs = 0;
+	int32											swapStep = 0;
+	uint64											swapItemId = 0;
+
 	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
 	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };
@@ -105,6 +110,8 @@ extern atomic<bool> GTowerMode;
 extern float GTowerX;
 extern float GTowerY;
 extern atomic<uint64> GRunGold;
+extern string GEnterChat;		// -chat - 스레드 시작 전에 한 번 쓰고 이후 읽기만
+extern atomic<bool> GSwapArmor;	// -swap
 extern atomic<uint64> GLeaveEscaped;
 extern atomic<uint64> GLeaveExpired;
 
