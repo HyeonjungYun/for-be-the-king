@@ -13,8 +13,8 @@
  *                        [-Export] [-NoSave] -unattended -nullrhi
  *   … -run=S1LevelGraybox -Map=/Game/Maps/Floor1 -Verify     (load the saved map, round trip + rules only)
  *
- * Note: UnrealEditor-Cmd exits 1 while the project prints the GameFeatureData asset-manager errors at startup,
- * even when this commandlet returns 0 — read "[LEVEL]" lines and "finished execution (result N)" in the log.
+ * The process exit code is this commandlet's result (0 = every step passed). Before 2026-10-07 it was 1 regardless,
+ * because of a missing GameFeatureData asset-manager rule (S1/Config/DefaultGame.ini) — if it is 1 again, read the log.
  *
  * Steps: new empty world → AS1LevelBuilder::Build → collect the markers back → every rule → compare with the
  * layout file (positions within 1 cm) → optional export → save. Exit code 0 only if every step passes.
