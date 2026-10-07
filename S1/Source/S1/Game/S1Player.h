@@ -226,9 +226,11 @@ protected:
 	bool bShowCombatDebug = true;
 
 	/**
-	 * MaxHp is hardcoded to the naked baseline (entities.yaml: base_stats_naked). The server
-	 * never sends it because nothing changes it yet — equipment does, so this becomes a
-	 * protocol field in P2. Adding it now would only mean changing it twice.
+	 * Naked baseline (entities.yaml: base_stats_naked) until the server's snapshot arrives —
+	 * ObjectInfo.hp / max_hp on S_ENTER_GAME and S_SPAWN, with equipment already added (EquipStats).
+	 * 🔴 An equip change inside the dungeon moves the server's max without telling us — there is no
+	 * field for it. The server keeps the hp ratio and resyncs hp with S_DAMAGE 0, so the bar is off
+	 * by at most the item's max_hp share until the next run.
 	 */
 	int32 CurrentHp = 500;
 	int32 MaxHp = 500;

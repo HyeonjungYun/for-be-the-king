@@ -209,13 +209,69 @@ bool FS1ItemCatalog::Parse(const FString& TypesCsv, const FString& StatsCsv, FSt
 	return true;
 }
 
+bool FS1ItemCatalog::ParseGrades(const FString& GradesCsv, FString& OutError)
+{
+	constexpr int32 GradeCount = 4;
+	GradeMultipliers.Reset();
+
+	const FCsv Csv = ReadCsv(GradesCsv);
+	const int32 ColGrade = Csv.Column(TEXT("grade"));
+	const int32 ColMultiplier = Csv.Column(TEXT("multiplier"));
+	if (ColGrade == INDEX_NONE || ColMultiplier == INDEX_NONE)
+	{
+		OutError = TEXT("item_grades.csv: header needs grade and multiplier");
+		return false;
+	}
+
+	TArray<float> Parsed;
+	Parsed.Init(0.f, GradeCount);
+
+	for (int32 r = 0; r < Csv.Rows.Num(); r++)
+	{
+		const TArray<FString>& Cells = Csv.Rows[r];
+		const int32 Line = Csv.LineNumbers[r];
+
+		int32 Grade = 0;
+		float Multiplier = 0.f;
+		if (Cells.Num() != Csv.Header.Num()
+			|| FDefaultValueHelper::ParseInt(Cells[ColGrade], Grade) == false || Grade < 1 || Grade > GradeCount
+			|| FDefaultValueHelper::ParseFloat(Cells[ColMultiplier], Multiplier) == false || Multiplier <= 0.f)
+		{
+			OutError = FString::Printf(TEXT("item_grades.csv line %d: grade must be 1..4 and multiplier > 0"), Line);
+			return false;
+		}
+
+		if (Parsed[Grade - 1] != 0.f)
+		{
+			OutError = FString::Printf(TEXT("item_grades.csv line %d: grade %d appears twice"), Line, Grade);
+			return false;
+		}
+
+		Parsed[Grade - 1] = Multiplier;
+	}
+
+	for (int32 i = 0; i < GradeCount; i++)
+	{
+		if (Parsed[i] == 0.f)
+		{
+			OutError = FString::Printf(TEXT("item_grades.csv is missing grade %d"), i + 1);
+			return false;
+		}
+	}
+
+	GradeMultipliers = MoveTemp(Parsed);
+	return true;
+}
+
 bool FS1ItemCatalog::LoadFromDirectory(const FString& Directory, FString& OutError)
 {
 	const FString TypesPath = FPaths::Combine(Directory, TEXT("item_types.csv"));
 	const FString StatsPath = FPaths::Combine(Directory, TEXT("item_type_stats.csv"));
+	const FString GradesPath = FPaths::Combine(Directory, TEXT("item_grades.csv"));
 
 	FString TypesCsv;
 	FString StatsCsv;
+	FString GradesCsv;
 
 	if (FFileHelper::LoadFileToString(TypesCsv, *TypesPath) == false)
 	{
@@ -227,6 +283,11 @@ bool FS1ItemCatalog::LoadFromDirectory(const FString& Directory, FString& OutErr
 		OutError = FString::Printf(TEXT("cannot read %s"), *StatsPath);
 		return false;
 	}
+	if (FFileHelper::LoadFileToString(GradesCsv, *GradesPath) == false)
+	{
+		OutError = FString::Printf(TEXT("cannot read %s"), *GradesPath);
+		return false;
+	}
 
-	return Parse(TypesCsv, StatsCsv, OutError);
+	return Parse(TypesCsv, StatsCsv, OutError) && ParseGrades(GradesCsv, OutError);
 }

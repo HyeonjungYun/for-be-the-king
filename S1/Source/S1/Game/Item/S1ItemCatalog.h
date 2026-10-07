@@ -46,14 +46,24 @@ public:
 	 */
 	bool Parse(const FString& TypesCsv, const FString& StatsCsv, FString& OutError);
 
-	/** Reads item_types.csv and item_type_stats.csv from Directory. */
+	/**
+	 * Parses item_grades.csv (grade,multiplier) — the same file the server's ItemTable reads, so a
+	 * tooltip number is the number the server fights with. All four grades must be there.
+	 */
+	bool ParseGrades(const FString& GradesCsv, FString& OutError);
+
+	/** Reads item_types.csv, item_type_stats.csv and item_grades.csv from Directory. */
 	bool LoadFromDirectory(const FString& Directory, FString& OutError);
 
 	const FS1ItemTypeDef* Find(uint32 TypeId) const { return Types.Find(TypeId); }
 	const TMap<uint32, FS1ItemTypeDef>& GetTypes() const { return Types; }
 	int32 Num() const { return Types.Num(); }
 
+	/** Common, Rare, Epic, Legendary — indexed by grade − 1. Empty until ParseGrades succeeds. */
+	TArrayView<const float> GetGradeMultipliers() const { return GradeMultipliers; }
+
 private:
 
 	TMap<uint32, FS1ItemTypeDef> Types;
+	TArray<float> GradeMultipliers;
 };

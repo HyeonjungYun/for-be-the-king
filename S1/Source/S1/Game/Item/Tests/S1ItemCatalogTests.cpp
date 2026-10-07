@@ -55,6 +55,41 @@ namespace
 	}
 }
 
+// ── Grade multipliers (item_grades.csv — shared with the server's ItemTable, 2026-10-07) ──
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1CatalogGradesTest,
+	"S1.Item.Catalog.ParseGrades_AllFourGrades_SameFileAsServer", GS1CatalogTestFlags)
+bool FS1CatalogGradesTest::RunTest(const FString& Parameters)
+{
+	FS1ItemCatalog Catalog;
+	FString Error;
+
+	TestTrue(TEXT("parses"), Catalog.ParseGrades(TEXT("grade,multiplier\r\n1,1.0\r\n2,1.3\r\n3,1.7\r\n4,2.2\r\n"), Error));
+	if (TestEqual(TEXT("four grades"), Catalog.GetGradeMultipliers().Num(), 4))
+	{
+		TestEqual(TEXT("common"), Catalog.GetGradeMultipliers()[0], 1.0f);
+		TestEqual(TEXT("legendary"), Catalog.GetGradeMultipliers()[3], 2.2f);
+	}
+
+	// A missing grade would silently make that grade x1.0 — rejected, and nothing is kept
+	struct FCase { const TCHAR* What; const TCHAR* Csv; };
+	const FCase Cases[] =
+	{
+		{ TEXT("grade 4 missing"),		TEXT("grade,multiplier\n1,1.0\n2,1.3\n3,1.7\n") },
+		{ TEXT("grade twice"),			TEXT("grade,multiplier\n1,1.0\n2,1.3\n2,1.4\n3,1.7\n4,2.2\n") },
+		{ TEXT("grade 5"),				TEXT("grade,multiplier\n1,1.0\n2,1.3\n3,1.7\n4,2.2\n5,3.0\n") },
+		{ TEXT("multiplier 0"),			TEXT("grade,multiplier\n1,0\n2,1.3\n3,1.7\n4,2.2\n") },
+		{ TEXT("missing column"),		TEXT("grade\n1\n2\n3\n4\n") },
+	};
+
+	for (const FCase& Case : Cases)
+	{
+		TestFalse(FString::Printf(TEXT("%s - rejected"), Case.What), Catalog.ParseGrades(Case.Csv, Error));
+		TestEqual(FString::Printf(TEXT("%s - nothing kept"), Case.What), Catalog.GetGradeMultipliers().Num(), 0);
+	}
+	return true;
+}
+
 // ── Catalog parsing ──────────────────────────────────────────────────────
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1CatalogParseValidTest,

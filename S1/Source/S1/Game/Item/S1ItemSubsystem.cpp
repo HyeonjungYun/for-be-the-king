@@ -86,10 +86,15 @@ void US1ItemSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		UE_LOG(LogTemp, Log, TEXT("[ITEMUI] item catalog loaded - %d types from %s"), Catalog.Num(), *Directory);
 	}
 
-	if (GradeMultipliers.Num() < 4)
-		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] GradeMultipliers has %d of 4 entries - missing grades count as x1.0"), GradeMultipliers.Num());
+	if (Catalog.GetGradeMultipliers().Num() < 4)
+		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] grade multipliers not loaded (item_grades.csv) - every grade counts as x1.0"));
 
 	CheckStrings();
+}
+
+TArrayView<const float> US1ItemSubsystem::GetGradeMultipliers() const
+{
+	return Catalog.GetGradeMultipliers();
 }
 
 void US1ItemSubsystem::CheckStrings() const

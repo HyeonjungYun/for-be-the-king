@@ -167,6 +167,7 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 			return;
 
 		Player->SetPlayerInfo(objectInfo.pos_info());
+		Player->SetCreatureInfo(objectInfo);		// 장비가 더한 최대 체력 (서버 EquipStats, 2026-10-07 에이전트 - YOLO 세션 위임)
 
 		MyPlayer = Player;
 		Players.Add(objectInfo.object_id(), Player);

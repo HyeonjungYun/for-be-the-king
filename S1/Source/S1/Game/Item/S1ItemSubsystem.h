@@ -134,8 +134,8 @@ public:
 	/** Item types read from Server/Data. Empty when the files could not be read — see the log. */
 	const FS1ItemCatalog& GetCatalog() const { return Catalog; }
 
-	/** Common, Rare, Epic, Legendary — entities.yaml grade_multiplier. */
-	TArrayView<const float> GetGradeMultipliers() const { return GradeMultipliers; }
+	/** Common, Rare, Epic, Legendary — Server/Data/item_grades.csv, the file the server fights with. */
+	TArrayView<const float> GetGradeMultipliers() const;
 
 	/** The six keys as of the last S_EQUIP_SYNC, without protobuf. Empty before the first one. */
 	TArray<FS1KeySlotView> GetKeySlots() const;
@@ -198,10 +198,6 @@ private:
 	 */
 	UPROPERTY(Config)
 	FString ItemDataDirectory;
-
-	/** Indexed by grade − 1. Comes from config; a missing entry counts as ×1.0 and is logged at load. */
-	UPROPERTY(Config)
-	TArray<float> GradeMultipliers;
 
 	UPROPERTY(Config)
 	int32 CarriedCapacity = 25;
