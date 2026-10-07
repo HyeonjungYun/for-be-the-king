@@ -6,6 +6,7 @@
 #include <thread>
 #include <fstream>
 #include <filesystem>
+#include <chrono>
 
 // design/gdd/escape-timer.md § Acceptance Criteria A - 이름 끝의 AC 번호가 그 행이다. 시계는 dtUs 로 주입한다.
 
@@ -279,4 +280,40 @@ TEST(Telemetry, 네_스레드가_동시에_써도_깨진_줄이_없다_AC_ET_16)
 	}
 	EXPECT_EQ(lines, 10'001);
 	EXPECT_EQ(broken, 0);
+}
+
+TEST(Telemetry, 디스크가_멈춰도_Append_는_기다리지_않고_닫을_때_전부_쓴다)
+{
+	// 회귀: 예전에는 Room 잡 안에서 ofstream 에 쓰고 flush 했다 - 쓰기가 멈추면 그 방이 같이 멈췄다 (G2 동기 로그와 같은 길)
+	// 쓰기 스레드를 묶음마다 300 ms 멈춰 두고 1,000 줄을 넣는다. 동기 쓰기라면 최소 300 ms 가 걸린다.
+	const string dir = ItemTable::DefaultDataDir() + "\\..\\Logs\\telemetry-test-stall";
+	chrono::steady_clock::duration appendTime{};
+	{
+		Telemetry t;
+		ASSERT_TRUE(t.Open(dir));
+		t.SetWriteStallForTest(300);
+
+		const auto start = chrono::steady_clock::now();
+		for (int32 i = 0; i < 1000; i++)
+			t.AppendGauge(0, "Ta", "FILL_START", static_cast<uint32>(i), 1);
+		appendTime = chrono::steady_clock::now() - start;
+	}	// 소멸자가 남은 줄을 다 쓰고 닫는다
+
+	EXPECT_LT(chrono::duration_cast<chrono::milliseconds>(appendTime).count(), 100) << "Append 가 쓰기를 기다렸다";
+
+	string newest;
+	for (const auto& entry : std::filesystem::directory_iterator(dir))
+	{
+		const string name = entry.path().string();
+		if (entry.path().filename().string().rfind("gauge-", 0) == 0 && name > newest)
+			newest = name;
+	}
+	ASSERT_FALSE(newest.empty());
+
+	ifstream in(newest);
+	string line;
+	int32 lines = 0;
+	while (getline(in, line))
+		lines++;
+	EXPECT_EQ(lines, 1'001) << "닫을 때 큐에 남은 줄을 버렸다";
 }

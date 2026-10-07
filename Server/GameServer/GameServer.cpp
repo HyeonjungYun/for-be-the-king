@@ -106,7 +106,9 @@ int main()
 			return -1;
 		}
 
-		LOG_LINE << "[BOOT] item data loaded - types=" << ItemTable::All().size() << " pools=" << ItemTable::PoolCount() << '\n';
+		LOG_LINE << "[BOOT] item data loaded - types=" << ItemTable::All().size() << " pools=" << ItemTable::PoolCount()
+			<< " stat_lines=" << ItemTable::StatLineCount() << " grade_x=" << ItemTable::GradeMultiplier(Protocol::ITEM_GRADE_COMMON)
+			<< "/" << ItemTable::GradeMultiplier(Protocol::ITEM_GRADE_LEGENDARY) << '\n';
 
 		// 층 아이템 풀 - ItemTable 다음이어야 한다. 부위 · 물리/마법 행에 뽑을 종류가 있는지 ItemTable 로 검사한다.
 		if (FloorItemPool::Load(dataDir, OUT error) == false)
@@ -193,6 +195,14 @@ int main()
 			}
 			if (GDebugGold.load())
 				LOG_LINE << "[BOOT] FBTK_DEBUG_GOLD=1 - /gold N adds run gold (TEST ONLY)\n";
+
+			if (_dupenv_s(&raw, &length, "FBTK_DEBUG_COMMANDS") == 0 && raw != nullptr)
+			{
+				GDebugCommands.store(raw[0] == '1');
+				::free(raw);
+			}
+			LOG_LINE << "[BOOT] debug chat commands (/bag /unbag /die /stun /root /silence /slow) "
+				<< (GDebugCommands.load() ? "ON - FBTK_DEBUG_COMMANDS=1 (TEST ONLY)" : "off") << '\n';
 
 			// 측정 전용 - 못 열어도 서버는 돈다
 			const string telemetryDir = dataDir + "\\..\\Logs\\telemetry";

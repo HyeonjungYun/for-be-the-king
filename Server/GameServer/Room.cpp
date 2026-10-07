@@ -75,6 +75,19 @@ namespace
 		out << '\n';
 	}
 
+	// 장비 합산 결과 (EquipStats) - 봇 · 로그로 장비가 전투에 들어갔는지 확인한다
+	void LogStats(const PlayerRef& player, const char* tag)
+	{
+		LOG_LINE << "[STATS] " << tag << " char=" << player->objectInfo->object_id()
+			<< " hp=" << player->hp << "/" << player->maxHp
+			<< " atk=" << player->attackPower << " mag=" << player->magicPower
+			<< " armor=" << player->armor << " mr=" << player->magicResist
+			<< " crit=" << player->critChance << " critx=" << player->critMultiplier
+			<< " as=" << player->percentAsBonus << " ms=" << player->percentMsBonus
+			<< " res=" << player->resistance << " range=" << player->attackRange
+			<< " type=" << (player->autoAttackType == Protocol::DAMAGE_TYPE_MAGIC ? "magic" : "physical") << '\n';
+	}
+
 	bool IsInAttackRange(const CreatureRef& attacker, const CreatureRef& target)
 	{
 		const float dx = target->posInfo->x() - attacker->posInfo->x();
@@ -199,6 +212,12 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->lastMoveUs = enterUs;
 		player->moveClock.Reset();
 		player->lastSaveUs = enterUs;
+
+		// 장비 스탯 - 입장 체력은 새 최대치로 가득. S_ENTER_GAME · 스폰 스냅샷이 이 체력을 싣는다 (TR-combat-026)
+		player->ApplyEquipmentStats(true);
+		player->objectInfo->set_hp(player->hp);
+		player->objectInfo->set_max_hp(player->maxHp);
+		LogStats(player, "enter");
 
 		// 체류 타이머는 방에 놓인 순간부터 - DB 적재 지연이 30 분을 깎지 않는다 (escape-timer.md Core Rule 13)
 		if (success)
@@ -814,7 +833,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 		}
 
 		bool isCrit = false;
-		const int32 damage = attacker->ComputeDamageTo(*target, Protocol::DAMAGE_TYPE_PHYSICAL, OUT isCrit);
+		const int32 damage = attacker->ComputeDamageTo(*target, attacker->autoAttackType, OUT isCrit);
 		const int32 remainingHp = target->TakeDamage(damage);
 
 		Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
@@ -823,7 +842,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 		dmg.set_damage(damage);
 		dmg.set_remaining_hp(remainingHp);
 		dmg.set_is_crit(isCrit);
-		dmg.set_damage_type(Protocol::DAMAGE_TYPE_PHYSICAL);
+		dmg.set_damage_type(attacker->autoAttackType);
 
 		// 후딜 소모는 히트에 성공했을 때만
 		attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
@@ -1158,8 +1177,7 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 		changed.push_back(outgoing.ToProto(Protocol::ITEM_STATE_CARRIED));
 	}
 
-	player->RebuildSkillSlotsFromEquipment();
-	LogSlots(player, "equip");
+	OnEquipmentChanged(player, "equip");
 	SendEquipSync(player);
 
 	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
@@ -1198,8 +1216,7 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 	player->equipped[foundIdx] = ItemEntry{};
 	player->inventory.push_back(e);
 
-	player->RebuildSkillSlotsFromEquipment();
-	LogSlots(player, "unequip");
+	OnEquipmentChanged(player, "unequip");
 	SendEquipSync(player);
 
 	vector<Protocol::ItemInstance> changed;
@@ -1573,7 +1590,7 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 	for (ItemEntry& e : player->equipped)
 		e = ItemEntry{};
 
-	player->RebuildSkillSlotsFromEquipment();
+	OnEquipmentChanged(player, "death");
 	SendEquipSync(player);
 
 	Protocol::S_INVENTORY_SYNC invPkt;		// 빈 목록, 전부 가방으로 감
@@ -2542,6 +2559,24 @@ void Room::ClearSpawnInvulnerability(const PlayerRef& player, const char* by)
 	LOG_LINE << "[INVULN] cleared char=" << player->objectInfo->object_id() << " by=" << by << " left="
 		<< (player->spawnInvulnUntilUs > nowUs ? (player->spawnInvulnUntilUs - nowUs) / 1000 : 0) << "ms\n";
 	player->spawnInvulnUntilUs = 0;
+}
+
+void Room::OnEquipmentChanged(const PlayerRef& player, const char* tag)
+{
+	player->RebuildSkillSlotsFromEquipment();
+	LogSlots(player, tag);
+
+	// 치유 패킷이 없다 - 몬스터 귀환과 같은 방식으로 피해 0 · 남은 체력을 보낸다 (클라 OnDamaged 가 재동기화로 읽는다)
+	if (player->ApplyEquipmentStats(false) && player->IsAlive())
+	{
+		Protocol::DamageInfo& resync = _pendingDamages.emplace_back();
+		resync.set_attacker_id(0);
+		resync.set_target_id(player->objectInfo->object_id());
+		resync.set_damage(0);
+		resync.set_remaining_hp(player->hp);
+	}
+
+	LogStats(player, tag);
 }
 
 void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs)

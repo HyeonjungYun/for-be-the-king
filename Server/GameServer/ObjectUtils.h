@@ -86,6 +86,10 @@ extern atomic<uint64> GDisconnectGraceUs;
 // /gold N - 런 골드 디버그 (FBTK_DEBUG_GOLD=1, escape-timer.md Core Rule 18). 꺼져 있으면 명령을 무시한다
 extern atomic<bool> GDebugGold;
 
+// /bag · /unbag · /die · /stun · /root · /silence · /slow - 디버그 채팅 명령 (FBTK_DEBUG_COMMANDS=1). 기본 꺼짐.
+// 예전에는 접속한 누구나 남에게 CC 를 걸고 가방을 지울 수 있었다 (ADR-0007 · 2026-10-07)
+extern atomic<bool> GDebugCommands;
+
 // 체류 시간 만료 (escape-timer.md Core Rule 16 · 17) - 소지 · 착용 · 주운 아이템을 id 로 지우고 골드 30 % 를 더한다. 가방은 없다
 struct ExpirySnapshot
 {

@@ -93,6 +93,7 @@
     <ClCompile Include="WallMapTest.cpp" />
     <ClCompile Include="MonsterTest.cpp" />
     <ClCompile Include="EscapeLogicTest.cpp" />
+    <ClCompile Include="EquipStatsTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="ItemRollerTest.cpp" />
     <ClCompile Include="ItemTableTest.cpp" />
@@ -122,6 +123,7 @@
     <ClCompile Include="..\GameServer\MonsterTable.cpp" />
     <ClCompile Include="..\GameServer\MonsterBrain.cpp" />
     <ClCompile Include="..\GameServer\EscapeLogic.cpp" />
+    <ClCompile Include="..\GameServer\EquipStats.cpp" />
     <ClCompile Include="..\GameServer\Telemetry.cpp" />
     <ClCompile Include="..\GameServer\Enum.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>

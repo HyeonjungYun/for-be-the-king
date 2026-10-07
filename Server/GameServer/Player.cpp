@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "Player.h"
+#include "EquipStats.h"
 
 namespace
 {
@@ -20,12 +21,7 @@ Player::~Player()
 
 float Player::GetEffectiveMoveSpeed() const
 {
-	const float flatBonus = 0.f;
-	const float percentBonus = 0.f;
-
-	const float speed = (BASE_MOVE_SPEED + flatBonus) * (1.f + percentBonus) * (1.f - activeSlow);
-
-	return clamp(speed, BASE_MOVE_SPEED * MS_MIN_RATIO, BASE_MOVE_SPEED * MS_MAX_RATIO);
+	return ComputeMoveSpeed(activeSlow);
 }
 
 float Player::GetSpeedCeiling(uint64 nowUs) const
@@ -42,11 +38,43 @@ float Player::GetSpeedCeiling(uint64 nowUs) const
 float Player::ComputeMoveSpeed(float slow) const
 {
 	const float flatBonus = 0.f;
-	const float percentBonus = 0.f;
 
-	const float speed = (BASE_MOVE_SPEED + flatBonus) * (1.f + percentBonus) * (1.f - slow);
+	// 이동속도 보너스는 가산 후 1회 곱 - 곱연산 누적 금지 (entities.yaml effective_move_speed)
+	const float speed = (BASE_MOVE_SPEED + flatBonus) * (1.f + percentMsBonus) * (1.f - slow);
 
 	return std::clamp(speed, BASE_MOVE_SPEED * MS_MIN_RATIO, BASE_MOVE_SPEED * MS_MAX_RATIO);
+}
+
+bool Player::ApplyEquipmentStats(bool refill)
+{
+	vector<WornItem> worn;
+	for (const ItemEntry& e : equipped)
+	{
+		if (e.instanceId != 0)
+			worn.push_back({ e.itemTypeId, e.grade });
+	}
+
+	const EquipStatTotals totals = EquipStats::Compute(worn, nakedMaxHp);
+
+	const int32 oldMaxHp = maxHp;
+	const int32 oldHp = hp;
+
+	maxHp			= totals.maxHp;
+	attackPower		= totals.attackPower;
+	magicPower		= totals.magicPower;
+	armor			= totals.armor;
+	magicResist		= totals.magicResist;
+	critChance		= totals.critChance;
+	critMultiplier	= totals.critMultiplier;
+	percentAsBonus	= totals.percentAsBonus;
+	percentMsBonus	= totals.percentMsBonus;
+	resistance		= totals.resistance;
+	attackRange		= totals.attackRange;
+	autoAttackType	= totals.autoAttackType;
+
+	hp = refill ? maxHp : EquipStats::RescaleHp(hp, oldMaxHp, maxHp);
+
+	return hp != oldHp;
 }
 
 void Player::RebuildSkillSlotsFromEquipment()

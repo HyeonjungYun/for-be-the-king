@@ -20,11 +20,25 @@ namespace
 	}
 }
 
+Telemetry::~Telemetry()
+{
+	{
+		lock_guard<mutex> guard(_queueLock);
+		_stop = true;
+	}
+	_queueCv.notify_one();
+
+	// 남은 줄을 다 쓰고 끝난다 - 그다음 ofstream 이 닫힌다
+	if (_writer.joinable())
+		_writer.join();
+}
+
 bool Telemetry::Open(const string& directory)
 {
-	lock_guard<mutex> guard(_lock);
-
-	_bootId = UnixMs() / 1000;
+	{
+		lock_guard<mutex> guard(_lock);
+		_bootId = UnixMs() / 1000;
+	}
 
 	std::error_code ec;
 	std::filesystem::create_directories(directory, ec);
@@ -37,15 +51,16 @@ bool Telemetry::Open(const string& directory)
 
 	_runs.open(directory + "\\runs-" + stamp + ".csv", ios::out | ios::trunc);
 	_gauge.open(directory + "\\gauge-" + stamp + ".csv", ios::out | ios::trunc);
-	_open = _runs.is_open() && _gauge.is_open();
 
-	if (_open)
-	{
-		_runs << RUNS_HEADER << '\n' << flush;
-		_gauge << GAUGE_HEADER << '\n' << flush;
-	}
+	if (_runs.is_open() == false || _gauge.is_open() == false)
+		return false;
 
-	return _open;
+	_runs << RUNS_HEADER << '\n' << flush;
+	_gauge << GAUGE_HEADER << '\n' << flush;
+
+	_writer = thread([this]() { WriterLoop(); });
+	_open.store(true);
+	return true;
 }
 
 string Telemetry::FormatRun(uint64 tsMs, uint64 bootId, uint64 runSeq, const RunRow& r)
@@ -65,16 +80,75 @@ void Telemetry::AppendRun(const RunRow& row)
 	{
 		lock_guard<mutex> guard(_lock);
 		line = FormatRun(UnixMs(), _bootId, ++_runSeq, row);
-		if (_open)
-			_runs << line << '\n' << flush;
 	}
 
+	Enqueue(Sink::Runs, line);
 	LOG_LINE << "[TELEM] run " << line << '\n';
 }
 
 void Telemetry::AppendGauge(uint32 floorId, const string& towerId, const char* event, uint32 permille, uint32 occupants)
 {
-	lock_guard<mutex> guard(_lock);
-	if (_open)
-		_gauge << UnixMs() << ',' << _bootId << ',' << floorId << ',' << towerId << ',' << event << ',' << permille << ',' << occupants << '\n' << flush;
+	uint64 bootId = 0;
+	{
+		lock_guard<mutex> guard(_lock);
+		bootId = _bootId;
+	}
+
+	ostringstream os;
+	os << UnixMs() << ',' << bootId << ',' << floorId << ',' << towerId << ',' << event << ',' << permille << ',' << occupants;
+	Enqueue(Sink::Gauge, os.str());
+}
+
+void Telemetry::Enqueue(Sink sink, string line)
+{
+	if (_open.load() == false)
+		return;
+
+	{
+		lock_guard<mutex> guard(_queueLock);
+		_queue.emplace_back(sink, move(line));
+	}
+	_queueCv.notify_one();
+}
+
+void Telemetry::WriterLoop()
+{
+	deque<pair<Sink, string>> batch;
+
+	while (true)
+	{
+		bool stopping = false;
+		{
+			unique_lock<mutex> guard(_queueLock);
+			_queueCv.wait(guard, [this]() { return _stop || _queue.empty() == false; });
+			batch.swap(_queue);
+			stopping = _stop;
+		}
+
+		if (const uint32 stall = _stallMs.load(); stall > 0 && batch.empty() == false)
+			this_thread::sleep_for(chrono::milliseconds(stall));
+
+		bool wroteRuns = false;
+		bool wroteGauge = false;
+		for (const auto& [sink, line] : batch)
+		{
+			ofstream& out = (sink == Sink::Runs) ? _runs : _gauge;
+			out << line << '\n';
+			(sink == Sink::Runs ? wroteRuns : wroteGauge) = true;
+		}
+		batch.clear();
+
+		// 묶음마다 한 번 - 서버가 죽어도 그 전 묶음까지는 파일에 있다
+		if (wroteRuns)
+			_runs.flush();
+		if (wroteGauge)
+			_gauge.flush();
+
+		if (stopping)
+		{
+			lock_guard<mutex> guard(_queueLock);
+			if (_queue.empty())
+				return;
+		}
+	}
 }

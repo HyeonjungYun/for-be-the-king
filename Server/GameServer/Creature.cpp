@@ -68,7 +68,10 @@ int32 Creature::ApplyMitigation(float baseDamage, const Creature& target, Protoc
 int32 Creature::ComputeDamageTo(const Creature& target, Protocol::DamageType type, bool& isCrit) const
 {
 	isCrit = (critChance > 0.f) && (Utils::GetRandom(0.f, 1.f) < critChance);
-	const float effectiveBase = attackPower * (isCrit ? critMultiplier : 1.f);
+
+	// 마법 무기 평타는 magic_power 로 때리고 magic_resist 로 막힌다 (combat-system.md Core Rule 2 · C3-b)
+	const int32 power = (type == Protocol::DAMAGE_TYPE_MAGIC) ? magicPower : attackPower;
+	const float effectiveBase = power * (isCrit ? critMultiplier : 1.f);
 
 	return ApplyMitigation(effectiveBase, target, type);
 }

@@ -545,7 +545,9 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 	// 플레이어 생성
 	PlayerRef player = ObjectUtils::CreatePlayer(gameSession, character.object_info().object_id());
 
-	player->maxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
+	// 맨몸 바닥. 장비 합산은 Room::EnterRoom 이 착용을 다 실은 뒤 더한다 (EquipStats)
+	player->nakedMaxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
+	player->maxHp = player->nakedMaxHp;
 
 	// 입장 체력은 항상 최대치 - 런마다 새로 시작한다. 베이스캠프에 회복 수단이 없다 (entry-point.md · 2026-10-05).
 	// 세션의 characters 는 로그인 때 캐시라 런 사이에 낡는다 - 위치 · 체력을 거기서 읽지 않는다.
@@ -693,10 +695,20 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 	if (room == nullptr)
 		return false;
 
-	// CC 디버그 전용
+	// 채팅은 아직 명령만 받는다 - 일반 채팅 시스템이 없다
 	const string& msg = pkt.msg();
 	if (msg.empty() || msg[0] != '/')
 		return true;
+
+	// /escape · /gold 는 각자 플래그가 있다(아래). 나머지 디버그 명령은 FBTK_DEBUG_COMMANDS=1 일 때만 -
+	// 꺼져 있으면 남에게 CC 를 걸거나 가방을 지우는 길이 막힌다
+	const bool ownFlag = (msg.rfind("/escape", 0) == 0) || (msg.rfind("/gold", 0) == 0);
+	if (ownFlag == false && GDebugCommands.load() == false)
+	{
+		LOG_LINE << "[CHAT] debug command ignored - FBTK_DEBUG_COMMANDS is off. char=" << player->objectInfo->object_id()
+			<< " cmd=" << msg.substr(0, min<size_t>(msg.find(' '), 32)) << '\n';
+		return true;
+	}
 
 	// 가방 디버그 전용
 	if (msg.rfind("/bag", 0) == 0)

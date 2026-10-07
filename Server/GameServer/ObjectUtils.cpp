@@ -21,6 +21,7 @@ DeathCommitTracker GDeathCommits;
 atomic<uint64> GDisconnectGraceUs = 180'000'000;
 DetachedBodies GDetachedBodies;
 atomic<bool> GDebugGold = false;
+atomic<bool> GDebugCommands = false;
 
 namespace
 {

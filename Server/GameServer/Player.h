@@ -37,6 +37,10 @@ private:
 
 public:
 	void	RebuildSkillSlotsFromEquipment();
+
+	// 착용 6칸 → 전투 스탯 (EquipStats). refill = 입장 - 체력을 새 최대치로 채운다.
+	// 아니면 체력 비율을 유지한다. 체력이 바뀌었으면 true - 부른 쪽이 S_DAMAGE 0 으로 알린다
+	bool	ApplyEquipmentStats(bool refill);
 	ItemEntry* FindInInventory(uint64 instanceId);
 	bool IsInventoryFull() const { return inventory.size() >= INVENTORY_SLOT_COUNT; }
 
@@ -51,6 +55,10 @@ public:
 	uint64					moveExceptionEndUs = 0;
 
 	uint64 lastSaveUs = 0;
+
+public:
+	int32					nakedMaxHp = BaseStats::MAX_HP;		// characters.max_hp - 장비 합산의 바닥
+	float					percentMsBonus = 0.f;				// 장비 합산 - 이동 검증 상한에 들어간다
 
 public:
 

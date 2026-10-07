@@ -163,6 +163,7 @@
     <ClCompile Include="MonsterTable.cpp" />
     <ClCompile Include="MonsterBrain.cpp" />
     <ClCompile Include="EscapeLogic.cpp" />
+    <ClCompile Include="EquipStats.cpp" />
     <ClCompile Include="Telemetry.cpp" />
     <ClCompile Include="Creature.cpp" />
     <ClCompile Include="CsvTable.cpp" />
@@ -209,6 +210,7 @@
     <ClInclude Include="MonsterTable.h" />
     <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="EscapeLogic.h" />
+    <ClInclude Include="EquipStats.h" />
     <ClInclude Include="Telemetry.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />

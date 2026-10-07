@@ -131,6 +131,9 @@ private:
 	// 진입 무적을 푼다 (AC-10) - 이동 · 공격 · 스킬. 이미 없으면 아무것도 하지 않는다
 	void	ClearSpawnInvulnerability(const PlayerRef& player, const char* by);
 
+	// 던전 안에서 착용이 바뀌었다 - 슬롯 · 전투 스탯을 다시 만들고, 체력이 바뀌었으면 S_DAMAGE 0 으로 알린다
+	void	OnEquipmentChanged(const PlayerRef& player, const char* tag);
+
 	// 사망 처리 공용 - S_DIED · 원인(가해자 기준) · 시전 취소, 그다음 몬스터면 드랍 · 플레이어면 사망 커밋
 	void	OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
 

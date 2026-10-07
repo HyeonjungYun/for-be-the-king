@@ -5,6 +5,7 @@
 
 unordered_map<uint32, ItemTypeDef> ItemTable::s_types;
 unordered_map<string, vector<SkillPoolEntry>> ItemTable::s_pools;
+float ItemTable::s_gradeMultipliers[Protocol::ITEM_GRADE_LEGENDARY + 1] = { 1.f, 1.f, 1.f, 1.f, 1.f };
 
 namespace
 {
@@ -12,25 +13,71 @@ namespace
 	{
 		return slot == Protocol::SLOT_HELMET || slot == Protocol::SLOT_ARMOR || slot == Protocol::SLOT_BOOTS;
 	}
+
+	// item_type_stats.csv 의 stat 이름 - 클라 S1ItemUIStyle 의 라벨 키와 같은 철자
+	bool ParseStatName(const string& name, OUT ItemStat& out)
+	{
+		static const pair<const char*, ItemStat> NAMES[] =
+		{
+			{ "attack_power",			ItemStat::AttackPower },
+			{ "magic_power",			ItemStat::MagicPower },
+			{ "max_hp",					ItemStat::MaxHp },
+			{ "armor",					ItemStat::Armor },
+			{ "magic_resist",			ItemStat::MagicResist },
+			{ "crit_chance",			ItemStat::CritChance },
+			{ "crit_multiplier_bonus",	ItemStat::CritMultiplierBonus },
+			{ "percent_as_bonus",		ItemStat::PercentAsBonus },
+			{ "percent_ms_bonus",		ItemStat::PercentMsBonus },
+			{ "resistance",				ItemStat::Resistance },
+		};
+
+		for (const auto& [text, stat] : NAMES)
+		{
+			if (name == text)
+			{
+				out = stat;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void ResetGrades(float (&grades)[Protocol::ITEM_GRADE_LEGENDARY + 1])
+	{
+		for (float& g : grades)
+			g = 1.f;
+	}
 }
 
 bool ItemTable::Load(const string& dataDir, OUT string& error)
 {
-	const char* names[2] = { "item_types.csv", "skill_pools.csv" };
-	string texts[2];
+	const char* names[4] = { "item_types.csv", "skill_pools.csv", "item_type_stats.csv", "item_grades.csv" };
+	string texts[4];
 
-	for (int32 i = 0; i < 2; i++)
+	for (int32 i = 0; i < 4; i++)
 	{
 		if (Csv::ReadFile(dataDir + "\\" + names[i], OUT texts[i]) == false)
 		{
 			error = string("cannot open ") + names[i];
 			s_types.clear();
 			s_pools.clear();
+			ResetGrades(s_gradeMultipliers);
 			return false;
 		}
 	}
 
-	return Parse(texts[0], texts[1], OUT error);
+	if (Parse(texts[0], texts[1], OUT error) == false)
+		return false;
+
+	if (ParseStats(texts[2], texts[3], OUT error) == false)
+	{
+		// 스탯 없이 뜨면 장비가 전투에 아무 영향이 없는 서버가 된다 - 부분 성공으로 두지 않는다
+		s_types.clear();
+		s_pools.clear();
+		return false;
+	}
+
+	return true;
 }
 
 bool ItemTable::Parse(const string& itemTypesCsv, const string& skillPoolsCsv, OUT string& error)
@@ -47,7 +94,7 @@ bool ItemTable::Parse(const string& itemTypesCsv, const string& skillPoolsCsv, O
 	vector<int32> tc;
 
 	if (Csv::Parse(itemTypesCsv, "item_types.csv", OUT typeCsv, OUT error) == false
-		|| Csv::FindColumns(typeCsv, "item_types.csv", { "id", "equip_slot", "archetype", "damage_type", "skill_pool_id" }, OUT tc, OUT error) == false)
+		|| Csv::FindColumns(typeCsv, "item_types.csv", { "id", "equip_slot", "archetype", "damage_type", "skill_pool_id", "attack_range_cm" }, OUT tc, OUT error) == false)
 		return false;
 
 	for (size_t r = 0; r < typeCsv.rows.size(); r++)
@@ -107,6 +154,14 @@ bool ItemTable::Parse(const string& itemTypesCsv, const string& skillPoolsCsv, O
 		if (def.archetype.empty() || def.skillPoolId.empty())
 		{
 			error = where + " archetype and skill_pool_id are required";
+			return false;
+		}
+
+		// 사거리는 무기만 공급한다 (C3-b). 맨몸 150 하한은 합산이 지킨다 - 여기서는 음수만 막는다
+		if (Csv::ParseFloat(row[tc[5]], OUT def.attackRangeCm) == false || def.attackRangeCm < 0.f
+			|| (isWeapon == false && def.attackRangeCm != 0.f))
+		{
+			error = where + " attack_range_cm must be a number >= 0, and 0 for non-weapons";
 			return false;
 		}
 
@@ -286,4 +341,140 @@ bool ItemTable::CanEquip(uint32 typeId, Protocol::EquipSlot slot)
 {
 	const ItemTypeDef* def = Find(typeId);
 	return def != nullptr && def->equipSlot == slot;
+}
+
+bool ItemTable::ParseStats(const string& itemTypeStatsCsv, const string& itemGradesCsv, OUT string& error)
+{
+	for (auto& [typeId, def] : s_types)
+		def.stats.clear();
+	ResetGrades(s_gradeMultipliers);
+
+	// ── item_grades.csv ── 등급 넷이 전부 있어야 한다. 빠진 등급이 조용히 1.0 이 되면 전설이 일반과 같아진다
+	float grades[Protocol::ITEM_GRADE_LEGENDARY + 1] = { 1.f, 1.f, 1.f, 1.f, 1.f };
+	bool seen[Protocol::ITEM_GRADE_LEGENDARY + 1] = {};
+
+	CsvTable gradeCsv;
+	vector<int32> gc;
+	if (Csv::Parse(itemGradesCsv, "item_grades.csv", OUT gradeCsv, OUT error) == false
+		|| Csv::FindColumns(gradeCsv, "item_grades.csv", { "grade", "multiplier" }, OUT gc, OUT error) == false)
+		return false;
+
+	for (size_t r = 0; r < gradeCsv.rows.size(); r++)
+	{
+		const vector<string>& row = gradeCsv.rows[r];
+		const string where = "item_grades.csv:" + to_string(gradeCsv.lineNumbers[r]);
+
+		uint32 grade = 0;
+		float multiplier = 0.f;
+		if (Csv::ParseUInt(row[gc[0]], OUT grade) == false || grade < Protocol::ITEM_GRADE_COMMON || grade > Protocol::ITEM_GRADE_LEGENDARY
+			|| Csv::ParseFloat(row[gc[1]], OUT multiplier) == false || multiplier <= 0.f)
+		{
+			error = where + " grade must be 1..4 and multiplier > 0";
+			return false;
+		}
+
+		if (seen[grade])
+		{
+			error = where + " grade " + to_string(grade) + " appears twice";
+			return false;
+		}
+
+		seen[grade] = true;
+		grades[grade] = multiplier;
+	}
+
+	for (uint32 g = Protocol::ITEM_GRADE_COMMON; g <= Protocol::ITEM_GRADE_LEGENDARY; g++)
+	{
+		if (seen[g] == false)
+		{
+			error = "item_grades.csv is missing grade " + to_string(g);
+			return false;
+		}
+	}
+
+	// ── item_type_stats.csv ──
+	unordered_map<uint32, vector<ItemStatLine>> lines;
+
+	CsvTable statCsv;
+	vector<int32> sc;
+	if (Csv::Parse(itemTypeStatsCsv, "item_type_stats.csv", OUT statCsv, OUT error) == false
+		|| Csv::FindColumns(statCsv, "item_type_stats.csv", { "id", "stat", "base_stat", "flat_floor" }, OUT sc, OUT error) == false)
+		return false;
+
+	for (size_t r = 0; r < statCsv.rows.size(); r++)
+	{
+		const vector<string>& row = statCsv.rows[r];
+		const string where = "item_type_stats.csv:" + to_string(statCsv.lineNumbers[r]);
+
+		uint32 typeId = 0;
+		ItemStatLine line;
+		if (Csv::ParseUInt(row[sc[0]], OUT typeId) == false
+			|| Csv::ParseFloat(row[sc[2]], OUT line.baseStat) == false || Csv::ParseFloat(row[sc[3]], OUT line.flatFloor) == false)
+		{
+			error = where + " id, base_stat and flat_floor must be numbers";
+			return false;
+		}
+
+		const ItemTypeDef* def = Find(typeId);
+		if (def == nullptr)
+		{
+			error = where + " id " + to_string(typeId) + " is not in item_types.csv";
+			return false;
+		}
+
+		if (ParseStatName(row[sc[1]], OUT line.stat) == false)
+		{
+			error = where + " unknown stat '" + row[sc[1]] + "'";
+			return false;
+		}
+
+		// 음수 페널티는 없다 - "중병기 crit_chance↓ 의 실제 값은 0" (item-equipment-system.md C3-b)
+		if (line.baseStat < 0.f || line.flatFloor < 0.f)
+		{
+			error = where + " base_stat and flat_floor must be >= 0";
+			return false;
+		}
+
+		// 공격 스탯은 무기 하나만 공급하고, 물리 무기는 attack_power · 마법 무기는 magic_power 다 (C3-b)
+		if ((line.stat == ItemStat::AttackPower && def->damage != ItemDamage::Physical)
+			|| (line.stat == ItemStat::MagicPower && def->damage != ItemDamage::Magic))
+		{
+			error = where + " attack_power belongs to physical weapons and magic_power to magic weapons only";
+			return false;
+		}
+
+		vector<ItemStatLine>& typeLines = lines[typeId];
+		for (const ItemStatLine& existing : typeLines)
+		{
+			if (existing.stat == line.stat)
+			{
+				error = where + " " + to_string(typeId) + " " + row[sc[1]] + " appears twice";
+				return false;
+			}
+		}
+
+		typeLines.push_back(line);
+	}
+
+	for (auto& [typeId, typeLines] : lines)
+		s_types[typeId].stats = move(typeLines);
+
+	memcpy(s_gradeMultipliers, grades, sizeof(grades));
+	return true;
+}
+
+float ItemTable::GradeMultiplier(Protocol::ItemGrade grade)
+{
+	if (grade < Protocol::ITEM_GRADE_COMMON || grade > Protocol::ITEM_GRADE_LEGENDARY)
+		return 1.f;
+
+	return s_gradeMultipliers[grade];
+}
+
+size_t ItemTable::StatLineCount()
+{
+	size_t count = 0;
+	for (const auto& [typeId, def] : s_types)
+		count += def.stats.size();
+	return count;
 }

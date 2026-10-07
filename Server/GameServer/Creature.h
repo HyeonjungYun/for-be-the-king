@@ -102,6 +102,7 @@ public:
 	float				attackRange		= BaseStats::ATTACK_RANGE;
 	float				critChance		= BaseStats::CRIT_CHANCE;
 	float				critMultiplier	= BaseStats::CRIT_MULITPLIER;
+	Protocol::DamageType autoAttackType	= Protocol::DAMAGE_TYPE_PHYSICAL;	// 맨몸 · 몬스터는 물리. 플레이어는 무기가 정한다
 
 public:
 	uint64				stunEndUs = 0;
