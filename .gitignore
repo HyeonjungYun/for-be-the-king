@@ -77,6 +77,10 @@ Server/ServerCore/Libraries/
 Server/coverage/
 Server/coverage.xml
 
+# 레벨 내보내기 스테이징 — S1LevelBuilder 가 매번 다시 쓰는 생성물 (design/levels/floor-1.md § 9).
+# 서버가 벽을 읽게 되면(level-map.md OQ-1) 내보내기 대상을 Server/Data 로 옮기고 이 줄을 지운다.
+Server/Data/export/
+
 # 🔴 [Xx]64/ 규칙이 NuGet 패키지의 x64 라이브러리까지 걸러낸다.
 #    빌드 산출물을 막으려던 규칙이 의존성을 막았고, CI 에서 gtest_maind.lib 를
 #    찾지 못해 링크가 깨졌다. packages 는 예외로 둔다.

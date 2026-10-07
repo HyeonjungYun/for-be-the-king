@@ -13,6 +13,9 @@ public class S1 : ModuleRules
 		// SlateCore — the item UI draws grade outlines (FSlateDrawElement) and picks fonts (FCoreStyle) itself.
 		PrivateDependencyModuleNames.AddRange(new string[] { "ProtobufCore", "SlateCore" });
 
+		// Json — the level tools read the floor layout (tools/level/floor1.json, design/levels/floor-1.md).
+		PrivateDependencyModuleNames.Add("Json");
+
 		PrivateIncludePaths.AddRange(new string[]
 		{
 			"S1/",
