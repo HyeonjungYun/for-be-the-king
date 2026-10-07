@@ -5,13 +5,142 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Game/Level/S1LevelBuilder.h"
 #include "Game/Level/S1LevelLayout.h"
+#include "Math/RandomStream.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "Physics/Experimental/PhysScene_Chaos.h"
 #include "UObject/Package.h"
+#if WITH_EDITOR
+#include "StaticMeshCompiler.h"
+#endif
 #include "UObject/SavePackage.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogS1LevelGraybox, Log, All);
+
+namespace S1LevelParity
+{
+	// AC-LM-21 · docs/architecture/adr-0006-server-2d-walls.md § Validation — the character capsule sweeps seeded segments
+	// over the saved level and writes where it stops. The server test (WallMapTest.cpp) runs the same segments through
+	// WallMap (r = 42) and compares. The server code is not copied into UE — each side answers with its own geometry.
+	constexpr float		CapsuleRadius = 42.f;		// the character capsule — the server's knockback / dash radius
+	constexpr float		CapsuleHalfHeight = 96.f;
+	constexpr double	SweepZ = CapsuleHalfHeight + 25.0;	// bottom 0.25 m (over 0.2 m rubble), top 2.17 m (under 2.5 m cover)
+	constexpr int32		Samples = 2000;
+	constexpr int32		Seed = 20261007;
+
+	double Round2(double V)
+	{
+		return FMath::RoundToDouble(V * 100.0) / 100.0;
+	}
+
+	bool Record(UWorld& World, const FString& OutFile)
+	{
+		// A commandlet world never ticks, and two things only finish on a tick (found by the canary, 2026-10-07):
+		//  1. a mesh still compiling when the map loaded skips its physics state — "recreated after compilation finishes"
+		//     (StaticMeshComponent.cpp), and nothing finishes it here. The level had 0 instance bodies
+		//  2. bodies added to the scene are queued until the scene runs — "required when querying against a currently
+		//     non-running scene" (ChaosScene.h Flush)
+#if WITH_EDITOR
+		FStaticMeshCompilingManager::Get().FinishAllCompilation();
+#endif
+		int32 Recreated = 0;
+		int32 Bodies = 0;
+		for (TActorIterator<AActor> It(&World); It; ++It)
+		{
+			TInlineComponentArray<UPrimitiveComponent*> Primitives(*It);
+			for (UPrimitiveComponent* Primitive : Primitives)
+			{
+				if (Primitive->IsRegistered() && Primitive->IsCollisionEnabled() && !Primitive->IsPhysicsStateCreated())
+				{
+					Primitive->RecreatePhysicsState();
+					Recreated++;
+				}
+				if (const UInstancedStaticMeshComponent* Instanced = Cast<UInstancedStaticMeshComponent>(Primitive))
+				{
+					Bodies += Instanced->GetInstanceBodies().Num();		// 5.8: the InstanceBodies member is deprecated and stays empty
+				}
+			}
+		}
+		if (FPhysScene* Scene = World.GetPhysicsScene())
+		{
+			Scene->Flush();
+		}
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity — physics scene %d · physics state created for %d component(s) · %d instance bodies"),
+			World.GetPhysicsScene() != nullptr ? 1 : 0, Recreated, Bodies);
+
+		const FCollisionShape Capsule = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
+		const FName Profile = TEXT("Pawn");
+		const FCollisionQueryParams Params(SCENE_QUERY_STAT(S1LevelParity), /*bTraceComplex*/ false);
+
+		auto Sweep = [&](const FVector2D& A, const FVector2D& B, FHitResult& Hit)
+		{
+			return World.SweepSingleByProfile(Hit, FVector(A, SweepZ), FVector(B, SweepZ), FQuat::Identity, Profile, Capsule, Params);
+		};
+
+		// Canary: straight at tower Tc (-78, 0) m, a 3 x 3 m box — must stop at 600 - 150 - 42 = 408 cm. If physics queries
+		// did not work headless every sweep would "miss", and the comparison would pass for nothing
+		{
+			FHitResult Hit;
+			const bool bHit = Sweep(FVector2D(-7800.0, -600.0), FVector2D(-7800.0, 0.0), Hit);
+			const double Expected = 600.0 - 150.0 - CapsuleRadius;
+			const double Got = bHit ? Hit.Time * 600.0 : -1.0;
+			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity canary — hit %d at %.2f cm (expected %.2f)"), bHit ? 1 : 0, Got, Expected);
+			if (!bHit || FMath::Abs(Got - Expected) > 5.0)
+			{
+				UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity canary failed — physics queries do not see the level; nothing written"));
+				return false;
+			}
+		}
+
+		FRandomStream Rng(Seed);
+		auto Range = [&Rng](double Lo, double Hi) { return Lo + (Hi - Lo) * Rng.GetFraction(); };
+
+		TArray<FString> Rows;
+		Rows.Add(TEXT("ax,ay,bx,by,ue_start_blocked,ue_hit,ue_stop_cm"));
+		int32 StartBlocked = 0;
+		int32 Hits = 0;
+
+		for (int32 i = 0; i < Samples; i++)
+		{
+			// 70 % in the band of houses (dense walls), the rest anywhere — cover, towers, open field
+			const bool bHouses = Rng.GetFraction() < 0.7f;
+			const FVector2D Start = bHouses ? FVector2D(Range(-4000.0, 2400.0), Range(-11600.0, 11600.0)) : FVector2D(Range(-13900.0, 13900.0), Range(-13900.0, 13900.0));
+			const double Angle = Range(0.0, 2.0 * UE_DOUBLE_PI);
+			const double Reach = Range(50.0, 800.0);
+
+			// Written with two decimals — sweep exactly what is written, so the server tests the same segment
+			const FVector2D A(Round2(Start.X), Round2(Start.Y));
+			const FVector2D B(Round2(Start.X + Reach * FMath::Cos(Angle)), Round2(Start.Y + Reach * FMath::Sin(Angle)));
+			const double Length = FVector2D::Distance(A, B);
+
+			if (World.OverlapBlockingTestByProfile(FVector(A, SweepZ), FQuat::Identity, Profile, Capsule, Params))
+			{
+				StartBlocked++;
+				Rows.Add(FString::Printf(TEXT("%.2f,%.2f,%.2f,%.2f,1,0,0.00"), A.X, A.Y, B.X, B.Y));
+				continue;
+			}
+
+			FHitResult Hit;
+			const bool bHit = Sweep(A, B, Hit) && !Hit.bStartPenetrating;
+			Hits += bHit ? 1 : 0;
+			Rows.Add(FString::Printf(TEXT("%.2f,%.2f,%.2f,%.2f,0,%d,%.2f"), A.X, A.Y, B.X, B.Y, bHit ? 1 : 0, bHit ? Hit.Time * Length : Length));
+		}
+
+		const FString Path = FPaths::IsRelative(OutFile) ? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), OutFile)) : OutFile;
+		if (!FFileHelper::SaveStringToFile(FString::Join(Rows, TEXT("\r\n")) + TEXT("\r\n"), *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity: cannot write %s"), *Path);
+			return false;
+		}
+
+		UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] parity — %d segments · start blocked %d · hit %d · written to %s"), Samples, StartBlocked, Hits, *Path);
+		return true;
+	}
+}
 
 US1LevelGrayboxCommandlet::US1LevelGrayboxCommandlet()
 {
@@ -31,8 +160,12 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 	const bool bExport = FParse::Param(*Params, TEXT("Export"));
 	const bool bSave = !FParse::Param(*Params, TEXT("NoSave"));
 
+	// -Parity=<file>: sweep the character capsule over the saved map and write the stops for the server test (AC-LM-21)
+	FString ParityFile;
+	const bool bParity = FParse::Value(*Params, TEXT("Parity="), ParityFile);
+
 	// -Verify: load the saved map from disk and run the same round trip — proves what was saved, not what was built.
-	if (FParse::Param(*Params, TEXT("Verify")))
+	if (FParse::Param(*Params, TEXT("Verify")) || bParity)
 	{
 		UPackage* Saved = LoadPackage(nullptr, *MapName, LOAD_None);
 		UWorld* Loaded = Saved != nullptr ? UWorld::FindWorldInPackage(Saved) : nullptr;
@@ -48,6 +181,14 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 		// Register components so actor locations are computed — without this every marker reads as the origin.
 		// Construction scripts are NOT re-run: we check what was saved, not what a rebuild would make.
 		Loaded->UpdateWorldComponents(/*bRerunConstructionScripts*/ false, /*bCurrentLevelOnly*/ false);
+
+		if (bParity)
+		{
+			const int32 ParityResult = S1LevelParity::Record(*Loaded, ParityFile) ? 0 : 1;
+			GEngine->DestroyWorldContext(Loaded);
+			Loaded->DestroyWorld(false);
+			return ParityResult;
+		}
 
 		int32 VerifyResult = 1;
 		int32 Builders = 0;

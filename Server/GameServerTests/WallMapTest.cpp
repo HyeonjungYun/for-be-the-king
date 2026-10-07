@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "FloorBounds.h"
 #include "WallMap.h"
 #include "WallTable.h"
 #include "EntryPointTable.h"
@@ -424,6 +425,137 @@ TEST(WallMap, 1층_황금_벽에서도_격자_결과는_전수_검사와_같다)
 
 	EXPECT_EQ(mismatch, 0);
 	EXPECT_GT(hits, 1000);
+}
+
+/*-------- 클라 충돌 ↔ 서버 벽 일치 (AC-LM-21) --------*/
+
+// floor1_parity.csv - UE 커맨드렛이 저장된 Floor1 위에서 캐릭터 캡슐(반지름 42 · 반높이 96)로 선분 2,000개를 스윕한 결과
+//   S1LevelGraybox -Map=/Game/Maps/Floor1 -Parity=../Server/GameServerTests/Data/floor1_parity.csv
+// 서버는 같은 선분을 WallMap(r = 42) + 42 cm 줄인 층 경계로 판정한다. 서버 코드를 UE 에 복제하지 않는다.
+//
+// "5 cm" 는 멈춘 거리의 차가 아니라 벽까지의 여유로 잰다 - 벽을 거의 나란히 스치는 이동은 기하가 1 cm 만 달라도
+// 멈추는 지점이 수 m 달라진다. 그래서 두 가지를 본다:
+//   ① UE 가 멈춘 지점에서 서버가 본 여유(벽까지 거리 - 42)가 ±5 cm 안 - 서버도 "닿았다"고 본다
+//   ② 서버가 UE 보다 먼저 멈췄다면, 그 사이 어디서도 서버가 5 cm 넘게 파고들었다고 보지 않는다
+TEST(WallMapParity, 클라_캡슐_스윕과_서버_벽_판정이_5cm_안에서_같다)
+{
+	constexpr float R = 42.f;
+	constexpr float TOL = 5.f;
+	constexpr float INSET = FloorBounds::HALF_CM - R;
+
+	string error;
+	ASSERT_TRUE(LoadFloor1(OUT error)) << error;
+	const WallMap& map = WallTable::Get(0);
+
+	string text;
+	ASSERT_TRUE(Csv::ReadFile(FixturePath("floor1_parity.csv"), OUT text)) << FixturePath("floor1_parity.csv");
+	CsvTable table;
+	vector<int32> c;
+	ASSERT_TRUE(Csv::Parse(text, "floor1_parity.csv", OUT table, OUT error)
+		&& Csv::FindColumns(table, "floor1_parity.csv", { "ax", "ay", "bx", "by", "ue_start_blocked", "ue_hit", "ue_stop_cm" }, OUT c, OUT error)) << error;
+
+	// 여유 = 가장 가까운 막힘까지 거리 - 42. 0 이면 캡슐이 면에 닿아 있다. 층 경계(UE 의 경계 흙벽 안쪽 면 = ±14,000)도 막힘이다
+	auto clearance = [&](float x, float y)
+	{
+		float sd = FloorBounds::HALF_CM - (std::max)(std::fabs(x), std::fabs(y));
+		for (const WallBox& w : map.Walls())
+			sd = (std::min)(sd, WallGeom::SignedDistance(w, x, y));
+		return sd - R;
+	};
+
+	// 서버의 넉백 · 대시 판정과 같다 - 벽은 WallMap, 경계는 42 cm 줄인 사각형 (ADR-0006 § ⑦)
+	auto serverStop = [&](float ax, float ay, float bx, float by)
+	{
+		float t = map.SweepFirstHit(ax, ay, bx, by, R);
+		for (const auto& [p, d] : { make_pair(ax, bx - ax), make_pair(ay, by - ay) })
+		{
+			if (d > 0.f)
+				t = (std::min)(t, (INSET - p) / d);
+			else if (d < 0.f)
+				t = (std::min)(t, (-INSET - p) / d);
+		}
+		return (std::max)(t, 0.f);
+	};
+
+	int32 samples = 0, ueHits = 0, serverEarlier = 0;
+	int32 startMismatch = 0, stopMismatch = 0, earlyMismatch = 0;
+	float worstAtStop = 0.f;
+	vector<string> details;
+
+	for (const vector<string>& row : table.rows)
+	{
+		float ax = 0, ay = 0, bx = 0, by = 0, ueStop = 0;
+		uint32 startBlocked = 0, ueHit = 0;
+		ASSERT_TRUE(Csv::ParseFloat(row[c[0]], OUT ax) && Csv::ParseFloat(row[c[1]], OUT ay) && Csv::ParseFloat(row[c[2]], OUT bx)
+			&& Csv::ParseFloat(row[c[3]], OUT by) && Csv::ParseUInt(row[c[4]], OUT startBlocked) && Csv::ParseUInt(row[c[5]], OUT ueHit)
+			&& Csv::ParseFloat(row[c[6]], OUT ueStop));
+		samples++;
+
+		const float startClearance = clearance(ax, ay);
+		if (startBlocked != 0)
+		{
+			// UE: 시작부터 겹친다 → 서버도 겹치거나 5 cm 안이어야 한다
+			if (startClearance >= TOL)
+			{
+				startMismatch++;
+				details.push_back("start blocked in UE, server clearance " + to_string(startClearance) + " at (" + to_string(ax) + ", " + to_string(ay) + ")");
+			}
+			continue;
+		}
+
+		if (startClearance <= -TOL)
+		{
+			startMismatch++;
+			details.push_back("start free in UE, server clearance " + to_string(startClearance) + " at (" + to_string(ax) + ", " + to_string(ay) + ")");
+			continue;
+		}
+
+		const float length = std::sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+		const float serverStopCm = serverStop(ax, ay, bx, by) * length;
+		auto at = [&](float d) { return make_pair(ax + (bx - ax) * d / length, ay + (by - ay) * d / length); };
+
+		// ① UE 가 멈춘 곳에서 서버도 닿아 있다고 본다
+		if (ueHit != 0)
+		{
+			ueHits++;
+			const auto p = at(ueStop);
+			const float atStop = clearance(p.first, p.second);
+			worstAtStop = (std::max)(worstAtStop, std::fabs(atStop));
+			if (std::fabs(atStop) > TOL)
+			{
+				stopMismatch++;
+				details.push_back("UE stops at " + to_string(ueStop) + " cm, server clearance there " + to_string(atStop)
+					+ " (server stops at " + to_string(serverStopCm) + ")");
+			}
+		}
+
+		// ② 서버가 먼저 멈췄다 - 그 사이 서버가 5 cm 넘게 파고들었다고 보는 곳이 없어야 한다
+		if (serverStopCm < ueStop - TOL)
+		{
+			serverEarlier++;
+			for (float d = serverStopCm; d <= ueStop; d += 1.f)
+			{
+				const auto p = at(d);
+				if (clearance(p.first, p.second) < -TOL)
+				{
+					earlyMismatch++;
+					details.push_back("server stops at " + to_string(serverStopCm) + " cm, UE at " + to_string(ueStop)
+						+ " - server sees > 5 cm of wall at " + to_string(d) + " cm");
+					break;
+				}
+			}
+		}
+	}
+
+	printf("[PARITY] segments=%d ue_hits=%d server_earlier=%d worst_clearance_at_ue_stop=%.2fcm\n", samples, ueHits, serverEarlier, worstAtStop);
+	for (size_t i = 0; i < details.size() && i < 10; i++)
+		printf("[PARITY] %s\n", details[i].c_str());
+
+	EXPECT_EQ(samples, 2000);
+	EXPECT_GT(ueHits, 200);				// 의미 있는 비교였다
+	EXPECT_EQ(startMismatch, 0);
+	EXPECT_EQ(stopMismatch, 0);
+	EXPECT_EQ(earlyMismatch, 0);
 }
 
 /*-------- 만들기 검증 --------*/

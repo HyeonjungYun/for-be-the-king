@@ -11,7 +11,9 @@
  *
  *   UnrealEditor-Cmd.exe S1.uproject -run=S1LevelGraybox -Map=/Game/Maps/Floor1 [-Layout=../tools/level/floor1.json]
  *                        [-Export] [-NoSave] -unattended -nullrhi
- *   … -run=S1LevelGraybox -Map=/Game/Maps/Floor1 -Verify     (load the saved map, round trip + rules only)
+ *   … -run=S1LevelGraybox -Map=/Game/Maps/Floor1 -Verify     (load the saved map, round trip + rules + server walls)
+ *   … -run=S1LevelGraybox -Map=/Game/Maps/Floor1 -Parity=../Server/GameServerTests/Data/floor1_parity.csv
+ *                        (capsule sweeps over the saved map for the server's collision parity test, AC-LM-21)
  *
  * The process exit code is this commandlet's result (0 = every step passed). Before 2026-10-07 it was 1 regardless,
  * because of a missing GameFeatureData asset-manager rule (S1/Config/DefaultGame.ini) — if it is 1 again, read the log.
