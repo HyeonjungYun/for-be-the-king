@@ -11,6 +11,7 @@ namespace
 Player::Player()
 {
 	_isPlayer = true;
+	objectInfo->set_creature_type(Protocol::CREATE_TYPE_PLAYER);
 }
 
 Player::~Player()

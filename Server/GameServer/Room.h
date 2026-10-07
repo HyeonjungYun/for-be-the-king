@@ -1,9 +1,19 @@
 ﻿#pragma once
 #include "JobQueue.h"
 #include "SkillTable.h"
+#include "MonsterBrain.h"
 #include <random>
 
 struct DeathSnapshot;
+
+// 몬스터 자리 하나 (monster-ai.md § States - Alive(id) ↔ DeadWaiting(respawnAtUs))
+struct MonsterSlot
+{
+	const MonsterSpawnDef*	spawn = nullptr;
+	uint64					monsterId = 0;		// 0 = 죽어서 기다린다
+	uint64					respawnAtUs = 0;
+	uint64					deferStartUs = 0;	// 곁에 플레이어가 있어 리스폰을 미룬 시작 (F9)
+};
 
 struct PendingTelegraph
 {
@@ -58,6 +68,9 @@ public:
 	void	HandleDisconnect(PlayerRef player);
 	void	HandleReattach(GameSessionRef session, PlayerRef body);
 
+	// 부팅 때 한 번 - MonsterTable 의 이 층 자리를 전부 만피 Idle 로 낳는다 (monster-ai.md Core Rule 22)
+	void	InitMonsters();
+
 public:
 	void	UpdateTick();
 	void	FlushMoves();
@@ -93,6 +106,17 @@ private:
 	
 	void	FindSpawnPosition(float baseX, float baseY, float& outX, float& outY);
 
+	// 사망 처리 공용 - S_DIED · 원인(가해자 기준) · 시전 취소, 그다음 몬스터면 드랍 · 플레이어면 사망 커밋
+	void	OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
+
+	// 몬스터 (design/gdd/monster-ai.md § I). 판단 = UpdateTick(10 Hz), 이동 = FlushMoves 앞(30 Hz)
+	void	UpdateMonsters(uint64 nowUs);
+	void	StepMonsters(uint64 nowUs);
+	void	SpawnMonster(MonsterSlot& slot, uint64 nowUs);
+	void	OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 damage, uint64 nowUs);
+	void	OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 nowUs);
+	bool	BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs);
+
 public:
 	uint32								_floorId = 0;
 
@@ -124,6 +148,10 @@ private:
 
 	vector<Protocol::DamageInfo>		_pendingDamages;
 	vector<Protocol::DiedInfo>			_pendingDeaths;
+
+	unordered_map<uint64, MonsterRef>	_monsters;			// 시체 유예 중인 것 포함
+	vector<MonsterSlot>					_monsterSlots;
+	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
 
 	unordered_set<uint64>				_ccTargets;
 	vector<Protocol::CcEventInfo>		_pendingCcApplied;

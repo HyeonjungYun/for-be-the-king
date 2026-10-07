@@ -1,6 +1,47 @@
 #pragma once
 #include "Creature.h"
-class Monster : public Creature
+#include "MonsterBrain.h"
+
+// 서버가 움직이는 몬스터 (design/gdd/monster-ai.md). 판정은 플레이어와 같은 Creature 공식 · 같은 전투 파이프라인이다.
+// object_id 는 MONSTER_ID_BASE(40억) 밴드 - 리스폰마다 새 id (이전 생애의 늦은 피해가 새 개체에 붙지 않게)
+constexpr uint64 MONSTER_ID_BASE = 4'000'000'000;
+
+extern atomic<uint64> GNextMonsterId;
+
+// G3 - 몬스터 판단 비용 · 이동 항목 수 (monster-ai.md F6 · F7, AC-MA-71). 10 초마다 [MON] 줄로 찍고 창을 비운다
+struct MonsterStats
 {
+	atomic<int32>	alive = 0;
+	atomic<uint64>	moveEntries = 0;		// S_MOVE 에 실린 몬스터 항목 수
+	atomic<uint64>	aiTicks = 0;
+	atomic<uint64>	aiTotalUs = 0;
+	atomic<uint64>	aiMaxUs = 0;
+	atomic<uint64>	hits = 0;				// 몬스터가 입힌 타격 (평타 · 스킬)
+	atomic<uint64>	playerKills = 0;		// 몬스터가 죽인 플레이어
+	atomic<uint64>	deaths = 0;				// 죽은 몬스터
+	atomic<uint64>	resetSnaps = 0;			// T12 순간 이동 (OQ-2 판단 근거)
+
+	void	RecordAi(uint64 micros);
+	void	Dump(uint64 windowSeconds);
 };
 
+extern MonsterStats GMonsterStats;
+
+class Monster : public Creature
+{
+public:
+	Monster(uint64 objectId, const MonsterTypeDef& type, const MonsterSpawnDef& spawn);
+	virtual ~Monster();
+
+	// 만피 · CC 해제 (복귀 도착 T11)
+	void		RestoreFull();
+
+public:
+	const MonsterTypeDef*	type = nullptr;
+	const MonsterSpawnDef*	spawn = nullptr;
+
+	MonsterBrainState		brain;
+	BrainOutput				decision;			// 직전 판단 - 이동 스텝이 목표점으로 쓴다
+	uint64					lastStepUs = 0;
+	uint64					diedAtUs = 0;		// 0 = 살아 있음. 시체 유예 뒤 방에서 뺀다
+};

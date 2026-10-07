@@ -109,3 +109,6 @@ skill.3001.desc,주변을 베고 1.5초 동안 느리게 한다,
 skill.1001.family,무기 계열,trinket detail - which part the skill came from (EB:531)
 skill.2001.family,신발 계열,
 skill.3001.family,갑옷 계열,
+monster.hound,떠돌이 들개,monster-ai.md roster 1 (임시 이름 - narrative 확정 전)
+monster.husk,허깨비 병사,monster-ai.md roster 2 (임시)
+monster.house_boss,집 보스,monster-ai.md roster 3 (임시)

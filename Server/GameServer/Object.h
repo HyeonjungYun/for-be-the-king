@@ -7,6 +7,7 @@ public:
 	virtual ~Object();
 
 	bool IsPlayer() { return _isPlayer; }
+	bool IsMonster() const { return _isMonster; }
 	bool IsBag() const { return objectInfo->object_type() == Protocol::OBJECT_TYPE_BAG; }
 
 public:
@@ -18,5 +19,6 @@ public:
 
 protected:
 	bool _isPlayer = false;
+	bool _isMonster = false;
 };
 

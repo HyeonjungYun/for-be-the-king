@@ -18,6 +18,10 @@ message ObjectInfo
 	uint64 object_id = 1;
 	ObjectType object_type = 2;
 	PosInfo pos_info = 3;
+	CreatureType creature_type = 4;		// 0 = 미지정(구버전 - 플레이어로 다룬다) · PLAYER · MONSTER (monster-ai.md § H, 2026-10-07)
+	uint32 monster_type_id = 5;			// MONSTER 일 때만 - Server/Data/monster_types.csv 의 id
+	int32 hp = 6;						// 스폰 순간의 체력 (신입 스냅샷). 이후는 S_DAMAGE.remaining_hp
+	int32 max_hp = 7;
 }
 
 message AttackInfo

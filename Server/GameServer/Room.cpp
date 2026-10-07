@@ -11,6 +11,8 @@
 #include "FloorBounds.h"
 #include "SpawnPlacement.h"
 #include "WallTable.h"
+#include "Monster.h"
+#include "MonsterTable.h"
 
 namespace
 {
@@ -761,24 +763,18 @@ void Room::ResolveAttacks(uint64 nowUs)
 		// 후딜 소모는 히트에 성공했을 때만
 		attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
 
-		if (remainingHp <= 0)
+		if (target->IsMonster())
+			OnMonsterDamaged(static_pointer_cast<Monster>(target), attackerId, damage, nowUs);
+
+		if (attacker->IsMonster())
 		{
-			Protocol::DiedInfo& died = _pendingDeaths.emplace_back();
-			died.set_victim_id(targetId);
-			died.set_instigator_id(attackerId);
-			died.set_cause(target->IsPlayer()
-				? Protocol::DEATH_CAUSE_PLAYER
-				: Protocol::DEATH_CAUSE_MONSTER);
-
-			// 죽은 대상이 공격 중이었다면 그 공격도 없앤다.
-			target->attackTargetId = 0;
-			target->attackHitAtUs = 0;
-
-			CancelCast(target);
-
-			LOG_LINE << "[DIED] victim=" << targetId << " by=" << attackerId << '\n';
-			BeginDeathCommit(target);
+			MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(attacker)->brain, nowUs);
+			GMonsterStats.hits.fetch_add(1);
 		}
+
+		// 이 루프가 _attackers 를 돌고 있다 - 죽은 대상을 여기서 지우지 않는다 (attackHitAtUs = 0 이라 건너뛴다)
+		if (remainingHp <= 0)
+			OnCreatureKilled(target, attacker, attackerId, nowUs);
 	}
 
 	for (uint64 id : resolved)
@@ -1658,7 +1654,8 @@ void Room::UpdateTick()
 	UpdateBagExpiry(nowUs);
 	UpdateChests(nowUs);
 	UpdateDetached(nowUs);
-	
+	UpdateMonsters(nowUs);
+
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
 }
@@ -1666,6 +1663,10 @@ void Room::UpdateTick()
 void Room::FlushMoves()
 {
 	JOB_TAG();
+
+	// 몬스터 이동을 같은 틱에 적분해 같은 S_MOVE 에 싣는다 - 패킷 · Send 수가 늘지 않는다 (monster-ai.md Core Rule 25)
+	StepMonsters(Utils::NowMicroseconds());
+
 	if (_dirtyMovers.empty() == false)
 	{
 		Protocol::S_MOVE movePkt;
@@ -1813,6 +1814,12 @@ void Room::FlushSpawns()
 			if (findIt == _objects.end())
 				continue;
 
+			if (CreatureRef creature = dynamic_pointer_cast<Creature>(findIt->second))
+			{
+				creature->objectInfo->set_hp(creature->hp);
+				creature->objectInfo->set_max_hp(creature->maxHp);
+			}
+
 			if (findIt->second->IsBag())
 			{
 				newBagPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
@@ -1853,8 +1860,17 @@ void Room::FlushSpawns()
 
 				for (auto& item : _objects)
 				{
-					if (item.second->IsPlayer())
-						allPkt.add_players()->CopyFrom(*item.second->objectInfo);
+					if (item.second->IsPlayer() || item.second->IsMonster())
+					{
+						// 체력은 스냅샷 순간 값 - 이후는 S_DAMAGE. 시체 유예 중인 몬스터는 보내지 않는다(곧 사라진다)
+						CreatureRef creature = static_pointer_cast<Creature>(item.second);
+						if (creature->IsMonster() && creature->IsAlive() == false)
+							continue;
+
+						creature->objectInfo->set_hp(creature->hp);
+						creature->objectInfo->set_max_hp(creature->maxHp);
+						allPkt.add_players()->CopyFrom(*creature->objectInfo);
+					}
 					else if (item.second->IsBag())
 						allBagPkt.add_players()->CopyFrom(*item.second->objectInfo);
 				}
@@ -2153,6 +2169,10 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 			if (target == nullptr || target->IsAlive() == false)
 				continue;
 
+			// 몬스터 광역은 몬스터를 맞히지 않는다 - 보스 내려치기가 병사를 죽이지 않게 (monster-ai.md Core Rule 18 ②)
+			if (caster->IsMonster() && target->IsMonster())
+				continue;
+
 			const float dx = target->posInfo->x() - originX;
 			const float dy = target->posInfo->y() - originY;
 			if ((dx * dx + dy * dy) <= (def.radiusCm * def.radiusCm))
@@ -2212,21 +2232,19 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 
 				dmg.set_damage_type(e.adRatio > 0.f ? Protocol::DAMAGE_TYPE_PHYSICAL : Protocol::DAMAGE_TYPE_MAGIC);
 
+				if (target->IsMonster())
+					OnMonsterDamaged(static_pointer_cast<Monster>(target), casterId, damage, nowUs);
+
+				if (caster->IsMonster())
+				{
+					MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(caster)->brain, nowUs);
+					GMonsterStats.hits.fetch_add(1);
+				}
+
 				if (remainingHp <= 0)
 				{
-					Protocol::DiedInfo& died = _pendingDeaths.emplace_back();
-					died.set_victim_id(targetId);
-					died.set_instigator_id(casterId);
-					died.set_cause(target->IsPlayer() ? Protocol::DEATH_CAUSE_PLAYER : Protocol::DEATH_CAUSE_MONSTER);
-
-					target->attackTargetId = 0;
-					target->attackHitAtUs = 0;
 					_attackers.erase(targetId);
-					CancelCast(target);
-
-					LOG_LINE << "[DIED] victim=" << targetId << " by=" << casterId << '\n';
-
-					BeginDeathCommit(target);
+					OnCreatureKilled(target, caster, casterId, nowUs);
 				}
 				break;
 			}
@@ -2393,4 +2411,418 @@ void Room::FindSpawnPosition(float baseX, float baseY, float& outX, float& outY)
 	};
 
 	SpawnPlacement::Find(baseX, baseY, occupied, [] { return Utils::GetRandom(0.f, 1.f); }, outX, outY);
+}
+
+void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs)
+{
+	const uint64 victimId = victim->objectInfo->object_id();
+
+	// 원인은 가해자 기준이다 - 예전에는 피해자 종류를 넣어 몬스터에게 죽은 플레이어가 PLAYER 로 나갔다 (monster-ai.md Core Rule 19)
+	Protocol::DiedInfo& died = _pendingDeaths.emplace_back();
+	died.set_victim_id(victimId);
+	died.set_instigator_id(instigatorId);
+	died.set_cause((instigator != nullptr && instigator->IsMonster()) ? Protocol::DEATH_CAUSE_MONSTER : Protocol::DEATH_CAUSE_PLAYER);
+
+	// 죽은 대상이 공격 중이었다면 그 공격도 없앤다.
+	victim->attackTargetId = 0;
+	victim->attackHitAtUs = 0;
+	CancelCast(victim);
+
+	LOG_LINE << "[DIED] victim=" << victimId << " by=" << instigatorId << '\n';
+
+	if (victim->IsMonster())
+	{
+		OnMonsterDied(static_pointer_cast<Monster>(victim), instigatorId, nowUs);
+		GMonsterStats.deaths.fetch_add(1);
+	}
+	else
+	{
+		if (instigator != nullptr && instigator->IsMonster())
+			GMonsterStats.playerKills.fetch_add(1);
+
+		BeginDeathCommit(victim);
+	}
+}
+
+void Room::InitMonsters()
+{
+	JOB_TAG();
+	const uint64 nowUs = Utils::NowMicroseconds();
+
+	_monsterSlots.clear();
+	for (const MonsterSpawnDef& spawn : MonsterTable::Spawns())
+	{
+		if (spawn.floorId != _floorId)
+			continue;
+
+		MonsterSlot& slot = _monsterSlots.emplace_back();
+		slot.spawn = &spawn;
+	}
+
+	// 재시작 = 모든 런 무효 - 전 자리 만피 Idle 로 바로 태어난다 (Core Rule 22)
+	for (MonsterSlot& slot : _monsterSlots)
+		SpawnMonster(slot, nowUs);
+
+	LOG_LINE << "[MON] floor=" << _floorId << " spawns=" << _monsterSlots.size() << '\n';
+}
+
+void Room::SpawnMonster(MonsterSlot& slot, uint64 nowUs)
+{
+	const MonsterTypeDef* type = MonsterTable::FindType(slot.spawn->typeId);
+	if (type == nullptr)
+		return;
+
+	const uint64 id = GNextMonsterId.fetch_add(1);
+	MonsterRef monster = make_shared<Monster>(id, *type, *slot.spawn);
+	MonsterBrain::Reset(monster->brain, nowUs);
+	monster->lastStepUs = nowUs;
+
+	if (AddObject(monster) == false)
+		return;
+
+	_monsters[id] = monster;
+	slot.monsterId = id;
+	slot.deferStartUs = 0;
+	_pendingSpawns.push_back(id);
+	GMonsterStats.alive.fetch_add(1);
+
+	LOG_LINE << "[MON] spawn id=" << id << " spawn=" << slot.spawn->spawnId << " type=" << type->nameKey
+		<< " pos=(" << slot.spawn->x << "," << slot.spawn->y << ")\n";
+}
+
+void Room::UpdateMonsters(uint64 nowUs)
+{
+	if (_monsterSlots.empty())
+		return;
+
+	// ── 시체 유예가 끝난 몬스터를 방에서 뺀다 ──
+	{
+		Protocol::S_DESPAWN despawnPkt;
+		for (auto it = _monsters.begin(); it != _monsters.end(); )
+		{
+			const MonsterRef& m = it->second;
+			if (m->diedAtUs != 0 && nowUs >= m->diedAtUs + MonsterConfig::CORPSE_LINGER_US)
+			{
+				despawnPkt.add_object_ids(it->first);
+				RemoveObject(it->first);
+				it = _monsters.erase(it);
+				continue;
+			}
+			++it;
+		}
+
+		if (despawnPkt.object_ids_size() > 0)
+		{
+			SEND_PACKET_BROADCAST(despawnPkt);
+		}
+	}
+
+	// ── 유효 목표 - 방 안 · 살아 있는 플레이어 (끊긴 몸 포함, § 12). 틱마다 한 번 ──
+	_brainPlayers.clear();
+	for (auto& [id, object] : _objects)
+	{
+		if (object->IsPlayer() == false)
+			continue;
+
+		const Player* player = static_cast<const Player*>(object.get());
+		if (player->IsAlive())
+			_brainPlayers.push_back({ id, player->posInfo->x(), player->posInfo->y() });
+	}
+
+	// ── 리스폰 - 자리마다. 곁(12 m)에 플레이어가 있으면 최대 60 초 미룬다 (F9) ──
+	for (MonsterSlot& slot : _monsterSlots)
+	{
+		if (slot.monsterId != 0 || nowUs < slot.respawnAtUs)
+			continue;
+
+		bool playerClose = false;		// "near" 는 windows.h 매크로다
+		const float r2 = MonsterConfig::RESPAWN_DEFER_RADIUS_CM * MonsterConfig::RESPAWN_DEFER_RADIUS_CM;
+		for (const BrainPlayer& p : _brainPlayers)
+		{
+			const float dx = p.x - slot.spawn->x;
+			const float dy = p.y - slot.spawn->y;
+			if (dx * dx + dy * dy <= r2)
+			{
+				playerClose = true;
+				break;
+			}
+		}
+
+		if (playerClose && nowUs < slot.respawnAtUs + MonsterConfig::RESPAWN_DEFER_MAX_US)
+		{
+			if (slot.deferStartUs == 0)
+			{
+				slot.deferStartUs = nowUs;
+				LOG_LINE << "[MON] respawn deferred spawn=" << slot.spawn->spawnId << " - player within 12 m\n";
+			}
+			continue;
+		}
+
+		SpawnMonster(slot, nowUs);
+	}
+
+	// ── 판단 ──
+	const uint64 startUs = Utils::NowMicroseconds();
+	const WallMap& walls = WallTable::Get(_floorId);
+	auto lineClear = [&walls](float ax, float ay, float bx, float by) { return walls.SweepBlocked(ax, ay, bx, by, 0.f) == false; };
+
+	for (auto& [id, m] : _monsters)
+	{
+		if (m->diedAtUs != 0)
+			continue;
+
+		BrainInput in;
+		in.nowUs = nowUs;
+		in.x = m->posInfo->x();
+		in.y = m->posInfo->y();
+		in.homeX = m->spawn->x;
+		in.homeY = m->spawn->y;
+		in.windingUp = m->attackHitAtUs != 0;
+		in.casting = m->IsCasting();
+		in.players = &_brainPlayers;
+		in.lineClear = lineClear;
+
+		const MonsterState before = m->brain.state;
+		m->decision = MonsterBrain::Think(m->brain, *m->type, in);
+		const BrainOutput& out = m->decision;
+
+		if (before != m->brain.state)
+		{
+			LOG_LINE << "[MON] state id=" << id << " " << MonsterStateName(before) << "->" << MonsterStateName(m->brain.state)
+				<< " target=" << m->brain.targetId << '\n';
+		}
+
+		if (out.resetOnArrive)
+		{
+			// T11 · T12 - 만피 · CC 해제. 클라는 피해 0 · 남은 체력 = 최대 로 체력바를 되돌린다 (치유 패킷이 없다)
+			m->RestoreFull();
+
+			Protocol::DamageInfo& heal = _pendingDamages.emplace_back();
+			heal.set_attacker_id(0);
+			heal.set_target_id(id);
+			heal.set_damage(0);
+			heal.set_remaining_hp(m->hp);
+
+			if (out.snapHome)
+			{
+				m->posInfo->set_x(m->spawn->x);
+				m->posInfo->set_y(m->spawn->y);
+				m->posInfo->set_state(Protocol::MOVE_STATE_IDLE);
+				_dirtyMovers.insert(id);
+				GMonsterStats.resetSnaps.fetch_add(1);
+				LOG_LINE << "[MON] reset_snap id=" << id << " spawn=" << m->spawn->spawnId << '\n';
+			}
+		}
+
+		// T10 - 같은 무리의 쉬는 동료를 부른다
+		if (out.aggroed && m->spawn->groupId != 0 && m->type->assistRadiusCm > 0.f)
+		{
+			const float r2 = m->type->assistRadiusCm * m->type->assistRadiusCm;
+			for (auto& [otherId, other] : _monsters)
+			{
+				if (otherId == id || other->diedAtUs != 0 || other->spawn->groupId != m->spawn->groupId)
+					continue;
+
+				const float dx = other->posInfo->x() - in.x;
+				const float dy = other->posInfo->y() - in.y;
+				if (dx * dx + dy * dy <= r2 && MonsterBrain::Alert(other->brain, m->brain.targetId, nowUs))
+					LOG_LINE << "[MON] assist id=" << otherId << " by=" << id << " target=" << m->brain.targetId << '\n';
+			}
+		}
+
+		if (out.castSkill)
+		{
+			if (const SkillDef* def = SkillTable::Find(m->type->skillId))
+				BeginMonsterCast(m, *def, nowUs);
+		}
+		else if (out.attackTargetId != 0)
+		{
+			HandleAttack(id, out.attackTargetId);
+		}
+	}
+
+	GMonsterStats.RecordAi(Utils::NowMicroseconds() - startUs);
+}
+
+void Room::StepMonsters(uint64 nowUs)
+{
+	if (_monsters.empty())
+		return;
+
+	const WallMap& walls = WallTable::Get(_floorId);
+	auto blocked = [&walls](float ax, float ay, float bx, float by, float r) { return walls.SweepBlocked(ax, ay, bx, by, r); };
+
+	uint32 entries = 0;
+
+	for (auto& [id, m] : _monsters)
+	{
+		if (m->diedAtUs != 0)
+			continue;
+
+		const uint64 dtUs = (m->lastStepUs != 0 && nowUs > m->lastStepUs) ? nowUs - m->lastStepUs : 0;
+		m->lastStepUs = nowUs;
+
+		const BrainOutput& d = m->decision;
+		Protocol::PosInfo* pos = m->posInfo;
+
+		if (d.hasGoal == false)
+		{
+			if (pos->state() == Protocol::MOVE_STATE_RUN)
+			{
+				pos->set_state(Protocol::MOVE_STATE_IDLE);
+				_dirtyMovers.insert(id);
+				entries++;
+			}
+			continue;
+		}
+
+		// F1 - CC · windup · 시전이면 0. 몬스터는 걸으면서 때리지 않는다 (Core Rule 17)
+		float speed = m->type->moveSpeedCms * (1.f - m->activeSlow) * d.speedMult;
+		if (m->CanMove(nowUs) == false || m->attackHitAtUs != 0 || m->IsCasting())
+			speed = 0.f;
+
+		StepInput in;
+		in.nowUs = nowUs;
+		in.dtUs = dtUs;
+		in.x = pos->x();
+		in.y = pos->y();
+		in.goalX = d.goalX;
+		in.goalY = d.goalY;
+		in.stopDistCm = d.stopDistCm;
+		in.speedCms = speed;
+		in.radiusCm = m->type->radiusCm;
+		in.blocked = blocked;
+
+		const StepOutput o = MonsterMover::Step(m->brain, in);
+
+		if (o.moved)
+		{
+			pos->set_x(o.x);
+			pos->set_y(o.y);
+			pos->set_yaw(o.yawDeg);
+			pos->set_state(Protocol::MOVE_STATE_RUN);
+			_dirtyMovers.insert(id);
+			entries++;
+			continue;
+		}
+
+		// 멈춘 첫 걸음은 한 번 더 보낸다 - 클라가 정지 애니메이션으로 바꾼다. 서 있으면 목표 쪽을 본다
+		const float faceYaw = ::atan2f(d.goalY - pos->y(), d.goalX - pos->x()) * 180.f / 3.14159265f;
+		float diff = ::fmodf(faceYaw - pos->yaw() + 540.f, 360.f) - 180.f;
+		const bool turn = ::fabsf(diff) > 10.f && (d.goalX != pos->x() || d.goalY != pos->y());
+
+		if (pos->state() == Protocol::MOVE_STATE_RUN || turn)
+		{
+			if (turn)
+				pos->set_yaw(faceYaw);
+			pos->set_state(Protocol::MOVE_STATE_IDLE);
+			_dirtyMovers.insert(id);
+			entries++;
+		}
+	}
+
+	GMonsterStats.moveEntries.fetch_add(entries);
+}
+
+void Room::OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 damage, uint64 nowUs)
+{
+	float ax = monster->posInfo->x();
+	float ay = monster->posInfo->y();
+
+	auto findIt = _objects.find(attackerId);
+	if (findIt != _objects.end())
+	{
+		ax = findIt->second->posInfo->x();
+		ay = findIt->second->posInfo->y();
+	}
+
+	MonsterBrain::OnDamaged(monster->brain, attackerId, damage, ax, ay, nowUs);
+}
+
+void Room::OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 nowUs)
+{
+	const uint64 id = monster->objectInfo->object_id();
+	const MonsterTypeDef& type = *monster->type;
+
+	MonsterBrain::Kill(monster->brain, nowUs);
+	monster->decision = BrainOutput();
+	monster->diedAtUs = nowUs;
+	monster->posInfo->set_state(Protocol::MOVE_STATE_IDLE);
+	GMonsterStats.alive.fetch_sub(1);
+
+	for (MonsterSlot& slot : _monsterSlots)
+	{
+		if (slot.monsterId == id)
+		{
+			slot.monsterId = 0;
+			slot.respawnAtUs = nowUs + static_cast<uint64>(slot.spawn->respawnSeconds) * 1'000'000;
+			slot.deferStartUs = 0;
+			break;
+		}
+	}
+
+	// ── 드랍 - 주인 없는 메모리 전용 가방, 먼저 여는 사람이 임자 (Core Rule 20) ──
+	size_t dropped = 0;
+	{
+		vector<ItemEntry> items = MonsterDrop::Roll(type, type.drops ? FloorItemPool::Find(_floorId, type.dropTier) : nullptr,
+			_rng, []() { return GNextInstanceId.fetch_add(1); });
+
+		if (items.empty() == false)
+		{
+			// 시체가 벽에 붙어 있으면 가방이 벽 안에 생긴다 - 가까운 빈 자리로. 못 찾으면 집(자리 검증이 벽 밖을 보장)
+			float bx = monster->posInfo->x();
+			float by = monster->posInfo->y();
+			if (WallTable::Get(_floorId).FindNearestFree(bx, by, MonsterConfig::DROP_FREE_RADIUS_CM, MonsterConfig::DROP_FREE_SEARCH_CM, OUT bx, OUT by) == false)
+			{
+				bx = monster->spawn->x;
+				by = monster->spawn->y;
+			}
+
+			BagRef bag = ObjectUtils::CreateBag(GNextBagId.fetch_add(1), _floorId, bx, by, monster->posInfo->z(),
+				nowUs + MonsterConfig::DROP_BAG_LIFETIME_US, /*owner*/ 0);
+			bag->items = move(items);
+			dropped = bag->items.size();
+			AddBag(bag);
+		}
+	}
+
+	LOG_LINE << "[MON] died id=" << id << " spawn=" << monster->spawn->spawnId << " type=" << type.nameKey
+		<< " by=" << instigatorId << " drop=" << dropped << " respawn_in=" << monster->spawn->respawnSeconds << "s\n";
+}
+
+bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs)
+{
+	// HandleSkill 의 꼬리를 슬롯 검사 없이 - 몬스터는 6 슬롯이 없다 (skill-system Q5 · monster-ai.md Core Rule 18 ①)
+	if (monster->CanUseSkill(nowUs) == false || monster->IsCasting())
+		return false;
+
+	const uint64 id = monster->objectInfo->object_id();
+
+	if (monster->attackHitAtUs != 0)
+	{
+		monster->attackTargetId = 0;
+		monster->attackHitAtUs = 0;
+		_attackers.erase(id);
+		_pendingAttackCancels.push_back(id);
+	}
+
+	monster->castSkillId = def.skillId;
+	monster->castSlot = Protocol::SLOT_NONE;
+	monster->castTargetId = 0;
+	monster->castAimX = monster->posInfo->x();
+	monster->castAimY = monster->posInfo->y();
+	monster->castEndAtUs = nowUs + static_cast<uint64>(def.castMs) * 1000;
+	_casters.insert(id);
+
+	if (def.castMs > 0)
+	{
+		Protocol::SkillCastInfo& info = _pendingCasts.emplace_back();
+		info.set_caster_id(id);
+		info.set_is_stationary(def.canMoveWhileCasting == false);
+	}
+
+	monster->brain.skillReadyAtUs = nowUs + static_cast<uint64>(def.castMs + def.cooldownMs) * 1000;
+
+	LOG_LINE << "[MON] cast id=" << id << " skill=" << def.skillId << '\n';
+	return true;
 }

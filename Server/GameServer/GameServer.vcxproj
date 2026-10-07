@@ -159,6 +159,9 @@
     <ClCompile Include="EntryPointTable.cpp" />
     <ClCompile Include="WallMap.cpp" />
     <ClCompile Include="WallTable.cpp" />
+    <ClCompile Include="TowerTable.cpp" />
+    <ClCompile Include="MonsterTable.cpp" />
+    <ClCompile Include="MonsterBrain.cpp" />
     <ClCompile Include="Creature.cpp" />
     <ClCompile Include="CsvTable.cpp" />
     <ClCompile Include="Enum.pb.cc">
@@ -200,6 +203,9 @@
     <ClInclude Include="SpawnPlacement.h" />
     <ClInclude Include="WallMap.h" />
     <ClInclude Include="WallTable.h" />
+    <ClInclude Include="TowerTable.h" />
+    <ClInclude Include="MonsterTable.h" />
+    <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />
     <ClInclude Include="Enum.pb.h" />

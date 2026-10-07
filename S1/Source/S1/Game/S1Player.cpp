@@ -15,6 +15,10 @@
 #include "S1.h"
 #include "DrawDebugHelpers.h"
 #include "Components/TextRenderComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Game/Monster/S1MonsterCatalog.h"
 
 AS1Player::AS1Player()
 {
@@ -107,6 +111,19 @@ void AS1Player::Tick(float DeltaTime)
 	DrawCombatDebug();
 	TickDamagePopups();
 
+	// Monster name reads flat to the fixed camera, same trick as the damage numbers
+	if (MonsterLabel != nullptr)
+	{
+		if (APlayerController* PC = GetWorld() != nullptr ? GetWorld()->GetFirstPlayerController() : nullptr)
+		{
+			FVector CamLoc;
+			FRotator CamRot;
+			PC->GetPlayerViewPoint(CamLoc, CamRot);
+			const FMatrix CamMatrix = FRotationMatrix(CamRot);
+			MonsterLabel->SetWorldRotation(FRotationMatrix::MakeFromXZ(-CamMatrix.GetUnitAxis(EAxis::X), CamMatrix.GetUnitAxis(EAxis::Z)).Rotator());
+		}
+	}
+
 	{
 		FVector Location = GetActorLocation();
 		PlayerInfo->set_x(Location.X);
@@ -180,6 +197,11 @@ void AS1Player::TickCc()
 void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit)
 {
 	CurrentHp = RemainingHp;
+
+	// Damage 0 is a resync, not a hit — a monster that walked home heals to full and the server says so with
+	// S_DAMAGE { damage 0, remaining_hp = max } because there is no heal packet (monster-ai.md T11)
+	if (Damage <= 0)
+		return;
 
 	UWorld* World = GetWorld();
 	if (World == nullptr)
@@ -320,8 +342,9 @@ void AS1Player::DrawCombatDebug()
 
 	if (Ratio > 0.f)
 	{
+		// Monsters in the art bible's monster teal (#199E70) so a bar alone says what it belongs to
 		DrawDebugLine(World, Base - Half, (Base - Half) + Half * 2.f * Ratio,
-			FColor::Green, false, -1.f, 0, 6.f);
+			bIsMonster ? FColor(25, 158, 112) : FColor::Green, false, -1.f, 0, 6.f);
 	}
 
 	// One short tick per active CC, left to right. Colours are arbitrary debug picks — the
@@ -511,6 +534,18 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 		break;
 	}
 
+	case 9001:	// 집 보스 내려치기 — the warning itself. S_SKILL_HIT arrives when the telegraph starts; the hit lands
+				// 1.45 s later on whoever is still inside 4 m (monster-ai.md Core Rule 18 · F10). Two rings: the edge
+				// you have to cross, and a fainter inner one so the circle reads as an area, not a line
+	{
+		constexpr float TelegraphSec = 1.45f;
+		DrawDebugCircle(World, Ground, 400.f, 64, FColor(230, 60, 40),
+			false, TelegraphSec, 0, 10.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		DrawDebugCircle(World, Ground, 200.f, 40, FColor(150, 40, 30),
+			false, TelegraphSec, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		break;
+	}
+
 	default:
 		// Unknown effect_id — the client table is behind the server's. Draw something rather
 		// than nothing: a hit the player cannot see is worse than one they cannot identify.
@@ -603,6 +638,61 @@ void AS1Player::SetPlayerInfo(const Protocol::PosInfo& Info)
 
 	DestInfo->CopyFrom(Info);
 	ResetInterpolation(Info.state());
+}
+
+void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
+{
+	// 0 = an older server that did not send it — keep the naked baseline
+	if (Info.max_hp() > 0)
+	{
+		MaxHp = Info.max_hp();
+		CurrentHp = Info.hp();
+	}
+
+	if (Info.creature_type() != Protocol::CREATE_TYPE_MONSTER || bIsMonster)
+		return;
+
+	bIsMonster = true;
+	MonsterTypeId = Info.monster_type_id();
+
+	const FS1MonsterTypeDef* Def = FS1MonsterCatalog::Get().Find(MonsterTypeId);
+
+	// Size from the server's own radius — the boss (110 cm) is the largest silhouette on the floor (art bible ⑩)
+	if (Def != nullptr)
+		SetActorScale3D(FVector(FS1MonsterCatalog::ScaleForRadius(Def->RadiusCm)));
+
+	// A teal disc under the feet. From the top-down camera this is what separates a monster from a player before
+	// any mesh does — monsters share the player mesh until their art exists (monster-ai.md OQ-5)
+	if (UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")))
+	{
+		MonsterDisc = NewObject<UStaticMeshComponent>(this);
+		MonsterDisc->SetStaticMesh(Cylinder);
+		MonsterDisc->SetupAttachment(RootComponent);
+		MonsterDisc->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MonsterDisc->SetCastShadow(false);
+		MonsterDisc->SetRelativeLocation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() + 2.f));
+		MonsterDisc->SetRelativeScale3D(FVector(1.0f, 1.0f, 0.02f));		// 100 cm cylinder → 1 m disc at player scale
+
+		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+		{
+			UMaterialInstanceDynamic* Tint = UMaterialInstanceDynamic::Create(Base, this);
+			Tint->SetVectorParameterValue(TEXT("Color"), FLinearColor(FColor(25, 158, 112)));
+			MonsterDisc->SetMaterial(0, Tint);
+		}
+		MonsterDisc->RegisterComponent();
+	}
+
+	MonsterLabel = NewObject<UTextRenderComponent>(this);
+	MonsterLabel->SetupAttachment(RootComponent);
+	MonsterLabel->SetHorizontalAlignment(EHTA_Center);
+	MonsterLabel->SetVerticalAlignment(EVRTA_TextCenter);
+	MonsterLabel->SetTextRenderColor(FColor(25, 158, 112));
+	MonsterLabel->SetWorldSize(28.f);
+	MonsterLabel->SetRelativeLocation(FVector(-70.f, 0.f, 120.f));
+	MonsterLabel->SetText(Def != nullptr ? FText::FromStringTable(TEXT("S1Items"), Def->NameKey) : FText::FromString(TEXT("?")));
+	MonsterLabel->RegisterComponent();
+
+	UE_LOG(LogTemp, Log, TEXT("[MON] spawn id=%llu type=%u hp=%d/%d"), Info.object_id(), MonsterTypeId, CurrentHp, MaxHp);
 }
 
 void AS1Player::SetDestInfo(const Protocol::PosInfo& Info)

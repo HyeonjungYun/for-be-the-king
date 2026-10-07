@@ -17,6 +17,10 @@ std::atomic<uint64> GSentThisWindow{ 0 };
 atomic<bool> GItemBehavior = false;
 atomic<bool> GNoClientMs = false;
 atomic<bool> GBurst = false;
+atomic<bool> GMonsterPull = false;
+atomic<uint32> GEntryPointId = 0;
+atomic<uint64> GMonsterKills = 0;
+atomic<uint64> GMonsterAttacksSent = 0;
 uint64 GBurstStartUs = 0;
 atomic<uint64> GBagOpenSent = 0;
 atomic<uint64> GLootSent = 0;
@@ -358,6 +362,7 @@ static void TickBots(float deltaTime)
 			Protocol::C_ENTER_GAME enterPkt;
 			enterPkt.set_playerindex(0);
 			enterPkt.set_floor_id(bot->floorId);
+			enterPkt.set_entry_point_id(GEntryPointId.load());
 			bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
 			GReenterSent.fetch_add(1);
 			continue;
@@ -399,6 +404,27 @@ static void TickBots(float deltaTime)
 			}
 		}
 
+		// -monsterpull: 봇 대신 가장 가까운 몬스터. 봇끼리는 싸우지 않는다
+		uint64 monsterId = 0;
+		if (GMonsterPull.load())
+		{
+			target = nullptr;
+			lock_guard<mutex> guard(bot->itemLock);
+			for (const auto& [id, pos] : bot->monsters)
+			{
+				const float mx = pos.first - bot->x;
+				const float my = pos.second - bot->y;
+				const float distSq = mx * mx + my * my;
+				if (monsterId == 0 || distSq < bestDistSq)
+				{
+					monsterId = id;
+					bestDistSq = distSq;
+					bot->destX = pos.first;
+					bot->destY = pos.second;
+				}
+			}
+		}
+
 		if (target != nullptr)
 		{
 			bot->destX = target->x;
@@ -435,7 +461,7 @@ static void TickBots(float deltaTime)
 		{
 
 		}
-		else if (target == nullptr)
+		else if (target == nullptr && monsterId == 0)
 		{
 			if (dist < ARRIVE_EPSILON)
 			{
@@ -546,6 +572,17 @@ static void TickBots(float deltaTime)
 			bot->nextAttackAtUs = nowUs + ATTACK_INTERVAL_US;
 			++GAttackSentThisWindow;
 		}
+		else if (monsterId != 0 && bestDistSq <= ATTACK_RANGE_SQ && nowUs >= bot->nextAttackAtUs)
+		{
+			Protocol::C_ATTACK attackPkt;
+			attackPkt.set_target_id(monsterId);
+
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(attackPkt), nowUs);
+
+			bot->nextAttackAtUs = nowUs + ATTACK_INTERVAL_US;
+			++GAttackSentThisWindow;
+			GMonsterAttacksSent.fetch_add(1);
+		}
 
 		// 아이템 행동 (G2 의 B 조건). 시전 · 돌진 중에는 하지 않는다 - 사람도 싸우는 손으로 줍지 않는다
 		if (GItemBehavior.load() && casting == false && dashing == false)
@@ -570,6 +607,8 @@ int main(int argc, char* argv[])
 			botCount = ::atoi(argv[i + 1]);
 		else if (::strcmp(argv[i], "-grant") == 0)
 			grantUnique = ::atoi(argv[i + 1]);
+		else if (::strcmp(argv[i], "-entry") == 0)
+			GEntryPointId.store(static_cast<uint32>(::atoi(argv[i + 1])));
 	}
 
 	bool grantSpread = false;
@@ -583,6 +622,8 @@ int main(int argc, char* argv[])
 			GNoClientMs.store(true);
 		else if (::strcmp(argv[i], "-burst") == 0)
 			GBurst.store(true);
+		else if (::strcmp(argv[i], "-monsterpull") == 0)
+			GMonsterPull.store(true);
 	}
 
 	GBurstStartUs = Utils::NowMicroseconds();
@@ -593,7 +634,9 @@ int main(int argc, char* argv[])
 	LOG_LINE << "[BOT] launching " << botCount << " bot(s)"
 		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF")
 		<< (GNoClientMs.load() ? " - client_ms OFF" : " - client_ms ON")
-		<< (GBurst.load() ? " - burst ON (all packets held 1.5s every 20s)" : "") << '\n';
+		<< (GBurst.load() ? " - burst ON (all packets held 1.5s every 20s)" : "")
+		<< (GMonsterPull.load() ? " - monster pull ON (chase + hit the nearest monster)" : "")
+		<< " - entry=" << GEntryPointId.load() << '\n';
 
 	// 계정 번호 풀. 끊긴 세션의 번호를 다음 세션이 그대로 물려 받는다
 	{
@@ -682,6 +725,12 @@ int main(int argc, char* argv[])
 				<< " Hz/bot  (target 30)"
 				<< "   attacks = " << (attacks / sec) << "/s"
 				<< "   skills = " << (skills / sec) << "/s" << '\n';
+
+			if (GMonsterPull.load())
+			{
+				LOG_LINE << "[BOT MON] attacks = " << GMonsterAttacksSent.exchange(0) / sec << "/s"
+					<< "   kills total = " << GMonsterKills.load() << '\n';
+			}
 
 			if (GItemBehavior.load())
 			{

@@ -44,6 +44,10 @@ PROTOBUF_CONSTEXPR ObjectInfo::ObjectInfo(
     /*decltype(_impl_.pos_info_)*/nullptr
   , /*decltype(_impl_.object_id_)*/uint64_t{0u}
   , /*decltype(_impl_.object_type_)*/0
+  , /*decltype(_impl_.creature_type_)*/0
+  , /*decltype(_impl_.monster_type_id_)*/0u
+  , /*decltype(_impl_.hp_)*/0
+  , /*decltype(_impl_.max_hp_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct ObjectInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR ObjectInfoDefaultTypeInternal()
@@ -277,6 +281,10 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.object_id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.object_type_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.pos_info_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.creature_type_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.monster_type_id_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.hp_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.max_hp_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::AttackInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -405,18 +413,18 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::Protocol::PosInfo)},
   { 12, -1, -1, sizeof(::Protocol::ObjectInfo)},
-  { 21, -1, -1, sizeof(::Protocol::AttackInfo)},
-  { 30, -1, -1, sizeof(::Protocol::DamageInfo)},
-  { 42, -1, -1, sizeof(::Protocol::CcEventInfo)},
-  { 53, -1, -1, sizeof(::Protocol::KnockbackInfo)},
-  { 65, -1, -1, sizeof(::Protocol::CcSlot)},
-  { 74, -1, -1, sizeof(::Protocol::CcStateInfo)},
-  { 83, -1, -1, sizeof(::Protocol::DiedInfo)},
-  { 92, -1, -1, sizeof(::Protocol::SkillInfo)},
-  { 102, -1, -1, sizeof(::Protocol::SkillCastInfo)},
-  { 110, -1, -1, sizeof(::Protocol::SkillHitInfo)},
-  { 121, -1, -1, sizeof(::Protocol::CharacterInfo)},
-  { 132, -1, -1, sizeof(::Protocol::ItemInstance)},
+  { 25, -1, -1, sizeof(::Protocol::AttackInfo)},
+  { 34, -1, -1, sizeof(::Protocol::DamageInfo)},
+  { 46, -1, -1, sizeof(::Protocol::CcEventInfo)},
+  { 57, -1, -1, sizeof(::Protocol::KnockbackInfo)},
+  { 69, -1, -1, sizeof(::Protocol::CcSlot)},
+  { 78, -1, -1, sizeof(::Protocol::CcStateInfo)},
+  { 87, -1, -1, sizeof(::Protocol::DiedInfo)},
+  { 96, -1, -1, sizeof(::Protocol::SkillInfo)},
+  { 106, -1, -1, sizeof(::Protocol::SkillCastInfo)},
+  { 114, -1, -1, sizeof(::Protocol::SkillHitInfo)},
+  { 125, -1, -1, sizeof(::Protocol::CharacterInfo)},
+  { 136, -1, -1, sizeof(::Protocol::ItemInstance)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -440,52 +448,55 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "\n\014Struct.proto\022\010Protocol\032\nEnum.proto\"n\n\007"
   "PosInfo\022\021\n\tobject_id\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n"
   "\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\022\"\n\005stat"
-  "e\030\006 \001(\0162\023.Protocol.MoveState\"o\n\nObjectIn"
-  "fo\022\021\n\tobject_id\030\001 \001(\004\022)\n\013object_type\030\002 \001"
-  "(\0162\024.Protocol.ObjectType\022#\n\010pos_info\030\003 \001"
-  "(\0132\021.Protocol.PosInfo\"G\n\nAttackInfo\022\023\n\013a"
-  "ttacker_id\030\001 \001(\004\022\021\n\ttarget_id\030\002 \001(\004\022\021\n\tw"
-  "indup_ms\030\003 \001(\004\"\226\001\n\nDamageInfo\022\023\n\013attacke"
-  "r_id\030\001 \001(\004\022\021\n\ttarget_id\030\002 \001(\004\022\016\n\006damage\030"
-  "\003 \001(\005\022\024\n\014remaining_hp\030\004 \001(\005\022\017\n\007is_crit\030\005"
-  " \001(\010\022)\n\013damage_type\030\006 \001(\0162\024.Protocol.Dam"
-  "ageType\"\202\001\n\013CcEventInfo\022\021\n\ttarget_id\030\001 \001"
-  "(\004\022\025\n\rinstigator_id\030\002 \001(\004\022!\n\007cc_type\030\003 \001"
-  "(\0162\020.Protocol.CcType\022\023\n\013duration_ms\030\004 \001("
-  "\r\022\021\n\tmagnitude\030\005 \001(\002\"x\n\rKnockbackInfo\022\021\n"
-  "\ttarget_id\030\001 \001(\004\022\025\n\rinstigator_id\030\002 \001(\004\022"
-  "\r\n\005dir_x\030\003 \001(\002\022\r\n\005dir_y\030\004 \001(\002\022\020\n\010distanc"
-  "e\030\005 \001(\002\022\r\n\005speed\030\006 \001(\002\"T\n\006CcSlot\022!\n\007cc_t"
-  "ype\030\001 \001(\0162\020.Protocol.CcType\022\024\n\014remaining"
-  "_ms\030\002 \001(\r\022\021\n\tmagnitude\030\003 \001(\002\"V\n\013CcStateI"
-  "nfo\022\021\n\ttarget_id\030\001 \001(\004\022\037\n\005slots\030\002 \003(\0132\020."
-  "Protocol.CcSlot\022\023\n\013active_slow\030\003 \001(\002\"Y\n\010"
-  "DiedInfo\022\021\n\tvictim_id\030\001 \001(\004\022\025\n\rinstigato"
-  "r_id\030\002 \001(\004\022#\n\005cause\030\003 \001(\0162\024.Protocol.Dea"
-  "thCause\"\227\001\n\tSkillInfo\022!\n\004slot\030\001 \001(\0162\023.Pr"
-  "otocol.EquipSlot\022\020\n\010skill_id\030\002 \001(\r\022+\n\nbi"
-  "nd_state\030\003 \001(\0162\027.Protocol.SlotBindState\022"
-  "(\n\013shadowed_by\030\004 \001(\0162\023.Protocol.EquipSlo"
-  "t\"9\n\rSkillCastInfo\022\021\n\tcaster_id\030\001 \001(\004\022\025\n"
-  "\ris_stationary\030\002 \001(\010\"k\n\014SkillHitInfo\022\021\n\t"
-  "caster_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\tta"
-  "rget_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impac"
-  "t_y\030\005 \001(\002\"v\n\rCharacterInfo\022)\n\013object_inf"
-  "o\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014\n\004name\030\002 "
-  "\001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n\010floor"
-  "_id\030\005 \001(\r\"\330\001\n\014ItemInstance\022\023\n\013instance_i"
-  "d\030\001 \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\"\n\005grade\030\003"
-  " \001(\0162\023.Protocol.ItemGrade\022\r\n\005level\030\004 \001(\r"
-  "\022\"\n\005state\030\005 \001(\0162\023.Protocol.ItemState\022!\n\004"
-  "slot\030\006 \001(\0162\023.Protocol.EquipSlot\022#\n\006skill"
-  "s\030\007 \003(\0132\023.Protocol.SkillInfob\006proto3"
+  "e\030\006 \001(\0162\023.Protocol.MoveState\"\323\001\n\nObjectI"
+  "nfo\022\021\n\tobject_id\030\001 \001(\004\022)\n\013object_type\030\002 "
+  "\001(\0162\024.Protocol.ObjectType\022#\n\010pos_info\030\003 "
+  "\001(\0132\021.Protocol.PosInfo\022-\n\rcreature_type\030"
+  "\004 \001(\0162\026.Protocol.CreatureType\022\027\n\017monster"
+  "_type_id\030\005 \001(\r\022\n\n\002hp\030\006 \001(\005\022\016\n\006max_hp\030\007 \001"
+  "(\005\"G\n\nAttackInfo\022\023\n\013attacker_id\030\001 \001(\004\022\021\n"
+  "\ttarget_id\030\002 \001(\004\022\021\n\twindup_ms\030\003 \001(\004\"\226\001\n\n"
+  "DamageInfo\022\023\n\013attacker_id\030\001 \001(\004\022\021\n\ttarge"
+  "t_id\030\002 \001(\004\022\016\n\006damage\030\003 \001(\005\022\024\n\014remaining_"
+  "hp\030\004 \001(\005\022\017\n\007is_crit\030\005 \001(\010\022)\n\013damage_type"
+  "\030\006 \001(\0162\024.Protocol.DamageType\"\202\001\n\013CcEvent"
+  "Info\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\rinstigator_id"
+  "\030\002 \001(\004\022!\n\007cc_type\030\003 \001(\0162\020.Protocol.CcTyp"
+  "e\022\023\n\013duration_ms\030\004 \001(\r\022\021\n\tmagnitude\030\005 \001("
+  "\002\"x\n\rKnockbackInfo\022\021\n\ttarget_id\030\001 \001(\004\022\025\n"
+  "\rinstigator_id\030\002 \001(\004\022\r\n\005dir_x\030\003 \001(\002\022\r\n\005d"
+  "ir_y\030\004 \001(\002\022\020\n\010distance\030\005 \001(\002\022\r\n\005speed\030\006 "
+  "\001(\002\"T\n\006CcSlot\022!\n\007cc_type\030\001 \001(\0162\020.Protoco"
+  "l.CcType\022\024\n\014remaining_ms\030\002 \001(\r\022\021\n\tmagnit"
+  "ude\030\003 \001(\002\"V\n\013CcStateInfo\022\021\n\ttarget_id\030\001 "
+  "\001(\004\022\037\n\005slots\030\002 \003(\0132\020.Protocol.CcSlot\022\023\n\013"
+  "active_slow\030\003 \001(\002\"Y\n\010DiedInfo\022\021\n\tvictim_"
+  "id\030\001 \001(\004\022\025\n\rinstigator_id\030\002 \001(\004\022#\n\005cause"
+  "\030\003 \001(\0162\024.Protocol.DeathCause\"\227\001\n\tSkillIn"
+  "fo\022!\n\004slot\030\001 \001(\0162\023.Protocol.EquipSlot\022\020\n"
+  "\010skill_id\030\002 \001(\r\022+\n\nbind_state\030\003 \001(\0162\027.Pr"
+  "otocol.SlotBindState\022(\n\013shadowed_by\030\004 \001("
+  "\0162\023.Protocol.EquipSlot\"9\n\rSkillCastInfo\022"
+  "\021\n\tcaster_id\030\001 \001(\004\022\025\n\ris_stationary\030\002 \001("
+  "\010\"k\n\014SkillHitInfo\022\021\n\tcaster_id\030\001 \001(\004\022\021\n\t"
+  "effect_id\030\002 \001(\r\022\021\n\ttarget_id\030\003 \001(\004\022\020\n\010im"
+  "pact_x\030\004 \001(\002\022\020\n\010impact_y\030\005 \001(\002\"v\n\rCharac"
+  "terInfo\022)\n\013object_info\030\001 \001(\0132\024.Protocol."
+  "ObjectInfo\022\014\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006"
+  "max_hp\030\004 \001(\005\022\020\n\010floor_id\030\005 \001(\r\"\330\001\n\014ItemI"
+  "nstance\022\023\n\013instance_id\030\001 \001(\004\022\024\n\014item_typ"
+  "e_id\030\002 \001(\r\022\"\n\005grade\030\003 \001(\0162\023.Protocol.Ite"
+  "mGrade\022\r\n\005level\030\004 \001(\r\022\"\n\005state\030\005 \001(\0162\023.P"
+  "rotocol.ItemState\022!\n\004slot\030\006 \001(\0162\023.Protoc"
+  "ol.EquipSlot\022#\n\006skills\030\007 \003(\0132\023.Protocol."
+  "SkillInfob\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 1676, descriptor_table_protodef_Struct_2eproto,
+    false, false, 1777, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 14,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -882,6 +893,10 @@ ObjectInfo::ObjectInfo(const ObjectInfo& from)
       decltype(_impl_.pos_info_){nullptr}
     , decltype(_impl_.object_id_){}
     , decltype(_impl_.object_type_){}
+    , decltype(_impl_.creature_type_){}
+    , decltype(_impl_.monster_type_id_){}
+    , decltype(_impl_.hp_){}
+    , decltype(_impl_.max_hp_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -889,8 +904,8 @@ ObjectInfo::ObjectInfo(const ObjectInfo& from)
     _this->_impl_.pos_info_ = new ::Protocol::PosInfo(*from._impl_.pos_info_);
   }
   ::memcpy(&_impl_.object_id_, &from._impl_.object_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.object_type_) -
-    reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.object_type_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.max_hp_) -
+    reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.max_hp_));
   // @@protoc_insertion_point(copy_constructor:Protocol.ObjectInfo)
 }
 
@@ -902,6 +917,10 @@ inline void ObjectInfo::SharedCtor(
       decltype(_impl_.pos_info_){nullptr}
     , decltype(_impl_.object_id_){uint64_t{0u}}
     , decltype(_impl_.object_type_){0}
+    , decltype(_impl_.creature_type_){0}
+    , decltype(_impl_.monster_type_id_){0u}
+    , decltype(_impl_.hp_){0}
+    , decltype(_impl_.max_hp_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -935,8 +954,8 @@ void ObjectInfo::Clear() {
   }
   _impl_.pos_info_ = nullptr;
   ::memset(&_impl_.object_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.object_type_) -
-      reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.object_type_));
+      reinterpret_cast<char*>(&_impl_.max_hp_) -
+      reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.max_hp_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -967,6 +986,39 @@ const char* ObjectInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext* ct
       case 3:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 26)) {
           ptr = ctx->ParseMessage(_internal_mutable_pos_info(), ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // .Protocol.CreatureType creature_type = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 32)) {
+          uint64_t val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+          _internal_set_creature_type(static_cast<::Protocol::CreatureType>(val));
+        } else
+          goto handle_unusual;
+        continue;
+      // uint32 monster_type_id = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 40)) {
+          _impl_.monster_type_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 hp = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 48)) {
+          _impl_.hp_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 max_hp = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 56)) {
+          _impl_.max_hp_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -1020,6 +1072,31 @@ uint8_t* ObjectInfo::_InternalSerialize(
         _Internal::pos_info(this).GetCachedSize(), target, stream);
   }
 
+  // .Protocol.CreatureType creature_type = 4;
+  if (this->_internal_creature_type() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteEnumToArray(
+      4, this->_internal_creature_type(), target);
+  }
+
+  // uint32 monster_type_id = 5;
+  if (this->_internal_monster_type_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt32ToArray(5, this->_internal_monster_type_id(), target);
+  }
+
+  // int32 hp = 6;
+  if (this->_internal_hp() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(6, this->_internal_hp(), target);
+  }
+
+  // int32 max_hp = 7;
+  if (this->_internal_max_hp() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(7, this->_internal_max_hp(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1054,6 +1131,27 @@ size_t ObjectInfo::ByteSizeLong() const {
       ::_pbi::WireFormatLite::EnumSize(this->_internal_object_type());
   }
 
+  // .Protocol.CreatureType creature_type = 4;
+  if (this->_internal_creature_type() != 0) {
+    total_size += 1 +
+      ::_pbi::WireFormatLite::EnumSize(this->_internal_creature_type());
+  }
+
+  // uint32 monster_type_id = 5;
+  if (this->_internal_monster_type_id() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(this->_internal_monster_type_id());
+  }
+
+  // int32 hp = 6;
+  if (this->_internal_hp() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_hp());
+  }
+
+  // int32 max_hp = 7;
+  if (this->_internal_max_hp() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_max_hp());
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -1082,6 +1180,18 @@ void ObjectInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PRO
   if (from._internal_object_type() != 0) {
     _this->_internal_set_object_type(from._internal_object_type());
   }
+  if (from._internal_creature_type() != 0) {
+    _this->_internal_set_creature_type(from._internal_creature_type());
+  }
+  if (from._internal_monster_type_id() != 0) {
+    _this->_internal_set_monster_type_id(from._internal_monster_type_id());
+  }
+  if (from._internal_hp() != 0) {
+    _this->_internal_set_hp(from._internal_hp());
+  }
+  if (from._internal_max_hp() != 0) {
+    _this->_internal_set_max_hp(from._internal_max_hp());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -1100,8 +1210,8 @@ void ObjectInfo::InternalSwap(ObjectInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(ObjectInfo, _impl_.object_type_)
-      + sizeof(ObjectInfo::_impl_.object_type_)
+      PROTOBUF_FIELD_OFFSET(ObjectInfo, _impl_.max_hp_)
+      + sizeof(ObjectInfo::_impl_.max_hp_)
       - PROTOBUF_FIELD_OFFSET(ObjectInfo, _impl_.pos_info_)>(
           reinterpret_cast<char*>(&_impl_.pos_info_),
           reinterpret_cast<char*>(&other->_impl_.pos_info_));

@@ -96,6 +96,15 @@
     <ClCompile Include="WallTable.cpp">
       <Filter>Data</Filter>
     </ClCompile>
+    <ClCompile Include="TowerTable.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
+    <ClCompile Include="MonsterTable.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
+    <ClCompile Include="MonsterBrain.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -175,6 +184,15 @@
     </ClInclude>
     <ClInclude Include="WallTable.h">
       <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="TowerTable.h">
+      <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="MonsterTable.h">
+      <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="MonsterBrain.h">
+      <Filter>Game\Object</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

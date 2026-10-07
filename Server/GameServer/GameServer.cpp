@@ -16,6 +16,9 @@
 #include "ChestSpawnTable.h"
 #include "EntryPointTable.h"
 #include "WallTable.h"
+#include "TowerTable.h"
+#include "MonsterTable.h"
+#include "Monster.h"
 #include "Bag.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
@@ -141,6 +144,45 @@ int main()
 			else
 				LOG_LINE << "[LEVEL] floor=" << floor << " walls=" << WallTable::Get(floor).Count()
 					<< " version=" << (version.empty() ? "none" : version) << '\n';
+		}
+
+		// 탈출 타워 - 몬스터 자리 검증(35 m)과 탈출 게이지가 읽는다. 파일이 없으면 0개
+		if (TowerTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] towers invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		// 몬스터 - 스킬 · 층 풀 · 진입 지점 · 벽 · 타워 다음이어야 한다. 자리마다 벽 겹침 · 진입 20 m · 타워 35 m 를 본다
+		if (MonsterTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] monsters invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] towers=" << TowerTable::All().size() << " monster types=" << MonsterTable::TypeCount()
+			<< " spawns=" << MonsterTable::Spawns().size() << '\n';
+
+		// G3 켬/끔 비교 - 같은 데이터로 몬스터만 끈다 (FBTK_MONSTERS=0)
+		bool monstersOn = true;
+		{
+			char* raw = nullptr;
+			size_t length = 0;
+			if (_dupenv_s(&raw, &length, "FBTK_MONSTERS") == 0 && raw != nullptr)
+			{
+				monstersOn = (raw[0] != '0');
+				::free(raw);
+			}
+		}
+
+		if (monstersOn)
+		{
+			for (int32 i = 0; i < FLOOR_COUNT; i++)
+				GRooms[i]->DoAsync(&Room::InitMonsters);
+		}
+		else
+		{
+			LOG_LINE << "[BOOT] FBTK_MONSTERS=0 - no monsters spawn (G3 COMPARISON ONLY)\n";
 		}
 
 		// 메모리 전용 - DB 행이 없다. 재시작하면 전층이 Sealed 로 돌아간다 (§ 8, ADR-0003).
@@ -363,6 +405,7 @@ int main()
 	{
 		this_thread::sleep_for(10s);
 		GStats.Dump(service->GetCurrentSessionCount());
+		GMonsterStats.Dump(10);
 	}
 
 

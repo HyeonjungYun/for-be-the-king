@@ -436,6 +436,10 @@ class ObjectInfo final :
     kPosInfoFieldNumber = 3,
     kObjectIdFieldNumber = 1,
     kObjectTypeFieldNumber = 2,
+    kCreatureTypeFieldNumber = 4,
+    kMonsterTypeIdFieldNumber = 5,
+    kHpFieldNumber = 6,
+    kMaxHpFieldNumber = 7,
   };
   // .Protocol.PosInfo pos_info = 3;
   bool has_pos_info() const;
@@ -473,6 +477,42 @@ class ObjectInfo final :
   void _internal_set_object_type(::Protocol::ObjectType value);
   public:
 
+  // .Protocol.CreatureType creature_type = 4;
+  void clear_creature_type();
+  ::Protocol::CreatureType creature_type() const;
+  void set_creature_type(::Protocol::CreatureType value);
+  private:
+  ::Protocol::CreatureType _internal_creature_type() const;
+  void _internal_set_creature_type(::Protocol::CreatureType value);
+  public:
+
+  // uint32 monster_type_id = 5;
+  void clear_monster_type_id();
+  uint32_t monster_type_id() const;
+  void set_monster_type_id(uint32_t value);
+  private:
+  uint32_t _internal_monster_type_id() const;
+  void _internal_set_monster_type_id(uint32_t value);
+  public:
+
+  // int32 hp = 6;
+  void clear_hp();
+  int32_t hp() const;
+  void set_hp(int32_t value);
+  private:
+  int32_t _internal_hp() const;
+  void _internal_set_hp(int32_t value);
+  public:
+
+  // int32 max_hp = 7;
+  void clear_max_hp();
+  int32_t max_hp() const;
+  void set_max_hp(int32_t value);
+  private:
+  int32_t _internal_max_hp() const;
+  void _internal_set_max_hp(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ObjectInfo)
  private:
   class _Internal;
@@ -484,6 +524,10 @@ class ObjectInfo final :
     ::Protocol::PosInfo* pos_info_;
     uint64_t object_id_;
     int object_type_;
+    int creature_type_;
+    uint32_t monster_type_id_;
+    int32_t hp_;
+    int32_t max_hp_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -3000,6 +3044,86 @@ inline void ObjectInfo::set_allocated_pos_info(::Protocol::PosInfo* pos_info) {
   }
   _impl_.pos_info_ = pos_info;
   // @@protoc_insertion_point(field_set_allocated:Protocol.ObjectInfo.pos_info)
+}
+
+// .Protocol.CreatureType creature_type = 4;
+inline void ObjectInfo::clear_creature_type() {
+  _impl_.creature_type_ = 0;
+}
+inline ::Protocol::CreatureType ObjectInfo::_internal_creature_type() const {
+  return static_cast< ::Protocol::CreatureType >(_impl_.creature_type_);
+}
+inline ::Protocol::CreatureType ObjectInfo::creature_type() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.creature_type)
+  return _internal_creature_type();
+}
+inline void ObjectInfo::_internal_set_creature_type(::Protocol::CreatureType value) {
+  
+  _impl_.creature_type_ = value;
+}
+inline void ObjectInfo::set_creature_type(::Protocol::CreatureType value) {
+  _internal_set_creature_type(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.creature_type)
+}
+
+// uint32 monster_type_id = 5;
+inline void ObjectInfo::clear_monster_type_id() {
+  _impl_.monster_type_id_ = 0u;
+}
+inline uint32_t ObjectInfo::_internal_monster_type_id() const {
+  return _impl_.monster_type_id_;
+}
+inline uint32_t ObjectInfo::monster_type_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.monster_type_id)
+  return _internal_monster_type_id();
+}
+inline void ObjectInfo::_internal_set_monster_type_id(uint32_t value) {
+  
+  _impl_.monster_type_id_ = value;
+}
+inline void ObjectInfo::set_monster_type_id(uint32_t value) {
+  _internal_set_monster_type_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.monster_type_id)
+}
+
+// int32 hp = 6;
+inline void ObjectInfo::clear_hp() {
+  _impl_.hp_ = 0;
+}
+inline int32_t ObjectInfo::_internal_hp() const {
+  return _impl_.hp_;
+}
+inline int32_t ObjectInfo::hp() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.hp)
+  return _internal_hp();
+}
+inline void ObjectInfo::_internal_set_hp(int32_t value) {
+  
+  _impl_.hp_ = value;
+}
+inline void ObjectInfo::set_hp(int32_t value) {
+  _internal_set_hp(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.hp)
+}
+
+// int32 max_hp = 7;
+inline void ObjectInfo::clear_max_hp() {
+  _impl_.max_hp_ = 0;
+}
+inline int32_t ObjectInfo::_internal_max_hp() const {
+  return _impl_.max_hp_;
+}
+inline int32_t ObjectInfo::max_hp() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.max_hp)
+  return _internal_max_hp();
+}
+inline void ObjectInfo::_internal_set_max_hp(int32_t value) {
+  
+  _impl_.max_hp_ = value;
+}
+inline void ObjectInfo::set_max_hp(int32_t value) {
+  _internal_set_max_hp(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.max_hp)
 }
 
 // -------------------------------------------------------------------

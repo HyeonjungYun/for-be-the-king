@@ -24,6 +24,7 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 	Protocol::C_ENTER_GAME enterPkt;
 	enterPkt.set_playerindex(0);
 	enterPkt.set_floor_id(bot->floorId);
+	enterPkt.set_entry_point_id(GEntryPointId.load());
 
 	const Protocol::CharacterInfo& Character = pkt.characters(0);
 
@@ -98,7 +99,7 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 {
-	if (GItemBehavior.load() == false)
+	if (GItemBehavior.load() == false && GMonsterPull.load() == false)
 		return true;
 
 	auto bot = static_pointer_cast<BotSession>(session);
@@ -106,8 +107,10 @@ bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 
 	for (const Protocol::ObjectInfo& info : pkt.players())
 	{
-		if (info.object_type() == Protocol::OBJECT_TYPE_BAG)
+		if (info.object_type() == Protocol::OBJECT_TYPE_BAG && GItemBehavior.load())
 			bot->bags[info.object_id()] = { info.pos_info().x(), info.pos_info().y() };
+		else if (info.creature_type() == Protocol::CREATE_TYPE_MONSTER && GMonsterPull.load())
+			bot->monsters[info.object_id()] = { info.pos_info().x(), info.pos_info().y() };
 	}
 
 	return true;
@@ -115,7 +118,7 @@ bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 
 bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 {
-	if (GItemBehavior.load() == false)
+	if (GItemBehavior.load() == false && GMonsterPull.load() == false)
 		return true;
 
 	auto bot = static_pointer_cast<BotSession>(session);
@@ -124,6 +127,7 @@ bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 	for (uint64 id : pkt.object_ids())
 	{
 		bot->bags.erase(id);
+		bot->monsters.erase(id);
 		if (bot->openBagId == id)
 			bot->openBagId = 0;
 	}
@@ -134,6 +138,18 @@ bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);
+
+	// 몬스터는 서버가 움직인다 - 같은 S_MOVE 에 실려 온다 (monster-ai.md Core Rule 25)
+	if (GMonsterPull.load() && pkt.correction() == false)
+	{
+		lock_guard<mutex> guard(bot->itemLock);
+		for (const Protocol::PosInfo& info : pkt.infos())
+		{
+			auto it = bot->monsters.find(info.object_id());
+			if (it != bot->monsters.end())
+				it->second = { info.x(), info.y() };
+		}
+	}
 
 	if (pkt.correction() == false)
 		return true;
@@ -232,13 +248,23 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 	for (const Protocol::DiedInfo& info : pkt.deaths())
 	{
+		if (GMonsterPull.load())
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+			if (bot->monsters.erase(info.victim_id()) > 0 && info.instigator_id() == bot->objectId.load())
+			{
+				GMonsterKills.fetch_add(1);
+				LOG_LINE << "[BOT KILL] monster=" << info.victim_id() << " by=" << bot->objectId.load() << " cause=" << info.cause() << '\n';
+			}
+		}
+
 		if (info.victim_id() != bot->objectId.load())
 			continue;
 
 		bot->alive.store(false);
 
 		LOG_LINE << "[BOT DIED] id=" << bot->objectId.load()
-			<< " by=" << info.instigator_id() << '\n';
+			<< " by=" << info.instigator_id() << " cause=" << info.cause() << '\n';
 
 		bot->Disconnect(L"Died");
 	}

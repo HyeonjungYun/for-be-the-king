@@ -116,6 +116,31 @@ void SkillTable::Init()
 
 		s_defs[def.skillId] = def;
 	}
+
+	// ── 몬스터 스킬 (9000번대) - 슬롯 없이 AI 가 직접 부른다 (skill-system Q5 · monster-ai.md Core Rule 18) ──
+	{
+		SkillDef def;
+		def.skillId = 9001;							// 집 보스 내려치기
+		def.effectId = 9001;
+		def.castMs = 600;							// 보스 정지 - S_SKILL_CAST is_stationary
+		def.cooldownMs = 8000;
+		def.canMoveWhileCasting = false;
+		def.shape = SkillShape::CircleSelf;
+		def.aimType = SkillAimType::SelfArea;
+		def.radiusCm = 400.f;
+		def.allowedSlot = Protocol::SLOT_NONE;
+
+		SkillEffect dmg;
+		dmg.type = SkillEffectType::Damage;
+		dmg.adRatio = 2.0f;							// 보스 AD 30 → 60, 방어력 완화
+		dmg.damageType = Protocol::DAMAGE_TYPE_PHYSICAL;
+		def.effects.push_back(dmg);
+
+		// F10 - 400 / 340 + 0.25 = 1.43 s 이상. 캐스트 600 ms 는 예고로 세지 않는다 (2026-10-07 리뷰)
+		def.telegraphMs = 1450;
+
+		s_defs[def.skillId] = def;
+	}
 }
 
 const SkillDef* SkillTable::Find(uint32 skillId)

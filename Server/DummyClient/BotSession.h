@@ -60,6 +60,9 @@ public:
 	// -burst 동안 쥐고 있는 패킷 - 보낼 순서 그대로 (틱 스레드 전용)
 	vector<SendBufferRef>							heldPackets;
 
+	// -monsterpull - 아는 몬스터 위치 (S_SPAWN · S_MOVE · S_DESPAWN · S_DIED). itemLock 아래에서만
+	unordered_map<uint64, pair<float, float>>		monsters;
+
 	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
 	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };
@@ -87,6 +90,13 @@ extern atomic<bool> GItemBehavior;
 // -noclientms: C_MOVE.client_ms 를 비운다(예전 이동 검증과 비교용) · -burst: 이동을 주기적으로 쥐었다 몰아 보낸다
 extern atomic<bool> GNoClientMs;
 extern atomic<bool> GBurst;
+
+// -monsterpull: 봇이 다른 봇 대신 가장 가까운 몬스터를 쫓아 때린다 (monster-ai.md AC-MA-70 · 71)
+// -entry <id>: 입장 지점을 고른다. 0 = 서버가 무작위 (봇은 벽을 모르므로 몬스터까지 직선이 트인 지점을 준다)
+extern atomic<bool> GMonsterPull;
+extern atomic<uint32> GEntryPointId;
+extern atomic<uint64> GMonsterKills;
+extern atomic<uint64> GMonsterAttacksSent;
 
 // 10초 창마다 보고하고 0 으로 돌린다
 extern atomic<uint64> GBagOpenSent;

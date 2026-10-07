@@ -14,6 +14,7 @@ class UInputAction;
 struct FInputActionValue;
 
 class UTextRenderComponent;
+class UStaticMeshComponent;
 
 /**
  * One floating damage number, backed by its own text component.
@@ -82,6 +83,15 @@ public:
 	void SetPlayerInfo(const Protocol::PosInfo& Info);
 	void SetDestInfo(const Protocol::PosInfo& Info);
 	Protocol::PosInfo* GetPlayerInfo() { return PlayerInfo; };
+
+	/**
+	 * Spawn snapshot beyond position — current/max HP and, for monsters, what to draw (monster-ai.md § H).
+	 * Monsters reuse this remote-proxy class so every id-based handler (move, attack, damage, death) works on them
+	 * unchanged; only the look differs: size from the server radius, a teal ground disc, a name label.
+	 */
+	void SetCreatureInfo(const Protocol::ObjectInfo& Info);
+
+	bool IsMonster() const { return bIsMonster; }
 
 public:
 	/**
@@ -223,6 +233,16 @@ protected:
 	int32 CurrentHp = 500;
 	int32 MaxHp = 500;
 	int32 DamagePopupCount = 0;
+
+	/** Set by SetCreatureInfo from ObjectInfo.creature_type. */
+	bool bIsMonster = false;
+	uint32 MonsterTypeId = 0;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> MonsterDisc = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> MonsterLabel = nullptr;
 
 	/** Pooled — components are reused rather than created and destroyed per hit. */
 	UPROPERTY(Transient)
