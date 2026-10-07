@@ -89,6 +89,7 @@
     <ClCompile Include="ChestTest.cpp" />
     <ClCompile Include="EntryPointTest.cpp" />
     <ClCompile Include="MoveClockTest.cpp" />
+    <ClCompile Include="LevelRulesTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="ItemRollerTest.cpp" />
     <ClCompile Include="ItemTableTest.cpp" />

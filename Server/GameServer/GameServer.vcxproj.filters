@@ -158,6 +158,12 @@
     <ClInclude Include="MoveClock.h">
       <Filter>Game</Filter>
     </ClInclude>
+    <ClInclude Include="FloorBounds.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="SpawnPlacement.h">
+      <Filter>Game</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Common\protoc-21.12-win64\bin\Protocol.proto">

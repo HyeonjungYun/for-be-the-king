@@ -8,6 +8,8 @@
 #include "ObjectUtils.h"
 #include "Bag.h"
 #include "GameSessionManager.h"
+#include "FloorBounds.h"
+#include "SpawnPlacement.h"
 
 namespace
 {
@@ -24,9 +26,6 @@ namespace
 	constexpr uint64	SAVE_INTERVAL_US = 60'000'000;
 	constexpr int32		SAVE_PER_TICK = 2;
 
-	constexpr float		SPAWN_SPACING_CM = 150.0f;
-	constexpr int32		SPAWN_MAX_RINGS = 6;
-	constexpr float		SPAWN_PI = 3.14159265f;
 	constexpr float		LOOT_RANGE_CM = 200.f;
 	constexpr uint64	LEAVE_RETRY_MS = 100;		// 사망 커밋을 기다리는 퇴장 재시도 간격
 }
@@ -414,16 +413,32 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		if (player->moveBudget > maxBudget)
 			player->moveBudget = maxBudget;
 
+		// 층 사각형 밖 · NaN · 무한대 - 예산을 쓰지 않고 거부한다 (FloorBounds.h, level-map.md AC-LM-02)
+		if (FloorBounds::Contains(pkt.info().x(), pkt.info().y()) == false)
+		{
+			rejected = true;
+
+			LOG_LINE << "[MOVE REJECT] id=" << objectId
+				<< " reason=bounds"
+				<< " x=" << pkt.info().x()
+				<< " y=" << pkt.info().y() << '\n';
+		}
+
 		// XY 평면 거리만 본다.
 		const double dx = static_cast<double>(pkt.info().x()) - player->posInfo->x();
 		const double dy = static_cast<double>(pkt.info().y()) - player->posInfo->y();
 		const double distance = std::sqrt(dx * dx + dy * dy);
 
-		if (distance > player->moveBudget)
+		if (rejected)
+		{
+			// 경계 거부 - 이미 남겼다
+		}
+		else if (distance > player->moveBudget)
 		{
 			rejected = true;
 
 			LOG_LINE << "[MOVE REJECT] id=" << objectId
+				<< " reason=speed"
 				<< " dist=" << distance
 				<< " budget=" << player->moveBudget
 				<< " dt=" << deltaSec
@@ -2331,43 +2346,21 @@ void Room::UpdateChests(uint64 nowUs)
 
 void Room::FindSpawnPosition(float baseX, float baseY, float& outX, float& outY)
 {
-	const float spacingSq = SPAWN_SPACING_CM * SPAWN_SPACING_CM;
+	// 고리 6겹을 돌고, 다 차면 반경 900 cm 원 안 (SpawnPlacement.h - 예전 폴백은 ±900 cm 정사각형이었다)
+	const float spacingSq = SpawnPlacement::SPACING_CM * SpawnPlacement::SPACING_CM;
 
-	for (int32 ring = 1; ring <= SPAWN_MAX_RINGS; ring++)
+	auto occupied = [&](float cx, float cy)
 	{
-		const int32 slots = (ring == 0) ? 1 : ring * 6;
-		const float radius = ring * SPAWN_SPACING_CM;
-
-		for (int32 i = 0; i < slots; i++)
+		for (auto& item : _objects)
 		{
-			const float  angle = (2.f * SPAWN_PI * i) / slots;
-			const float cx = baseX + radius * ::cosf(angle);
-			const float cy = baseY + radius * ::sinf(angle);
+			const float dx = item.second->posInfo->x() - cx;
+			const float dy = item.second->posInfo->y() - cy;
 
-			bool occupied = false;
-
-			for (auto& item : _objects)
-			{
-				const float dx = item.second->posInfo->x() - cx;
-				const float dy = item.second->posInfo->y() - cy;
-
-				if ((dx * dx + dy * dy) < spacingSq)
-				{
-					occupied = true;
-					break;
-				}
-			}
-
-			if (occupied == false)
-			{
-				outX = cx;
-				outY = cy;
-				return;
-			}
+			if ((dx * dx + dy * dy) < spacingSq)
+				return true;
 		}
-	}
+		return false;
+	};
 
-	const float fallback = SPAWN_MAX_RINGS * SPAWN_SPACING_CM;
-	outX = baseX + Utils::GetRandom(-fallback, fallback);
-	outY = baseY + Utils::GetRandom(-fallback, fallback);
+	SpawnPlacement::Find(baseX, baseY, occupied, [] { return Utils::GetRandom(0.f, 1.f); }, outX, outY);
 }

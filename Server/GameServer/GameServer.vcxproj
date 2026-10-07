@@ -194,6 +194,8 @@
     <ClInclude Include="ChestSpawnTable.h" />
     <ClInclude Include="EntryPointTable.h" />
     <ClInclude Include="MoveClock.h" />
+    <ClInclude Include="FloorBounds.h" />
+    <ClInclude Include="SpawnPlacement.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />
     <ClInclude Include="Enum.pb.h" />
