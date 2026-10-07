@@ -38,11 +38,15 @@ label.entry_title,진입 지점 선택,S4 title (design/ux/entry-point.md)
 label.entry_hint,지점을 클릭하거나 숫자 키를 누르세요,S4 line under the map when nothing is hovered
 label.entry_random,무작위 (R),S4 button - entry_point_id 0
 label.entry_cancel,취소 (Esc),S4 button - back to S3
-entry.1,북서,S4 point name - Server/Data/entry_points.csv entry_id 1 (TEMP)
-entry.2,북동,S4 point name - entry_id 2 (TEMP)
-entry.3,남서,S4 point name - entry_id 3 (TEMP)
-entry.4,남동,S4 point name - entry_id 4 (TEMP)
-entry.5,중앙,S4 point name - entry_id 5 (TEMP)
+entry.1,외곽 북,S4 point name - Server/Data/entry_points.csv entry_id 1 (design/levels/floor-1.md § 2)
+entry.2,외곽 북동,S4 point name - entry_id 2
+entry.3,외곽 남동,S4 point name - entry_id 3
+entry.4,외곽 남,S4 point name - entry_id 4
+entry.5,외곽 남서,S4 point name - entry_id 5
+entry.6,외곽 북서,S4 point name - entry_id 6
+entry.7,서쪽 집(H1) 근처,S4 point name - entry_id 7
+entry.8,가운데 집(H2) 근처,S4 point name - entry_id 8
+entry.9,동쪽 집(H3) 근처,S4 point name - entry_id 9
 aim.none,즉발,aim_type none - fires on press
 aim.self_area,내 주변,aim_type self_area
 aim.target,대상 지정,aim_type target

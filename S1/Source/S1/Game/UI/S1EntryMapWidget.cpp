@@ -15,7 +15,11 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/GameInstance.h"
+#include "Game/Escape/S1EscapeSubsystem.h"
 #include "InputCoreTypes.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 using namespace S1ItemUIStyle;
 
@@ -27,11 +31,43 @@ namespace S1EntryMapLayout
 	constexpr int32 MaxNumberKeys = 9;
 
 	/** World → map. Screen up is world +X, screen right is world +Y — the dungeon camera's way. */
+	FVector2D ToMap(float WorldX, float WorldY, float HalfExtentCm)
+	{
+		const float U = (WorldY + HalfExtentCm) / (2.f * HalfExtentCm);
+		const float V = (HalfExtentCm - WorldX) / (2.f * HalfExtentCm);
+		return FVector2D(FMath::Clamp(U, 0.f, 1.f) * MapSize, FMath::Clamp(V, 0.f, 1.f) * MapSize);
+	}
+
 	FVector2D ToMap(const FS1EntryPoint& Point, float HalfExtentCm)
 	{
-		const float U = (Point.Y + HalfExtentCm) / (2.f * HalfExtentCm);
-		const float V = (HalfExtentCm - Point.X) / (2.f * HalfExtentCm);
-		return FVector2D(FMath::Clamp(U, 0.f, 1.f) * MapSize, FMath::Clamp(V, 0.f, 1.f) * MapSize);
+		return ToMap(Point.X, Point.Y, HalfExtentCm);
+	}
+
+	struct FHouseRect { float X0 = 0.f, X1 = 0.f, Y0 = 0.f, Y1 = 0.f; };
+
+	/** Server/Data/houses.csv (house_id,floor_id,x0,x1,y0,y1) — level-map.md § UI: S4 shows points + house outlines + towers */
+	TArray<FHouseRect> LoadHouses(uint32 FloorId)
+	{
+		TArray<FHouseRect> Houses;
+
+		FString Relative;
+		GConfig->GetString(TEXT("/Script/S1.S1ItemSubsystem"), TEXT("ItemDataDirectory"), Relative, GGameIni);
+		FString Csv;
+		if (FFileHelper::LoadFileToString(Csv, *FPaths::Combine(FPaths::ProjectDir(), Relative, TEXT("houses.csv"))) == false)
+			return Houses;
+
+		TArray<FString> Lines;
+		Csv.ParseIntoArrayLines(Lines, true);
+		for (int32 i = 1; i < Lines.Num(); i++)
+		{
+			TArray<FString> Cells;
+			Lines[i].TrimStartAndEnd().ParseIntoArray(Cells, TEXT(","), false);
+			if (Cells.Num() < 6 || static_cast<uint32>(FCString::Atoi(*Cells[1])) != FloorId)
+				continue;
+
+			Houses.Add({ FCString::Atof(*Cells[2]), FCString::Atof(*Cells[3]), FCString::Atof(*Cells[4]), FCString::Atof(*Cells[5]) });
+		}
+		return Houses;
 	}
 
 	const FKey& NumberKey(int32 Index)
@@ -121,6 +157,52 @@ void US1EntryMapWidget::NativeOnInitialized()
 	const US1BaseCampSubsystem* BaseCamp = GetBaseCamp();
 	const float HalfExtent = BaseCamp != nullptr ? FMath::Max(BaseCamp->GetMapHalfExtentCm(), 1.f) : 3000.f;
 	const TArray<FS1EntryPoint> Points = BaseCamp != nullptr ? BaseCamp->GetEntryPoints().OnFloor(BaseCamp->GetFloorId()) : TArray<FS1EntryPoint>();
+	const uint32 FloorId = BaseCamp != nullptr ? BaseCamp->GetFloorId() : 0;
+
+	// Houses and towers under the points — the only landmarks the map shows (level-map.md § UI Requirements)
+	for (const FHouseRect& House : LoadHouses(FloorId))
+	{
+		const FVector2D TopLeft = ToMap(House.X1, House.Y0, HalfExtent);
+		const FVector2D BottomRight = ToMap(House.X0, House.Y1, HalfExtent);
+
+		UBorder* Outline = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Outline->SetBrush(FSlateRoundedBoxBrush(FLinearColor(1.f, 1.f, 1.f, 0.04f), 2.f, TextTertiary(), 1.5f));
+		Outline->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* HouseSlot = Canvas->AddChildToCanvas(Outline))
+		{
+			HouseSlot->SetAutoSize(false);
+			HouseSlot->SetPosition(TopLeft);
+			HouseSlot->SetSize(BottomRight - TopLeft);
+		}
+	}
+
+	if (const US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+	{
+		for (const FS1TowerView& Tower : Escape->GetTowers())
+		{
+			constexpr float TowerMarker = 16.f;
+			UBorder* Mark = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+			Mark->SetBrush(FSlateRoundedBoxBrush(FLinearColor(0.85f, 0.78f, 0.45f, 0.9f), 2.f));
+			Mark->SetVisibility(ESlateVisibility::HitTestInvisible);
+			if (UCanvasPanelSlot* TowerSlot = Canvas->AddChildToCanvas(Mark))
+			{
+				TowerSlot->SetAutoSize(false);
+				TowerSlot->SetSize(FVector2D(TowerMarker));
+				TowerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+				TowerSlot->SetPosition(ToMap(Tower.Position.X, Tower.Position.Y, HalfExtent));
+			}
+
+			UTextBlock* TowerLabel = MakeText(FontSmall, TextSecondary());
+			TowerLabel->SetText(FText::FromString(Tower.TowerId));
+			TowerLabel->SetVisibility(ESlateVisibility::HitTestInvisible);
+			if (UCanvasPanelSlot* LabelSlot = Canvas->AddChildToCanvas(TowerLabel))
+			{
+				LabelSlot->SetAutoSize(true);
+				LabelSlot->SetAlignment(FVector2D(0.5f, 0.f));
+				LabelSlot->SetPosition(ToMap(Tower.Position.X, Tower.Position.Y, HalfExtent) + FVector2D(0.f, TowerMarker * 0.5f + 1.f));
+			}
+		}
+	}
 
 	for (int32 i = 0; i < Points.Num(); i++)
 	{
