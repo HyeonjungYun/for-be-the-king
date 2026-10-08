@@ -72,6 +72,7 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	bot->destY = pos.y();
 
 	bot->objectId.store(pkt.player().object_id());
+	bot->replanPath.store(true);
 
 	if (GItemBehavior.load())
 	{

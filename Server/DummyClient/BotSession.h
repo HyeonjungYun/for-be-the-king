@@ -71,6 +71,11 @@ public:
 	// -chat + -chatafter <ms> - 입장 뒤 이 시각에 -chat 명령을 보낸다. 0 = 없음
 	atomic<uint64>									chatAtUs = 0;
 
+	// -tower 길찾기 (BotPath) - 입장마다 패킷 스레드가 replanPath 를 켜고, 틱 스레드가 길을 다시 찾는다. path 는 틱 스레드 전용
+	atomic<bool>									replanPath = false;
+	vector<pair<float, float>>						path;
+	size_t											pathIndex = 0;
+
 	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
 	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };

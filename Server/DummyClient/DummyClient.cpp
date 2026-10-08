@@ -6,6 +6,7 @@
 #include "Session.h"
 #include "ClientPacketHandler.h"
 #include "BotSession.h"
+#include "BotPath.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -61,6 +62,7 @@ namespace
 	constexpr float ATTACK_RANGE = 150.f;
 	constexpr float ATTACK_RANGE_SQ = ATTACK_RANGE * ATTACK_RANGE;
 	constexpr float BOT_STOP_DISTANCE = 120.f;
+	constexpr float WAYPOINT_REACHED_CM = 5.f;	// -tower 길찾기 - 이 안이면 다음 꺾는 점으로 (한 틱 이동은 이 점에서 멈춘다)
 	constexpr uint64 ATTACK_INTERVAL_US = 1'000'000;
 	constexpr uint64 REFILL_INTERVAL_US = 1'000'000;
 
@@ -512,6 +514,7 @@ static void TickBots(float deltaTime)
 		}
 
 		// -tower: 싸우지 않고 그 지점으로 걸어가 선다 - 서버 게이지가 채워 탈출시킨다
+		float stopDistance = BOT_STOP_DISTANCE;
 		if (GTowerMode.load())
 		{
 			target = nullptr;
@@ -519,6 +522,35 @@ static void TickBots(float deltaTime)
 			bestDistSq = FLT_MAX;
 			bot->destX = GTowerX;
 			bot->destY = GTowerY;
+
+			// 벽이 있는 층 - 길을 찾아 꺾는 점을 하나씩 밟는다. 중간 점은 정확히 밟아야 다음 직선이 벽을 피한다 (멈춤 거리 0)
+			if (BotPath::IsLoaded() && bot->floorId == BotPath::LoadedFloor())
+			{
+				if (bot->replanPath.exchange(false))
+				{
+					bot->path = BotPath::Find(bot->x, bot->y, GTowerX, GTowerY);
+					bot->pathIndex = 0;
+					LOG_LINE << "[BOT PATH] char=" << bot->objectId.load() << " from=(" << static_cast<int32>(bot->x) << "," << static_cast<int32>(bot->y)
+						<< ") waypoints=" << bot->path.size() << '\n';
+				}
+
+				while (bot->pathIndex < bot->path.size())
+				{
+					const float wx = bot->path[bot->pathIndex].first - bot->x;
+					const float wy = bot->path[bot->pathIndex].second - bot->y;
+					if (wx * wx + wy * wy > WAYPOINT_REACHED_CM * WAYPOINT_REACHED_CM)
+						break;
+					bot->pathIndex++;
+				}
+
+				if (bot->path.empty() == false)
+				{
+					const size_t at = (std::min)(bot->pathIndex, bot->path.size() - 1);
+					bot->destX = bot->path[at].first;
+					bot->destY = bot->path[at].second;
+					stopDistance = 0.f;
+				}
+			}
 		}
 
 		if (target != nullptr)
@@ -573,7 +605,7 @@ static void TickBots(float deltaTime)
 				bot->y += dy * ratio;
 			}
 		}
-		else if (dist > BOT_STOP_DISTANCE)
+		else if (dist > stopDistance)
 		{
 			const float step = moveSpeed * deltaTime;
 			const float ratio = (step < dist) ? (step / dist) : 1.f;
@@ -762,6 +794,10 @@ int main(int argc, char* argv[])
 
 	if (botCount < 1)
 		botCount = 1;
+
+	// -tower 는 벽을 돌아간다 - 벽이 있는 층(0층)만 (BotPath.h)
+	if (GTowerMode.load())
+		BotPath::Load(0);
 
 	LOG_LINE << "[BOT] launching " << botCount << " bot(s)"
 		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF")
