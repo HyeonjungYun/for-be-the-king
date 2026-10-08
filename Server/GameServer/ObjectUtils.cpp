@@ -3,6 +3,7 @@
 #include "Player.h"
 #include "Bag.h"
 #include "GameSession.h"
+#include "GameSessionManager.h"
 #include "Room.h"
 #include "ItemTable.h"
 #include "ChestSpawnTable.h"
@@ -106,7 +107,10 @@ namespace
 
 	enum class MarkResult : uint8 { Marked, AlreadyApplied, Failed };
 
-	// 기록된 저장이면 커밋 직전, 같은 트랜잭션 안에서 적용 표시를 남긴다 (CommitJournal.h). 기록 id 는 영문 · 숫자 · '-' 뿐
+	// 모든 런 끝 저장은 트랜잭션 맨 앞에서 적용 표시를 남긴다 (CommitJournal.h). 기록 id 는 영문 · 숫자 · '-' 뿐.
+	// 🔴 2026-10-08 리뷰: 예전엔 파일로 남긴 저장(재시도에 들어간 것)만 표시했다 - 첫 시도의 COMMIT 이 DB 에선 됐는데 응답을 잃으면
+	//    (연결 끊김 → 일시 실패) 표시 없이 재시도가 돌아 탈출 골드 · 만료 골드가 두 번 들어갔다. 이제 id 는 큐에 넣을 때 정하고 늘 표시한다.
+	//    맨 앞인 이유: 앞선 시도가 커밋됐으면 상태가 이미 바뀌어 엄격 단계의 쓰기가 "어긋남" 으로 영구 실패하기 전에 알아야 한다
 	MarkResult MarkApplied(DBConnection* conn, const string& journalId, const char* kind, uint64 characterId)
 	{
 		const string insert = "INSERT INTO applied_commits (journal_id, character_id, kind) VALUES ('" + conn->Escape(journalId) + "', "
@@ -122,7 +126,8 @@ namespace
 		return MarkResult::Failed;
 	}
 
-	// TryCommit* 의 커밋 직전 공통 - journalId 가 비었으면 아무것도 안 한다. Ok 가 아니면 이미 롤백했다
+	// TryCommit* 의 트랜잭션 맨 앞 공통 - journalId 가 비었으면 아무것도 안 한다(시험 · 옛 호출). false 면 이미 롤백했다:
+	// result = Ok 는 "전에 적용됐다", 그 밖은 실패 분류
 	bool MarkOrFinish(DBConnection* conn, const string& journalId, const char* kind, uint64 characterId, OUT CommitOutcome& result)
 	{
 		if (journalId.empty())
@@ -143,9 +148,58 @@ namespace
 			return false;
 		}
 	}
+
+	// 저장이 끝났다 - 표시는 그 저장이 진행 중인 동안만 필요하다. 지우지 못해도 부팅이 비운다
+	void ClearAppliedMark(DBConnection* conn, const string& journalId)
+	{
+		if (journalId.empty())
+			return;
+
+		const string del = "DELETE FROM applied_commits WHERE journal_id = '" + conn->Escape(journalId) + "'";
+		if (conn->Excute(del.c_str()) == false)
+			LOG_LINE << "[JOURNAL] cannot clear applied mark " << journalId << " err=" << conn->GetLastErrorNo() << " (boot will clear it)\n";
+	}
+
+	// 검증 전용 (FBTK_FAKE_ACK_LOSS=N) - 처음 N 번의 커밋은 DB 에선 됐는데 응답을 잃은 것처럼 연결 끊김으로 돌려준다.
+	// 재시도가 표시를 보고 두 번 적용하지 않는지 본다 (2026-10-08 리뷰 ①)
+	bool FakeAckLoss(const char* tag, uint64 characterId)
+	{
+		if (GFakeCommitAckLoss.load() <= 0 || GFakeCommitAckLoss.fetch_sub(1) <= 0)
+			return false;
+
+		LOG_LINE << "[" << tag << "] injected ack loss - committed but reporting 2013 (TEST) char=" << characterId << '\n';
+		t_commitErrno = 2013;
+		return true;
+	}
+
+	// 이미 적용된 사망 저장 - 그때 실제로 가방에 들어간 것만 메모리 가방에 담는다. 관대 단계였으면 일부만 들어갔을 수 있다
+	// (그 시도의 걸러 내기는 응답과 함께 잃었다). 엄격 단계였으면 전부 들어갔다 - 걸러도 그대로
+	void KeepItemsActuallyInBag(DBConnection* conn, DeathSnapshot& snap)
+	{
+		const string select = "SELECT instance_id FROM item_instances WHERE bag_id = " + to_string(snap.bagId);
+		MYSQL_RES* res = conn->Query(select.c_str());
+		if (res == nullptr)
+		{
+			LOG_LINE << "[DEATH] 🔴 already applied but cannot read bag " << snap.bagId << " err=" << conn->GetLastErrorNo() << " - keeping the snapshot\n";
+			return;
+		}
+
+		unordered_set<uint64> inBag;
+		while (MYSQL_ROW row = ::mysql_fetch_row(res))
+			inBag.insert(::strtoull(row[0], nullptr, 10));
+		conn->FreeResult(res);
+
+		const size_t before = snap.items.size();
+		snap.items.erase(remove_if(snap.items.begin(), snap.items.end(),
+			[&inBag](const ItemEntry& e) { return inBag.count(e.instanceId) == 0; }), snap.items.end());
+
+		if (snap.items.size() != before)
+			LOG_LINE << "[DEATH] already applied - bag " << snap.bagId << " holds " << snap.items.size() << " of " << before << " char=" << snap.characterId << '\n';
+	}
 }
 
 string GCommitJournalDir;
+atomic<int32> GFakeCommitAckLoss = 0;
 
 CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode, const string& journalId)
 {
@@ -159,6 +213,10 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 
 	if (conn->BeginTransaction() == false)
 		return RollbackAndClassify(conn);
+
+	// 적용 표시를 맨 먼저 - 이미 있으면 전에 커밋됐다(응답만 잃었다). 쓰기를 하나도 하지 않고 성공으로 친다
+	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "ESCAPE", characterId, OUT marked) == false)
+		return marked;
 
 	::snprintf(query, sizeof(query),
 		"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", characterId);
@@ -294,11 +352,11 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 		return CommitOutcome::Transient;
 	}
 
-	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "ESCAPE", characterId, OUT marked) == false)
-		return marked;
-
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
+
+	if (FakeAckLoss("ESCAPE", characterId))
+		return CommitOutcome::Transient;
 
 	return CommitOutcome::Ok;
 }
@@ -607,9 +665,15 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 {
 	const bool lenient = (mode == CommitMode::Lenient);
 
-	// 관대 단계는 새 가방 id 로 - 엄격 단계가 막힌 이유가 가방 id 중복일 수도 있다 (롤백돼 옛 id 는 어디에도 없다)
+	// 관대 단계는 새 가방 id 로 - 엄격 단계가 막힌 이유가 가방 id 중복일 수도 있다 (롤백돼 옛 id 는 어디에도 없다).
+	// 관대 단계 안의 재시도는 같은 id 를 다시 쓴다 - 커밋은 됐는데 응답을 잃은 뒤 재시도가 새 id 를 받으면, 표시를 보고 성공으로
+	// 치더라도 메모리 가방은 DB 에 없는 id 가 되고 DB 의 진짜 가방은 재시작 때 따로 되살아난다 (2026-10-08 리뷰 ④)
 	if (lenient)
-		snap.bagId = GNextBagId.fetch_add(1);
+	{
+		if (snap.lenientBagId == 0)
+			snap.lenientBagId = GNextBagId.fetch_add(1);
+		snap.bagId = snap.lenientBagId;
+	}
 
 	// DB 에 이미 있는 것은 가방으로 옮기고(UPDATE), 이번 런에 생긴 것은 가방 소속 새 행으로 넣는다(INSERT).
 	vector<uint64> existingIds;
@@ -625,6 +689,14 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 
 	if (conn->BeginTransaction() == false)
 		return RollbackAndClassify(conn);
+
+	// 적용 표시를 맨 먼저 (TryCommitEscape 와 같다). 이미 적용됐으면 그때 가방에 실제로 들어간 것만 남긴다
+	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "DEATH", snap.characterId, OUT marked) == false)
+	{
+		if (marked == CommitOutcome::Ok)
+			KeepItemsActuallyInBag(conn, snap);
+		return marked;
+	}
 
 	char insert[256];
 	::snprintf(insert, sizeof(insert),
@@ -711,11 +783,12 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		return CommitOutcome::Permanent;
 	}
 
-	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "DEATH", snap.characterId, OUT marked) == false)
-		return marked;
-
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
+
+	// 응답을 잃은 척 - 아래 관대 단계 걸러 내기도 같이 잃는다. 재시도의 KeepItemsActuallyInBag 이 DB 에서 다시 본다
+	if (FakeAckLoss("DEATH", snap.characterId))
+		return CommitOutcome::Transient;
 
 	if (lenient)
 	{
@@ -733,6 +806,19 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 namespace
 {
 	void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId, int32 waitsLeft, uint64 firstUs);
+}
+
+void ResendBaseCampIfRelogged(DBConnection* conn, const GameSessionRef& original, uint64 characterId)
+{
+	if (original != nullptr && original->IsConnected())
+		return;
+
+	GameSessionRef relogged = GSessionManager.FindInBaseCamp(characterId);
+	if (relogged == nullptr || relogged == original)
+		return;
+
+	LOG_LINE << "[BASECAMP] run-end result to the relogged session - char=" << characterId << '\n';
+	SendBaseCampInventory(conn, relogged, characterId);
 }
 
 void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId)
@@ -835,6 +921,10 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 	if (conn->BeginTransaction() == false)
 		return RollbackAndClassify(conn);
 
+	// 적용 표시를 맨 먼저 (TryCommitEscape 와 같다) - 만료 골드도 두 번 들어가지 않게
+	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "EXPIRE", snap.characterId, OUT marked) == false)
+		return marked;
+
 	::snprintf(query, sizeof(query), "SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", snap.characterId);
 	MYSQL_RES* lockRes = conn->Query(query);
 	if (lockRes == nullptr)
@@ -873,11 +963,11 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 		return CommitOutcome::Transient;
 	}
 
-	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "EXPIRE", snap.characterId, OUT marked) == false)
-		return marked;
-
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
+
+	if (FakeAckLoss("EXPIRE", snap.characterId))
+		return CommitOutcome::Transient;
 
 	return CommitOutcome::Ok;
 }
@@ -894,7 +984,8 @@ namespace
 		uint32			transientRetries = 0;
 
 		JournalEntry	journal;				// 첫 시도 때의 스냅샷 - 실패하면 파일로 (CommitJournal.h)
-		string			journalId;				// 파일로 남겼으면 그 id, 아니면 빈 문자열
+		string			journalId;				// 큐에 넣을 때 정한다 - 모든 시도가 이 id 로 applied_commits 표시 (2026-10-08 리뷰 ①)
+		bool			journalWritten = false;	// 파일로 남겼나 - 첫 실패 때만 (사용자 결정 ①)
 
 		function<CommitOutcome(DBConnection*, CommitMode, const string&)>	attempt;
 		function<void(DBConnection*, bool, CommitMode)>						finish;
@@ -903,10 +994,8 @@ namespace
 	// 재시도로 들어가는 순간 한 번 - 평소 저장(첫 시도 성공)은 디스크를 건드리지 않는다 (사용자 결정 2026-10-08 ①)
 	void WriteJournalOnce(const shared_ptr<CommitTask>& task)
 	{
-		if (task->journalId.empty() == false || GCommitJournalDir.empty())
+		if (task->journalWritten || GCommitJournalDir.empty())
 			return;
-
-		task->journal.id = CommitJournal::NewId(task->journal.kind, task->characterId);
 
 		string error;
 		if (CommitJournal::Write(GCommitJournalDir, task->journal, OUT error) == false)
@@ -916,7 +1005,7 @@ namespace
 			return;
 		}
 
-		task->journalId = task->journal.id;
+		task->journalWritten = true;
 		LOG_LINE << "[JOURNAL] wrote " << task->journalId << " (a restart will finish this commit)\n";
 	}
 
@@ -936,9 +1025,12 @@ namespace
 				LOG_LINE << "[" << task->tag << "] committed after " << task->transientRetries << " transient retries · mode=" << modeName
 					<< " · " << elapsedMs << "ms char=" << task->characterId << '\n';
 
-			// 파일을 먼저 지운다 - 지우기 전에 꺼져도 applied_commits 표시가 있어 부팅이 건너뛴다
-			if (task->journalId.empty() == false)
-				CommitJournal::Remove(GCommitJournalDir, task->journalId);
+			// 파일을 먼저 지우고 표시를 지운다 - 지우기 전에 꺼져도 표시가 있어 부팅이 건너뛴다.
+			// 파일을 못 지웠으면(백신 · 색인기가 쥐고 있는 등) 표시를 남긴다 - 다음 부팅이 "이미 적용" 으로 파일만 치운다 (리뷰 ②)
+			if (task->journalWritten == false || CommitJournal::Remove(GCommitJournalDir, task->journalId))
+				ClearAppliedMark(conn, task->journalId);
+			else
+				LOG_LINE << "[JOURNAL] 🔴 cannot remove " << task->journalId << " - keeping the applied mark (the next boot only removes the file)\n";
 
 			task->finish(conn, true, task->mode);
 			return;
@@ -948,8 +1040,8 @@ namespace
 			LOG_LINE << "[" << task->tag << "] 🔴 ABANDONED - permanent failure even in lenient mode, DB unchanged. err=" << err
 				<< " char=" << task->characterId << " after " << elapsedMs << "ms\n";
 
-			// 다시 해도 같다 - 부팅이 또 붙잡지 않게 치우되, 원인을 볼 수 있게 남긴다
-			if (task->journalId.empty() == false)
+			// 다시 해도 같다 - 부팅이 또 붙잡지 않게 치우되, 원인을 볼 수 있게 남긴다. 표시는 없다(이 시도는 롤백됐다)
+			if (task->journalWritten)
 				CommitJournal::MoveToAbandoned(GCommitJournalDir, task->journalId);
 
 			task->finish(conn, false, task->mode);
@@ -1008,6 +1100,8 @@ void QueueCommit(JournalEntry journal,
 	task->characterId = journal.characterId;
 	task->queuedUs = Utils::NowMicroseconds();
 	task->journal = move(journal);
+	task->journal.id = CommitJournal::NewId(task->journal.kind, task->characterId);
+	task->journalId = task->journal.id;
 	task->attempt = move(attempt);
 	task->finish = move(finish);
 
@@ -1069,6 +1163,16 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 	int32 skipped = 0;
 	int32 abandoned = 0;
 
+	// 파일을 못 지운 기록 - 표시를 남긴다. 표시까지 지우면 다음 부팅이 그 파일을 또 적용한다 (2026-10-08 리뷰 ②)
+	vector<string> keepMarks;
+	auto removeOrKeep = [&dir, &keepMarks](const string& id)
+		{
+			if (CommitJournal::Remove(dir, id))
+				return;
+			LOG_LINE << "[JOURNAL] 🔴 cannot remove " << id << " - keeping its applied mark so the next boot skips it\n";
+			keepMarks.push_back(id);
+		};
+
 	for (JournalEntry& entry : entries)
 	{
 		// 커밋은 됐는데 파일을 지우기 전에 꺼졌다 - 두 번 적용하지 않는다
@@ -1080,7 +1184,7 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 		if (marked > 0)
 		{
 			LOG_LINE << "[JOURNAL] " << entry.id << " already applied - removing the record\n";
-			CommitJournal::Remove(dir, entry.id);
+			removeOrKeep(entry.id);
 			skipped++;
 			continue;
 		}
@@ -1099,7 +1203,7 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 			{
 				LOG_LINE << "[JOURNAL] replayed " << entry.id << " (" << CommitJournal::KindName(entry.kind) << " char=" << entry.characterId
 					<< " mode=" << (mode == CommitMode::Lenient ? "lenient" : "strict") << ")\n";
-				CommitJournal::Remove(dir, entry.id);
+				removeOrKeep(entry.id);
 				applied++;
 				break;
 			}
@@ -1133,15 +1237,25 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 		}
 	}
 
-	// 기록이 모두 정리됐다 - 표시는 "파일이 남아 있는 저장" 을 위해서만 있다. 런 중에 쌓인 것까지 비운다
-	if (conn->Excute("DELETE FROM applied_commits") == false)
+	// 기록이 모두 정리됐다 - 표시는 진행 중인 저장 · 파일이 남은 저장을 위해서만 있다. 런 중에 지우지 못한 것까지 비우되,
+	// 파일을 못 지운 기록의 표시는 남긴다
+	string clear = "DELETE FROM applied_commits";
+	if (keepMarks.empty() == false)
+	{
+		clear += " WHERE journal_id NOT IN (";
+		for (size_t i = 0; i < keepMarks.size(); i++)
+			clear += (i > 0 ? ",'" : "'") + conn->Escape(keepMarks[i]) + "'";
+		clear += ")";
+	}
+
+	if (conn->Excute(clear.c_str()) == false)
 	{
 		LOG_LINE << "[BOOT] cannot clear applied_commits: " << conn->GetError() << '\n';
 		return false;
 	}
 
 	LOG_LINE << "[JOURNAL] boot replay - records=" << ids.size() << " applied=" << applied << " already=" << skipped
-		<< " abandoned=" << abandoned << " unreadable=" << (ids.size() - entries.size()) << " dir=" << dir << '\n';
+		<< " abandoned=" << abandoned << " unreadable=" << (ids.size() - entries.size()) << " kept_marks=" << keepMarks.size() << " dir=" << dir << '\n';
 	return true;
 }
 

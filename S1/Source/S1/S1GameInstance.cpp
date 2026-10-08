@@ -160,6 +160,8 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 				Mine->SetPlayerInfo(objectInfo.pos_info());
 				Mine->SetCreatureInfo(objectInfo);
 				MyPlayer = Mine;
+				UE_LOG(LogTemp, Log, TEXT("[ENTER] reused my pawn id=%llu hp=%d/%d at (%.0f, %.0f)"),
+					ObjectId, objectInfo.hp(), objectInfo.max_hp(), objectInfo.pos_info().x(), objectInfo.pos_info().y());
 			}
 			return;
 		}
@@ -248,11 +250,15 @@ void US1GameInstance::ClearDungeonView()
 	UWorld* World = GetWorld();
 	const AS1Player* Mine = MyPlayer.Get();
 
+	// 내 폰은 MyPlayer 약참조 말고 빙의 중인 폰으로도 확인한다 - 약참조가 비어 있어도 조종 중인 폰을 지우지 않게 (2026-10-08 리뷰 ⑥)
+	const APlayerController* PC = GetFirstLocalPlayerController();
+	const APawn* Possessed = (PC != nullptr) ? PC->GetPawn() : nullptr;
+
 	int32 Actors = 0;
 	for (auto It = Players.CreateIterator(); It; ++It)
 	{
 		AS1Player* Actor = It.Value().Get();
-		if (Actor != nullptr && Actor == Mine)
+		if (Actor != nullptr && (Actor == Mine || Actor == Possessed))
 			continue;
 
 		if (Actor != nullptr && World != nullptr)

@@ -40,8 +40,9 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 // ── 런 끝 저장 (사망 · 탈출 · 만료) ─ ADR-0010 · CommitRetry.h ──
 // Try* = 한 번. 실패를 Transient(다시 하면 된다) / Permanent(다시 해도 같다)로 돌려준다.
 // mode = Lenient 면 "그 순간 DB 에 실제로 남아 있는 그 캐릭터의 것만" 옮기고 어긋난 것은 🔴 로그로 남긴다.
-// 사망 관대 단계는 snap 을 고친다 - 새 가방 id · 가방에 실제로 들어간 아이템만 남긴 목록.
-// journalId 가 있으면(기록된 저장) 같은 트랜잭션 안에서 applied_commits 에 남긴다 - 부팅 재처리가 두 번 적용하지 않게
+// 사망 관대 단계는 snap 을 고친다 - 새 가방 id(그 단계에서 한 번) · 가방에 실제로 들어간 아이템만 남긴 목록.
+// journalId 를 트랜잭션 맨 앞에서 applied_commits 에 남긴다 - 이미 있으면 전에 커밋됐다(응답을 잃었거나 부팅 재처리) → 롤백하고 Ok.
+// QueueCommit 은 늘 id 를 준다. 빈 문자열이면 표시하지 않는다
 CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode, const string& journalId);
 CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode, const string& journalId);
 CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode, const string& journalId);
@@ -49,6 +50,7 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 // 큐에 넣고 끝날 때까지 다시 한다: 엄격 → (영구 실패) 관대 → (영구 실패) 포기, 일시 실패는 같은 단계를 100 ms → ×2 → 5 s 간격으로.
 // 기다리는 동안 DB 스레드를 잡지 않는다(GDBQueue.PushAfter) · 연결이 끊겼으면 다시 붙인다.
 // 첫 시도가 실패하면 journal(스냅샷)을 GCommitJournalDir 에 파일로 남긴다 - 끝나면 지우고, 포기면 abandoned/ 로.
+// 기록 id 는 큐에 넣을 때 정한다(파일이 없어도 applied_commits 표시에 쓴다) · 끝나면 파일 → 표시 순으로 지운다.
 // finish(conn, committed, mode) 는 DB 스레드에서 한 번 - committed = false 면 포기(DB 는 저장 전 그대로)
 void QueueCommit(JournalEntry journal,
 	function<CommitOutcome(DBConnection*, CommitMode, const string& journalId)> attempt,
@@ -56,6 +58,9 @@ void QueueCommit(JournalEntry journal,
 
 // 저장 기록 디렉터리 - 부팅이 정한다 (Server/Logs/pending-commits · FBTK_JOURNAL_DIR). 비어 있으면 기록하지 않는다
 extern string GCommitJournalDir;
+
+// 검증 전용 (FBTK_FAKE_ACK_LOSS=N) - 처음 N 번의 런 끝 커밋은 DB 에선 됐는데 응답을 잃은 것처럼 일시 실패로 돌려준다
+extern atomic<int32> GFakeCommitAckLoss;
 
 // 부팅 - applied_commits 표가 없으면 만든다 (Server/Tools/schema_commit_journal.sql 과 같은 정의)
 bool EnsureCommitJournalTable(DBConnection* conn);
@@ -69,6 +74,10 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir);
 // 베이스캠프에 들어오는 세 지점 - 로그인 · 탈출 커밋 완료 · 던전 퇴장 - 에서 DB 스레드가 부른다.
 // 클라는 베이스캠프에 있을 때 받은 동기화를 전체 교체로 다룬다(던전 동기화에는 보관이 없다).
 void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId);
+
+// 런 끝 저장(탈출 · 만료)을 기다리는 사이 끊고 다시 로그인해 베이스캠프에 있는 세션에 결과를 다시 보낸다.
+// original 이 아직 붙어 있으면 아무것도 안 한다 (사망은 OnBagCreated 가 같은 일을 한다, 2026-10-08 리뷰 ③)
+void ResendBaseCampIfRelogged(DBConnection* conn, const GameSessionRef& original, uint64 characterId);
 
 extern atomic<bool> GFailDeathCommit;
 extern atomic<int32> GFailEscapeCommits;

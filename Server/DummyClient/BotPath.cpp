@@ -254,13 +254,19 @@ vector<pair<float, float>> BotPath::Find(float fromX, float fromY, float toX, fl
 		cells.push_back({ CenterOf(cell % GRID), CenterOf(cell / GRID) });
 	reverse(cells.begin(), cells.end());
 
-	// 도착점이 빈 곳이면 그 점 그대로 - 칸 중심으로 끝나면 최대 70 cm 어긋난다
+	// 도착점이 빈 곳이면 그 점 그대로 - 칸 중심으로 끝나면 최대 70 cm 어긋난다.
+	// 마지막 칸 중심 대신 넣을 때는 그 앞 점에서 곧장 갈 수 있을 때만 (안 되면 칸 중심을 지나서 간다 - 리뷰 ⑤)
 	if (s_map.Overlaps(toX, toY, CLEARANCE_CM) == false)
 	{
+		const float px = (cells.size() >= 2) ? cells[cells.size() - 2].first : fromX;
+		const float py = (cells.size() >= 2) ? cells[cells.size() - 2].second : fromY;
+
 		if (cells.empty())
 			cells.push_back({ toX, toY });
-		else
+		else if (s_map.SweepBlocked(px, py, toX, toY, SMOOTH_RADIUS_CM) == false)
 			cells.back() = { toX, toY };
+		else
+			cells.push_back({ toX, toY });
 	}
 
 	// 건너뛰기 - 지금 점에서 벽에 닿지 않고 곧장 갈 수 있는 가장 먼 칸까지. 꺾는 점만 남는다

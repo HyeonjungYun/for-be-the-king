@@ -16,6 +16,7 @@ struct DeathSnapshot
 	uint64				expiresAtUs = 0;
 	vector<ItemEntry>	items;
 	vector<uint64>		droppedIds;
+	uint64				lenientBagId = 0;	// 관대 단계가 처음 정한 가방 id - 그 단계의 재시도는 이것을 다시 쓴다 (기록 파일에는 안 쓴다)
 };
 
 struct EscapeSnapshot

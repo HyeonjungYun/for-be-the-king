@@ -320,6 +320,20 @@ int main()
 		char* raw = nullptr;
 		size_t length = 0;
 
+		if (_dupenv_s(&raw, &length, "FBTK_FAKE_ACK_LOSS") == 0 && raw != nullptr)
+		{
+			GFakeCommitAckLoss.store(static_cast<int32>(::strtol(raw, nullptr, 10)));
+			::free(raw);
+		}
+
+		if (GFakeCommitAckLoss.load() > 0)
+			LOG_LINE << "[BOOT] FBTK_FAKE_ACK_LOSS=" << GFakeCommitAckLoss.load() << " - first N run-end commits report a lost ack after committing (TEST ONLY)\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
 		if (_dupenv_s(&raw, &length, "FBTK_LOG_STALL_MS") == 0 && raw != nullptr)
 		{
 			const uint32 stallMs = static_cast<uint32>(::strtoul(raw, nullptr, 10));

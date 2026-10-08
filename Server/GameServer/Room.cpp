@@ -1740,6 +1740,10 @@ void Room::BeginEscapeCommitInto(uint64 playerId, vector<uint64>* despawnBatch)
 
 			// 베이스캠프로 돌아왔다 - 방금 커밋한 결과를 S3 에 보낸다 (UI 4단계)
 			SendBaseCampInventory(conn, session, snap.characterId);
+
+			// 기다리는 사이 끊고 다시 로그인했다 - 그 세션은 로그인 때 저장 전 상태를 받았을 수 있다. 결과만 다시 보낸다
+			// (S_LEAVE_GAME 은 보내지 않는다 - 이미 베이스캠프에 있고, 그사이 입장을 누르면 화면이 엇갈린다. 2026-10-08 리뷰 ③)
+			ResendBaseCampIfRelogged(conn, session, snap.characterId);
 		});
 }
 
@@ -3439,9 +3443,12 @@ void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
 
 			LOG_LINE << "[EXPIRE] " << (committed ? "committed" : "abandoned") << " - char=" << snap.characterId << '\n';
 
-			// 끊긴 몸이면 보낼 곳이 없다 - 다음 접속이 DB 에서 새로 적재한다
+			// 끊긴 몸이면 그 세션으로는 보낼 곳이 없다 - 그사이 다시 로그인해 베이스캠프에 있으면 그쪽으로 결과를 (리뷰 ③)
 			if (session == nullptr)
+			{
+				ResendBaseCampIfRelogged(conn, nullptr, snap.characterId);
 				return;
+			}
 
 			session->place.store(SessionPlace::BaseCamp);
 
@@ -3454,6 +3461,7 @@ void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
 			session->Send(sendBuffer);
 
 			SendBaseCampInventory(conn, session, snap.characterId);
+			ResendBaseCampIfRelogged(conn, session, snap.characterId);
 		});
 }
 
