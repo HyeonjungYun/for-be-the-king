@@ -6,6 +6,7 @@
 #include "Room.h"
 #include "ItemTable.h"
 #include "ChestSpawnTable.h"
+#include "DBError.h"
 #include <thread>
 
 atomic<int64> ObjectUtils::s_idGenerator = RUNTIME_ID_BASE;
@@ -47,8 +48,6 @@ namespace
 		return ok;
 	}
 
-	constexpr int32 DEATH_COMMIT_ATTEMPTS = 3;
-
 	// 베이스캠프 동기화가 사망 커밋을 기다리는 한도 - 100 ms × 100 = 10 초
 	constexpr int32 BASECAMP_SYNC_WAIT_TRIES = 100;
 	constexpr uint32 BASECAMP_SYNC_WAIT_MS = 100;
@@ -56,9 +55,6 @@ namespace
 
 namespace
 {
-	constexpr uint32 ESCAPE_RETRY_FIRST_MS = 100;
-	constexpr uint32 ESCAPE_RETRY_MAX_MS = 5000;
-
 	string JoinIds(const vector<uint64>& ids)
 	{
 		string s;
@@ -90,116 +86,176 @@ namespace
 			+ "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + ")";
 	}
 
-	bool TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap)
+	// INSERT_ITEMS 의 관대 판 - 이미 있는 id(중복 키) · 제약 위반 행은 건너뛰고 나머지를 넣는다
+	string InsertItemsSql(CommitMode mode)
 	{
-		const uint64 characterId = snap.characterId;
-		char query[256];
-
-		if (conn->BeginTransaction() == false)
-			return false;
-
-		::snprintf(query, sizeof(query),
-			"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", characterId);
-
-		MYSQL_RES* lockRes = conn->Query(query);
-		bool ok = (lockRes != nullptr);
-		if (lockRes != nullptr)
-			conn->FreeResult(lockRes);
-
-		// DB 에 이미 있는 것은 소유 · 상태만 바꾸고, 이번 런에 생긴 것은 새 행으로 넣는다.
-		vector<uint64> carriedIds;
-		string newValues;
-
-		for (const ItemEntry& e : snap.carried)
-		{
-			if (e.isNew)
-				AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_CARRIED, 0, e.level, characterId, 0);
-			else
-				carriedIds.push_back(e.instanceId);
-		}
-
-		if (ok && carriedIds.empty() == false)
-		{
-			const string update =
-				"UPDATE item_instances SET owner_character_id = " + to_string(characterId)
-				+ ", bag_id = NULL, state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED))
-				+ ", slot = 0 WHERE instance_id IN (" + JoinIds(carriedIds) + ")";
-
-			ok = conn->Excute(update.c_str());
-		}
-
-		uint64 expected = snap.carried.size();
-		for (int32 i = 0; ok && i < SKILL_SLOT_COUNT; i++)
-		{
-			const ItemEntry& e = snap.equipped[i];
-			if (e.instanceId == 0)
-				continue;
-
-			expected++;
-
-			if (e.isNew)
-			{
-				AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_EQUIPPED, i + 1, e.level, characterId, 0);
-				continue;
-			}
-
-			::snprintf(query, sizeof(query),
-				"UPDATE item_instances SET owner_character_id = %llu, bag_id = NULL, state = %d, slot = %d WHERE instance_id = %llu",
-				characterId, static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED), i + 1, e.instanceId);
-
-			ok = conn->Excute(query);
-		}
-
-		if (ok && newValues.empty() == false)
-		{
-			const string insert = INSERT_ITEMS + newValues;
-			ok = conn->Excute(insert.c_str());
-		}
-
-		if (ok && snap.droppedIds.empty() == false)
-		{
-			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
-			ok = conn->Excute(del.c_str());
-		 }
-
-		// 런 골드 전액 (escape-timer.md Core Rule 18) - 정상 플레이에서는 0 이라 문장을 보내지 않는다
-		if (ok && snap.gold > 0)
-		{
-			::snprintf(query, sizeof(query), "UPDATE characters SET gold = gold + %llu WHERE character_id = %llu", snap.gold, characterId);
-			ok = conn->Excute(query);
-		}
-
-		if (ok)
-		{
-			::snprintf(query, sizeof(query),
-				"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state IN (%d, %d)",
-				characterId, static_cast<int32>(Protocol::ITEM_STATE_CARRIED), static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED));
-
-			if (MYSQL_RES* countRes = conn->Query(query))
-			{
-				uint64 actual = 0;
-				if (MYSQL_ROW row = ::mysql_fetch_row(countRes))
-					actual = ::strtoull(row[0], nullptr, 10);
-				conn->FreeResult(countRes);
-
-				if (actual != expected)
-					LOG_LINE << "[ESCAPE] owned count mismatch - expected=" << expected << " actual=" << actual << " char=" << characterId << '\n';
-			}
-		}
-
-		// 검증 전용 - 쓰기를 다 한 뒤에 실패시켜 롤백과 재시도를 본다
-		if (ok && GFailEscapeCommits.fetch_sub(1) > 0)
-		{
-			LOG_LINE << "[ESCAPE] injected failure - char=" << characterId << '\n';
-			ok = false;
-		}
-
-		if (ok && conn->Commit())
-			return true;
-
-		conn->Rollback();
-		return false;
+		return (mode == CommitMode::Lenient) ? string("INSERT IGNORE") + (INSERT_ITEMS + 6) : string(INSERT_ITEMS);
 	}
+
+	// 이 DB 스레드의 마지막 저장 실패 오류 번호 - Rollback 이 mysql_errno 를 덮어쓰므로 여기 남긴다 (RunCommit 이 로그 · 재연결에 쓴다)
+	thread_local uint32 t_commitErrno = 0;
+
+	// 실패한 문장의 오류 번호를 Rollback 이 덮어쓰기 전에 읽어 분류한다 (CommitRetry - 다시 하면 되나)
+	CommitOutcome RollbackAndClassify(DBConnection* conn)
+	{
+		const uint32 err = conn->GetLastErrorNo();
+		t_commitErrno = err;
+		conn->Rollback();
+		return CommitRetry::FromMysqlError(err);
+	}
+}
+
+CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode)
+{
+	const uint64 characterId = snap.characterId;
+	const bool lenient = (mode == CommitMode::Lenient);
+	char query[256];
+
+	// 남의 것은 가져오지 않는다 - 주인 없는(가방 · 상자에서 주운 - DB 에선 아직 그 가방 소속) 것과 내 것만. 두 단계 모두.
+	// 회귀: 예전엔 id 만 봤다 - DB 에서 다른 캐릭터 창고로 간 행도 내 소지로 끌어왔다 (2026-10-08 사망 경로에서 발견, 탈출도 같은 구멍)
+	const string mineOrUnowned = " AND (owner_character_id IS NULL OR owner_character_id = " + to_string(characterId) + ")";
+
+	if (conn->BeginTransaction() == false)
+		return RollbackAndClassify(conn);
+
+	::snprintf(query, sizeof(query),
+		"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", characterId);
+
+	MYSQL_RES* lockRes = conn->Query(query);
+	if (lockRes == nullptr)
+		return RollbackAndClassify(conn);
+	conn->FreeResult(lockRes);
+
+	// DB 에 이미 있는 것은 소유 · 상태만 바꾸고, 이번 런에 생긴 것은 새 행으로 넣는다.
+	vector<uint64> carriedIds;
+	string newValues;
+
+	for (const ItemEntry& e : snap.carried)
+	{
+		if (e.isNew)
+			AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_CARRIED, 0, e.level, characterId, 0);
+		else
+			carriedIds.push_back(e.instanceId);
+	}
+
+	// 엄격: 메모리가 말한 DB 행(isNew 제외)이 전부 있고 전부 내 것 또는 주인 없는 것이어야 한다 - 아니면 데이터가 어긋났다 → 관대 단계로.
+	// 바뀐 행 수로는 셀 수 없어(값이 그대로인 행은 0) 미리 잠그고 센다
+	if (lenient == false)
+	{
+		vector<uint64> existingIds = carriedIds;
+		for (const ItemEntry& e : snap.equipped)
+		{
+			if (e.instanceId != 0 && e.isNew == false)
+				existingIds.push_back(e.instanceId);
+		}
+
+		if (existingIds.empty() == false)
+		{
+			const string check = "SELECT COUNT(*) FROM item_instances WHERE instance_id IN (" + JoinIds(existingIds) + ")" + mineOrUnowned + " FOR UPDATE";
+			MYSQL_RES* res = conn->Query(check.c_str());
+			if (res == nullptr)
+				return RollbackAndClassify(conn);
+
+			uint64 found = 0;
+			if (MYSQL_ROW row = ::mysql_fetch_row(res))
+				found = ::strtoull(row[0], nullptr, 10);
+			conn->FreeResult(res);
+
+			if (found != existingIds.size())
+			{
+				LOG_LINE << "[ESCAPE] item rows mismatch - expected=" << existingIds.size() << " found=" << found << " char=" << characterId << '\n';
+				conn->Rollback();
+				return CommitOutcome::Permanent;
+			}
+		}
+	}
+
+	if (carriedIds.empty() == false)
+	{
+		const string update =
+			string(lenient ? "UPDATE IGNORE" : "UPDATE") + " item_instances SET owner_character_id = " + to_string(characterId)
+			+ ", bag_id = NULL, state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED))
+			+ ", slot = 0 WHERE instance_id IN (" + JoinIds(carriedIds) + ")" + mineOrUnowned;
+
+		// 바뀐 행 수로는 셀 수 없다 - 원래 내 소지품(값이 그대로인 행)은 MySQL 이 0 으로 센다. 어긋남은 아래 소유 개수 확인이 본다
+		if (conn->Excute(update.c_str()) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	uint64 expected = snap.carried.size();
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		const ItemEntry& e = snap.equipped[i];
+		if (e.instanceId == 0)
+			continue;
+
+		expected++;
+
+		if (e.isNew)
+		{
+			AppendItemValues(OUT newValues, e, Protocol::ITEM_STATE_EQUIPPED, i + 1, e.level, characterId, 0);
+			continue;
+		}
+
+		const string update =
+			string(lenient ? "UPDATE IGNORE" : "UPDATE") + " item_instances SET owner_character_id = " + to_string(characterId)
+			+ ", bag_id = NULL, state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ", slot = " + to_string(i + 1)
+			+ " WHERE instance_id = " + to_string(e.instanceId) + mineOrUnowned;
+
+		if (conn->Excute(update.c_str()) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	if (newValues.empty() == false)
+	{
+		const string insert = InsertItemsSql(mode) + newValues;
+		if (conn->Excute(insert.c_str()) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	if (snap.droppedIds.empty() == false)
+	{
+		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
+		if (conn->Excute(del.c_str()) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	// 런 골드 전액 (escape-timer.md Core Rule 18) - 정상 플레이에서는 0 이라 문장을 보내지 않는다
+	if (snap.gold > 0)
+	{
+		::snprintf(query, sizeof(query), "%s characters SET gold = gold + %llu WHERE character_id = %llu",
+			lenient ? "UPDATE IGNORE" : "UPDATE", snap.gold, characterId);
+		if (conn->Excute(query) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	::snprintf(query, sizeof(query),
+		"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state IN (%d, %d)",
+		characterId, static_cast<int32>(Protocol::ITEM_STATE_CARRIED), static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED));
+
+	if (MYSQL_RES* countRes = conn->Query(query))
+	{
+		uint64 actual = 0;
+		if (MYSQL_ROW row = ::mysql_fetch_row(countRes))
+			actual = ::strtoull(row[0], nullptr, 10);
+		conn->FreeResult(countRes);
+
+		if (actual != expected)
+			LOG_LINE << "[ESCAPE] " << (lenient ? "🔴 lenient - " : "") << "owned count mismatch - expected=" << expected << " actual=" << actual << " char=" << characterId << '\n';
+	}
+
+	// 검증 전용 - 쓰기를 다 한 뒤에 실패시켜 롤백과 재시도를 본다. 일시적 실패를 흉내 낸다 (AC-ET-24)
+	if (GFailEscapeCommits.fetch_sub(1) > 0)
+	{
+		LOG_LINE << "[ESCAPE] injected failure - char=" << characterId << '\n';
+		conn->Rollback();
+		return CommitOutcome::Transient;
+	}
+
+	if (conn->Commit() == false)
+		return RollbackAndClassify(conn);
+
+	return CommitOutcome::Ok;
 }
 
 PlayerRef ObjectUtils::CreatePlayer(GameSessionRef session, uint64 characterId)
@@ -502,8 +558,14 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 	return false;
 }
 
-bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
+CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode)
 {
+	const bool lenient = (mode == CommitMode::Lenient);
+
+	// 관대 단계는 새 가방 id 로 - 엄격 단계가 막힌 이유가 가방 id 중복일 수도 있다 (롤백돼 옛 id 는 어디에도 없다)
+	if (lenient)
+		snap.bagId = GNextBagId.fetch_add(1);
+
 	// DB 에 이미 있는 것은 가방으로 옮기고(UPDATE), 이번 런에 생긴 것은 가방 소속 새 행으로 넣는다(INSERT).
 	vector<uint64> existingIds;
 	string newValues;
@@ -516,86 +578,108 @@ bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap)
 			existingIds.push_back(e.instanceId);
 	}
 
-	const string ids = JoinIds(existingIds);
+	if (conn->BeginTransaction() == false)
+		return RollbackAndClassify(conn);
 
-	string dropped;
-	for (size_t i = 0; i < snap.droppedIds.size(); i++)
+	char insert[256];
+	::snprintf(insert, sizeof(insert),
+		"INSERT INTO bags (bag_id, floor_id, x, y, z, expires_at) "
+		"VALUES (%llu, %u, %f, %f, %f, NOW() + INTERVAL %llu SECOND)",
+		snap.bagId, snap.floorId, snap.x, snap.y, snap.z, BAG_LIFETIME_US / 1'000'000);
+
+	if (conn->Excute(insert) == false)
+		return RollbackAndClassify(conn);
+
+	if (existingIds.empty() == false)
 	{
-		if (i > 0)
-			dropped += ',';
-		dropped += to_string(snap.droppedIds[i]);
-	}
+		// 내 것 또는 주인 없는 것(가방 · 상자에서 주운 것 - DB 에선 아직 그 가방 소속)만 옮긴다. 남의 것은 두 단계 모두 건드리지 않는다.
+		// 회귀: 예전엔 id 만 봤다 - DB 에서 다른 캐릭터 창고로 간 행도 이 가방으로 끌어왔다 (2026-10-08 실서버 시험에서 발견)
+		const string mineOrUnowned = " AND (owner_character_id IS NULL OR owner_character_id = " + to_string(snap.characterId) + ")";
 
-	for (int32 attempt = 1; attempt <= DEATH_COMMIT_ATTEMPTS; attempt++)
-	{
-		if (conn->BeginTransaction() == false)
+		const string update =
+			"UPDATE item_instances SET owner_character_id = NULL, bag_id = " + to_string(snap.bagId)
+			+ ", state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG))
+			+ ", slot = 0, level = 0 WHERE instance_id IN (" + JoinIds(existingIds) + ")" + mineOrUnowned;
+
+		if (conn->Excute(update.c_str()) == false)
+			return RollbackAndClassify(conn);
+
+		if (conn->GetAffectedRows() != existingIds.size())
 		{
-			LOG_LINE << "[DEATH] begin failed - char=" << snap.characterId << " err=" << conn->GetLastErrorNo() << '\n';
-			continue;
-		}
-
-		char insert[256];
-		::snprintf(insert, sizeof(insert),
-			"INSERT INTO bags (bag_id, floor_id, x, y, z, expires_at) "
-			"VALUES (%llu, %u, %f, %f, %f, NOW() + INTERVAL %llu SECOND)",
-			snap.bagId, snap.floorId, snap.x, snap.y, snap.z, BAG_LIFETIME_US / 1'000'000);
-
-		bool ok = conn->Excute(insert);
-
-		if (ok && existingIds.empty() == false)
-		{
-			const string update =
-				"UPDATE item_instances SET owner_character_id = NULL, bag_id = " + to_string(snap.bagId)
-				+ ", state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG))
-				+ ", slot = 0, level = 0 WHERE instance_id IN (" + ids + ")";
-
-			ok = conn->Excute(update.c_str());
-
-			// DB 에 있어야 할 아이템(isNew 아님)은 전부 있어야 한다. 모자라면 어딘가 어긋났다 - 커밋하지 않는다.
-			if (ok && conn->GetAffectedRows() != existingIds.size())
+			// 엄격: DB 에 있어야 할 아이템(isNew 아님)은 전부 있어야 한다. 모자라면 어딘가 어긋났다 - 커밋하지 않는다 → 관대 단계로
+			if (lenient == false)
 			{
 				LOG_LINE << "[DEATH] item count mismatch - expected=" << existingIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
-				ok = false;
+				conn->Rollback();
+				return CommitOutcome::Permanent;
 			}
+
+			LOG_LINE << "[DEATH] 🔴 lenient - moved " << conn->GetAffectedRows() << " of " << existingIds.size() << " to bag " << snap.bagId
+				<< " (the rest were gone or someone else's) char=" << snap.characterId << '\n';
 		}
-
-		// 같은 트랜잭션 - 가방 행 · 소유 이전과 함께 확정되거나 함께 롤백된다 (AC-CH-07)
-		if (ok && newValues.empty() == false)
-		{
-			const string insert = INSERT_ITEMS + newValues;
-			ok = conn->Excute(insert.c_str());
-		}
-
-		//  이번 런에서 버린 아이템을 파기한다. 이미 없으면 목적은 달성된 것이라 개수가 달라도 실패로 보지않는다.
-		if (ok && snap.droppedIds.empty() == false)
-		{
-			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + dropped + ")";
-			ok = conn->Excute(del.c_str());
-			if (ok && conn->GetAffectedRows() != snap.droppedIds.size())
-				LOG_LINE << "[DEATH] dropped rows already gone - expected=" << snap.droppedIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
-		}
-
-		// 검증 전용 - 커밋을 늦춰 재입장 가드(DeathCommitTracker)가 실제로 발동하는지 본다.
-		const uint32 delayMs = GDeathCommitDelayMs.load();
-		if (ok && delayMs > 0)
-			this_thread::sleep_for(chrono::milliseconds(delayMs));
-
-		// 검증 전용 - 쓰기를 전부 성공시킨 뒤에 실패시킨다(가방 INSERT · 소유 이전 · 런 중 생성 INSERT · 파기).
-		// 롤백이 그것들을 모두 되돌리는지가 원자성 검증이다 (AC-CH-07). 탈출 커밋의 주입과 같은 자리다.
-		if (ok && GFailDeathCommit.load())
-		{
-			LOG_LINE << "[DEATH] injected failure after all writes - bag=" << snap.bagId << '\n';
-			ok = false;
-		}
-
-		if (ok && conn->Commit())
-			return true;
-
-		conn->Rollback();
-		LOG_LINE << "[DEATH] attempt " << attempt << " failed - char=" << snap.characterId << " err=" << conn->GetLastErrorNo() << '\n';
 	}
 
-	return false;
+	// 같은 트랜잭션 - 가방 행 · 소유 이전과 함께 확정되거나 함께 롤백된다 (AC-CH-07)
+	if (newValues.empty() == false)
+	{
+		const string insertItems = InsertItemsSql(mode) + newValues;
+		if (conn->Excute(insertItems.c_str()) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	//  이번 런에서 버린 아이템을 파기한다. 이미 없으면 목적은 달성된 것이라 개수가 달라도 실패로 보지않는다.
+	if (snap.droppedIds.empty() == false)
+	{
+		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
+		if (conn->Excute(del.c_str()) == false)
+			return RollbackAndClassify(conn);
+
+		if (conn->GetAffectedRows() != snap.droppedIds.size())
+			LOG_LINE << "[DEATH] dropped rows already gone - expected=" << snap.droppedIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
+	}
+
+	// 관대 단계: 가방에 실제로 들어간 것만 메모리 가방에 담는다 - 안 그러면 DB 에 없는 아이템을 주워 갈 수 있다
+	unordered_set<uint64> inBag;
+	if (lenient)
+	{
+		const string select = "SELECT instance_id FROM item_instances WHERE bag_id = " + to_string(snap.bagId);
+		MYSQL_RES* res = conn->Query(select.c_str());
+		if (res == nullptr)
+			return RollbackAndClassify(conn);
+
+		while (MYSQL_ROW row = ::mysql_fetch_row(res))
+			inBag.insert(::strtoull(row[0], nullptr, 10));
+		conn->FreeResult(res);
+	}
+
+	// 검증 전용 - 커밋을 늦춰 재입장 가드(DeathCommitTracker)가 실제로 발동하는지 본다.
+	if (const uint32 delayMs = GDeathCommitDelayMs.load(); delayMs > 0)
+		this_thread::sleep_for(chrono::milliseconds(delayMs));
+
+	// 검증 전용 - 쓰기를 전부 성공시킨 뒤에 실패시킨다(가방 INSERT · 소유 이전 · 런 중 생성 INSERT · 파기).
+	// 롤백이 그것들을 모두 되돌리는지가 원자성 검증이다 (AC-CH-07). 데이터 어긋남과 같은 영구 실패로 다룬다 -
+	// 엄격 → 관대 → 포기 로 끝나고, 결과는 예전과 같다(가방 없음 · 아이템은 주인에게)
+	if (GFailDeathCommit.load())
+	{
+		LOG_LINE << "[DEATH] injected failure after all writes - bag=" << snap.bagId << '\n';
+		conn->Rollback();
+		return CommitOutcome::Permanent;
+	}
+
+	if (conn->Commit() == false)
+		return RollbackAndClassify(conn);
+
+	if (lenient)
+	{
+		const size_t before = snap.items.size();
+		snap.items.erase(remove_if(snap.items.begin(), snap.items.end(),
+			[&inBag](const ItemEntry& e) { return inBag.count(e.instanceId) == 0; }), snap.items.end());
+
+		if (snap.items.size() != before)
+			LOG_LINE << "[DEATH] 🔴 lenient - bag " << snap.bagId << " holds " << snap.items.size() << " of " << before << " char=" << snap.characterId << '\n';
+	}
+
+	return CommitOutcome::Ok;
 }
 
 void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId)
@@ -663,88 +747,139 @@ void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 ch
 	LOG_LINE << "[BASECAMP] sync - char=" << characterId << " vaulted=" << vaulted << " carried=" << carried << " equipped=" << equipped << '\n';
 }
 
+// 만료 커밋 한 번 (escape-timer.md Core Rule 17). 가방을 만들지 않는다 - bags 테이블은 건드리지 않는다 (AC-9).
+// DELETE 는 원래 관대하다(어긋나도 실패로 보지 않는다) - 관대 단계는 골드 문장만 UPDATE IGNORE 로 바꾼다
+CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode)
+{
+	const bool lenient = (mode == CommitMode::Lenient);
+	char query[256];
+
+	if (conn->BeginTransaction() == false)
+		return RollbackAndClassify(conn);
+
+	::snprintf(query, sizeof(query), "SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", snap.characterId);
+	MYSQL_RES* lockRes = conn->Query(query);
+	if (lockRes == nullptr)
+		return RollbackAndClassify(conn);
+	conn->FreeResult(lockRes);
+
+	// 소유자가 아니라 id 로 - 주운 사망 가방 아이템은 DB 에서 아직 그 가방 소속(IN_BAG)이다. 지우지 않으면 재시작 때
+	// LoadLiveBags 가 가방을 되살려 복제가 된다. 창고(VAULTED)는 상태 조건으로 어떤 경우에도 못 지운다 (AC-ET-25)
+	if (snap.rowIds.empty() == false)
+	{
+		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.rowIds) + ") AND state IN ("
+			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED)) + ","
+			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ","
+			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG)) + ")";
+
+		if (conn->Excute(del.c_str()) == false)
+			return RollbackAndClassify(conn);
+
+		if (conn->GetAffectedRows() != snap.rowIds.size())
+			LOG_LINE << "[EXPIRE] row mismatch - expected=" << snap.rowIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
+	}
+
+	if (snap.goldKept > 0)
+	{
+		::snprintf(query, sizeof(query), "%s characters SET gold = gold + %llu WHERE character_id = %llu",
+			lenient ? "UPDATE IGNORE" : "UPDATE", snap.goldKept, snap.characterId);
+		if (conn->Excute(query) == false)
+			return RollbackAndClassify(conn);
+	}
+
+	// 검증 전용 - 탈출 커밋 실패 주입과 같은 자리 (AC-ET-24 롤백). 일시적 실패를 흉내 낸다
+	if (GFailEscapeCommits.fetch_sub(1) > 0)
+	{
+		LOG_LINE << "[EXPIRE] injected failure - char=" << snap.characterId << '\n';
+		conn->Rollback();
+		return CommitOutcome::Transient;
+	}
+
+	if (conn->Commit() == false)
+		return RollbackAndClassify(conn);
+
+	return CommitOutcome::Ok;
+}
+
 namespace
 {
-	// 만료 커밋 한 번 (escape-timer.md Core Rule 17). 가방을 만들지 않는다 - bags 테이블은 건드리지 않는다 (AC-9)
-	bool TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap)
+	// 저장 하나의 재시도 상태. 작업이 자기 자신을 PushAfter 로 다시 넣는다 - DB 스레드를 잡고 자지 않는다
+	struct CommitTask
 	{
-		char query[256];
+		string			tag;					// DEATH · ESCAPE · EXPIRE - 로그 머리
+		uint64			characterId = 0;
+		uint64			queuedUs = 0;
+		CommitMode		mode = CommitMode::Strict;
+		uint32			transientRetries = 0;
 
-		if (conn->BeginTransaction() == false)
-			return false;
+		function<CommitOutcome(DBConnection*, CommitMode)>		attempt;
+		function<void(DBConnection*, bool, CommitMode)>			finish;
+	};
 
-		::snprintf(query, sizeof(query), "SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", snap.characterId);
-		MYSQL_RES* lockRes = conn->Query(query);
-		bool ok = (lockRes != nullptr);
-		if (lockRes != nullptr)
-			conn->FreeResult(lockRes);
+	void RunCommit(const shared_ptr<CommitTask>& task, DBConnection* conn)
+	{
+		t_commitErrno = 0;
+		const CommitOutcome outcome = task->attempt(conn, task->mode);
+		const uint32 err = t_commitErrno;		// 실패한 문장의 번호 (0 = DB 오류가 아닌 실패 - 데이터 어긋남 · 시험 주입)
+		const CommitStep step = CommitRetry::Next(task->mode, outcome, task->transientRetries);
+		const uint64 elapsedMs = (Utils::NowMicroseconds() - task->queuedUs) / 1000;
+		const char* modeName = (task->mode == CommitMode::Lenient) ? "lenient" : "strict";
 
-		// 소유자가 아니라 id 로 - 주운 사망 가방 아이템은 DB 에서 아직 그 가방 소속(IN_BAG)이다. 지우지 않으면 재시작 때
-		// LoadLiveBags 가 가방을 되살려 복제가 된다. 창고(VAULTED)는 상태 조건으로 어떤 경우에도 못 지운다 (AC-ET-25)
-		if (ok && snap.rowIds.empty() == false)
+		switch (step.kind)
 		{
-			const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.rowIds) + ") AND state IN ("
-				+ to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED)) + ","
-				+ to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ","
-				+ to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG)) + ")";
+		case CommitStep::Kind::Done:
+			if (task->transientRetries > 0 || task->mode == CommitMode::Lenient)
+				LOG_LINE << "[" << task->tag << "] committed after " << task->transientRetries << " transient retries · mode=" << modeName
+					<< " · " << elapsedMs << "ms char=" << task->characterId << '\n';
+			task->finish(conn, true, task->mode);
+			return;
 
-			ok = conn->Excute(del.c_str());
-			if (ok && conn->GetAffectedRows() != snap.rowIds.size())
-				LOG_LINE << "[EXPIRE] row mismatch - expected=" << snap.rowIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
+		case CommitStep::Kind::Abandon:
+			// 관대 단계에서도 같은 문장으로는 안 된다 - 데이터가 깨졌다. DB 는 저장 전 그대로 (예전 사망 3회 실패와 같은 결과)
+			LOG_LINE << "[" << task->tag << "] 🔴 ABANDONED - permanent failure even in lenient mode, DB unchanged. err=" << err
+				<< " char=" << task->characterId << " after " << elapsedMs << "ms\n";
+			task->finish(conn, false, task->mode);
+			return;
+
+		case CommitStep::Kind::Retry:
+		default:
+			break;
 		}
 
-		if (ok && snap.goldKept > 0)
+		if (step.mode != task->mode)
 		{
-			::snprintf(query, sizeof(query), "UPDATE characters SET gold = gold + %llu WHERE character_id = %llu", snap.goldKept, snap.characterId);
-			ok = conn->Excute(query);
+			LOG_LINE << "[" << task->tag << "] permanent failure in strict mode (err=" << err << ") - retrying leniently char=" << task->characterId << '\n';
+			task->mode = step.mode;
+		}
+		else
+		{
+			task->transientRetries++;
+			const bool stuck = (task->transientRetries % CommitRetry::WARN_EVERY) == 0;
+			LOG_LINE << "[" << task->tag << "] " << (stuck ? "🔴 STILL FAILING - " : "") << "attempt " << task->transientRetries
+				<< " failed err=" << err << " (" << modeName << ") - retry in " << step.delayMs << "ms · waiting " << elapsedMs
+				<< "ms char=" << task->characterId << '\n';
 		}
 
-		// 검증 전용 - 탈출 커밋 실패 주입과 같은 자리 (AC-ET-24 롤백)
-		if (ok && GFailEscapeCommits.fetch_sub(1) > 0)
-		{
-			LOG_LINE << "[EXPIRE] injected failure - char=" << snap.characterId << '\n';
-			ok = false;
-		}
+		// 끊긴 연결로 다시 해 봐야 같다 - 이 워커의 커넥션을 지금 다시 붙인다 (다음 시도는 다른 워커일 수 있다 - 그 워커도 제 것을 고친다)
+		if (DBError::IsConnectionLost(err) || conn->IsConnected() == false)
+			conn->Reconnect();
 
-		if (ok && conn->Commit())
-			return true;
-
-		conn->Rollback();
-		return false;
+		GDBQueue.PushAfter(step.delayMs, [task](DBConnection* next) { RunCommit(task, next); });
 	}
 }
 
-void CommitExpiry(DBConnection* conn, const ExpirySnapshot& snap)
+void QueueCommit(const char* tag, uint64 characterId,
+	function<CommitOutcome(DBConnection*, CommitMode)> attempt,
+	function<void(DBConnection*, bool committed, CommitMode mode)> finish)
 {
-	uint32 backoffMs = ESCAPE_RETRY_FIRST_MS;
+	auto task = make_shared<CommitTask>();
+	task->tag = tag;
+	task->characterId = characterId;
+	task->queuedUs = Utils::NowMicroseconds();
+	task->attempt = move(attempt);
+	task->finish = move(finish);
 
-	for (int32 attempt = 1; ; attempt++)
-	{
-		if (TryCommitExpiry(conn, snap))
-			return;
-
-		LOG_LINE << "[EXPIRE] attempt " << attempt << " failed - char=" << snap.characterId << " retry in " << backoffMs << "ms\n";
-		this_thread::sleep_for(chrono::milliseconds(backoffMs));
-		backoffMs = (backoffMs * 2 < ESCAPE_RETRY_MAX_MS) ? backoffMs * 2 : ESCAPE_RETRY_MAX_MS;
-	}
-}
-
-void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap)
-{
-	uint32 backoffMs = ESCAPE_RETRY_FIRST_MS;
-
-	// 탈출만 무한 재시도 - 다른 경로는 실패해도 되돌릴 대상이 있지만, 탈출은 얻은 것을 확정하는 유일한 지점
-	for (int32 attempt = 1; ; attempt++)
-	{
-		if (TryCommitEscape(conn, snap))
-			return;
-
-		LOG_LINE << "[ESCAPE] attempt " << attempt << " failed - char=" << snap.characterId
-			<< " retry in " << backoffMs << "ms\n";
-
-		this_thread::sleep_for(chrono::milliseconds(backoffMs));
-		backoffMs = (backoffMs * 2 < ESCAPE_RETRY_MAX_MS) ? backoffMs * 2 : ESCAPE_RETRY_MAX_MS;
-	}
+	GDBQueue.Push([task](DBConnection* conn) { RunCommit(task, conn); });
 }
 
 bool DeathCommitTracker::TryBegin(uint64 characterId)

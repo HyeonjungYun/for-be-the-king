@@ -12,6 +12,11 @@ public:
 	bool			Connect(const char* host, uint32 port, const char* user, const char* password, const char* schema);
 	void			Close();
 
+	// 같은 접속 정보로 다시 붙는다 - 끊긴 연결은 저절로 살아나지 않는다 (예전엔 MySQL 이 재시작하면 그 커넥션의 모든 작업이
+	// 서버가 꺼질 때까지 실패했다, ADR-0010 R-1). 한 번도 Connect 하지 않았으면 false. 실패하면 GetLastErrorNo 가 연결 오류를 준다
+	bool			Reconnect();
+	uint32			GetReconnectCount() const { return _reconnects; }
+
 	// INSERT, UPDATE, DELETE, DDL 결과셋이 없는 쿼리
 	bool			Excute(const char* query);
 
@@ -38,5 +43,17 @@ public:
 	bool			IsConnected() const { return _conn != nullptr; }
 
 private:
-	MYSQL* _conn = nullptr;
+	bool			Open();
+
+	MYSQL*			_conn = nullptr;
+
+	// Reconnect 용 접속 정보 - Connect 가 채운다
+	string			_host;
+	uint32			_port = 0;
+	string			_user;
+	string			_password;
+	string			_schema;
+
+	uint32			_lastConnectErrno = 0;		// 연결이 없을 때 GetLastErrorNo 가 줄 값 - 마지막 연결 시도의 오류
+	uint32			_reconnects = 0;
 };

@@ -27,6 +27,7 @@ float GTowerX = 0.f;
 float GTowerY = 0.f;
 atomic<uint64> GRunGold = 0;
 string GEnterChat;
+atomic<uint32> GChatAfterMs = 0;
 atomic<bool> GSwapArmor = false;
 atomic<uint64> GLeaveEscaped = 0;
 atomic<uint64> GLeaveExpired = 0;
@@ -683,6 +684,15 @@ static void TickBots(float deltaTime)
 
 		if (GSwapArmor.load())
 			TrySwapArmor(bot, nowUs);
+
+		if (const uint64 chatAt = bot->chatAtUs.load(); chatAt != 0 && nowUs >= chatAt)
+		{
+			bot->chatAtUs.store(0);
+			Protocol::C_CHAT chat;
+			chat.set_msg(GEnterChat);
+			SendOrHold(bot, ClientPacketHandler::MakeSendBuffer(chat), nowUs);
+			LOG_LINE << "[BOT CHAT] char=" << bot->objectId.load() << " " << GEnterChat << '\n';
+		}
 	}
 }
 
@@ -705,6 +715,8 @@ int main(int argc, char* argv[])
 			GRunGold.store(::strtoull(argv[i + 1], nullptr, 10));
 		else if (::strcmp(argv[i], "-chat") == 0)
 			GEnterChat = argv[i + 1];
+		else if (::strcmp(argv[i], "-chatafter") == 0)
+			GChatAfterMs.store(static_cast<uint32>(::atoi(argv[i + 1])));
 		else if (::strcmp(argv[i], "-tower") == 0 && i + 2 < argc)
 		{
 			GTowerMode.store(true);

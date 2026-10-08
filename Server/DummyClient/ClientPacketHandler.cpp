@@ -86,8 +86,12 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	if (GSwapArmor.load())
 		bot->swapAtUs.store(Utils::NowMicroseconds() + 3'000'000);
 
-	// -chat "<명령>": 입장마다 한 번 보낸다 - 디버그 명령 게이트(FBTK_DEBUG_COMMANDS) 시험
-	if (GEnterChat.empty() == false)
+	// -chat "<명령>": 입장마다 한 번 보낸다 - 디버그 명령 게이트(FBTK_DEBUG_COMMANDS) 시험. -chatafter 가 있으면 그만큼 뒤에 (틱이 보낸다)
+	if (GEnterChat.empty() == false && GChatAfterMs.load() > 0)
+	{
+		bot->chatAtUs.store(Utils::NowMicroseconds() + static_cast<uint64>(GChatAfterMs.load()) * 1000);
+	}
+	else if (GEnterChat.empty() == false)
 	{
 		Protocol::C_CHAT chat;
 		chat.set_msg(GEnterChat);

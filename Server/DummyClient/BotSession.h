@@ -68,6 +68,9 @@ public:
 	int32											swapStep = 0;
 	uint64											swapItemId = 0;
 
+	// -chat + -chatafter <ms> - 입장 뒤 이 시각에 -chat 명령을 보낸다. 0 = 없음
+	atomic<uint64>									chatAtUs = 0;
+
 	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
 	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };
@@ -111,6 +114,7 @@ extern float GTowerX;
 extern float GTowerY;
 extern atomic<uint64> GRunGold;
 extern string GEnterChat;		// -chat - 스레드 시작 전에 한 번 쓰고 이후 읽기만
+extern atomic<uint32> GChatAfterMs;	// -chatafter - 0 이면 입장하자마자 (저장 재시도 시험: 입장 뒤 DB 를 건드린 다음 /die)
 extern atomic<bool> GSwapArmor;	// -swap
 extern atomic<uint64> GLeaveEscaped;
 extern atomic<uint64> GLeaveExpired;

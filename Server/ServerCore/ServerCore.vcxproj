@@ -168,6 +168,7 @@
     <ClInclude Include="DBConnection.h" />
     <ClInclude Include="DBConnectionPool.h" />
     <ClInclude Include="DBJobQueue.h" />
+    <ClInclude Include="DBError.h" />
     <ClInclude Include="GlobalQueue.h" />
     <ClInclude Include="IocpCore.h" />
     <ClInclude Include="IocpEvent.h" />

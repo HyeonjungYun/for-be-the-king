@@ -111,6 +111,9 @@
     <ClCompile Include="EquipStats.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
+    <ClCompile Include="CommitRetry.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
     <ClCompile Include="Telemetry.cpp">
       <Filter>Data</Filter>
     </ClCompile>
@@ -211,6 +214,9 @@
     </ClInclude>
     <ClInclude Include="KillBatch.h">
       <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="CommitRetry.h">
+      <Filter>Data</Filter>
     </ClInclude>
     <ClInclude Include="Telemetry.h">
       <Filter>Data</Filter>

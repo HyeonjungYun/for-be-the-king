@@ -1,7 +1,9 @@
 ﻿#pragma once
+#include "CommitRetry.h"
 
 struct DeathSnapshot;
 struct EscapeSnapshot;
+struct ExpirySnapshot;
 struct ChestSpawn;
 
 class ObjectUtils
@@ -34,14 +36,25 @@ bool LoadLiveBags(DBConnection* conn);
 
 bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const vector<uint64>& instanceIds);
 
-bool CommitDeath(DBConnection* conn, const DeathSnapshot& snap);
+// ── 런 끝 저장 (사망 · 탈출 · 만료) ─ ADR-0010 · CommitRetry.h ──
+// Try* = 한 번. 실패를 Transient(다시 하면 된다) / Permanent(다시 해도 같다)로 돌려준다.
+// mode = Lenient 면 "그 순간 DB 에 실제로 남아 있는 그 캐릭터의 것만" 옮기고 어긋난 것은 🔴 로그로 남긴다.
+// 사망 관대 단계는 snap 을 고친다 - 새 가방 id · 가방에 실제로 들어간 아이템만 남긴 목록
+CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode);
+CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode);
+CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode);
+
+// 큐에 넣고 끝날 때까지 다시 한다: 엄격 → (영구 실패) 관대 → (영구 실패) 포기, 일시 실패는 같은 단계를 100 ms → ×2 → 5 s 간격으로.
+// 기다리는 동안 DB 스레드를 잡지 않는다(GDBQueue.PushAfter) · 연결이 끊겼으면 다시 붙인다.
+// finish(conn, committed, mode) 는 DB 스레드에서 한 번 - committed = false 면 포기(DB 는 저장 전 그대로)
+void QueueCommit(const char* tag, uint64 characterId,
+	function<CommitOutcome(DBConnection*, CommitMode)> attempt,
+	function<void(DBConnection*, bool committed, CommitMode mode)> finish);
 
 // 베이스캠프 인벤토리(보관 · 반입 · 착용)를 DB 에서 읽어 S_INVENTORY_SYNC 로 보낸다 (UI 4단계 · S3).
 // 베이스캠프에 들어오는 세 지점 - 로그인 · 탈출 커밋 완료 · 던전 퇴장 - 에서 DB 스레드가 부른다.
 // 클라는 베이스캠프에 있을 때 받은 동기화를 전체 교체로 다룬다(던전 동기화에는 보관이 없다).
 void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId);
-
-void CommitEscape(DBConnection* conn, const EscapeSnapshot& snap);
 
 extern atomic<bool> GFailDeathCommit;
 extern atomic<int32> GFailEscapeCommits;
@@ -98,9 +111,6 @@ struct ExpirySnapshot
 	uint32				itemsDestroyed = 0;	// 결과 안내용 - 소지 + 착용 개수 (isNew 포함)
 	uint64				goldKept = 0;
 };
-
-// 성공할 때까지 재시도 (탈출 커밋과 같은 100 ms → ×2 → 5 s)
-void CommitExpiry(DBConnection* conn, const ExpirySnapshot& snap);
 
 /*------------------
 	DetachedBodies

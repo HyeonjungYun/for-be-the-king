@@ -1550,12 +1550,13 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size()
 		<< " new=" << newItems << " dropped=" << snap.droppedIds.size() << '\n';
 
+	// 끝날 때까지 다시 한다 (ADR-0010 R-1, 2026-10-08) - 그동안 이 캐릭터는 재입장 · 베이스캠프 장비 조작 · 퇴장이 막혀 있다
+	// (GDeathCommits). 예전엔 3 번 실패하면 포기해서 죽은 사람이 장비를 그대로 지켰다
 	RoomRef room = GetRoomRef();
-	GDBQueue.Push([room, snap](DBConnection* conn)
-		{
-			const bool ok = CommitDeath(conn, snap);
-			room->DoAsync(&Room::OnBagCreated, snap, ok);
-		});
+	auto shared = make_shared<DeathSnapshot>(move(snap));
+	QueueCommit("DEATH", characterId,
+		[shared](DBConnection* conn, CommitMode mode) { return TryCommitDeath(conn, *shared, mode); },
+		[room, shared](DBConnection*, bool committed, CommitMode) { room->DoAsync(&Room::OnBagCreated, *shared, committed); });
 }
 
 void Room::OnBagCreated(DeathSnapshot snap, bool ok)
@@ -1569,9 +1570,13 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 
 	if (ok == false)
 	{
-		LOG_LINE << "[DEATH] commit failed - no bag. char=" << snap.characterId << '\n';
+		LOG_LINE << "[DEATH] commit abandoned - no bag, items stay with the owner. char=" << snap.characterId << '\n';
 		return;
 	}
+
+	// 10 분은 가방이 실제로 생긴 지금부터 - DB 장애로 저장이 오래 밀렸으면 처음 잡아 둔 만료 시각은 이미 지났을 수 있다.
+	// DB 쪽도 커밋 때 NOW() + 10 분이라 둘이 맞는다
+	snap.expiresAtUs = Utils::NowMicroseconds() + BAG_LIFETIME_US;
 
 	BagRef bag = ObjectUtils::CreateBag(snap.bagId, snap.floorId, snap.x, snap.y, snap.z, snap.expiresAtUs, snap.characterId);
 	bag->items = snap.items;
@@ -1676,20 +1681,22 @@ void Room::BeginEscapeCommit(uint64 playerId)
 	// 큐에 넣은 순간부터 커밋 완료까지 - 동시 완충 때 큐가 비는 시간 (escape-timer.md AC-ET-26)
 	const uint64 queuedUs = Utils::NowMicroseconds();
 
-	GDBQueue.Push([session, snap, queuedUs](DBConnection* conn)
+	// 끝날 때까지 다시 한다 - 엄격 → 관대 → 포기 (ObjectUtils.h QueueCommit). 그동안 Escaping 이라 베이스캠프 조작 · 재입장이 막힌다
+	QueueCommit("ESCAPE", playerId,
+		[snap](DBConnection* conn, CommitMode mode) { return TryCommitEscape(conn, snap, mode); },
+		[session, snap, queuedUs](DBConnection* conn, bool committed, CommitMode)
 		{
-			// 성공할 때까지 재시도. 돌아왔으면 커밋된 것
-			CommitEscape(conn, snap);
 			session->place.store(SessionPlace::BaseCamp);
 			GDeathCommits.End(snap.characterId);
 
+			// 포기(데이터가 깨진 경우뿐)면 DB 는 런 전 그대로다 - "탈출 성공" 배너 없이(RUN_END_NONE) 베이스캠프로, 아래 동기화가 실제 상태를 보여 준다
 			Protocol::S_LEAVE_GAME leavePkt;
-			leavePkt.set_reason(Protocol::RUN_END_ESCAPED);
-			leavePkt.set_gold_kept(snap.gold);
+			leavePkt.set_reason(committed ? Protocol::RUN_END_ESCAPED : Protocol::RUN_END_NONE);
+			leavePkt.set_gold_kept(committed ? snap.gold : 0);
 			SEND_PACKET_DECLARATION(leavePkt);
 			session->Send(sendBuffer);
 
-			LOG_LINE << "[ESCAPE] committed - char=" << snap.characterId << " gold=" << snap.gold
+			LOG_LINE << "[ESCAPE] " << (committed ? "committed" : "abandoned") << " - char=" << snap.characterId << " gold=" << (committed ? snap.gold : 0)
 				<< " queued_to_done=" << (Utils::NowMicroseconds() - queuedUs) / 1000 << "ms\n";
 
 			// 베이스캠프로 돌아왔다 - 방금 커밋한 결과를 S3 에 보낸다 (UI 4단계)
@@ -3356,12 +3363,13 @@ void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
 	LOG_LINE << "[EXPIRE] commit begin - char=" << playerId << " destroyed=" << snap.itemsDestroyed << " rows=" << snap.rowIds.size()
 		<< " gold_kept=" << snap.goldKept << " detached=" << (session == nullptr ? 1 : 0) << '\n';
 
-	GDBQueue.Push([session, snap](DBConnection* conn)
+	QueueCommit("EXPIRE", playerId,
+		[snap](DBConnection* conn, CommitMode mode) { return TryCommitExpiry(conn, snap, mode); },
+		[session, snap](DBConnection* conn, bool committed, CommitMode)
 		{
-			CommitExpiry(conn, snap);
 			GDeathCommits.End(snap.characterId);
 
-			LOG_LINE << "[EXPIRE] committed - char=" << snap.characterId << '\n';
+			LOG_LINE << "[EXPIRE] " << (committed ? "committed" : "abandoned") << " - char=" << snap.characterId << '\n';
 
 			// 끊긴 몸이면 보낼 곳이 없다 - 다음 접속이 DB 에서 새로 적재한다
 			if (session == nullptr)
@@ -3369,10 +3377,11 @@ void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
 
 			session->place.store(SessionPlace::BaseCamp);
 
+			// 포기면 아무것도 지워지지 않았다 - 결과 배너 없이(RUN_END_NONE), 동기화가 실제 상태를 보여 준다
 			Protocol::S_LEAVE_GAME leavePkt;
-			leavePkt.set_reason(Protocol::RUN_END_EXPIRED);
-			leavePkt.set_gold_kept(snap.goldKept);
-			leavePkt.set_items_destroyed(snap.itemsDestroyed);
+			leavePkt.set_reason(committed ? Protocol::RUN_END_EXPIRED : Protocol::RUN_END_NONE);
+			leavePkt.set_gold_kept(committed ? snap.goldKept : 0);
+			leavePkt.set_items_destroyed(committed ? snap.itemsDestroyed : 0);
 			SEND_PACKET_DECLARATION(leavePkt);
 			session->Send(sendBuffer);
 
