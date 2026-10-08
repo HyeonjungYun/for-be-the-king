@@ -124,3 +124,28 @@ run.alarm.nearby,근처에서 누군가 탈출을 시작했다,경보 집합 - �
 run.result.escaped,탈출 성공,S_LEAVE_GAME ESCAPED
 run.result.escaped_gold,탈출 성공 - 골드 +{0},
 run.result.expired,시간 초과 - 소지품 {0}개를 잃었다 (골드 +{1}),S_LEAVE_GAME EXPIRED
+login.title,로그인,L1 title (ADR-0011)
+login.username,아이디,L1 label
+login.password,비밀번호,L1 label (masked box)
+login.submit,로그인,L1 button
+login.register,가입,L1 button - registers then logs in
+login.working,확인 중…,L1/L2 while a request is out
+login.connecting,게임 서버에 접속 중…,after the token - until S_LOGIN
+login.error.empty,아이디와 비밀번호를 입력하라,L1 local check
+login.error.unreachable,인증 서버에 연결할 수 없다,HTTP no answer / timeout (AC-AL-09)
+login.error.too_many,요청이 너무 많다 - 잠시 뒤 다시 시도하라,HTTP 429 per-IP limit
+login.error.invalid_credentials,아이디 또는 비밀번호가 틀렸다,401 invalid_credentials
+login.error.username_taken,이미 있는 아이디다,409 username_taken
+login.error.invalid_username,아이디는 1~32자,400 invalid_username
+login.error.password_too_short,비밀번호는 8자 이상,400 password_too_short
+login.error.expired,로그인이 만료됐다 - 다시 로그인하라,401 invalid_token
+login.error.game_server,게임 서버 접속 실패,S_LOGIN failed (AC-AL-09)
+login.error.game_unreachable,게임 서버에 연결할 수 없다,socket connect failed
+login.error.unknown,알 수 없는 오류 ({0}),any other HTTP code
+character.title,캐릭터 이름,L2 title
+character.hint,한글 · 영문 · 숫자 2~12자,L2 rule - the auth server checks it
+character.name,이름,L2 label
+character.create,만들기,L2 button
+character.error.invalid_name,이름은 한글 · 영문 · 숫자 2~12자,400 invalid_name
+character.error.name_taken,이미 있는 이름이다,409 name_taken
+label.starter_kit,장비가 없다 - 기본 장비 3종을 받고 입장한다,S3 above [입장] when worn + carried + vault are empty (account-login-mvp Core Rule 8)

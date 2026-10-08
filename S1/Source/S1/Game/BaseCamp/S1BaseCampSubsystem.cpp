@@ -2,6 +2,7 @@
 
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/Item/S1ItemSubsystem.h"
+#include "Game/Login/S1LoginSubsystem.h"
 #include "Game/UI/S1BaseCampWidget.h"
 #include "S1.h"
 #include "S1GameInstance.h"
@@ -80,6 +81,11 @@ void US1BaseCampSubsystem::Deinitialize()
 void US1BaseCampSubsystem::HandleLogin(const Protocol::S_LOGIN& Pkt)
 {
 	UE_LOG(LogTemp, Log, TEXT("[BASECAMP] login - characters=%d"), Pkt.characters_size());
+
+	// The login screen steps aside - S3 takes the whole screen next (ADR-0011)
+	if (US1LoginSubsystem* Login = GetGameInstance()->GetSubsystem<US1LoginSubsystem>())
+		Login->HandleGameLoginSucceeded();
+
 	SetPlace(ES1Place::BaseCamp);
 }
 

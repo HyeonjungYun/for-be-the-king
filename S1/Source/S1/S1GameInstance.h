@@ -23,6 +23,13 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void ConnectToGameServer();
 
+	/**
+	 * Connects and sends C_LOGIN with this token — the login screen's token from the auth server (ADR-0011).
+	 * Empty = ConnectToGameServer(): the command line, then the ini (dev). True when the socket connected and
+	 * C_LOGIN went out; the answer comes as S_LOGIN.
+	 */
+	bool ConnectToGameServerWithToken(const FString& Token);
+
 	UFUNCTION(BlueprintCallable)
 	void DisconnectFromGameServer();
 

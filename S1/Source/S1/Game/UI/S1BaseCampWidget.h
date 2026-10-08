@@ -113,6 +113,7 @@ private:
 	UPROPERTY() TObjectPtr<UVerticalBox>					TotalLines;
 	UPROPERTY() TObjectPtr<UVerticalBox>					AtomicLines;
 	UPROPERTY() TObjectPtr<US1ItemDetailWidget>				Detail;
+	UPROPERTY() TObjectPtr<UTextBlock>						StarterNotice;	// above [입장] - "기본 장비 3종을 받고 입장한다"
 	UPROPERTY() TObjectPtr<UBorder>							EnterButton;
 	UPROPERTY() TObjectPtr<UTextBlock>						EnterText;
 	UPROPERTY() TObjectPtr<US1EntryMapWidget>				EntryMap;

@@ -3,6 +3,7 @@
 #include "Game/Level/S1NetworkPump.h"
 
 #include "S1GameInstance.h"
+#include "Game/Login/S1LoginSubsystem.h"
 
 AS1NetworkPump::AS1NetworkPump()
 {
@@ -16,7 +17,14 @@ void AS1NetworkPump::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+	US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
+	if (GameInstance == nullptr)
+		return;
+
+	// A dev token (-token=, or DevLoginToken in editor binaries) connects right away as before. Otherwise the
+	// login screen gets a token from the auth server and connects itself (ADR-0011)
+	US1LoginSubsystem* Login = GameInstance->GetSubsystem<US1LoginSubsystem>();
+	if (Login == nullptr || Login->BeginLogin(GetWorld()))
 	{
 		GameInstance->ConnectToGameServer();
 	}

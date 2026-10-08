@@ -19,6 +19,9 @@ public class S1 : ModuleRules
 		// PhysicsCore — the level export reads each server-wall mesh's collision trace flag (UBodySetupCore, ADR-0006 E2).
 		PrivateDependencyModuleNames.Add("PhysicsCore");
 
+		// HTTP — the login screen talks to the auth server (ADR-0011). Windows uses the Curl backend; plain http works in Shipping too.
+		PrivateDependencyModuleNames.Add("HTTP");
+
 		PrivateIncludePaths.AddRange(new string[]
 		{
 			"S1/",

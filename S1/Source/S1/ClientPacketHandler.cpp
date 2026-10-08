@@ -4,6 +4,7 @@
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/Escape/S1EscapeSubsystem.h"
+#include "Game/Login/S1LoginSubsystem.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -18,6 +19,10 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 	if (pkt.success() == false || pkt.characters_size() == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[LOGIN] failed - characters=%d"), pkt.characters_size());
+
+		// 로그인 화면으로 돌아가 이유를 보인다 (ADR-0011 · AC-AL-09). 개발 토큰 접속이면 화면이 없어 아무 일도 없다
+		if (US1LoginSubsystem* Login = US1LoginSubsystem::Get())
+			Login->HandleGameLoginFailed();
 		return true;
 	}
 

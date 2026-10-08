@@ -24,6 +24,11 @@ void US1GameInstance::Shutdown()
 
 void US1GameInstance::ConnectToGameServer()
 {
+	ConnectToGameServerWithToken(FString());
+}
+
+bool US1GameInstance::ConnectToGameServerWithToken(const FString& Token)
+{
 	Socket = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(TEXT("Stream"), TEXT("Client Socket"));
 
 	// 서버 쪽 주소 받아오기
@@ -46,19 +51,23 @@ void US1GameInstance::ConnectToGameServer()
 		GameServerSession = MakeShared<PacketSession>(Socket);
 		GameServerSession->Run();
 
-		// TEMP: Lobby에서 캐릭터 선택창 등
+		// 로그인 화면의 토큰 (ADR-0011). 비어 있으면 명령줄 · ini 의 개발 토큰
 		{
 			Protocol::C_LOGIN Pkt;
-			Pkt.set_token(TCHAR_TO_UTF8(*ResolveLoginToken()));
+			Pkt.set_token(TCHAR_TO_UTF8(*(Token.IsEmpty() ? ResolveLoginToken() : Token)));
 
 			SendBufferRef SendBuffer = ClientPacketHandler::MakeSendBuffer(Pkt);
 			SendPacket(SendBuffer);
 		}
+		return true;
 	}
-	else
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Connection Failed")));
-	}
+
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("Connection Failed")));
+
+	// 실패한 소켓은 닫는다 - 로그인 화면이 다시 시도하면 새로 만든다 (그대로 두면 다음 시도가 덮어써 새어 나간다)
+	ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);
+	Socket = nullptr;
+	return false;
 }
 
 void US1GameInstance::DisconnectFromGameServer()

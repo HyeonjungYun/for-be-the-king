@@ -341,6 +341,15 @@ void US1BaseCampWidget::NativeOnInitialized()
 	const US1ItemSubsystem* Items = GetItems();
 	MakeGrid(Column[2], Items != nullptr ? Items->GetCarriedCapacity() : 25, CarriedSlots);
 
+	// The server dresses a character with nothing at all - worn, carried and vault empty - in the starter kit
+	// on entry (account-login-mvp Core Rule 8). Said here so entering empty-handed is not a surprise either way
+	StarterNotice = MakeText(FontSmall, TextSecondary());
+	StarterNotice->SetText(Text(TEXT("label.starter_kit")));
+	StarterNotice->SetAutoWrapText(true);
+	StarterNotice->SetVisibility(ESlateVisibility::Collapsed);
+	if (UVerticalBoxSlot* StarterSlot = Column[2]->AddChildToVerticalBox(StarterNotice))
+		StarterSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
+
 	EnterButton = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	EnterButton->SetPadding(FMargin(16.f, 10.f));
 	EnterButton->SetHorizontalAlignment(HAlign_Center);
@@ -680,6 +689,16 @@ void US1BaseCampWidget::RefreshEnter()
 	EnterText->SetText(Text(bEntering ? TEXT("label.entering") : TEXT("label.enter")));
 	EnterText->SetColorAndOpacity(FSlateColor(bCanEnter ? TextPrimary() : TextShadowed()));
 	EnterButton->SetBrushColor(bCanEnter ? CellHover() : CellBackground());
+
+	// Same condition the server checks (ServerPacketHandler LoadPlayerItems ownedRows == 0) - only once the
+	// base-camp sync is in, so a half-loaded S3 never promises a kit the server will not give
+	const US1ItemSubsystem* Items = GetItems();
+	const bool bOwnsNothing = Items != nullptr
+		&& Items->GetByState(ES1ItemState::Vaulted).Num() == 0
+		&& Items->GetByState(ES1ItemState::Carried).Num() == 0
+		&& Items->GetByState(ES1ItemState::Equipped).Num() == 0;
+	const bool bReady = BaseCamp != nullptr && BaseCamp->IsInventoryReady();
+	StarterNotice->SetVisibility(bReady && bOwnsNothing ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 void US1BaseCampWidget::RefreshDetail()
