@@ -41,6 +41,7 @@ public:
 
 public:
 	atomic<uint64> accountId = 0;
+	atomic<bool> loginStarted = false;		// C_LOGIN 을 받았다 - 실패하면 되돌린다. 연결 하나에 로그인 하나 (ADR-0011)
 	vector<Protocol::CharacterInfo> characters;
 	atomic<SessionPlace> place = SessionPlace::None;
 

@@ -7,6 +7,7 @@
 #include "Room.h"
 #include "ItemTable.h"
 #include "ChestSpawnTable.h"
+#include "StarterKitTable.h"
 #include "DBError.h"
 #include <thread>
 
@@ -17,6 +18,8 @@ atomic<bool> GFailDeathCommit = false;
 atomic<uint32> GDeathCommitDelayMs = 0;
 atomic<uint32> GBaseCampDelayMs = 0;
 atomic<bool> GBotRegear = false;
+atomic<int32> GFakeLoginFail = 0;
+atomic<uint32> GLoginDelayMs = 0;
 atomic<bool> GEntryFromDb = false;
 atomic<int32> GFailEscapeCommits = 0;
 DeathCommitTracker GDeathCommits;
@@ -1310,30 +1313,11 @@ int32 RegearBot(Player& player, const string& characterName)
 	if (characterName.rfind("bot_", 0) != 0)
 		return 0;
 
-	// reset_bots.sql 이 처음에 입히는 3점과 같다 - 재지급 전후로 봇의 전투가 달라지지 않게
-	struct Gear { Protocol::EquipSlot slot; uint32 itemTypeId; uint32 skillId; };
-	constexpr Gear BASIC_GEAR[] =
-	{
-		{ Protocol::SLOT_WEAPON_PRIMARY,	101, 1001 },	// 무기 · 단일 스턴
-		{ Protocol::SLOT_ARMOR,				401, 3001 },	// 갑옷 · 광역 감속
-		{ Protocol::SLOT_BOOTS,				501, 2001 },	// 신발 · 대시
-	};
+	// 기본 장비 표(starter_kit.csv)와 같다 - reset_bots.sql 이 처음에 입히는 3점이기도 해서 재지급 전후로 봇의 전투가 달라지지 않는다
+	return EquipStarterKit(player);
+}
 
-	int32 filled = 0;
-	for (const Gear& gear : BASIC_GEAR)
-	{
-		ItemEntry& worn = player.equipped[gear.slot - 1];
-		if (worn.itemTypeId != 0)
-			continue;
-
-		worn = ItemEntry{};
-		worn.instanceId = GNextInstanceId.fetch_add(1);
-		worn.itemTypeId = gear.itemTypeId;
-		worn.grade = Protocol::ITEM_GRADE_COMMON;
-		worn.skillIdPrimary = gear.skillId;
-		worn.isNew = true;		// DB 행은 없다 - 사망이면 가방으로, 탈출이면 소유로 INSERT 된다 (S-4)
-		filled++;
-	}
-
-	return filled;
+int32 EquipStarterKit(Player& player)
+{
+	return StarterKitTable::EquipInto(player.equipped, SKILL_SLOT_COUNT, [] { return GNextInstanceId.fetch_add(1); });
 }

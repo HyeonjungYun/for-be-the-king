@@ -157,6 +157,7 @@
     <ClCompile Include="Bag.cpp" />
     <ClCompile Include="ChestSpawnTable.cpp" />
     <ClCompile Include="EntryPointTable.cpp" />
+    <ClCompile Include="StarterKitTable.cpp" />
     <ClCompile Include="WallMap.cpp" />
     <ClCompile Include="WallTable.cpp" />
     <ClCompile Include="TowerTable.cpp" />
@@ -203,6 +204,7 @@
     <ClInclude Include="Bag.h" />
     <ClInclude Include="ChestSpawnTable.h" />
     <ClInclude Include="EntryPointTable.h" />
+    <ClInclude Include="StarterKitTable.h" />
     <ClInclude Include="MoveClock.h" />
     <ClInclude Include="FloorBounds.h" />
     <ClInclude Include="SpawnPlacement.h" />

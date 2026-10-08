@@ -113,6 +113,16 @@ extern atomic<bool> GEntryFromDb;
 // 맨몸 부위를 채우고 채운 개수를 돌려준다. 이름이 bot_ 으로 시작하지 않으면 0
 int32 RegearBot(Player& player, const string& characterName);
 
+// 기본 장비(starter_kit.csv)로 비어 있는 부위를 채운다 - 런 중 생성(isNew) 아이템. 채운 개수.
+// 입장 때 착용 · 소지 · 창고가 모두 빈 캐릭터에게 (account-login-mvp-2026-10-09.md Core Rule 8 · ADR-0011 Decision 4)
+int32 EquipStarterKit(Player& player);
+
+// 검증 전용 (FBTK_FAKE_LOGIN_FAIL=N) - 처음 N 번의 로그인은 캐릭터 조회가 실패한 것처럼 처리한다 (AC-AL-07)
+extern atomic<int32> GFakeLoginFail;
+
+// 검증 전용 (FBTK_LOGIN_DELAY_MS) - 로그인 DB 작업을 이만큼 늦춘다. 처리 중에 끊긴 접속이 계정을 잡아 두지 않는지 본다
+extern atomic<uint32> GLoginDelayMs;
+
 // 송신 통계의 가상 패킷 칸 - S_SPAWN · S_DESPAWN 중 가방 · 상자 몫을 따로 센다 (SendBuffer::SetStatId)
 constexpr uint16 STAT_ID_BAG_SPAWN = 1900;
 constexpr uint16 STAT_ID_BAG_DESPAWN = 1901;

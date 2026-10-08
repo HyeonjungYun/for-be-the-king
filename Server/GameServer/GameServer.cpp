@@ -15,6 +15,7 @@
 #include "ItemRoller.h"
 #include "ChestSpawnTable.h"
 #include "EntryPointTable.h"
+#include "StarterKitTable.h"
 #include "WallTable.h"
 #include "TowerTable.h"
 #include "MonsterTable.h"
@@ -118,6 +119,15 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] floor item pool loaded - pools=" << FloorItemPool::Count() << '\n';
+
+		// 기본 장비 - ItemTable 다음이어야 한다. 종류가 그 부위에 맞는지, 스킬이 그 종류의 풀에 있는지 검사한다 (ADR-0011)
+		if (StarterKitTable::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] starter kit invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] starter kit loaded - pieces=" << StarterKitTable::All().size() << '\n';
 
 		// 상자 배치 - 층 풀 다음이어야 한다. 상자마다 그 층 · 등급의 풀이 있는지 검사한다.
 		if (ChestSpawnTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
@@ -328,6 +338,34 @@ int main()
 
 		if (GFakeCommitAckLoss.load() > 0)
 			LOG_LINE << "[BOOT] FBTK_FAKE_ACK_LOSS=" << GFakeCommitAckLoss.load() << " - first N run-end commits report a lost ack after committing (TEST ONLY)\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_FAKE_LOGIN_FAIL") == 0 && raw != nullptr)
+		{
+			GFakeLoginFail.store(static_cast<int32>(::strtol(raw, nullptr, 10)));
+			::free(raw);
+		}
+
+		if (GFakeLoginFail.load() > 0)
+			LOG_LINE << "[BOOT] FBTK_FAKE_LOGIN_FAIL=" << GFakeLoginFail.load() << " - first N logins fail their character query (TEST ONLY)\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_LOGIN_DELAY_MS") == 0 && raw != nullptr)
+		{
+			GLoginDelayMs.store(static_cast<uint32>(::strtoul(raw, nullptr, 10)));
+			::free(raw);
+		}
+
+		if (GLoginDelayMs.load() > 0)
+			LOG_LINE << "[BOOT] FBTK_LOGIN_DELAY_MS=" << GLoginDelayMs.load() << " - every login waits this long in the DB queue (TEST ONLY)\n";
 	}
 
 	{

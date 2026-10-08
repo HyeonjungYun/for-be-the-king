@@ -29,8 +29,12 @@ namespace
 
 	// 캐릭터의 아이템을 전부 읽어 Player에 싣는다.
 	// 이후 던전 내에서는 DB를 치지 않는다.
-	bool LoadPlayerItems(DBConnection* conn, PlayerRef player)
+	// ownedRows = 이 캐릭터가 소유한 행 수 (착용 · 소지 · 창고 전부). 0 이면 기본 장비를 받는다 - 사망 가방의 행은
+	// 주인이 NULL 이라 세지 않는다 (ObjectUtils CommitDeath)
+	bool LoadPlayerItems(DBConnection* conn, PlayerRef player, OUT int32& ownedRows)
 	{
+		ownedRows = 0;
+
 		const uint64 characterId = player->objectInfo->object_id();
 
 		char query[512];
@@ -79,6 +83,8 @@ namespace
 
 		while (MYSQL_ROW row = ::mysql_fetch_row(res))
 		{
+			ownedRows++;
+
 			ItemEntry e;
 			e.instanceId = ::strtoull(row[COL_ID], nullptr, 10);
 			e.itemTypeId = static_cast<uint32>(::atoi(row[COL_TYPE]));
@@ -397,20 +403,38 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 {
 	auto gameSession = static_pointer_cast<GameSession>(session);
 
+	auto reject = [&gameSession]()
+		{
+			Protocol::S_LOGIN loginPkt;
+			loginPkt.set_success(false);
+
+			SEND_PACKET_DECLARATION(loginPkt);
+			gameSession->Send(sendBuffer);
+		};
+
 	const string token = pkt.token();
 	if (token.empty())
 	{
-		Protocol::S_LOGIN loginPkt;
-		loginPkt.set_success(false);
+		reject();
+		return true;
+	}
 
-		SEND_PACKET_DECLARATION(loginPkt);
-		gameSession->Send(sendBuffer);
-
+	// 🔴 연결 하나에 로그인은 하나 (ADR-0011 Migration 2 · AC-AL-07). 이미 로그인했거나 처리 중이면 거절한다.
+	//    전에는 두 번째 C_LOGIN 이 다른 계정으로 accountId 를 덮어써서, 끊길 때 두 번째 계정만 풀리고 첫 계정은
+	//    서버를 다시 켤 때까지 "already online" 으로 잠겼다. 실패한 로그인은 이 표시를 되돌려 다시 시도할 수 있다
+	if (gameSession->loginStarted.exchange(true))
+	{
+		LOG_LINE << "[LOGIN] rejected - this connection already logged in or is logging in. account=" << gameSession->accountId.load() << '\n';
+		reject();
 		return true;
 	}
 
 	GDBQueue.Push([gameSession, token](DBConnection* conn)
 		{
+			// 검증 전용 (FBTK_LOGIN_DELAY_MS) - 이 사이에 접속을 끊어 아래 회수 경로를 시험한다
+			if (const uint32 delayMs = GLoginDelayMs.load(); delayMs > 0)
+				this_thread::sleep_for(chrono::milliseconds(delayMs));
+
 			Protocol::S_LOGIN loginPkt;
 			loginPkt.set_success(false);
 
@@ -445,7 +469,21 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 					"WHERE account_id = %llu ORDER BY character_id",
 					accountId);
 
-				if (MYSQL_RES* result = conn->Query(query))
+				// 캐릭터 목록을 다 읽었을 때만 성공이다. 전에는 조회 실패 · 열 수 불일치에도 success = true 로 답했고,
+				// 열 수 불일치는 TryLogin 으로 잡은 계정을 놓지 않아 서버를 다시 켤 때까지 그 계정이 잠겼다
+				bool loaded = false;
+
+				MYSQL_RES* result = nullptr;
+				if (GFakeLoginFail.load() > 0 && GFakeLoginFail.fetch_sub(1) > 0)
+					LOG_LINE << "[LOGIN] injected character query failure - account=" << accountId << " (FBTK_FAKE_LOGIN_FAIL)\n";
+				else
+					result = conn->Query(query);
+
+				if (result == nullptr)
+				{
+					LOG_LINE << "[LOGIN] character query failed - account=" << accountId << " err=" << conn->GetError() << '\n';
+				}
+				else
 				{
 					enum {COL_ID = 0, COL_NAME, COL_HP, COL_MAX_HP, COL_FLOOR, COL_X, COL_Y, COL_Z, COL_YAW, COL_COUNT };
 
@@ -453,7 +491,6 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 					{
 						LOG_LINE << "[LOGIN] column count mismatch - expected " << COL_COUNT << " got " << ::mysql_num_fields(result) << '\n';
 						conn->FreeResult(result);
-						accountId = 0;
 					}
 					else
 					{
@@ -477,15 +514,42 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 						}
 
 						conn->FreeResult(result);
+						loaded = true;
 					}
 				}
 
-				gameSession->characters.assign(loginPkt.characters().begin(), loginPkt.characters().end());
-				gameSession->accountId.store(accountId);
-				gameSession->place.store(SessionPlace::BaseCamp);
+				if (loaded == false)
+				{
+					GAccountManager.LogOut(accountId);
+					accountId = 0;
+					loginPkt.clear_characters();
+				}
+				else
+				{
+					gameSession->characters.assign(loginPkt.characters().begin(), loginPkt.characters().end());
+					gameSession->accountId.store(accountId);
+					gameSession->place.store(SessionPlace::BaseCamp);
 
-				loginPkt.set_success(true);
+					// 🔴 이 작업이 도는 사이에 접속이 끊겼으면 OnDisconnected 는 이미 accountId 0 을 놓고 지나갔다 —
+					//    여기서 회수하지 않으면 계정이 서버를 다시 켤 때까지 "already online" 이다.
+					//    Disconnect 는 _connected 를 먼저 내리고 OnDisconnected 를 부르므로, 둘 중 exchange 로 먼저 가져간 쪽만 LogOut 한다
+					if (gameSession->IsConnected() == false)
+					{
+						if (const uint64 abandoned = gameSession->accountId.exchange(0); abandoned != 0)
+						{
+							LOG_LINE << "[LOGIN] connection closed while logging in - released account=" << abandoned << '\n';
+							GAccountManager.LogOut(abandoned);
+						}
+						return;
+					}
+
+					loginPkt.set_success(true);
+				}
 			}
+
+			// 실패한 연결은 다시 로그인할 수 있다 (토큰 만료 · 이미 접속 중 · 조회 실패)
+			if (loginPkt.success() == false)
+				gameSession->loginStarted.store(false);
 
 			SEND_PACKET_DECLARATION(loginPkt);
 			gameSession->Send(sendBuffer);
@@ -598,7 +662,8 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 
 	GDBQueue.Push([gameSession, player, room, name = character.name()](DBConnection* conn)
 		{
-			if (LoadPlayerItems(conn, player) == false)
+			int32 ownedRows = 0;
+			if (LoadPlayerItems(conn, player, OUT ownedRows) == false)
 			{
 				LOG_LINE << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << '\n';
 
@@ -606,11 +671,20 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 				return;
 			}
 
-			// 부하 측정 전용 - 맨몸 봇에 기본 3점 (FBTK_BOT_REGEAR)
+			// 부하 측정 전용 - 맨몸 봇에 기본 3점 (FBTK_BOT_REGEAR).
+			// 기본 장비보다 먼저 - 봇이 채워지면 아래는 채울 부위가 없어 [REGEAR] 집계가 예전 측정과 같다
 			if (GBotRegear.load())
 			{
 				if (const int32 filled = RegearBot(*player, name); filled > 0)
 					LOG_LINE << "[REGEAR] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
+			}
+
+			// 기본 장비 - 착용 · 소지 · 창고가 모두 비었다 (account-login-mvp-2026-10-09.md Core Rule 8 · ADR-0011 Decision 4).
+			// 창고에 하나라도 있으면 주지 않는다 - 맡겨 두고 공짜 장비만 들고 들어가는 것을 막는다
+			if (ownedRows == 0)
+			{
+				if (const int32 filled = EquipStarterKit(*player); filled > 0)
+					LOG_LINE << "[STARTER] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
 			}
 
 			// 방에 입장
