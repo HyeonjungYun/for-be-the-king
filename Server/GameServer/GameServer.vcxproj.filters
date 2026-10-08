@@ -114,6 +114,9 @@
     <ClCompile Include="CommitRetry.cpp">
       <Filter>Data</Filter>
     </ClCompile>
+    <ClCompile Include="CommitJournal.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
     <ClCompile Include="Telemetry.cpp">
       <Filter>Data</Filter>
     </ClCompile>
@@ -216,6 +219,9 @@
       <Filter>Game\Object</Filter>
     </ClInclude>
     <ClInclude Include="CommitRetry.h">
+      <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="CommitJournal.h">
       <Filter>Data</Filter>
     </ClInclude>
     <ClInclude Include="Telemetry.h">

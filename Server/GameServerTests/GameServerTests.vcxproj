@@ -96,6 +96,7 @@
     <ClCompile Include="EquipStatsTest.cpp" />
     <ClCompile Include="KillBatchTest.cpp" />
     <ClCompile Include="CommitRetryTest.cpp" />
+    <ClCompile Include="CommitJournalTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="ItemRollerTest.cpp" />
     <ClCompile Include="ItemTableTest.cpp" />
@@ -127,6 +128,7 @@
     <ClCompile Include="..\GameServer\EscapeLogic.cpp" />
     <ClCompile Include="..\GameServer\EquipStats.cpp" />
     <ClCompile Include="..\GameServer\CommitRetry.cpp" />
+    <ClCompile Include="..\GameServer\CommitJournal.cpp" />
     <ClCompile Include="..\GameServer\Telemetry.cpp" />
     <ClCompile Include="..\GameServer\Enum.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>

@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "CommitRetry.h"
+#include "CommitJournal.h"
 
 struct DeathSnapshot;
 struct EscapeSnapshot;
@@ -39,17 +40,30 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 // ── 런 끝 저장 (사망 · 탈출 · 만료) ─ ADR-0010 · CommitRetry.h ──
 // Try* = 한 번. 실패를 Transient(다시 하면 된다) / Permanent(다시 해도 같다)로 돌려준다.
 // mode = Lenient 면 "그 순간 DB 에 실제로 남아 있는 그 캐릭터의 것만" 옮기고 어긋난 것은 🔴 로그로 남긴다.
-// 사망 관대 단계는 snap 을 고친다 - 새 가방 id · 가방에 실제로 들어간 아이템만 남긴 목록
-CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode);
-CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode);
-CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode);
+// 사망 관대 단계는 snap 을 고친다 - 새 가방 id · 가방에 실제로 들어간 아이템만 남긴 목록.
+// journalId 가 있으면(기록된 저장) 같은 트랜잭션 안에서 applied_commits 에 남긴다 - 부팅 재처리가 두 번 적용하지 않게
+CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode, const string& journalId);
+CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode, const string& journalId);
+CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode, const string& journalId);
 
 // 큐에 넣고 끝날 때까지 다시 한다: 엄격 → (영구 실패) 관대 → (영구 실패) 포기, 일시 실패는 같은 단계를 100 ms → ×2 → 5 s 간격으로.
 // 기다리는 동안 DB 스레드를 잡지 않는다(GDBQueue.PushAfter) · 연결이 끊겼으면 다시 붙인다.
+// 첫 시도가 실패하면 journal(스냅샷)을 GCommitJournalDir 에 파일로 남긴다 - 끝나면 지우고, 포기면 abandoned/ 로.
 // finish(conn, committed, mode) 는 DB 스레드에서 한 번 - committed = false 면 포기(DB 는 저장 전 그대로)
-void QueueCommit(const char* tag, uint64 characterId,
-	function<CommitOutcome(DBConnection*, CommitMode)> attempt,
+void QueueCommit(JournalEntry journal,
+	function<CommitOutcome(DBConnection*, CommitMode, const string& journalId)> attempt,
 	function<void(DBConnection*, bool committed, CommitMode mode)> finish);
+
+// 저장 기록 디렉터리 - 부팅이 정한다 (Server/Logs/pending-commits · FBTK_JOURNAL_DIR). 비어 있으면 기록하지 않는다
+extern string GCommitJournalDir;
+
+// 부팅 - applied_commits 표가 없으면 만든다 (Server/Tools/schema_commit_journal.sql 과 같은 정의)
+bool EnsureCommitJournalTable(DBConnection* conn);
+
+// 부팅 - 접속을 받기 전에 남은 기록을 처리한다 (RestoreIdCounters 뒤, PurgeExpiredBags · LoadLiveBags 앞).
+// 이미 적용된 기록(applied_commits 에 있음)은 지우기만 · 읽을 수 없는 기록 · 관대 단계도 영구 실패면 abandoned/ 로.
+// 일시 실패가 끝내 안 풀리면 false - 서버를 띄우지 않는다 (사용자 결정 2026-10-08: 띄우면 그 캐릭터가 저장 전 상태로 들어간다)
+bool ReplayCommitJournal(DBConnection* conn, const string& dir);
 
 // 베이스캠프 인벤토리(보관 · 반입 · 착용)를 DB 에서 읽어 S_INVENTORY_SYNC 로 보낸다 (UI 4단계 · S3).
 // 베이스캠프에 들어오는 세 지점 - 로그인 · 탈출 커밋 완료 · 던전 퇴장 - 에서 DB 스레드가 부른다.
@@ -103,14 +117,6 @@ extern atomic<bool> GDebugGold;
 // 예전에는 접속한 누구나 남에게 CC 를 걸고 가방을 지울 수 있었다 (ADR-0007 · 2026-10-07)
 extern atomic<bool> GDebugCommands;
 
-// 체류 시간 만료 (escape-timer.md Core Rule 16 · 17) - 소지 · 착용 · 주운 아이템을 id 로 지우고 골드 30 % 를 더한다. 가방은 없다
-struct ExpirySnapshot
-{
-	uint64				characterId = 0;
-	vector<uint64>		rowIds;				// DB 행이 있는 것 - 소지 · 착용(isNew 제외) ∪ droppedIds
-	uint32				itemsDestroyed = 0;	// 결과 안내용 - 소지 + 착용 개수 (isNew 포함)
-	uint64				goldKept = 0;
-};
 
 /*------------------
 	DetachedBodies

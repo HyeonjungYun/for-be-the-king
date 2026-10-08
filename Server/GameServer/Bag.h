@@ -27,6 +27,16 @@ struct EscapeSnapshot
 	uint64				gold = 0;		// 런 골드 전액이 계정으로 (escape-timer.md Core Rule 18)
 };
 
+// 체류 시간 만료 (escape-timer.md Core Rule 16 · 17) - 소지 · 착용 · 주운 아이템을 id 로 지우고 골드 30 % 를 더한다. 가방은 없다
+// (2026-10-08 ObjectUtils.h 에서 옮김 - 저장 기록(CommitJournal)이 세 스냅샷을 같이 다룬다)
+struct ExpirySnapshot
+{
+	uint64				characterId = 0;
+	vector<uint64>		rowIds;				// DB 행이 있는 것 - 소지 · 착용(isNew 제외) ∪ droppedIds
+	uint32				itemsDestroyed = 0;	// 결과 안내용 - 소지 + 착용 개수 (isNew 포함)
+	uint64				goldKept = 0;
+};
+
 class Bag : public Object
 {
 public:

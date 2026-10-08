@@ -103,9 +103,51 @@ namespace
 		conn->Rollback();
 		return CommitRetry::FromMysqlError(err);
 	}
+
+	enum class MarkResult : uint8 { Marked, AlreadyApplied, Failed };
+
+	// 기록된 저장이면 커밋 직전, 같은 트랜잭션 안에서 적용 표시를 남긴다 (CommitJournal.h). 기록 id 는 영문 · 숫자 · '-' 뿐
+	MarkResult MarkApplied(DBConnection* conn, const string& journalId, const char* kind, uint64 characterId)
+	{
+		const string insert = "INSERT INTO applied_commits (journal_id, character_id, kind) VALUES ('" + conn->Escape(journalId) + "', "
+			+ to_string(characterId) + ", '" + kind + "')";
+
+		if (conn->Excute(insert.c_str()))
+			return MarkResult::Marked;
+
+		// 이미 있다 = 이 기록은 전에 커밋됐다 (커밋 뒤 파일을 지우기 전에 서버가 꺼졌다). 지금 트랜잭션은 버리고 성공으로 친다 - 두 번 적용하지 않는다
+		if (conn->GetLastErrorNo() == 1062)
+			return MarkResult::AlreadyApplied;
+
+		return MarkResult::Failed;
+	}
+
+	// TryCommit* 의 커밋 직전 공통 - journalId 가 비었으면 아무것도 안 한다. Ok 가 아니면 이미 롤백했다
+	bool MarkOrFinish(DBConnection* conn, const string& journalId, const char* kind, uint64 characterId, OUT CommitOutcome& result)
+	{
+		if (journalId.empty())
+			return true;
+
+		switch (MarkApplied(conn, journalId, kind, characterId))
+		{
+		case MarkResult::Marked:
+			return true;
+		case MarkResult::AlreadyApplied:
+			LOG_LINE << "[JOURNAL] " << journalId << " already applied - this attempt rolled back, counted as done\n";
+			conn->Rollback();
+			result = CommitOutcome::Ok;
+			return false;
+		case MarkResult::Failed:
+		default:
+			result = RollbackAndClassify(conn);
+			return false;
+		}
+	}
 }
 
-CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode)
+string GCommitJournalDir;
+
+CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, CommitMode mode, const string& journalId)
 {
 	const uint64 characterId = snap.characterId;
 	const bool lenient = (mode == CommitMode::Lenient);
@@ -251,6 +293,9 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 		conn->Rollback();
 		return CommitOutcome::Transient;
 	}
+
+	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "ESCAPE", characterId, OUT marked) == false)
+		return marked;
 
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
@@ -558,7 +603,7 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 	return false;
 }
 
-CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode)
+CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode mode, const string& journalId)
 {
 	const bool lenient = (mode == CommitMode::Lenient);
 
@@ -666,6 +711,9 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		return CommitOutcome::Permanent;
 	}
 
+	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "DEATH", snap.characterId, OUT marked) == false)
+		return marked;
+
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
 
@@ -749,7 +797,7 @@ void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 ch
 
 // 만료 커밋 한 번 (escape-timer.md Core Rule 17). 가방을 만들지 않는다 - bags 테이블은 건드리지 않는다 (AC-9).
 // DELETE 는 원래 관대하다(어긋나도 실패로 보지 않는다) - 관대 단계는 골드 문장만 UPDATE IGNORE 로 바꾼다
-CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode)
+CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, CommitMode mode, const string& journalId)
 {
 	const bool lenient = (mode == CommitMode::Lenient);
 	char query[256];
@@ -795,6 +843,9 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 		return CommitOutcome::Transient;
 	}
 
+	if (CommitOutcome marked; MarkOrFinish(conn, journalId, "EXPIRE", snap.characterId, OUT marked) == false)
+		return marked;
+
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
 
@@ -812,14 +863,37 @@ namespace
 		CommitMode		mode = CommitMode::Strict;
 		uint32			transientRetries = 0;
 
-		function<CommitOutcome(DBConnection*, CommitMode)>		attempt;
-		function<void(DBConnection*, bool, CommitMode)>			finish;
+		JournalEntry	journal;				// 첫 시도 때의 스냅샷 - 실패하면 파일로 (CommitJournal.h)
+		string			journalId;				// 파일로 남겼으면 그 id, 아니면 빈 문자열
+
+		function<CommitOutcome(DBConnection*, CommitMode, const string&)>	attempt;
+		function<void(DBConnection*, bool, CommitMode)>						finish;
 	};
+
+	// 재시도로 들어가는 순간 한 번 - 평소 저장(첫 시도 성공)은 디스크를 건드리지 않는다 (사용자 결정 2026-10-08 ①)
+	void WriteJournalOnce(const shared_ptr<CommitTask>& task)
+	{
+		if (task->journalId.empty() == false || GCommitJournalDir.empty())
+			return;
+
+		task->journal.id = CommitJournal::NewId(task->journal.kind, task->characterId);
+
+		string error;
+		if (CommitJournal::Write(GCommitJournalDir, task->journal, OUT error) == false)
+		{
+			// 기록 없이도 재시도는 계속한다 - 그동안 서버가 꺼지면 예전처럼 이 저장은 사라진다
+			LOG_LINE << "[JOURNAL] 🔴 cannot write " << task->journal.id << " - " << error << '\n';
+			return;
+		}
+
+		task->journalId = task->journal.id;
+		LOG_LINE << "[JOURNAL] wrote " << task->journalId << " (a restart will finish this commit)\n";
+	}
 
 	void RunCommit(const shared_ptr<CommitTask>& task, DBConnection* conn)
 	{
 		t_commitErrno = 0;
-		const CommitOutcome outcome = task->attempt(conn, task->mode);
+		const CommitOutcome outcome = task->attempt(conn, task->mode, task->journalId);
 		const uint32 err = t_commitErrno;		// 실패한 문장의 번호 (0 = DB 오류가 아닌 실패 - 데이터 어긋남 · 시험 주입)
 		const CommitStep step = CommitRetry::Next(task->mode, outcome, task->transientRetries);
 		const uint64 elapsedMs = (Utils::NowMicroseconds() - task->queuedUs) / 1000;
@@ -831,6 +905,11 @@ namespace
 			if (task->transientRetries > 0 || task->mode == CommitMode::Lenient)
 				LOG_LINE << "[" << task->tag << "] committed after " << task->transientRetries << " transient retries · mode=" << modeName
 					<< " · " << elapsedMs << "ms char=" << task->characterId << '\n';
+
+			// 파일을 먼저 지운다 - 지우기 전에 꺼져도 applied_commits 표시가 있어 부팅이 건너뛴다
+			if (task->journalId.empty() == false)
+				CommitJournal::Remove(GCommitJournalDir, task->journalId);
+
 			task->finish(conn, true, task->mode);
 			return;
 
@@ -838,6 +917,11 @@ namespace
 			// 관대 단계에서도 같은 문장으로는 안 된다 - 데이터가 깨졌다. DB 는 저장 전 그대로 (예전 사망 3회 실패와 같은 결과)
 			LOG_LINE << "[" << task->tag << "] 🔴 ABANDONED - permanent failure even in lenient mode, DB unchanged. err=" << err
 				<< " char=" << task->characterId << " after " << elapsedMs << "ms\n";
+
+			// 다시 해도 같다 - 부팅이 또 붙잡지 않게 치우되, 원인을 볼 수 있게 남긴다
+			if (task->journalId.empty() == false)
+				CommitJournal::MoveToAbandoned(GCommitJournalDir, task->journalId);
+
 			task->finish(conn, false, task->mode);
 			return;
 
@@ -860,26 +944,175 @@ namespace
 				<< "ms char=" << task->characterId << '\n';
 		}
 
+		// 기다리게 됐다 - 그동안 서버가 꺼져도 다음 부팅이 끝내도록 디스크에 남긴다
+		WriteJournalOnce(task);
+
 		// 끊긴 연결로 다시 해 봐야 같다 - 이 워커의 커넥션을 지금 다시 붙인다 (다음 시도는 다른 워커일 수 있다 - 그 워커도 제 것을 고친다)
 		if (DBError::IsConnectionLost(err) || conn->IsConnected() == false)
 			conn->Reconnect();
 
 		GDBQueue.PushAfter(step.delayMs, [task](DBConnection* next) { RunCommit(task, next); });
 	}
+
+	CommitOutcome AttemptJournal(DBConnection* conn, JournalEntry& entry, CommitMode mode)
+	{
+		switch (entry.kind)
+		{
+		case JournalKind::Death:	return TryCommitDeath(conn, entry.death, mode, entry.id);
+		case JournalKind::Escape:	return TryCommitEscape(conn, entry.escape, mode, entry.id);
+		case JournalKind::Expiry:	return TryCommitExpiry(conn, entry.expiry, mode, entry.id);
+		default:					return CommitOutcome::Permanent;
+		}
+	}
+
+	// 부팅 재처리의 일시 실패 한도 - 100 ms → ×2 → 5 s 로 10 번이면 약 25 s. 그래도 안 되면 서버를 띄우지 않는다
+	constexpr uint32 BOOT_TRANSIENT_LIMIT = 10;
 }
 
-void QueueCommit(const char* tag, uint64 characterId,
-	function<CommitOutcome(DBConnection*, CommitMode)> attempt,
+void QueueCommit(JournalEntry journal,
+	function<CommitOutcome(DBConnection*, CommitMode, const string& journalId)> attempt,
 	function<void(DBConnection*, bool committed, CommitMode mode)> finish)
 {
 	auto task = make_shared<CommitTask>();
-	task->tag = tag;
-	task->characterId = characterId;
+	task->tag = CommitJournal::KindName(journal.kind);
+	task->characterId = journal.characterId;
 	task->queuedUs = Utils::NowMicroseconds();
+	task->journal = move(journal);
 	task->attempt = move(attempt);
 	task->finish = move(finish);
 
 	GDBQueue.Push([task](DBConnection* conn) { RunCommit(task, conn); });
+}
+
+bool EnsureCommitJournalTable(DBConnection* conn)
+{
+	// Server/Tools/schema_commit_journal.sql 과 같은 정의 - 표가 있으면 아무 일도 하지 않는다
+	if (conn->Excute(
+		"CREATE TABLE IF NOT EXISTS applied_commits ("
+		" journal_id   VARCHAR(64)     NOT NULL,"
+		" character_id BIGINT UNSIGNED NOT NULL,"
+		" kind         VARCHAR(16)     NOT NULL,"
+		" applied_at   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+		" PRIMARY KEY (journal_id)"
+		") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4") == false)
+	{
+		LOG_LINE << "[BOOT] cannot create applied_commits: " << conn->GetError() << '\n';
+		return false;
+	}
+
+	return true;
+}
+
+bool ReplayCommitJournal(DBConnection* conn, const string& dir)
+{
+	if (dir.empty())
+		return true;
+
+	const vector<string> ids = CommitJournal::ListIds(dir);
+
+	// 읽을 수 없는 기록은 적용할 수 없다 - 일부만 적용하면 잘못된 결과가 확정된다. 원인을 볼 수 있게 abandoned/ 로
+	vector<JournalEntry> entries;
+	uint64 maxInstance = 0;
+	uint64 maxBag = 0;
+	for (const string& id : ids)
+	{
+		JournalEntry entry;
+		string error;
+		if (CommitJournal::Read(dir, id, OUT entry, OUT error) == false || entry.id != id)
+		{
+			LOG_LINE << "[JOURNAL] 🔴 unreadable " << id << " - " << (error.empty() ? "id mismatch" : error) << " → abandoned/\n";
+			CommitJournal::MoveToAbandoned(dir, id);
+			continue;
+		}
+
+		CommitJournal::MaxIds(entry, OUT maxInstance, OUT maxBag);
+		entries.push_back(move(entry));
+	}
+
+	// 런 중 생성 아이템 · 가방 id 는 DB 에 없어 RestoreIdCounters 가 모른다 - 재처리 · 이후 발급이 기록 속 id 와 겹치지 않게 그 위로
+	if (maxInstance >= GNextInstanceId.load())
+		GNextInstanceId.store(maxInstance + 1);
+	if (maxBag >= GNextBagId.load())
+		GNextBagId.store(maxBag + 1);
+
+	int32 applied = 0;
+	int32 skipped = 0;
+	int32 abandoned = 0;
+
+	for (JournalEntry& entry : entries)
+	{
+		// 커밋은 됐는데 파일을 지우기 전에 꺼졌다 - 두 번 적용하지 않는다
+		uint64 marked = 0;
+		const string check = "SELECT COUNT(*) FROM applied_commits WHERE journal_id = '" + conn->Escape(entry.id) + "'";
+		if (QueryScalar(conn, check.c_str(), OUT marked) == false)
+			return false;
+
+		if (marked > 0)
+		{
+			LOG_LINE << "[JOURNAL] " << entry.id << " already applied - removing the record\n";
+			CommitJournal::Remove(dir, entry.id);
+			skipped++;
+			continue;
+		}
+
+		CommitMode mode = CommitMode::Strict;
+		uint32 transient = 0;
+
+		while (true)
+		{
+			t_commitErrno = 0;
+			const CommitOutcome outcome = AttemptJournal(conn, entry, mode);
+			const uint32 err = t_commitErrno;
+			const CommitStep step = CommitRetry::Next(mode, outcome, transient);
+
+			if (step.kind == CommitStep::Kind::Done)
+			{
+				LOG_LINE << "[JOURNAL] replayed " << entry.id << " (" << CommitJournal::KindName(entry.kind) << " char=" << entry.characterId
+					<< " mode=" << (mode == CommitMode::Lenient ? "lenient" : "strict") << ")\n";
+				CommitJournal::Remove(dir, entry.id);
+				applied++;
+				break;
+			}
+
+			if (step.kind == CommitStep::Kind::Abandon)
+			{
+				LOG_LINE << "[JOURNAL] 🔴 ABANDONED " << entry.id << " - permanent failure even in lenient mode, DB unchanged. err=" << err << " → abandoned/\n";
+				CommitJournal::MoveToAbandoned(dir, entry.id);
+				abandoned++;
+				break;
+			}
+
+			if (step.mode != mode)
+			{
+				LOG_LINE << "[JOURNAL] " << entry.id << " permanent failure in strict mode (err=" << err << ") - retrying leniently\n";
+				mode = step.mode;
+				continue;
+			}
+
+			if (++transient > BOOT_TRANSIENT_LIMIT)
+			{
+				LOG_LINE << "[JOURNAL] 🔴 " << entry.id << " still failing after " << BOOT_TRANSIENT_LIMIT << " retries (err=" << err
+					<< ") - refusing to start until it can be applied\n";
+				return false;
+			}
+
+			LOG_LINE << "[JOURNAL] " << entry.id << " attempt " << transient << " failed err=" << err << " - retry in " << step.delayMs << "ms\n";
+			if (DBError::IsConnectionLost(err) || conn->IsConnected() == false)
+				conn->Reconnect();
+			this_thread::sleep_for(chrono::milliseconds(step.delayMs));
+		}
+	}
+
+	// 기록이 모두 정리됐다 - 표시는 "파일이 남아 있는 저장" 을 위해서만 있다. 런 중에 쌓인 것까지 비운다
+	if (conn->Excute("DELETE FROM applied_commits") == false)
+	{
+		LOG_LINE << "[BOOT] cannot clear applied_commits: " << conn->GetError() << '\n';
+		return false;
+	}
+
+	LOG_LINE << "[JOURNAL] boot replay - records=" << ids.size() << " applied=" << applied << " already=" << skipped
+		<< " abandoned=" << abandoned << " unreadable=" << (ids.size() - entries.size()) << " dir=" << dir << '\n';
+	return true;
 }
 
 bool DeathCommitTracker::TryBegin(uint64 characterId)

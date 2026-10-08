@@ -165,6 +165,7 @@
     <ClCompile Include="EscapeLogic.cpp" />
     <ClCompile Include="EquipStats.cpp" />
     <ClCompile Include="CommitRetry.cpp" />
+    <ClCompile Include="CommitJournal.cpp" />
     <ClCompile Include="Telemetry.cpp" />
     <ClCompile Include="Creature.cpp" />
     <ClCompile Include="CsvTable.cpp" />
@@ -214,6 +215,7 @@
     <ClInclude Include="EquipStats.h" />
     <ClInclude Include="KillBatch.h" />
     <ClInclude Include="CommitRetry.h" />
+    <ClInclude Include="CommitJournal.h" />
     <ClInclude Include="Telemetry.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />

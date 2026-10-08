@@ -397,6 +397,22 @@ int main()
 		return -1;
 	}
 
+	// 기다리는 런 끝 저장의 기록 (CommitJournal.h, 2026-10-08) - 그 사이 서버가 꺼지면 아래 재처리가 접속을 받기 전에 끝낸다
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+		if (_dupenv_s(&raw, &length, "FBTK_JOURNAL_DIR") == 0 && raw != nullptr)
+		{
+			GCommitJournalDir = raw;
+			::free(raw);
+		}
+		else
+		{
+			GCommitJournalDir = ItemTable::DefaultDataDir() + "\\..\\Logs\\pending-commits";
+		}
+		LOG_LINE << "[BOOT] commit journal dir=" << GCommitJournalDir << '\n';
+	}
+
 	{
 		DBConnection* conn = GDBPool.Pop();
 		if (conn == nullptr)
@@ -405,7 +421,10 @@ int main()
 			return -1;
 		}
 
-		const bool ok = RestoreIdCounters(conn) && PurgeExpiredBags(conn) && ValidateItemRows(conn) && LoadLiveBags(conn);
+		// 순서: id 카운터 → 남은 저장 기록 재처리(카운터를 기록 속 id 위로 올린 뒤) → 만료 가방 정리 → 행 검사 → 살아 있는 가방 적재.
+		// 재처리가 만든 사망 가방은 아직 만료 전이라 정리에 걸리지 않고, LoadLiveBags 가 월드에 되살린다
+		const bool ok = EnsureCommitJournalTable(conn) && RestoreIdCounters(conn) && ReplayCommitJournal(conn, GCommitJournalDir)
+			&& PurgeExpiredBags(conn) && ValidateItemRows(conn) && LoadLiveBags(conn);
 		GDBPool.Push(conn);
 
 		if (ok == false)

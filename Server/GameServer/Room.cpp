@@ -1589,8 +1589,15 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 	// (GDeathCommits). 예전엔 3 번 실패하면 포기해서 죽은 사람이 장비를 그대로 지켰다
 	RoomRef room = GetRoomRef();
 	auto shared = make_shared<DeathSnapshot>(move(snap));
-	QueueCommit("DEATH", characterId,
-		[shared](DBConnection* conn, CommitMode mode) { return TryCommitDeath(conn, *shared, mode); },
+
+	// 첫 시도가 실패하면 이 스냅샷이 파일로 남는다 - 그 사이 서버가 꺼져도 다음 부팅이 끝낸다 (CommitJournal.h)
+	JournalEntry journal;
+	journal.kind = JournalKind::Death;
+	journal.characterId = characterId;
+	journal.death = *shared;
+
+	QueueCommit(move(journal),
+		[shared](DBConnection* conn, CommitMode mode, const string& journalId) { return TryCommitDeath(conn, *shared, mode, journalId); },
 		[room, shared](DBConnection*, bool committed, CommitMode) { room->DoAsync(&Room::OnBagCreated, *shared, committed); });
 }
 
@@ -1697,8 +1704,13 @@ void Room::BeginEscapeCommit(uint64 playerId)
 	const uint64 queuedUs = Utils::NowMicroseconds();
 
 	// 끝날 때까지 다시 한다 - 엄격 → 관대 → 포기 (ObjectUtils.h QueueCommit). 그동안 Escaping 이라 베이스캠프 조작 · 재입장이 막힌다
-	QueueCommit("ESCAPE", playerId,
-		[snap](DBConnection* conn, CommitMode mode) { return TryCommitEscape(conn, snap, mode); },
+	JournalEntry journal;
+	journal.kind = JournalKind::Escape;
+	journal.characterId = playerId;
+	journal.escape = snap;
+
+	QueueCommit(move(journal),
+		[snap](DBConnection* conn, CommitMode mode, const string& journalId) { return TryCommitEscape(conn, snap, mode, journalId); },
 		[session, snap, queuedUs](DBConnection* conn, bool committed, CommitMode)
 		{
 			session->place.store(SessionPlace::BaseCamp);
@@ -3378,8 +3390,13 @@ void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
 	LOG_LINE << "[EXPIRE] commit begin - char=" << playerId << " destroyed=" << snap.itemsDestroyed << " rows=" << snap.rowIds.size()
 		<< " gold_kept=" << snap.goldKept << " detached=" << (session == nullptr ? 1 : 0) << '\n';
 
-	QueueCommit("EXPIRE", playerId,
-		[snap](DBConnection* conn, CommitMode mode) { return TryCommitExpiry(conn, snap, mode); },
+	JournalEntry journal;
+	journal.kind = JournalKind::Expiry;
+	journal.characterId = playerId;
+	journal.expiry = snap;
+
+	QueueCommit(move(journal),
+		[snap](DBConnection* conn, CommitMode mode, const string& journalId) { return TryCommitExpiry(conn, snap, mode, journalId); },
 		[session, snap](DBConnection* conn, bool committed, CommitMode)
 		{
 			GDeathCommits.End(snap.characterId);
