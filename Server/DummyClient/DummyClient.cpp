@@ -30,6 +30,7 @@ string GEnterChat;
 atomic<uint32> GChatAfterMs = 0;
 atomic<bool> GSwapArmor = false;
 atomic<bool> GStayDead = false;
+atomic<bool> GHoldOnReject = false;
 atomic<uint64> GLeaveEscaped = 0;
 atomic<uint64> GLeaveExpired = 0;
 uint64 GBurstStartUs = 0;
@@ -753,6 +754,8 @@ int main(int argc, char* argv[])
 			GSwapArmor.store(true);
 		else if (::strcmp(argv[i], "-staydead") == 0)
 			GStayDead.store(true);
+		else if (::strcmp(argv[i], "-holdonreject") == 0)
+			GHoldOnReject.store(true);
 	}
 
 	GBurstStartUs = Utils::NowMicroseconds();

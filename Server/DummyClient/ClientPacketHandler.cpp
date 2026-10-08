@@ -46,6 +46,15 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	if (pkt.success() == false)
 	{
+		// -holdonreject: UE 클라처럼 베이스캠프에 남아 있다가 다시 입장한다 - 기다리는 동안 이 세션이 베이스캠프 동기화를 받는다
+		if (GHoldOnReject.load())
+		{
+			LOG_LINE << "[BOT] enter rejected idx=" << bot->botIndex
+				<< " char=" << bot->characterId.load() << " - waiting in base camp" << '\n';
+			bot->reenterAtUs.store(Utils::NowMicroseconds() + BOT_REENTER_DELAY_US);
+			return true;
+		}
+
 		LOG_LINE << "[BOT] enter rejected idx=" << bot->botIndex
 			<< " char=" << bot->characterId.load() << " - reconnecting" << '\n';
 		bot->Disconnect(L"enter rejected");
@@ -435,11 +444,16 @@ bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pk
 
 bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SYNC& pkt)
 {
+	auto bot = static_pointer_cast<BotSession>(session);
+
+	// 베이스캠프에서 받은 동기화 - 사망 저장이 끝나기 전 상태인지(소지 · 착용이 남았는지) 서버 로그와 맞춰 본다
+	if (GHoldOnReject.load() && bot->inGame.load() == false)
+		LOG_LINE << "[BOT BASECAMP SYNC] char=" << bot->characterId.load() << " items=" << pkt.items_size() << '\n';
+
 	if (GItemBehavior.load() == false && GSwapArmor.load() == false)
 		return true;
 
 	// 던전 동기화는 소지 · 착용 전체다. 베이스캠프 동기화에는 보관도 있지만 봇은 보관을 쓰지 않는다
-	auto bot = static_pointer_cast<BotSession>(session);
 	lock_guard<mutex> guard(bot->itemLock);
 
 	bot->items.clear();

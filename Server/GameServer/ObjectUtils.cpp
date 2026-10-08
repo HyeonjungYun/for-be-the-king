@@ -730,17 +730,43 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 	return CommitOutcome::Ok;
 }
 
+namespace
+{
+	void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId, int32 waitsLeft, uint64 firstUs);
+}
+
 void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 characterId)
 {
 	if (session == nullptr || characterId == 0)
 		return;
 
-	// 사망 커밋이 도는 중이면 DB 는 아직 사망 전 상태다. 커밋은 보통 수 ms 라 잠깐 기다린다.
-	// 끝내 안 끝나면(실패 주입 · DB 지연) 지금 확정된 상태를 보낸다 - 커밋이 실패하면 그게 맞는 상태이고,
-	// 그동안 베이스캠프 조작과 입장은 GDeathCommits 검사가 막는다.
-	for (int32 i = 0; i < BASECAMP_SYNC_WAIT_TRIES && GDeathCommits.IsPending(characterId); i++)
-		this_thread::sleep_for(chrono::milliseconds(BASECAMP_SYNC_WAIT_MS));
+	SyncBaseCamp(conn, session, characterId, BASECAMP_SYNC_WAIT_TRIES, Utils::NowMicroseconds());
+}
 
+namespace
+{
+void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId, int32 waitsLeft, uint64 firstUs)
+{
+	// 기다리는 사이에 끊겼다 - 보낼 곳이 없다
+	if (session->IsConnected() == false)
+		return;
+
+	// 사망 커밋이 도는 중이면 DB 는 아직 사망 전 상태다. 커밋은 보통 수 ms 라 잠깐 기다린다 - 자지 않고 다시 넣는다(PushAfter).
+	// 예전엔 이 워커가 최대 10 초 잤다 - 저장이 DB 장애로 길어지면 재로그인마다 워커 하나가 10 초씩 빠졌다 (ADR-0007 R-3)
+	if (GDeathCommits.IsPending(characterId) && waitsLeft > 0)
+	{
+		if (waitsLeft == BASECAMP_SYNC_WAIT_TRIES)
+			LOG_LINE << "[BASECAMP] sync deferred - death commit pending. char=" << characterId << '\n';
+
+		GDBQueue.PushAfter(BASECAMP_SYNC_WAIT_MS, [session, characterId, waitsLeft, firstUs](DBConnection* next)
+			{
+				SyncBaseCamp(next, session, characterId, waitsLeft - 1, firstUs);
+			});
+		return;
+	}
+
+	// 끝내 안 끝나면(실패 주입 · DB 장애) 지금 확정된 상태를 보낸다 - 커밋이 포기되면 그게 맞는 상태이고,
+	// 커밋되면 OnBagCreated 가 다시 보낸다. 그동안 베이스캠프 조작과 입장은 GDeathCommits 검사가 막는다.
 	if (GDeathCommits.IsPending(characterId))
 		LOG_LINE << "[BASECAMP] sync while death commit pending - char=" << characterId << " (sending committed state)\n";
 
@@ -792,7 +818,11 @@ void SendBaseCampInventory(DBConnection* conn, GameSessionRef session, uint64 ch
 	SEND_PACKET_DECLARATION(pkt);
 	session->Send(sendBuffer);
 
-	LOG_LINE << "[BASECAMP] sync - char=" << characterId << " vaulted=" << vaulted << " carried=" << carried << " equipped=" << equipped << '\n';
+	// 사망 커밋을 기다렸으면 얼마나 - 0 이면 바로 보냈다
+	const uint64 waitedMs = (waitsLeft < BASECAMP_SYNC_WAIT_TRIES) ? (Utils::NowMicroseconds() - firstUs) / 1000 : 0;
+	LOG_LINE << "[BASECAMP] sync - char=" << characterId << " vaulted=" << vaulted << " carried=" << carried << " equipped=" << equipped
+		<< " waited=" << waitedMs << "ms\n";
+}
 }
 
 // 만료 커밋 한 번 (escape-timer.md Core Rule 17). 가방을 만들지 않는다 - bags 테이블은 건드리지 않는다 (AC-9).

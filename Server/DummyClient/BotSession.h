@@ -117,6 +117,7 @@ extern string GEnterChat;		// -chat - 스레드 시작 전에 한 번 쓰고 이
 extern atomic<uint32> GChatAfterMs;	// -chatafter - 0 이면 입장하자마자 (저장 재시도 시험: 입장 뒤 DB 를 건드린 다음 /die)
 extern atomic<bool> GSwapArmor;	// -swap
 extern atomic<bool> GStayDead;	// -staydead - 죽어도 접속을 끊지 않는다
+extern atomic<bool> GHoldOnReject;	// -holdonreject - 입장 거절에 끊지 않고 베이스캠프에서 기다렸다 다시 입장 (UE 클라처럼, ADR-0007 R-3 시험)
 extern atomic<uint64> GLeaveEscaped;
 extern atomic<uint64> GLeaveExpired;
 
