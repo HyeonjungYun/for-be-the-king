@@ -97,6 +97,8 @@ void ServerStats::Dump(int32 sessionCount)
 	const uint64 moveRejects = _moveRejects.exchange(0);
 	const uint64 moveBlocked = _moveBlocked.exchange(0);
 	const uint64 moveWallRejects = _moveWallRejects.exchange(0);
+	const uint64 attackWallBlocked = _attackWallBlocked.exchange(0);
+	const uint64 mutualKills = _mutualKills.exchange(0);
 
 	uint64 buckets[BUCKET_COUNT];
 	for (int32 i = 0; i < BUCKET_COUNT; i++)
@@ -200,6 +202,9 @@ void ServerStats::Dump(int32 sessionCount)
 	out << " SV-3 move    reject=" << moveRejects << " " << Verdict(moveRejects == 0)
 		<< "  blocked=" << moveBlocked << " (hard CC, informational)"
 		<< "  wall=" << moveWallRejects << " (bots ignore walls, informational)\n";
+
+	out << " combat       attack_wall=" << attackWallBlocked << " (line of attack blocked, informational)"
+		<< "  mutual_kills=" << mutualKills << '\n';
 
 	out << " SV-5 band    recv=" << recvMbps << " Mbps"
 		<< "  sent=" << sentMbps << " Mbps " << Verdict(sentMbps <= SENT_LIMIT_MBPS)

@@ -34,6 +34,12 @@ public:
 	// 서버 벽에 막힌 이동 (reason=wall). SV-3 판정에 넣지 않는다 - 봇은 벽을 모른다 (ADR-0006 § Risks)
 	void			AddMoveWallReject() { _moveWallRejects.fetch_add(1); }
 
+	// 벽 · 엄폐물에 시선이 막힌 평타 - 대상 락 거절 + windup 중 취소 (combat-system.md Rule 7). 정보용 - 봇은 벽을 모른다
+	void			AddAttackWallBlocked() { _attackWallBlocked.fetch_add(1); }
+
+	// 같은 전투 Flush 에서 서로를 죽인 쌍 (TR-combat-022 - 예전엔 늘 0 이었다)
+	void			AddMutualKill() { _mutualKills.fetch_add(1); }
+
 	void			Dump(int32 sessionCount);
 
 	static uint64	PercentileUpperUs(const uint64* buckets, uint64 total, double p);
@@ -56,6 +62,8 @@ private:
 	atomic<uint64>	_moveRejects = 0;
 	atomic<uint64>	_moveBlocked = 0;
 	atomic<uint64>	_moveWallRejects = 0;
+	atomic<uint64>	_attackWallBlocked = 0;
+	atomic<uint64>	_mutualKills = 0;
 
 	atomic<uint64>	_sentByPacket[PACKET_ID_LIMIT];
 	PacketNameFn	_packetName = nullptr;

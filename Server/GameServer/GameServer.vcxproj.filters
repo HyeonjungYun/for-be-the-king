@@ -209,6 +209,9 @@
     <ClInclude Include="EquipStats.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
+    <ClInclude Include="KillBatch.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
     <ClInclude Include="Telemetry.h">
       <Filter>Data</Filter>
     </ClInclude>

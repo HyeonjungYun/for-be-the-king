@@ -94,6 +94,7 @@
     <ClCompile Include="MonsterTest.cpp" />
     <ClCompile Include="EscapeLogicTest.cpp" />
     <ClCompile Include="EquipStatsTest.cpp" />
+    <ClCompile Include="KillBatchTest.cpp" />
     <ClCompile Include="CreatureTest.cpp" />
     <ClCompile Include="ItemRollerTest.cpp" />
     <ClCompile Include="ItemTableTest.cpp" />

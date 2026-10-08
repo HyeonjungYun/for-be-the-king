@@ -96,6 +96,13 @@ namespace
 		return (dx * dx + dy * dy) <= (attacker->attackRange * attacker->attackRange);
 	}
 
+	// 평타 시선 - 공격자와 대상 중심을 잇는 선분이 벽 · 엄폐물 · 타워에 걸리면 못 때린다 (combat-system.md Rule 1 · 7,
+	// 사용자 결정 2026-10-08 "평타는 벽 너머 불가능"). 면에 닿기만 하는 선분은 막지 않는다(WallMap 열린 집합). 벽 없는 층은 늘 통과
+	bool IsAttackLineClear(const WallMap& walls, const CreatureRef& attacker, const CreatureRef& target)
+	{
+		return walls.SweepBlocked(attacker->posInfo->x(), attacker->posInfo->y(), target->posInfo->x(), target->posInfo->y(), 0.f) == false;
+	}
+
 	bool IsHardCcType(Protocol::CcType type)
 	{
 		return type == Protocol::CC_TYPE_STUN
@@ -625,9 +632,15 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId)
 		return;
 	}
 
-	// 대상 락 시점에도 사거리를 본다. 히트 시점에 한 번 더 재검증
+	// 대상 락 시점에도 사거리 · 시선을 본다. 히트 시점에 한 번 더 재검증
 	if (IsInAttackRange(attacker, target) == false)
 		return;
+
+	if (IsAttackLineClear(WallTable::Get(_floorId), attacker, target) == false)
+	{
+		GStats.AddAttackWallBlocked();
+		return;
+	}
 
 	// 공격하면 내 무적이 풀린다 (AC-10)
 	if (attacker->IsPlayer())
@@ -822,12 +835,21 @@ void Room::ResolveAttacks(uint64 nowUs)
 
 
 		// 공격자 사망, 대상 소명, 대상 사망, 사거리 이탈, 대상 진입 무적 -> 취소. 쿨다운을 소모 하지 않는다.
-		if (attacker->IsAlive() == false
+		// 공격자가 이번 Flush 에 막 죽었으면 이 히트는 동시다 - 그대로 들어간다 (TR-combat-022, KillBatch)
+		if (CanStillStrike(attacker) == false
 			|| target == nullptr
 			|| target->IsAlive() == false
 			|| IsInAttackRange(attacker, target) == false
 			|| (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs)))
 		{
+			_pendingAttackCancels.push_back(attackerId);
+			continue;
+		}
+
+		// windup 중 벽 · 엄폐물 뒤로 들어갔다 -> 시선 상실, 같은 취소 (Rule 7 · Edge Cases)
+		if (IsAttackLineClear(WallTable::Get(_floorId), attacker, target) == false)
+		{
+			GStats.AddAttackWallBlocked();
 			_pendingAttackCancels.push_back(attackerId);
 			continue;
 		}
@@ -856,9 +878,9 @@ void Room::ResolveAttacks(uint64 nowUs)
 			GMonsterStats.hits.fetch_add(1);
 		}
 
-		// 이 루프가 _attackers 를 돌고 있다 - 죽은 대상을 여기서 지우지 않는다 (attackHitAtUs = 0 이라 건너뛴다)
+		// 이 루프가 _attackers 를 돌고 있다 - 사망 처리는 Flush 끝 (FlushCombat → KillBatch)
 		if (remainingHp <= 0)
-			OnCreatureKilled(target, attacker, attackerId, nowUs);
+			KillCreature(target, attacker, attackerId, nowUs);
 	}
 
 	for (uint64 id : resolved)
@@ -990,7 +1012,8 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 
 		CreatureRef caster = dynamic_pointer_cast<Creature>(casterIt->second);
 
-		if (caster == nullptr || caster->IsAlive() == false)
+		// 이번 Flush 에 막 죽은 시전자의 예고는 동시 - 그대로 떨어진다 (TR-combat-022)
+		if (caster == nullptr || CanStillStrike(caster) == false)
 			continue;
 
 		vector<CreatureRef> targets;
@@ -1809,10 +1832,25 @@ void Room::FlushCombat()
 	JOB_TAG();
 	const uint64 nowUs = Utils::NowMicroseconds();
 
+	// 이 Flush 에서 해소되는 히트는 동시다 - 사망은 모았다가 아래에서 한꺼번에 (TR-combat-022 "동시 치사는 양쪽 모두 사망")
+	_kills.Begin();
+
 	UpdateCc(nowUs);
 	ResolveAttacks(nowUs);
 	ResolveCasts(nowUs);
 	ResolveTelegraphs(nowUs);
+
+	for (const auto& kill : _kills.End())
+	{
+		if (kill.mutual && kill.victimId < kill.instigatorId)
+		{
+			GStats.AddMutualKill();
+			LOG_LINE << "[DIED] mutual " << kill.victimId << " <-> " << kill.instigatorId << '\n';
+		}
+
+		_attackers.erase(kill.victimId);
+		OnCreatureKilled(kill.victim, kill.instigator, kill.instigatorId, nowUs);
+	}
 
 	if (_pendingAttacks.empty() == false)
 	{
@@ -2383,10 +2421,7 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 				}
 
 				if (remainingHp <= 0)
-				{
-					_attackers.erase(targetId);
-					OnCreatureKilled(target, caster, casterId, nowUs);
-				}
+					KillCreature(target, caster, casterId, nowUs);
 				break;
 			}
 			case SkillEffectType::HardCc:
@@ -2581,6 +2616,23 @@ void Room::OnEquipmentChanged(const PlayerRef& player, const char* tag)
 	}
 
 	LogStats(player, tag);
+}
+
+void Room::KillCreature(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs)
+{
+	if (_kills.IsOpen())
+	{
+		_kills.Note(victim->objectInfo->object_id(), instigatorId, victim, instigator);
+		return;
+	}
+
+	_attackers.erase(victim->objectInfo->object_id());
+	OnCreatureKilled(victim, instigator, instigatorId, nowUs);
+}
+
+bool Room::CanStillStrike(const CreatureRef& creature) const
+{
+	return creature->IsAlive() || _kills.DiedThisFlush(creature->objectInfo->object_id());
 }
 
 void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs)

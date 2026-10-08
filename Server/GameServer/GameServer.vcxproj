@@ -211,6 +211,7 @@
     <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="EscapeLogic.h" />
     <ClInclude Include="EquipStats.h" />
+    <ClInclude Include="KillBatch.h" />
     <ClInclude Include="Telemetry.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />

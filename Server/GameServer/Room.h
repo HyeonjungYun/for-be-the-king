@@ -3,6 +3,7 @@
 #include "SkillTable.h"
 #include "MonsterBrain.h"
 #include "EscapeLogic.h"
+#include "KillBatch.h"
 #include <random>
 
 struct DeathSnapshot;
@@ -137,6 +138,12 @@ private:
 	// 사망 처리 공용 - S_DIED · 원인(가해자 기준) · 시전 취소, 그다음 몬스터면 드랍 · 플레이어면 사망 커밋
 	void	OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
 
+	// 체력 0 이 된 순간 부른다. 전투 Flush 안이면 Flush 끝으로 미루고(동시 치사, KillBatch), 밖이면 바로 OnCreatureKilled
+	void	KillCreature(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
+
+	// 살아 있거나, 이번 전투 Flush 에 막 죽어 아직 자기 히트가 남은 쪽 (TR-combat-022)
+	bool	CanStillStrike(const CreatureRef& creature) const;
+
 	// 몬스터 (design/gdd/monster-ai.md § I). 판단 = UpdateTick(10 Hz), 이동 = FlushMoves 앞(30 Hz)
 	void	UpdateMonsters(uint64 nowUs);
 	void	StepMonsters(uint64 nowUs);
@@ -185,6 +192,8 @@ private:
 
 	vector<Protocol::DamageInfo>		_pendingDamages;
 	vector<Protocol::DiedInfo>			_pendingDeaths;
+
+	KillBatch<CreatureRef>				_kills;				// 전투 Flush 동안만 열린다 (FlushCombat)
 
 	unordered_map<uint64, MonsterRef>	_monsters;			// 시체 유예 중인 것 포함
 	vector<MonsterSlot>					_monsterSlots;
