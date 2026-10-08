@@ -32,6 +32,7 @@ atomic<uint32> GChatAfterMs = 0;
 atomic<bool> GSwapArmor = false;
 atomic<bool> GStayDead = false;
 atomic<bool> GHoldOnReject = false;
+atomic<int32> GTowerCount = 0;
 atomic<uint64> GLeaveEscaped = 0;
 atomic<uint64> GLeaveExpired = 0;
 uint64 GBurstStartUs = 0;
@@ -523,8 +524,16 @@ static void TickBots(float deltaTime)
 			bot->destX = GTowerX;
 			bot->destY = GTowerY;
 
+			// -towercount: 지켜보는 봇 - 제자리에 선다 (다른 사람의 완충 S_DESPAWN 을 받는 쪽)
+			const bool watcher = (GTowerCount.load() > 0 && static_cast<int32>(bot->botIndex) > GTowerCount.load());
+			if (watcher)
+			{
+				bot->destX = bot->x;
+				bot->destY = bot->y;
+			}
+
 			// 벽이 있는 층 - 길을 찾아 꺾는 점을 하나씩 밟는다. 중간 점은 정확히 밟아야 다음 직선이 벽을 피한다 (멈춤 거리 0)
-			if (BotPath::IsLoaded() && bot->floorId == BotPath::LoadedFloor())
+			if (watcher == false && BotPath::IsLoaded() && bot->floorId == BotPath::LoadedFloor())
 			{
 				if (bot->replanPath.exchange(false))
 				{
@@ -759,6 +768,8 @@ int main(int argc, char* argv[])
 			GEnterChat = argv[i + 1];
 		else if (::strcmp(argv[i], "-chatafter") == 0)
 			GChatAfterMs.store(static_cast<uint32>(::atoi(argv[i + 1])));
+		else if (::strcmp(argv[i], "-towercount") == 0)
+			GTowerCount.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-tower") == 0 && i + 2 < argc)
 		{
 			GTowerMode.store(true);

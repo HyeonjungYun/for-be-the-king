@@ -78,6 +78,9 @@ public:
 	void	BeginDeathCommit(const CreatureRef& victim);
 	void	OnBagCreated(DeathSnapshot snap, bool ok);
 	void	BeginEscapeCommit(uint64 playerId);
+	// despawnBatch 가 있으면 S_DESPAWN 을 바로 방송하지 않고 id 만 모은다 - 완충 한 틱에 나가는 사람을 한 패킷으로 (AC-ET-26)
+	// (오버로드로 두면 DoAsync(&Room::BeginEscapeCommit, …) 가 어느 쪽인지 못 고른다 - 이름을 따로 둔다)
+	void	BeginEscapeCommitInto(uint64 playerId, vector<uint64>* despawnBatch);
 
 	void	HandleDisconnect(PlayerRef player);
 	void	HandleReattach(GameSessionRef session, PlayerRef body);

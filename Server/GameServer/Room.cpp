@@ -1651,6 +1651,11 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 
 void Room::BeginEscapeCommit(uint64 playerId)
 {
+	BeginEscapeCommitInto(playerId, nullptr);
+}
+
+void Room::BeginEscapeCommitInto(uint64 playerId, vector<uint64>* despawnBatch)
+{
 	JOB_TAG();
 	auto findIt = _objects.find(playerId);
 	if (findIt == _objects.end())
@@ -1685,10 +1690,17 @@ void Room::BeginEscapeCommit(uint64 playerId)
 	RemoveObject(playerId);
 	session->place.store(SessionPlace::Escaping);
 
-	Protocol::S_DESPAWN despawnPkt;
-	despawnPkt.add_object_ids(playerId);
-	SEND_PACKET_DECLARATION(despawnPkt);
-	Broadcast(sendBuffer);
+	if (despawnBatch != nullptr)
+	{
+		despawnBatch->push_back(playerId);
+	}
+	else
+	{
+		Protocol::S_DESPAWN despawnPkt;
+		despawnPkt.add_object_ids(playerId);
+		SEND_PACKET_DECLARATION(despawnPkt);
+		Broadcast(sendBuffer);
+	}
 
 	int64 newItems = count_if(snap.carried.begin(), snap.carried.end(), [](const ItemEntry& e) { return e.isNew; });
 	for (const ItemEntry& e : snap.equipped)
@@ -3313,8 +3325,30 @@ void Room::UpdateEscapeTowers(uint64 nowUs)
 		// 완충 - 그 틱의 점유자 전원을 id 오름차순으로 탈출 커밋 (Core Rule 9, AC-ET-08). 이미 죽는 중이면 건너뛴다
 		if (r.completed)
 		{
+			// 나가는 사람의 S_DESPAWN 을 한 패킷으로 모아 한 번 방송한다 (escape-timer.md § Edge Cases "배치로 합칠 수 있다").
+			// 30명이 따로 방송하면 30 × 방 30명 = 송신 약 900번 - 실측 완충 틱 16 ~ 46 ms 중 95 % 가 그 방송이었다 (2026-10-08).
+			// 남은 사람이 받는 결과는 같다(클라가 id 마다 지운다). 같은 틱에 나가는 사람끼리는 서로의 S_DESPAWN 을 받지 않는다 -
+			// 예전엔 id 가 큰 쪽만 작은 쪽 것을 받았다. 탈출한 클라는 던전을 떠날 때 남의 액터를 지우지 않는다(사망 · 탈출 공통, 별건)
+			const uint64 completeBeginUs = Utils::NowMicroseconds();
+			vector<uint64> leaving;
+
 			for (uint64 id : occupants)
-				BeginEscapeCommit(id);
+				BeginEscapeCommitInto(id, &leaving);
+
+			const uint64 broadcastBeginUs = Utils::NowMicroseconds();
+			if (leaving.empty() == false)
+			{
+				Protocol::S_DESPAWN despawnPkt;
+				for (uint64 id : leaving)
+					despawnPkt.add_object_ids(id);
+				SEND_PACKET_DECLARATION(despawnPkt);
+				Broadcast(sendBuffer);
+			}
+
+			const uint64 doneUs = Utils::NowMicroseconds();
+			const int64 watchers = count_if(_objects.begin(), _objects.end(), [](const auto& kv) { return kv.second->IsPlayer(); });
+			LOG_LINE << "[ESCAPE] completed tower=" << t.towerId << " n=" << leaving.size() << " watchers=" << watchers
+				<< " us=" << (doneUs - completeBeginUs) << " despawn_broadcast_us=" << (doneUs - broadcastBeginUs) << '\n';
 
 			t.lastOccupants.clear();
 		}
