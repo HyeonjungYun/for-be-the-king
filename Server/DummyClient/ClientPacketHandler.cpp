@@ -318,7 +318,9 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 		LOG_LINE << "[BOT DIED] id=" << bot->objectId.load()
 			<< " by=" << info.instigator_id() << " cause=" << info.cause() << '\n';
 
-		bot->Disconnect(L"Died");
+		// -staydead: 죽어도 끊지 않는다 - 사망 저장 중에 죽은 몸이 보낸 요청을 서버가 거절하는지 본다 (2026-10-08)
+		if (GStayDead.load() == false)
+			bot->Disconnect(L"Died");
 	}
 	return true;
 }

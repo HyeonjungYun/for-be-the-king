@@ -116,6 +116,7 @@ extern atomic<uint64> GRunGold;
 extern string GEnterChat;		// -chat - 스레드 시작 전에 한 번 쓰고 이후 읽기만
 extern atomic<uint32> GChatAfterMs;	// -chatafter - 0 이면 입장하자마자 (저장 재시도 시험: 입장 뒤 DB 를 건드린 다음 /die)
 extern atomic<bool> GSwapArmor;	// -swap
+extern atomic<bool> GStayDead;	// -staydead - 죽어도 접속을 끊지 않는다
 extern atomic<uint64> GLeaveEscaped;
 extern atomic<uint64> GLeaveExpired;
 

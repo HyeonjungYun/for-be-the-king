@@ -29,6 +29,7 @@ atomic<uint64> GRunGold = 0;
 string GEnterChat;
 atomic<uint32> GChatAfterMs = 0;
 atomic<bool> GSwapArmor = false;
+atomic<bool> GStayDead = false;
 atomic<uint64> GLeaveEscaped = 0;
 atomic<uint64> GLeaveExpired = 0;
 uint64 GBurstStartUs = 0;
@@ -428,8 +429,16 @@ static void TickBots(float deltaTime)
 			continue;
 		}
 
-		if (bot->inGame.load() == false || bot->alive.load() == false)
+		if (bot->inGame.load() == false)
 			continue;
+
+		// 죽은 몸은 움직이지 않는다. -staydead -swap 이면 갑옷 교체 요청만 보내 서버가 거절하는지 본다
+		if (bot->alive.load() == false)
+		{
+			if (GStayDead.load() && GSwapArmor.load())
+				TrySwapArmor(bot, nowUs);
+			continue;
+		}
 
 		// 쥐고 있던 이동을 한꺼번에 - 서버에는 간격 0 으로 몰려 도착한다
 		if (bot->heldPackets.empty() == false && InBurstHold(nowUs) == false)
@@ -742,6 +751,8 @@ int main(int argc, char* argv[])
 			GIdleOne.store(true);
 		else if (::strcmp(argv[i], "-swap") == 0)
 			GSwapArmor.store(true);
+		else if (::strcmp(argv[i], "-staydead") == 0)
+			GStayDead.store(true);
 	}
 
 	GBurstStartUs = Utils::NowMicroseconds();

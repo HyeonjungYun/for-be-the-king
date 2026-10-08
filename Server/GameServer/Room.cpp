@@ -1157,6 +1157,14 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 	if (player == nullptr)
 		return;
 
+	// 죽은 몸은 장비를 못 바꾼다 - 루팅 · 버리기와 같은 거절 (예전엔 검사가 없어 사망 저장 중에 메모리에서 바꿔 낄 수 있었다, 2026-10-08)
+	if (_objects.find(player->objectInfo->object_id()) == _objects.end() || player->IsAlive() == false)
+	{
+		LOG_LINE << "[ITEM] equip rejected - not alive in room. char=" << player->objectInfo->object_id() << " item=" << instanceId << '\n';
+		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE, {});
+		return;
+	}
+
 	if (slot < Protocol::SLOT_WEAPON_PRIMARY || slot > Protocol::SLOT_TRINKET)
 	{
 		session->SendItemResult(requestId, Protocol::ITEM_BAD_REQUEST, {});
@@ -1212,6 +1220,14 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 	PlayerRef player = session->player.load();
 	if (player == nullptr)
 		return;
+
+	// 죽은 몸은 장비를 못 바꾼다 (HandleEquip 과 같다)
+	if (_objects.find(player->objectInfo->object_id()) == _objects.end() || player->IsAlive() == false)
+	{
+		LOG_LINE << "[ITEM] unequip rejected - not alive in room. char=" << player->objectInfo->object_id() << " item=" << instanceId << '\n';
+		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
+		return;
+	}
 
 	int32 foundIdx = -1;
 	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
@@ -1550,6 +1566,25 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 	LOG_LINE << "[DEATH] commit begin - char=" << characterId << " bag=" << snap.bagId << " items=" << snap.items.size()
 		<< " new=" << newItems << " dropped=" << snap.droppedIds.size() << '\n';
 
+	// 죽는 순간 소지 · 착용을 비운다 (사용자 결정 2026-10-08) - DB 저장은 위 스냅샷으로 한다.
+	// 예전엔 저장이 끝난 뒤(OnBagCreated) 비웠다. DB 장애로 저장이 길어지면 그동안 죽은 사람 화면에 아이템이 남고, 메모리에서 바꿔 낄 수도 있었다.
+	// 가방이 월드에 나타나는 것은 그대로 저장 뒤다 - 먼저 띄우면 누가 주운 뒤 저장이 실패할 때 복제가 된다 (DB 우선, ADR-0005).
+	// 저장을 포기해도(데이터가 깨진 경우) DB 는 그대로라 다음 접속이 DB 에서 다시 적재한다 - SavePlayer 는 체력 · 위치만 쓴다
+	player->inventory.clear();
+	player->droppedIds.clear();
+	for (ItemEntry& e : player->equipped)
+		e = ItemEntry{};
+
+	OnEquipmentChanged(player, "death");
+	SendEquipSync(player);
+
+	if (GameSessionRef session = player->session.lock())		// 끊긴 몸이면 보낼 곳이 없다
+	{
+		Protocol::S_INVENTORY_SYNC invPkt;		// 빈 목록 - 전부 곧 가방으로 간다
+		SEND_PACKET_DECLARATION(invPkt);
+		session->Send(sendBuffer);
+	}
+
 	// 끝날 때까지 다시 한다 (ADR-0010 R-1, 2026-10-08) - 그동안 이 캐릭터는 재입장 · 베이스캠프 장비 조작 · 퇴장이 막혀 있다
 	// (GDeathCommits). 예전엔 3 번 실패하면 포기해서 죽은 사람이 장비를 그대로 지켰다
 	RoomRef room = GetRoomRef();
@@ -1604,27 +1639,7 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 		LOG_LINE << "[DEATH] committed while in base camp - resending inventory. char=" << characterId << '\n';
 	}
 
-	// 죽은 플레이어가 아직 방에 있으면 메모리도 비운다. 봇은 이미 끊고 나갔을 수 있다.
-	auto findIt = _objects.find(snap.characterId);
-	if (findIt == _objects.end())
-		return;
-
-	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
-	if (player == nullptr)
-		return;
-
-	player->inventory.clear();
-	player->droppedIds.clear();
-	for (ItemEntry& e : player->equipped)
-		e = ItemEntry{};
-
-	OnEquipmentChanged(player, "death");
-	SendEquipSync(player);
-
-	Protocol::S_INVENTORY_SYNC invPkt;		// 빈 목록, 전부 가방으로 감
-	SEND_PACKET_DECLARATION(invPkt);
-	if (auto session = player->session.lock())
-		session->Send(sendBuffer);
+	// 죽은 사람의 메모리 인벤토리는 이미 비었다 - 죽는 순간 BeginDeathCommit 이 비운다 (2026-10-08)
 }
 
 void Room::BeginEscapeCommit(uint64 playerId)
