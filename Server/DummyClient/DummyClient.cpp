@@ -810,6 +810,46 @@ int main(int argc, char* argv[])
 	if (GTowerMode.load())
 		BotPath::Load(0);
 
+	// -pathcheck: 0층 대각선을 벽을 돌아 걸으면 몇 초인가 (roadmap P3 완료 기준 "약 116 초 ±15 %", game-concept.md 396 m ÷ 3.4) - 계산만 하고 끝낸다
+	for (int i = 1; i < argc; i++)
+	{
+		if (::strcmp(argv[i], "-pathcheck") != 0)
+			continue;
+
+		if (BotPath::Load(0) == false)
+			return 1;
+
+		constexpr float CORNER = 13900.f;		// 층 경계(14,000) 안쪽 1 m
+		const float pairs[4][4] =
+		{
+			{ -CORNER, -CORNER,  CORNER,  CORNER },
+			{  CORNER,  CORNER, -CORNER, -CORNER },
+			{ -CORNER,  CORNER,  CORNER, -CORNER },
+			{  CORNER, -CORNER, -CORNER,  CORNER },
+		};
+
+		for (const auto& p : pairs)
+		{
+			const vector<pair<float, float>> path = BotPath::Find(p[0], p[1], p[2], p[3]);
+			float length = 0.f;
+			float ax = p[0];
+			float ay = p[1];
+			for (const auto& [x, y] : path)
+			{
+				length += ::sqrtf((x - ax) * (x - ax) + (y - ay) * (y - ay));
+				ax = x;
+				ay = y;
+			}
+
+			const float straight = ::sqrtf((p[2] - p[0]) * (p[2] - p[0]) + (p[3] - p[1]) * (p[3] - p[1]));
+			LOG_LINE << "[PATHCHECK] (" << p[0] << "," << p[1] << ") -> (" << p[2] << "," << p[3] << ") waypoints=" << path.size()
+				<< " straight=" << straight / 100.f << "m path=" << length / 100.f << "m (+" << (length / straight - 1.f) * 100.f << "%)"
+				<< " time=" << length / BOT_MOVE_SPEED << "s at " << BOT_MOVE_SPEED << "cm/s\n";
+		}
+
+		return 0;
+	}
+
 	LOG_LINE << "[BOT] launching " << botCount << " bot(s)"
 		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF")
 		<< (GNoClientMs.load() ? " - client_ms OFF" : " - client_ms ON")
