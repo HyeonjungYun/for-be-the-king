@@ -39,6 +39,7 @@ message DamageInfo
 	int32 remaining_hp = 4;
 	bool is_crit = 5;
 	DamageType damage_type = 6;
+	int32 max_hp = 7;					// 0 = 그대로. 던전 안 장비 교체로 최대 체력이 바뀌었을 때만 싣는다 (재동기화 damage 0, 2026-10-08)
 }
 
 message CcEventInfo

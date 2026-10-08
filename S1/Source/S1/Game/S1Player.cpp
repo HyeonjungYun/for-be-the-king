@@ -185,8 +185,15 @@ void AS1Player::TickCc()
 		Movement->StopMovementImmediately();
 }
 
-void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit)
+void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 NewMaxHp)
 {
+	if (NewMaxHp > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[HP] max changed id=%llu max=%d->%d hp=%d"),
+			PlayerInfo != nullptr ? PlayerInfo->object_id() : 0, MaxHp, NewMaxHp, RemainingHp);
+		MaxHp = NewMaxHp;
+	}
+
 	CurrentHp = RemainingHp;
 
 	// Damage 0 is a resync, not a hit — a monster that walked home heals to full and the server says so with

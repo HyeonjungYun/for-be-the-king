@@ -74,7 +74,8 @@ bool Player::ApplyEquipmentStats(bool refill)
 
 	hp = refill ? maxHp : EquipStats::RescaleHp(hp, oldMaxHp, maxHp);
 
-	return hp != oldHp;
+	// 최대치만 바뀌고 체력은 반올림으로 그대로일 수 있다 (체력 1 등) - 그래도 알려야 남의 체력 바 비율이 맞는다
+	return hp != oldHp || maxHp != oldMaxHp;
 }
 
 void Player::RebuildSkillSlotsFromEquipment()

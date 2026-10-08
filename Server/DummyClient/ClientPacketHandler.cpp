@@ -234,13 +234,19 @@ bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 	auto bot = static_pointer_cast<BotSession>(session);
 	for (const Protocol::DamageInfo& info : pkt.damages())
 	{
+		// 남의 최대 체력 변화 - 던전 안 장비 교체를 방 안의 다른 사람도 받는지 (DamageInfo.max_hp, 2026-10-08)
 		if (info.target_id() != bot->objectId.load())
+		{
+			if (info.max_hp() > 0)
+				LOG_LINE << "[BOT SEE MAXHP] observer=" << bot->objectId.load() << " target=" << info.target_id()
+					<< " max=" << info.max_hp() << " hp=" << info.remaining_hp() << '\n';
 			continue;
+		}
 		if (info.damage() != 0 && logged.fetch_add(1) >= 30)
 			continue;
 
 		cout << "[BOT HIT] target=" << info.target_id() << " attacker=" << info.attacker_id() << " dmg=" << info.damage()
-			<< " hp=" << info.remaining_hp() << " crit=" << info.is_crit()
+			<< " hp=" << info.remaining_hp() << " max=" << info.max_hp() << " crit=" << info.is_crit()
 			<< " type=" << (info.damage_type() == Protocol::DAMAGE_TYPE_MAGIC ? "magic" : "physical") << '\n';
 	}
 	return true;

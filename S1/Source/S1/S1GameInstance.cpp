@@ -327,7 +327,7 @@ void US1GameInstance::HandleDamage(const Protocol::S_DAMAGE& DamagePkt)
 			continue;
 
 		if (AS1Player* Player = FindActor->Get())
-			Player->OnDamaged(Info.damage(), Info.remaining_hp(), Info.is_crit());
+			Player->OnDamaged(Info.damage(), Info.remaining_hp(), Info.is_crit(), Info.max_hp());
 	}
 }
 

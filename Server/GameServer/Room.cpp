@@ -2639,7 +2639,8 @@ void Room::OnEquipmentChanged(const PlayerRef& player, const char* tag)
 	player->RebuildSkillSlotsFromEquipment();
 	LogSlots(player, tag);
 
-	// 치유 패킷이 없다 - 몬스터 귀환과 같은 방식으로 피해 0 · 남은 체력을 보낸다 (클라 OnDamaged 가 재동기화로 읽는다)
+	// 치유 패킷이 없다 - 몬스터 귀환과 같은 방식으로 피해 0 · 남은 체력을 보낸다 (클라 OnDamaged 가 재동기화로 읽는다).
+	// 새 최대치도 싣는다 - 예전엔 방 안의 다른 클라가 입장 스냅샷의 최대치를 런 끝까지 썼다 (체력 바 비율이 틀림)
 	if (player->ApplyEquipmentStats(false) && player->IsAlive())
 	{
 		Protocol::DamageInfo& resync = _pendingDamages.emplace_back();
@@ -2647,6 +2648,7 @@ void Room::OnEquipmentChanged(const PlayerRef& player, const char* tag)
 		resync.set_target_id(player->objectInfo->object_id());
 		resync.set_damage(0);
 		resync.set_remaining_hp(player->hp);
+		resync.set_max_hp(player->maxHp);
 	}
 
 	LogStats(player, tag);

@@ -150,8 +150,11 @@ public:
 	/**
 	 * A server-confirmed hit. The client never computes HP or decides whether a hit landed
 	 * (Rule 10) — it only displays what arrived.
+	 *
+	 * @param NewMaxHp  DamageInfo.max_hp — 0 means unchanged. The server fills it on the damage-0 resync it
+	 *                  sends after an equip change inside the dungeon, so every client's bar uses the new max.
 	 */
-	void OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit);
+	void OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 NewMaxHp = 0);
 
 	/**
 	 * Someone started casting. Everyone sees this, including enemies.
@@ -232,9 +235,8 @@ protected:
 	/**
 	 * Naked baseline (entities.yaml: base_stats_naked) until the server's snapshot arrives —
 	 * ObjectInfo.hp / max_hp on S_ENTER_GAME and S_SPAWN, with equipment already added (EquipStats).
-	 * 🔴 An equip change inside the dungeon moves the server's max without telling us — there is no
-	 * field for it. The server keeps the hp ratio and resyncs hp with S_DAMAGE 0, so the bar is off
-	 * by at most the item's max_hp share until the next run.
+	 * An equip change inside the dungeon arrives as S_DAMAGE { damage 0, remaining_hp, max_hp } (2026-10-08) —
+	 * before that field existed the bar was off by the item's max_hp share until the next run.
 	 */
 	int32 CurrentHp = 500;
 	int32 MaxHp = 500;

@@ -832,6 +832,7 @@ class DamageInfo final :
     kRemainingHpFieldNumber = 4,
     kIsCritFieldNumber = 5,
     kDamageTypeFieldNumber = 6,
+    kMaxHpFieldNumber = 7,
   };
   // uint64 attacker_id = 1;
   void clear_attacker_id();
@@ -887,6 +888,15 @@ class DamageInfo final :
   void _internal_set_damage_type(::Protocol::DamageType value);
   public:
 
+  // int32 max_hp = 7;
+  void clear_max_hp();
+  int32_t max_hp() const;
+  void set_max_hp(int32_t value);
+  private:
+  int32_t _internal_max_hp() const;
+  void _internal_set_max_hp(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.DamageInfo)
  private:
   class _Internal;
@@ -901,6 +911,7 @@ class DamageInfo final :
     int32_t remaining_hp_;
     bool is_crit_;
     int damage_type_;
+    int32_t max_hp_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -3312,6 +3323,26 @@ inline void DamageInfo::_internal_set_damage_type(::Protocol::DamageType value) 
 inline void DamageInfo::set_damage_type(::Protocol::DamageType value) {
   _internal_set_damage_type(value);
   // @@protoc_insertion_point(field_set:Protocol.DamageInfo.damage_type)
+}
+
+// int32 max_hp = 7;
+inline void DamageInfo::clear_max_hp() {
+  _impl_.max_hp_ = 0;
+}
+inline int32_t DamageInfo::_internal_max_hp() const {
+  return _impl_.max_hp_;
+}
+inline int32_t DamageInfo::max_hp() const {
+  // @@protoc_insertion_point(field_get:Protocol.DamageInfo.max_hp)
+  return _internal_max_hp();
+}
+inline void DamageInfo::_internal_set_max_hp(int32_t value) {
+  
+  _impl_.max_hp_ = value;
+}
+inline void DamageInfo::set_max_hp(int32_t value) {
+  _internal_set_max_hp(value);
+  // @@protoc_insertion_point(field_set:Protocol.DamageInfo.max_hp)
 }
 
 // -------------------------------------------------------------------
