@@ -42,6 +42,14 @@ public:
 	void HandleDespawn(uint64 ObjectId);
 	void HandleDespawn(const Protocol::S_DESPAWN& DespawnPkt);
 
+	/**
+	 * S_LEAVE_GAME — the run is over. Destroys every other actor (players, monsters) and forgets every bag.
+	 * The server sends nothing to a session outside the dungeon, so whatever left, died or expired while we sat
+	 * in base camp would otherwise linger as a ghost after the next entry. The next S_SPAWN repopulates.
+	 * Our own pawn stays — the server despawns it on death; after an escape HandleSpawn reuses it (2026-10-08).
+	 */
+	void ClearDungeonView();
+
 	void HandleMove(const Protocol::S_MOVE& MovePkt);
 	void HandleCc(const Protocol::S_CC& CcPkt);
 	void HandleCcState(const Protocol::S_CC_STATE& StatePkt);

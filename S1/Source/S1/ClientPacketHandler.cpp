@@ -62,6 +62,10 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 {
 	// H9 (UI 4단계) - 런이 끝났다(탈출 커밋 완료 · 사망 후 퇴장). 베이스캠프 화면(S3)으로.
 	// 서버가 바로 뒤에 베이스캠프 인벤토리(S_INVENTORY_SYNC)를 보낸다.
+	// 던전에서 본 남의 액터 · 가방을 비운다 - 베이스캠프에 있는 동안은 아무것도 안 오므로 다음 입장 뒤 유령이 된다 (2026-10-08 에이전트)
+	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
+		GameInstance->ClearDungeonView();
+
 	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
 		BaseCamp->HandleLeftGame();
 

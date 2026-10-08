@@ -151,7 +151,18 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 	if (TWeakObjectPtr<AS1Player>* Found = Players.Find(ObjectId))
 	{
 		if (Found->IsValid())	// 액터가 살아있으면 중ㅂ고
+		{
+			// 탈출 뒤 재입장 - 내 폰은 지난 런 그대로 남아 있다(사망 때만 서버가 지운다). 예전엔 여기서 돌아가
+			// 새 입장 위치 · 체력(서버는 가득 채운다)을 입히지 않았다 - 체력 바가 지난 런 끝 값으로 남았다 (2026-10-08 에이전트)
+			if (IsMine)
+			{
+				AS1Player* Mine = Found->Get();
+				Mine->SetPlayerInfo(objectInfo.pos_info());
+				Mine->SetCreatureInfo(objectInfo);
+				MyPlayer = Mine;
+			}
 			return;
+		}
 
 		Players.Remove(ObjectId);
 	}
@@ -230,6 +241,33 @@ void US1GameInstance::HandleDespawn(uint64 ObjectId)
 		World->DestroyActor(FindActor->Get());
 
 	Players.Remove(ObjectId);
+}
+
+void US1GameInstance::ClearDungeonView()
+{
+	UWorld* World = GetWorld();
+	const AS1Player* Mine = MyPlayer.Get();
+
+	int32 Actors = 0;
+	for (auto It = Players.CreateIterator(); It; ++It)
+	{
+		AS1Player* Actor = It.Value().Get();
+		if (Actor != nullptr && Actor == Mine)
+			continue;
+
+		if (Actor != nullptr && World != nullptr)
+			World->DestroyActor(Actor);
+
+		It.RemoveCurrent();
+		Actors++;
+	}
+
+	// 가방은 HandleDespawn 경로로 - 열린 창 · 아이템 UI 도 같이 닫힌다
+	const TArray<uint64> BagIds = Bags.Array();
+	for (uint64 BagId : BagIds)
+		HandleDespawn(BagId);
+
+	UE_LOG(LogTemp, Log, TEXT("[LEAVE] cleared dungeon view - actors=%d bags=%d"), Actors, BagIds.Num());
 }
 
 void US1GameInstance::HandleDespawn(const Protocol::S_DESPAWN& DespawnPkt)
