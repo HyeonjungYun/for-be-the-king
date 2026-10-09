@@ -13,6 +13,8 @@ EquipStatTotals EquipStats::Compute(const vector<WornItem>& worn, int32 nakedMax
 {
 	float sums[static_cast<int32>(ItemStat::Count)] = {};
 	float weaponRange = 0.f;
+	float weaponSpeed = 1.f;
+	bool weaponRanged = false;
 	bool magicWeapon = false;
 
 	for (const WornItem& item : worn)
@@ -38,6 +40,8 @@ EquipStatTotals EquipStats::Compute(const vector<WornItem>& worn, int32 nakedMax
 		if (def->equipSlot == Protocol::SLOT_WEAPON_PRIMARY)
 		{
 			weaponRange = def->attackRangeCm;
+			weaponSpeed = def->attackSpeed;
+			weaponRanged = def->rangedAttack;
 			magicWeapon = (def->damage == ItemDamage::Magic);
 		}
 	}
@@ -59,6 +63,8 @@ EquipStatTotals EquipStats::Compute(const vector<WornItem>& worn, int32 nakedMax
 	out.percentMsBonus	= sum(ItemStat::PercentMsBonus);
 	out.resistance		= std::clamp(BaseStats::RESISTANCE + sum(ItemStat::Resistance), 0.f, RESISTANCE_MAX);
 	out.attackRange		= max(BaseStats::ATTACK_RANGE, weaponRange);
+	out.attackSpeed		= BaseStats::ATTACK_SPEED * weaponSpeed;
+	out.rangedAttack	= weaponRanged;
 	out.autoAttackType	= magicWeapon ? Protocol::DAMAGE_TYPE_MAGIC : Protocol::DAMAGE_TYPE_PHYSICAL;
 
 	return out;

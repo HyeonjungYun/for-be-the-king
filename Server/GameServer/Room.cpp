@@ -442,6 +442,21 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		return;
 	}
 
+	// 이동 스킬의 자기 변위 - 클라는 캐스트(60 ms)가 끝나는 순간 대시를 보내는데, 서버는 다음 FlushCombat(33 ms 간격)에야 창을 연다.
+	// 그 사이에 온 이동은 속도 거부 + 캐스트 취소였다 (2026-10-10 UE 클라 Z 질주 - 봇은 100 ms 를 기다려 안 걸렸다).
+	// 캐스트가 한 Flush 안에 끝나는 이동 스킬이면 여기서 먼저 해소해 창을 연다
+	if (player->IsCasting())
+	{
+		const uint64 dueUs = Utils::NowMicroseconds();
+		const SkillDef* castDef = SkillTable::Find(player->castSkillId);
+
+		if (castDef != nullptr && castDef->HasMovement() && player->castEndAtUs <= dueUs + COMBAT_FLUSH_MS * 1000)
+		{
+			player->castEndAtUs = min(player->castEndAtUs, dueUs);
+			ResolveCasts(dueUs);
+		}
+	}
+
 	// 서버 이동 검증
 	const uint64 nowUs = Utils::NowMicroseconds();
 	bool rejected = (player->lastMoveUs == 0);
@@ -944,9 +959,11 @@ void Room::ResolveCasts(uint64 nowUs)
 			Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
 			hit.set_caster_id(casterId);
 			hit.set_effect_id(def->effectId);
-			hit.set_target_id(0);
+			hit.set_target_id(castTargetId);
 			hit.set_impact_x(originX);
 			hit.set_impact_y(originY);
+			hit.set_aim_x(castAimX);
+			hit.set_aim_y(castAimY);
 		}
 
 		if (def->telegraphMs == 0)
@@ -969,6 +986,8 @@ void Room::ResolveCasts(uint64 nowUs)
 			pending.targetId = castTargetId;
 			pending.originX = originX;
 			pending.originY = originY;
+			pending.aimX = castAimX;
+			pending.aimY = castAimY;
 
 			LOG_LINE << "[SKILL TELEGRAPH] caster=" << casterId
 				<< " skill=" << skillId
@@ -2356,20 +2375,80 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 	outTargets.clear();
 
 	const uint64 casterId = caster->objectInfo->object_id();
+	const uint64 nowUs = Utils::NowMicroseconds();
+
+	// 맞을 수 있는 상대인가 - 살아 있고, 진입 무적이 아니고, 몬스터끼리는 아니다 (monster-ai.md Core Rule 18 ②)
+	auto canBeHit = [&](const CreatureRef& target)
+		{
+			if (target == nullptr || target->IsAlive() == false)
+				return false;
+			if (caster->IsMonster() && target->IsMonster())
+				return false;
+			if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+				return false;
+			return true;
+		};
+
+	// 조준 방향 - 시전자에서 조준점으로. 조준점이 발밑이면 바라보는 방향
+	float dirX = aimX - originX;
+	float dirY = aimY - originY;
+	const float dirLen = ::sqrtf(dirX * dirX + dirY * dirY);
+	if (dirLen > 1.f)
+	{
+		dirX /= dirLen;
+		dirY /= dirLen;
+	}
+	else
+	{
+		const float yawRad = caster->posInfo->yaw() * 3.14159265f / 180.f;
+		dirX = ::cosf(yawRad);
+		dirY = ::sinf(yawRad);
+	}
 
 	switch (def.shape)
 	{
+	case SkillShape::None:
+		return;
+
 	case SkillShape::Single:
 	{
+		// 조준 없는 단일기(맹수의 포효) - 대치 중인 적 = 전방 반원 안에서 가장 가까운 적 (skill_rules confront_range_cm)
+		if (def.aimType == SkillAimType::None)
+		{
+			const float range = SkillTable::Rules().confrontRangeCm;
+			CreatureRef best = nullptr;
+			float bestSq = range * range;
+
+			for (auto& item : _objects)
+			{
+				if (item.first == casterId)
+					continue;
+
+				CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+				if (canBeHit(target) == false)
+					continue;
+
+				const float dx = target->posInfo->x() - originX;
+				const float dy = target->posInfo->y() - originY;
+				const float distSq = dx * dx + dy * dy;
+				if (distSq > bestSq || (dx * dirX + dy * dirY) < 0.f)
+					continue;
+
+				best = target;
+				bestSq = distSq;
+			}
+
+			if (best != nullptr)
+				outTargets.push_back(best);
+			return;
+		}
+
 		auto findIt = _objects.find(castTargetId);
 		if (findIt == _objects.end())
 			return;
 
 		CreatureRef target = dynamic_pointer_cast<Creature>(findIt->second);
-		if (target == nullptr || target->IsAlive() == false)
-			return;
-
-		if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(Utils::NowMicroseconds()))
+		if (canBeHit(target) == false)
 			return;
 
 		const float dx = target->posInfo->x() - originX;
@@ -2380,10 +2459,22 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 		outTargets.push_back(target);
 		return;
 	}
+
 	case SkillShape::CircleSelf:
+	case SkillShape::CirclePoint:
 	{
 		if (def.radiusCm <= 0.f)
 			return;
+
+		// 지점 원은 조준점에 - 사거리 밖을 찍었으면 사거리 끝 (클라 조준 표시와 같은 규칙)
+		float cx = originX;
+		float cy = originY;
+		if (def.shape == SkillShape::CirclePoint)
+		{
+			const float reach = min(dirLen, def.rangeCm);
+			cx = originX + dirX * reach;
+			cy = originY + dirY * reach;
+		}
 
 		for (auto& item : _objects)
 		{
@@ -2391,28 +2482,99 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 				continue;
 
 			CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
-			if (target == nullptr || target->IsAlive() == false)
+			if (canBeHit(target) == false)
 				continue;
 
-			// 몬스터 광역은 몬스터를 맞히지 않는다 - 보스 내려치기가 병사를 죽이지 않게 (monster-ai.md Core Rule 18 ②)
-			if (caster->IsMonster() && target->IsMonster())
-				continue;
-
-			// 진입 무적 (AC-10)
-			if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(Utils::NowMicroseconds()))
-				continue;
-
-			const float dx = target->posInfo->x() - originX;
-			const float dy = target->posInfo->y() - originY;
+			const float dx = target->posInfo->x() - cx;
+			const float dy = target->posInfo->y() - cy;
 			if ((dx * dx + dy * dy) <= (def.radiusCm * def.radiusCm))
 				outTargets.push_back(target);
 		}
 		return;
 	}
 
-	default:
-		// TODO : LIne, CirclePoint
+	case SkillShape::Cone:
+	{
+		// 반경 안이고 조준 방향과의 각이 angle/2 이내. 각도 · 반경은 skills.csv (일률값, 나중에 조정)
+		const float halfCos = ::cosf(def.angleDeg * 0.5f * 3.14159265f / 180.f);
+
+		for (auto& item : _objects)
+		{
+			if (item.first == casterId)
+				continue;
+
+			CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+			if (canBeHit(target) == false)
+				continue;
+
+			const float dx = target->posInfo->x() - originX;
+			const float dy = target->posInfo->y() - originY;
+			const float distSq = dx * dx + dy * dy;
+			if (distSq > def.radiusCm * def.radiusCm)
+				continue;
+
+			// 발밑에 겹친 상대는 방향을 셀 수 없다 - 맞는다
+			const float dist = ::sqrtf(distSq);
+			if (dist > 1.f && (dx * dirX + dy * dirY) / dist < halfCos)
+				continue;
+
+			outTargets.push_back(target);
+		}
 		return;
+	}
+
+	case SkillShape::Line:
+	case SkillShape::Projectile:
+	{
+		// 시전자에서 range 만큼 뻗는 선분 - 선분까지의 거리가 반폭 + 캡슐 반경 이내면 맞는다.
+		// 🔴 투사체는 0 단계에서 직선 즉시 판정이다. 2 단계가 실제로 날린다 (관통 아니면 가장 가까운 하나만)
+		constexpr float CAPSULE_RADIUS = 42.f;
+		const float halfWidth = def.widthCm * 0.5f + CAPSULE_RADIUS;
+		const WallMap& walls = WallTable::Get(_floorId);
+
+		CreatureRef nearest = nullptr;
+		float nearestT = 0.f;
+
+		for (auto& item : _objects)
+		{
+			if (item.first == casterId)
+				continue;
+
+			CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+			if (canBeHit(target) == false)
+				continue;
+
+			const float dx = target->posInfo->x() - originX;
+			const float dy = target->posInfo->y() - originY;
+			const float t = dx * dirX + dy * dirY;		// 선분 위 투영 거리
+			if (t < 0.f || t > def.rangeCm)
+				continue;
+
+			const float perp = ::fabsf(dx * dirY - dy * dirX);
+			if (perp > halfWidth)
+				continue;
+
+			// 벽에 막힌다 - 선형 스킬 (ADR-0006 · skill-system.md line)
+			if (walls.SweepBlocked(originX, originY, target->posInfo->x(), target->posInfo->y(), 0.f))
+				continue;
+
+			if (def.shape == SkillShape::Projectile && def.pierce == false)
+			{
+				if (nearest == nullptr || t < nearestT)
+				{
+					nearest = target;
+					nearestT = t;
+				}
+				continue;
+			}
+
+			outTargets.push_back(target);
+		}
+
+		if (nearest != nullptr)
+			outTargets.push_back(nearest);
+		return;
+	}
 	}
 }
 
@@ -2420,15 +2582,22 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 {
 	const uint64 casterId = caster->objectInfo->object_id();
 
+	// 🔴 0 단계 - 피해 · 하드/소프트 CC · 이동만. requires 가 붙은 효과(표식 · 재입력 · 적중 조건 …)와 나머지 종류는 1 ~ 4 단계가 채운다.
+	//    여기 걸리는 효과는 부팅 로그 [SKILL] 에 세지 않는다 - 데이터는 전부 실려 있고 엔진이 뒤따라온다
+	auto isActiveNow = [](const SkillEffect& e)
+		{
+			return e.condition == SkillRequire::None;
+		};
+
 	for (const SkillEffect& e : def.effects)
 	{
+		if (e.self == false || isActiveNow(e) == false)
+			continue;
+
 		switch (e.type)
 		{
 		case SkillEffectType::Movement:
 			ApplyMovement(caster, e, nowUs);
-			break;
-		case SkillEffectType::SelfBuff:
-			// TODO : MoveSpeed, WallPierce
 			break;
 		default:
 			break;
@@ -2441,6 +2610,9 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 
 		for (const SkillEffect& e : def.effects)
 		{
+			if (e.self || isActiveNow(e) == false)
+				continue;
+
 			switch (e.type)
 			{
 			case SkillEffectType::Damage:
@@ -2448,40 +2620,49 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 				if (e.adRatio <= 0.f && e.apRatio <= 0.f)
 					break;
 
-				bool isCrit = false;
-				const int32 damage = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
-				const int32 remainingHp = target->TakeDamage(damage);
-
-				Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
-				dmg.set_attacker_id(casterId);
-				dmg.set_target_id(targetId);
-				dmg.set_damage(damage);
-				dmg.set_remaining_hp(remainingHp);
-				dmg.set_is_crit(isCrit);
-
-				dmg.set_damage_type(e.adRatio > 0.f ? Protocol::DAMAGE_TYPE_PHYSICAL : Protocol::DAMAGE_TYPE_MAGIC);
-
-				if (target->IsMonster())
-					OnMonsterDamaged(static_pointer_cast<Monster>(target), casterId, damage, nowUs);
-
-				if (caster->IsMonster())
+				// 다단 히트는 0 단계에서 한 번에 - 간격은 1 단계 (hits 만큼 합산해 같은 총량을 낸다)
+				for (uint32 hit = 0; hit < max(1u, e.hits); hit++)
 				{
-					MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(caster)->brain, nowUs);
-					GMonsterStats.hits.fetch_add(1);
-				}
+					if (target->IsAlive() == false)
+						break;
 
-				if (remainingHp <= 0)
-					KillCreature(target, caster, casterId, nowUs);
+					bool isCrit = false;
+					const int32 damage = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
+					const int32 remainingHp = target->TakeDamage(damage);
+
+					Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
+					dmg.set_attacker_id(casterId);
+					dmg.set_target_id(targetId);
+					dmg.set_damage(damage);
+					dmg.set_remaining_hp(remainingHp);
+					dmg.set_is_crit(isCrit);
+					dmg.set_damage_type(e.DamageType());
+
+					if (target->IsMonster())
+						OnMonsterDamaged(static_pointer_cast<Monster>(target), casterId, damage, nowUs);
+
+					if (caster->IsMonster())
+					{
+						MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(caster)->brain, nowUs);
+						GMonsterStats.hits.fetch_add(1);
+					}
+
+					if (remainingHp <= 0)
+					{
+						KillCreature(target, caster, casterId, nowUs);
+						break;
+					}
+				}
 				break;
 			}
 			case SkillEffectType::HardCc:
 			case SkillEffectType::SoftCc:
-				if (e.ccDurationMs > 0)
-					ApplyCc(targetId, casterId, e.ccType, e.ccDurationMs, e.ccMagnitude);
+				if (e.durationMs > 0)
+					ApplyCc(targetId, casterId, e.ccType, e.durationMs, e.magnitude);
 				break;
 
 			default:
-				// TODO : Knockback, Movement, SelfBuff
+				// 1 ~ 4 단계: Knockback · Pull · Dot · Mark · Execute · Zone · Chain · Delayed · Throw …
 				break;
 			}
 		}

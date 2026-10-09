@@ -30,7 +30,7 @@ bool StarterKitTable::Parse(const string& csv, OUT string& error)
 	vector<int32> c;
 
 	if (Csv::Parse(csv, "starter_kit.csv", OUT table, OUT error) == false
-		|| Csv::FindColumns(table, "starter_kit.csv", { "slot", "item_type_id", "skill_id" }, OUT c, OUT error) == false)
+		|| Csv::FindColumns(table, "starter_kit.csv", { "slot", "item_type_id", "skill_id", "skill_id_secondary" }, OUT c, OUT error) == false)
 		return false;
 
 	for (size_t r = 0; r < table.rows.size(); r++)
@@ -68,15 +68,31 @@ bool StarterKitTable::Parse(const string& csv, OUT string& error)
 			return false;
 		}
 
-		if (Csv::ParseUInt(row[c[2]], OUT p.skillId) == false)
+		if (Csv::ParseUInt(row[c[2]], OUT p.skillId) == false || Csv::ParseUInt(row[c[3]], OUT p.skillIdSecondary) == false)
 		{
-			error = where + " skill_id must be a number (0 = none)";
+			error = where + " skill_id and skill_id_secondary must be numbers (0 = none)";
+			return false;
+		}
+
+		// 두 번째 스킬(Q)은 무기만 가진다 - 롤러와 같은 규칙 (ItemRoller::RollSkills)
+		if (p.skillIdSecondary != 0 && p.slot != Protocol::SLOT_WEAPON_PRIMARY)
+		{
+			error = where + " skill_id_secondary is for weapons only";
+			return false;
+		}
+
+		if (p.skillIdSecondary != 0 && p.skillIdSecondary == p.skillId)
+		{
+			error = where + " the two skills must differ (EB-03)";
 			return false;
 		}
 
 		// 상자에서 나올 수 없는 스킬을 기본 장비로 주지 않는다 - 그 종류의 풀에 있어야 한다
-		if (p.skillId != 0)
+		for (const uint32 skillId : { p.skillId, p.skillIdSecondary })
 		{
+			if (skillId == 0)
+				continue;
+
 			const ItemTypeDef* def = ItemTable::Find(p.itemTypeId);
 			const vector<SkillPoolEntry>* pool = ItemTable::FindPool(def->skillPoolId);
 
@@ -84,12 +100,12 @@ bool StarterKitTable::Parse(const string& csv, OUT string& error)
 			if (pool != nullptr)
 			{
 				for (const SkillPoolEntry& entry : *pool)
-					inPool = inPool || entry.skillId == p.skillId;
+					inPool = inPool || entry.skillId == skillId;
 			}
 
 			if (inPool == false)
 			{
-				error = where + " skill " + to_string(p.skillId) + " is not in pool '" + def->skillPoolId + "' of item type " + to_string(p.itemTypeId);
+				error = where + " skill " + to_string(skillId) + " is not in pool '" + def->skillPoolId + "' of item type " + to_string(p.itemTypeId);
 				return false;
 			}
 		}
@@ -127,6 +143,7 @@ int32 StarterKitTable::EquipInto(ItemEntry* equipped, int32 slotCount, const fun
 		worn.itemTypeId = piece.itemTypeId;
 		worn.grade = Protocol::ITEM_GRADE_COMMON;
 		worn.skillIdPrimary = piece.skillId;
+		worn.skillIdSecondary = piece.skillIdSecondary;
 		worn.isNew = true;		// DB 행은 없다 - 사망이면 가방으로, 탈출이면 소유로 INSERT 된다 (S-4)
 		filled++;
 	}

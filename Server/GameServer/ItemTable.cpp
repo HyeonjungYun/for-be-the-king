@@ -165,6 +165,37 @@ bool ItemTable::Parse(const string& itemTypesCsv, const string& skillPoolsCsv, O
 			return false;
 		}
 
+		// 평타 - 무기마다 다르다 (2026-10-10). 열이 없으면 예전 값(1.0 · 근접) - 테스트 픽스처가 그대로 읽힌다
+		if (auto asIt = typeCsv.columns.find("attack_speed"); asIt != typeCsv.columns.end())
+		{
+			if (Csv::ParseFloat(row[asIt->second], OUT def.attackSpeed) == false || def.attackSpeed <= 0.f || def.attackSpeed > 3.f
+				|| (isWeapon == false && def.attackSpeed != 1.f))
+			{
+				error = where + " attack_speed must be (0, 3], and 1.0 for non-weapons";
+				return false;
+			}
+		}
+
+		if (auto kindIt = typeCsv.columns.find("attack_kind"); kindIt != typeCsv.columns.end())
+		{
+			const string& kind = row[kindIt->second];
+			if (kind == "projectile")
+				def.rangedAttack = true;
+			else if (kind == "melee")
+				def.rangedAttack = false;
+			else if (kind != "none")
+			{
+				error = where + " attack_kind must be melee / projectile / none";
+				return false;
+			}
+
+			if (isWeapon == (kind == "none"))
+			{
+				error = where + " attack_kind must be melee/projectile for weapons and none for the rest";
+				return false;
+			}
+		}
+
 		if (types.emplace(def.typeId, def).second == false)
 		{
 			error = where + " duplicate id " + to_string(def.typeId);

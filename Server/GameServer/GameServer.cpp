@@ -90,7 +90,6 @@ int main()
 	::setvbuf(stdout, nullptr, _IONBF, 0);
 
 	ServerPacketHandler::Init();
-	SkillTable::Init();
 
 	// G2 · SV-5 - 아이템 이벤트가 만드는 송신량을 따로 본다. 가방 · 상자의 생성 · 소멸은 가상 칸으로 센다
 	GStats.SetPacketNames(PacketName);
@@ -100,6 +99,16 @@ int main()
 	{
 		const string dataDir = ItemTable::DefaultDataDir();
 		string error;
+
+		// 스킬 로스터 - ItemTable 보다 먼저. 풀이 스킬 id 를 검사한다 (2026-10-10, src/스킬_목록.csv 76개 → skills.csv)
+		if (SkillTable::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] skill data invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] skill data loaded - skills=" << SkillTable::All().size() << " dot_tick=" << SkillTable::Rules().dotTickMs
+			<< "ms wall_stun=" << SkillTable::Rules().wallStunMs << "ms\n";
 
 		if (ItemTable::Load(dataDir, OUT error) == false)
 		{

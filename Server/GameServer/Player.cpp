@@ -70,6 +70,8 @@ bool Player::ApplyEquipmentStats(bool refill)
 	percentMsBonus	= totals.percentMsBonus;
 	resistance		= totals.resistance;
 	attackRange		= totals.attackRange;
+	attackSpeed		= totals.attackSpeed;
+	rangedAutoAttack = totals.rangedAttack;
 	autoAttackType	= totals.autoAttackType;
 
 	hp = refill ? maxHp : EquipStats::RescaleHp(hp, oldMaxHp, maxHp);

@@ -190,12 +190,13 @@ enum CcType : int {
   CC_TYPE_SLOW = 16,
   CC_TYPE_HEAL_REDUCTION = 32,
   CC_TYPE_SILENCE = 64,
+  CC_TYPE_BLIND = 128,
   CcType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   CcType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool CcType_IsValid(int value);
 constexpr CcType CcType_MIN = CC_TYPE_NONE;
-constexpr CcType CcType_MAX = CC_TYPE_SILENCE;
+constexpr CcType CcType_MAX = CC_TYPE_BLIND;
 constexpr int CcType_ARRAYSIZE = CcType_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CcType_descriptor();

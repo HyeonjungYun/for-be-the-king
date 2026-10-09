@@ -83,8 +83,9 @@ namespace
 	bool LoadLiveWorld(uint32 floorCount, OUT string& error)
 	{
 		const string dir = ItemTable::DefaultDataDir();
-		SkillTable::Init();
-		return ItemTable::Load(dir, OUT error)
+		// 실제 풀은 실제 로스터(skills.csv)를 가리킨다 - 코드 픽스처(Init)로는 풀 검사가 실패한다 (2026-10-10)
+		return SkillTable::Load(dir, OUT error)
+			&& ItemTable::Load(dir, OUT error)
 			&& FloorItemPool::Load(dir, OUT error)
 			&& EntryPointTable::Load(dir, floorCount, OUT error)
 			&& WallTable::Load(dir, floorCount, EntryPointTable::All(), OUT error)
@@ -186,7 +187,8 @@ TEST(MonsterTable, 자리는_진입_20m_타워_35m_경계_10m_를_지키고_경�
 	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,5000,100,0,0,1800\n301,0,1,0,6000,100,0,0,1800\n", OUT error));	// spawn_id 중복
 	EXPECT_FALSE(ParseSpawn(hound, "301,0,7,0,5000,100,0,0,1800\n", OUT error));					// 모르는 종류
 
-	// 드랍할 풀이 그 층에 없다 - 1층(0)은 실제 풀이 있고 2층(1)은 없다
+	// 드랍할 풀이 그 층에 없다 - 1층(0)은 실제 풀이 있고 2층(1)은 없다. 실제 풀은 실제 종류 표가 필요하다
+	ASSERT_TRUE(SkillTable::Load(ItemTable::DefaultDataDir(), OUT error) && ItemTable::Load(ItemTable::DefaultDataDir(), OUT error)) << error;
 	ASSERT_TRUE(FloorItemPool::Load(ItemTable::DefaultDataDir(), OUT error)) << error;
 	const string dropsOpen = HoundRow("300", "40", "1800", "0", "0", "open");
 	EXPECT_TRUE(ParseSpawn(dropsOpen, "301,0,1,0,5000,100,0,0,1800\n", OUT error)) << error;

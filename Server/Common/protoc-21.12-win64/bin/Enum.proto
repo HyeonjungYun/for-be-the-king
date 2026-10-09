@@ -50,6 +50,7 @@ enum CcType
 	CC_TYPE_SLOW = 16;
 	CC_TYPE_HEAL_REDUCTION = 32;
 	CC_TYPE_SILENCE = 64;
+	CC_TYPE_BLIND = 128;		// soft - the client shrinks the view (skill_rules.csv blind_view_scale). 2026-10-10 skill roster
 }
 
 enum DeathCause

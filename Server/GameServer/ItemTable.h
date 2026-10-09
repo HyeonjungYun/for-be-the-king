@@ -45,6 +45,8 @@ struct ItemTypeDef
 	ItemDamage				damage = ItemDamage::None;
 	string					skillPoolId;
 	float					attackRangeCm = 0.f;	// 무기만. 0 = 공급하지 않음 (C3-b)
+	float					attackSpeed = 1.f;		// 무기만 - 맨몸 공속(1.0/s)에 곱한다. 무기마다 평타가 다르다 (2026-10-10 사용자 결정)
+	bool					rangedAttack = false;	// 활 · 스태프 - 평타가 투사체 (필중, 날아가는 중 벽에 막힘)
 
 	vector<ItemStatLine>	stats;					// ParseStats 가 채운다
 };

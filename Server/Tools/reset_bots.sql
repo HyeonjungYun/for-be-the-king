@@ -41,16 +41,17 @@ DELETE i FROM item_instances i
 JOIN characters c ON c.character_id = i.owner_character_id
 WHERE c.name LIKE 'bot\_%';
 
+-- 🔴 Server/Data/starter_kit.csv 와 같은 3점이어야 한다 - 봇 재지급(RegearBot)이 그 표를 읽는다 (2026-10-10 로스터: 검 1007 기습 · 1004 휘두르기 / 신발 1003 질주)
 INSERT INTO item_instances
     (instance_id, item_type_id, grade, level, state, slot,
      owner_character_id, skill_id_primary, skill_id_secondary)
 SELECT 800000 + c.character_id * 10 + k.n, k.type_id, 1, 0, 2, k.slot,
-       c.character_id, k.skill_id, 0
+       c.character_id, k.skill_id, k.skill_id2
 FROM characters c
 CROSS JOIN (
-    SELECT 1 AS n, 101 AS type_id, 1 AS slot, 1001 AS skill_id UNION ALL   -- 무기 · 단일 스턴
-    SELECT 2,      401,            4,         3001             UNION ALL   -- 갑옷 · 광역 감속
-    SELECT 3,      501,            5,         2001                          -- 신발 · 대시
+    SELECT 1 AS n, 101 AS type_id, 1 AS slot, 1007 AS skill_id, 1004 AS skill_id2 UNION ALL   -- 검 · 기습(단일 + 기절) / 휘두르기(부채꼴)
+    SELECT 2,      401,            4,         0,               0              UNION ALL   -- 갑옷 · 스킬 없음
+    SELECT 3,      501,            5,         1003,            0                          -- 신발 · 질주
 ) k
 WHERE c.name LIKE 'bot\_%';
 

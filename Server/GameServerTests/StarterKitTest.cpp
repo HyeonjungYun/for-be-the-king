@@ -8,7 +8,7 @@
 // 🔴 파일을 읽지 않는다 - 문자열 픽스처를 Parse 에 넣는다. 실제 Server/Data/starter_kit.csv 는 부팅이 검사한다.
 namespace
 {
-	const char* HEADER = "slot,item_type_id,skill_id\n";
+	const char* HEADER = "slot,item_type_id,skill_id,skill_id_secondary\n";
 
 	void LoadItems()
 	{
@@ -21,6 +21,7 @@ namespace
 			+ "501,item.501,5,boots_sprint,none,rolled,0,boots\n";
 		const string pools = string("pool_id,skill_id,weight\n")
 			+ "weapon,1001,1\n"
+			+ "weapon,3001,1\n"		// 무기 Q 몫 - 같은 스킬이 두 풀에 있어도 된다
 			+ "armor,3001,1\n"
 			+ "boots,2001,1\n";
 
@@ -29,7 +30,7 @@ namespace
 
 	string ValidKit()
 	{
-		return string(HEADER) + "1,101,1001\n" + "4,401,3001\n" + "5,501,2001\n";
+		return string(HEADER) + "1,101,1001,0\n" + "4,401,3001,0\n" + "5,501,2001,0\n";
 	}
 
 	bool ParseKit(const string& csv, OUT string& error)
@@ -53,7 +54,7 @@ TEST(StarterKit, 올바른_표는_세_부위를_싣는다)
 TEST(StarterKit, 그_부위에_입을_수_없는_종류는_거부한다)
 {
 	string error;
-	EXPECT_FALSE(ParseKit(string(HEADER) + "4,101,1001\n", OUT error));		// 무기를 갑옷 칸에
+	EXPECT_FALSE(ParseKit(string(HEADER) + "4,101,1001,0\n", OUT error));		// 무기를 갑옷 칸에
 	EXPECT_NE(error.find("cannot be worn"), string::npos) << error;
 	EXPECT_TRUE(StarterKitTable::All().empty());
 }
@@ -61,39 +62,60 @@ TEST(StarterKit, 그_부위에_입을_수_없는_종류는_거부한다)
 TEST(StarterKit, 모르는_종류는_거부한다)
 {
 	string error;
-	EXPECT_FALSE(ParseKit(string(HEADER) + "1,999,1001\n", OUT error));
+	EXPECT_FALSE(ParseKit(string(HEADER) + "1,999,1001,0\n", OUT error));
 	EXPECT_NE(error.find("unknown item_type_id"), string::npos) << error;
 }
 
 TEST(StarterKit, 종류의_풀에_없는_스킬은_거부한다)
 {
 	string error;
-	EXPECT_FALSE(ParseKit(string(HEADER) + "1,101,3001\n", OUT error));		// 3001 은 갑옷 풀
+	EXPECT_FALSE(ParseKit(string(HEADER) + "1,101,2001,0\n", OUT error));		// 2001 은 신발 풀
 	EXPECT_NE(error.find("not in pool"), string::npos) << error;
 }
 
 TEST(StarterKit, 스킬_0_은_스킬_없는_장비로_받는다)
 {
 	string error;
-	ASSERT_TRUE(ParseKit(string(HEADER) + "1,101,0\n", OUT error)) << error;
+	ASSERT_TRUE(ParseKit(string(HEADER) + "1,101,0,0\n", OUT error)) << error;
 	EXPECT_EQ(StarterKitTable::All()[0].skillId, 0u);
 }
 
 TEST(StarterKit, 같은_부위가_두_번이면_거부한다)
 {
 	string error;
-	EXPECT_FALSE(ParseKit(string(HEADER) + "1,101,1001\n" + "1,101,1001\n", OUT error));
+	EXPECT_FALSE(ParseKit(string(HEADER) + "1,101,1001,0\n" + "1,101,1001,0\n", OUT error));
 	EXPECT_NE(error.find("duplicate slot"), string::npos) << error;
 }
 
 TEST(StarterKit, 범위_밖_부위는_거부한다)
 {
 	string error;
-	EXPECT_FALSE(ParseKit(string(HEADER) + "0,101,1001\n", OUT error));
-	EXPECT_FALSE(ParseKit(string(HEADER) + "7,101,1001\n", OUT error));
+	EXPECT_FALSE(ParseKit(string(HEADER) + "0,101,1001,0\n", OUT error));
+	EXPECT_FALSE(ParseKit(string(HEADER) + "7,101,1001,0\n", OUT error));
 }
 
 // 빈 표면 "맨몸으로 들여보낸다" 가 되어 규칙이 조용히 꺼진다
+// 무기만 두 번째 스킬(Q)을 가진다 - 롤러와 같은 규칙 (ItemRoller::RollSkills)
+TEST(StarterKit, 두_번째_스킬은_무기만_가진다)
+{
+	string error;
+	ASSERT_TRUE(ParseKit(string(HEADER) + "1,101,1001,3001\n", OUT error)) << error;
+	EXPECT_EQ(StarterKitTable::All()[0].skillIdSecondary, 3001u);
+
+	EXPECT_FALSE(ParseKit(string(HEADER) + "5,501,2001,1001\n", OUT error));		// 신발에 Q
+	EXPECT_NE(error.find("weapons only"), string::npos) << error;
+	EXPECT_FALSE(ParseKit(string(HEADER) + "1,101,1001,1001\n", OUT error));		// 같은 스킬 둘
+	EXPECT_FALSE(ParseKit(string(HEADER) + "1,101,1001,2001\n", OUT error));		// 2001 은 픽스처 weapon 풀에 없다
+
+	// 입힐 때 Q 도 같이 - 무기의 두 번째 스킬이 Q 키가 된다 (Player::RebuildSkillSlotsFromEquipment)
+	ASSERT_TRUE(ParseKit(string(HEADER) + "1,101,1001,3001\n", OUT error)) << error;
+	ItemEntry equipped[SKILL_SLOT_COUNT];
+	uint64 nextId = 1;
+	StarterKitTable::EquipInto(equipped, SKILL_SLOT_COUNT, [&nextId] { return nextId++; });
+	EXPECT_EQ(equipped[0].skillIdPrimary, 1001u);
+	EXPECT_EQ(equipped[0].skillIdSecondary, 3001u);
+}
+
 TEST(StarterKit, 빈_표는_기동을_거부한다)
 {
 	string error;

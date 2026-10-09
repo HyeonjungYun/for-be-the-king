@@ -28,6 +28,8 @@ struct EquipStatTotals
 	float					percentMsBonus = 0.f;
 	float					resistance = BaseStats::RESISTANCE;
 	float					attackRange = BaseStats::ATTACK_RANGE;
+	float					attackSpeed = BaseStats::ATTACK_SPEED;				// 무기 배율 × 맨몸 1.0 (2026-10-10 무기별 평타)
+	bool					rangedAttack = false;								// 활 · 스태프 - 평타가 투사체
 	Protocol::DamageType	autoAttackType = Protocol::DAMAGE_TYPE_PHYSICAL;	// 무기가 평타 타입을 정한다 (combat-system.md Core Rule 2)
 };
 

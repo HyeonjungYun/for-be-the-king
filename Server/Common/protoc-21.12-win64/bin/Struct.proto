@@ -103,6 +103,8 @@ message SkillHitInfo
 	uint64 target_id = 3;
 	float impact_x = 4;
 	float impact_y = 5;
+	float aim_x = 6;			// where the skill was aimed - lines / cones / projectiles need a direction to draw (2026-10-10)
+	float aim_y = 7;
 }
 
 message CharacterInfo

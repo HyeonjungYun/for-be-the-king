@@ -16,7 +16,8 @@ struct StarterKitPiece
 {
 	Protocol::EquipSlot	slot = Protocol::SLOT_NONE;
 	uint32				itemTypeId = 0;
-	uint32				skillId = 0;		// 0 = 스킬 없음
+	uint32				skillId = 0;			// 0 = 스킬 없음
+	uint32				skillIdSecondary = 0;	// 무기의 Q 키. 무기가 아니면 0
 };
 
 class StarterKitTable

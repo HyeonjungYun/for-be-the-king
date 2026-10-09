@@ -209,6 +209,8 @@ PROTOBUF_CONSTEXPR SkillHitInfo::SkillHitInfo(
   , /*decltype(_impl_.effect_id_)*/0u
   , /*decltype(_impl_.impact_x_)*/0
   , /*decltype(_impl_.impact_y_)*/0
+  , /*decltype(_impl_.aim_x_)*/0
+  , /*decltype(_impl_.aim_y_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct SkillHitInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR SkillHitInfoDefaultTypeInternal()
@@ -387,6 +389,8 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::SkillHitInfo, _impl_.target_id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::SkillHitInfo, _impl_.impact_x_),
   PROTOBUF_FIELD_OFFSET(::Protocol::SkillHitInfo, _impl_.impact_y_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::SkillHitInfo, _impl_.aim_x_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::SkillHitInfo, _impl_.aim_y_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -425,8 +429,8 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 97, -1, -1, sizeof(::Protocol::SkillInfo)},
   { 107, -1, -1, sizeof(::Protocol::SkillCastInfo)},
   { 115, -1, -1, sizeof(::Protocol::SkillHitInfo)},
-  { 126, -1, -1, sizeof(::Protocol::CharacterInfo)},
-  { 137, -1, -1, sizeof(::Protocol::ItemInstance)},
+  { 128, -1, -1, sizeof(::Protocol::CharacterInfo)},
+  { 139, -1, -1, sizeof(::Protocol::ItemInstance)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -480,25 +484,26 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "state\030\003 \001(\0162\027.Protocol.SlotBindState\022(\n\013"
   "shadowed_by\030\004 \001(\0162\023.Protocol.EquipSlot\"9"
   "\n\rSkillCastInfo\022\021\n\tcaster_id\030\001 \001(\004\022\025\n\ris"
-  "_stationary\030\002 \001(\010\"k\n\014SkillHitInfo\022\021\n\tcas"
-  "ter_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\ttarge"
-  "t_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impact_y"
-  "\030\005 \001(\002\"v\n\rCharacterInfo\022)\n\013object_info\030\001"
-  " \001(\0132\024.Protocol.ObjectInfo\022\014\n\004name\030\002 \001(\t"
-  "\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n\010floor_id"
-  "\030\005 \001(\r\"\330\001\n\014ItemInstance\022\023\n\013instance_id\030\001"
-  " \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\"\n\005grade\030\003 \001("
-  "\0162\023.Protocol.ItemGrade\022\r\n\005level\030\004 \001(\r\022\"\n"
-  "\005state\030\005 \001(\0162\023.Protocol.ItemState\022!\n\004slo"
-  "t\030\006 \001(\0162\023.Protocol.EquipSlot\022#\n\006skills\030\007"
-  " \003(\0132\023.Protocol.SkillInfob\006proto3"
+  "_stationary\030\002 \001(\010\"\211\001\n\014SkillHitInfo\022\021\n\tca"
+  "ster_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\ttarg"
+  "et_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impact_"
+  "y\030\005 \001(\002\022\r\n\005aim_x\030\006 \001(\002\022\r\n\005aim_y\030\007 \001(\002\"v\n"
+  "\rCharacterInfo\022)\n\013object_info\030\001 \001(\0132\024.Pr"
+  "otocol.ObjectInfo\022\014\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 "
+  "\001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n\010floor_id\030\005 \001(\r\"\330\001"
+  "\n\014ItemInstance\022\023\n\013instance_id\030\001 \001(\004\022\024\n\014i"
+  "tem_type_id\030\002 \001(\r\022\"\n\005grade\030\003 \001(\0162\023.Proto"
+  "col.ItemGrade\022\r\n\005level\030\004 \001(\r\022\"\n\005state\030\005 "
+  "\001(\0162\023.Protocol.ItemState\022!\n\004slot\030\006 \001(\0162\023"
+  ".Protocol.EquipSlot\022#\n\006skills\030\007 \003(\0132\023.Pr"
+  "otocol.SkillInfob\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 1793, descriptor_table_protodef_Struct_2eproto,
+    false, false, 1824, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 14,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -3692,12 +3697,14 @@ SkillHitInfo::SkillHitInfo(const SkillHitInfo& from)
     , decltype(_impl_.effect_id_){}
     , decltype(_impl_.impact_x_){}
     , decltype(_impl_.impact_y_){}
+    , decltype(_impl_.aim_x_){}
+    , decltype(_impl_.aim_y_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&_impl_.caster_id_, &from._impl_.caster_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.impact_y_) -
-    reinterpret_cast<char*>(&_impl_.caster_id_)) + sizeof(_impl_.impact_y_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.aim_y_) -
+    reinterpret_cast<char*>(&_impl_.caster_id_)) + sizeof(_impl_.aim_y_));
   // @@protoc_insertion_point(copy_constructor:Protocol.SkillHitInfo)
 }
 
@@ -3711,6 +3718,8 @@ inline void SkillHitInfo::SharedCtor(
     , decltype(_impl_.effect_id_){0u}
     , decltype(_impl_.impact_x_){0}
     , decltype(_impl_.impact_y_){0}
+    , decltype(_impl_.aim_x_){0}
+    , decltype(_impl_.aim_y_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -3739,8 +3748,8 @@ void SkillHitInfo::Clear() {
   (void) cached_has_bits;
 
   ::memset(&_impl_.caster_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.impact_y_) -
-      reinterpret_cast<char*>(&_impl_.caster_id_)) + sizeof(_impl_.impact_y_));
+      reinterpret_cast<char*>(&_impl_.aim_y_) -
+      reinterpret_cast<char*>(&_impl_.caster_id_)) + sizeof(_impl_.aim_y_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -3786,6 +3795,22 @@ const char* SkillHitInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext* 
       case 5:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 45)) {
           _impl_.impact_y_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float aim_x = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 53)) {
+          _impl_.aim_x_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float aim_y = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 61)) {
+          _impl_.aim_y_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else
           goto handle_unusual;
@@ -3857,6 +3882,26 @@ uint8_t* SkillHitInfo::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteFloatToArray(5, this->_internal_impact_y(), target);
   }
 
+  // float aim_x = 6;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_x = this->_internal_aim_x();
+  uint32_t raw_aim_x;
+  memcpy(&raw_aim_x, &tmp_aim_x, sizeof(tmp_aim_x));
+  if (raw_aim_x != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(6, this->_internal_aim_x(), target);
+  }
+
+  // float aim_y = 7;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_y = this->_internal_aim_y();
+  uint32_t raw_aim_y;
+  memcpy(&raw_aim_y, &tmp_aim_y, sizeof(tmp_aim_y));
+  if (raw_aim_y != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(7, this->_internal_aim_y(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -3906,6 +3951,24 @@ size_t SkillHitInfo::ByteSizeLong() const {
     total_size += 1 + 4;
   }
 
+  // float aim_x = 6;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_x = this->_internal_aim_x();
+  uint32_t raw_aim_x;
+  memcpy(&raw_aim_x, &tmp_aim_x, sizeof(tmp_aim_x));
+  if (raw_aim_x != 0) {
+    total_size += 1 + 4;
+  }
+
+  // float aim_y = 7;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_y = this->_internal_aim_y();
+  uint32_t raw_aim_y;
+  memcpy(&raw_aim_y, &tmp_aim_y, sizeof(tmp_aim_y));
+  if (raw_aim_y != 0) {
+    total_size += 1 + 4;
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -3947,6 +4010,20 @@ void SkillHitInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::P
   if (raw_impact_y != 0) {
     _this->_internal_set_impact_y(from._internal_impact_y());
   }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_x = from._internal_aim_x();
+  uint32_t raw_aim_x;
+  memcpy(&raw_aim_x, &tmp_aim_x, sizeof(tmp_aim_x));
+  if (raw_aim_x != 0) {
+    _this->_internal_set_aim_x(from._internal_aim_x());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_y = from._internal_aim_y();
+  uint32_t raw_aim_y;
+  memcpy(&raw_aim_y, &tmp_aim_y, sizeof(tmp_aim_y));
+  if (raw_aim_y != 0) {
+    _this->_internal_set_aim_y(from._internal_aim_y());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -3965,8 +4042,8 @@ void SkillHitInfo::InternalSwap(SkillHitInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(SkillHitInfo, _impl_.impact_y_)
-      + sizeof(SkillHitInfo::_impl_.impact_y_)
+      PROTOBUF_FIELD_OFFSET(SkillHitInfo, _impl_.aim_y_)
+      + sizeof(SkillHitInfo::_impl_.aim_y_)
       - PROTOBUF_FIELD_OFFSET(SkillHitInfo, _impl_.caster_id_)>(
           reinterpret_cast<char*>(&_impl_.caster_id_),
           reinterpret_cast<char*>(&other->_impl_.caster_id_));
