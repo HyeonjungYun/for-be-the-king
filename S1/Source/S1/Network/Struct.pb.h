@@ -2299,6 +2299,8 @@ class SkillHitInfo final :
     kEffectIdFieldNumber = 2,
     kImpactXFieldNumber = 4,
     kImpactYFieldNumber = 5,
+    kAimXFieldNumber = 6,
+    kAimYFieldNumber = 7,
   };
   // uint64 caster_id = 1;
   void clear_caster_id();
@@ -2345,6 +2347,24 @@ class SkillHitInfo final :
   void _internal_set_impact_y(float value);
   public:
 
+  // float aim_x = 6;
+  void clear_aim_x();
+  float aim_x() const;
+  void set_aim_x(float value);
+  private:
+  float _internal_aim_x() const;
+  void _internal_set_aim_x(float value);
+  public:
+
+  // float aim_y = 7;
+  void clear_aim_y();
+  float aim_y() const;
+  void set_aim_y(float value);
+  private:
+  float _internal_aim_y() const;
+  void _internal_set_aim_y(float value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.SkillHitInfo)
  private:
   class _Internal;
@@ -2358,6 +2378,8 @@ class SkillHitInfo final :
     uint32_t effect_id_;
     float impact_x_;
     float impact_y_;
+    float aim_x_;
+    float aim_y_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -4015,6 +4037,46 @@ inline void SkillHitInfo::_internal_set_impact_y(float value) {
 inline void SkillHitInfo::set_impact_y(float value) {
   _internal_set_impact_y(value);
   // @@protoc_insertion_point(field_set:Protocol.SkillHitInfo.impact_y)
+}
+
+// float aim_x = 6;
+inline void SkillHitInfo::clear_aim_x() {
+  _impl_.aim_x_ = 0;
+}
+inline float SkillHitInfo::_internal_aim_x() const {
+  return _impl_.aim_x_;
+}
+inline float SkillHitInfo::aim_x() const {
+  // @@protoc_insertion_point(field_get:Protocol.SkillHitInfo.aim_x)
+  return _internal_aim_x();
+}
+inline void SkillHitInfo::_internal_set_aim_x(float value) {
+  
+  _impl_.aim_x_ = value;
+}
+inline void SkillHitInfo::set_aim_x(float value) {
+  _internal_set_aim_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.SkillHitInfo.aim_x)
+}
+
+// float aim_y = 7;
+inline void SkillHitInfo::clear_aim_y() {
+  _impl_.aim_y_ = 0;
+}
+inline float SkillHitInfo::_internal_aim_y() const {
+  return _impl_.aim_y_;
+}
+inline float SkillHitInfo::aim_y() const {
+  // @@protoc_insertion_point(field_get:Protocol.SkillHitInfo.aim_y)
+  return _internal_aim_y();
+}
+inline void SkillHitInfo::_internal_set_aim_y(float value) {
+  
+  _impl_.aim_y_ = value;
+}
+inline void SkillHitInfo::set_aim_y(float value) {
+  _internal_set_aim_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.SkillHitInfo.aim_y)
 }
 
 // -------------------------------------------------------------------

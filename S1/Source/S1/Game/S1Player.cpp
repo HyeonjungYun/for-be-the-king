@@ -20,6 +20,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Game/Monster/S1MonsterCatalog.h"
 #include "Game/Item/S1ItemSubsystem.h"
+#include "Game/S1SkillTable.h"
 
 AS1Player::AS1Player()
 {
@@ -486,7 +487,7 @@ void AS1Player::OnSkillCastEnded()
 	bCastMarkerVisible = false;
 }
 
-void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, AS1Player* Target)
+void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, const FVector& Aim, AS1Player* Target)
 {
 	if (World == nullptr)
 		return;
@@ -497,58 +498,123 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 		? Target->GetActorLocation().Z - 90.f
 		: 0.f);
 
-	// 🔴 Branching on effect_id, never skill_id. An observer sees a shape and a colour and
-	// has to infer the rest — that inference is the fight (equipment-skill-binding.md B8).
+	// 🔴 Branching on effect_id, never skill_id — an observer sees a shape and a colour and has to
+	// infer the rest; that inference is the fight (equipment-skill-binding.md B8). effect_id = skill_id
+	// since the 2026-10-10 roster, but the lookup only reads the SHAPE: 76 skills get the same six
+	// readouts, one per hit shape, until the art budget opens. 🔴 TEMP shapes (DrawDebug, not Niagara).
 	//
-	// DrawDebug rather than Niagara on purpose: what P1.5 has to prove is that hits are
-	// *readable*, not that they are pretty. Effect assets come after the art budget opens.
-	switch (EffectId)
-	{
-	case 1:		// 후려치기 — single target strike
-	{
-		const float Size = 90.f;
-		const FColor Colour(230, 70, 70);
+	// Colour by power — physical warm, magic cool, hybrid in between — so "what hit me" has a second channel.
+	const FS1SkillDef* Def = FS1SkillTable::Find(EffectId);
 
-		DrawDebugLine(World, Ground + FVector(-Size, 0.f, 0.f), Ground + FVector(Size, 0.f, 0.f),
-			Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
-		DrawDebugLine(World, Ground + FVector(0.f, -Size, 0.f), Ground + FVector(0.f, Size, 0.f),
-			Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
-		break;
-	}
-
-	case 2:		// 짓쳐들기 — dash. Drawn as an arrival marker, not a trail:
-				// the mover's own position stream already shows the path.
-	{
-		DrawDebugCircle(World, Ground, 70.f, 24, FColor(90, 220, 190),
-			false, EFFECT_LIFETIME_SEC, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
-		break;
-	}
-
-	case 3:		// 후려베기 — area. The radius has to be visible or a bystander cannot learn
-				// how far it reaches, which is the only way to learn to stand outside it.
-	{
-		DrawDebugCircle(World, Ground, 250.f, 40, FColor(240, 150, 60),
-			false, EFFECT_LIFETIME_SEC, 0, 7.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
-		break;
-	}
-
-	case 9001:	// 집 보스 내려치기 — the warning itself. S_SKILL_HIT arrives when the telegraph starts; the hit lands
-				// 1.45 s later on whoever is still inside 4 m (monster-ai.md Core Rule 18 · F10). Two rings: the edge
-				// you have to cross, and a fainter inner one so the circle reads as an area, not a line
+	// The boss telegraph keeps its own look: it is the warning, not the hit (monster-ai.md Core Rule 18 · F10)
+	if (EffectId == 9001)
 	{
 		constexpr float TelegraphSec = 1.45f;
 		DrawDebugCircle(World, Ground, 400.f, 64, FColor(230, 60, 40),
 			false, TelegraphSec, 0, 10.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		DrawDebugCircle(World, Ground, 200.f, 40, FColor(150, 40, 30),
 			false, TelegraphSec, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
-		break;
+		return;
 	}
 
-	default:
+	if (Def == nullptr)
+	{
 		// Unknown effect_id — the client table is behind the server's. Draw something rather
 		// than nothing: a hit the player cannot see is worse than one they cannot identify.
 		DrawDebugCircle(World, Ground, 60.f, 16, FColor(180, 180, 180),
 			false, EFFECT_LIFETIME_SEC, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		return;
+	}
+
+	FColor Colour(230, 70, 70);
+	switch (Def->Power)
+	{
+	case ES1SkillPower::Ap:		Colour = FColor(90, 140, 255); break;
+	case ES1SkillPower::Hybrid:	Colour = FColor(200, 90, 230); break;
+	case ES1SkillPower::None:	Colour = FColor(90, 220, 190); break;
+	default: break;
+	}
+
+	// Direction toward the aim. A zero aim (self area) draws nothing directional
+	FVector Dir = FVector(Aim.X, Aim.Y, 0.f) - FVector(Impact.X, Impact.Y, 0.f);
+	Dir.Z = 0.0;
+	const bool bHasDir = Dir.Normalize();
+
+	switch (Def->Shape)
+	{
+	case ES1SkillShape::Single:
+	{
+		// A cross on the impact — the one hit, where it landed
+		const float Size = 90.f;
+		DrawDebugLine(World, Ground + FVector(-Size, 0.f, 0.f), Ground + FVector(Size, 0.f, 0.f), Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
+		DrawDebugLine(World, Ground + FVector(0.f, -Size, 0.f), Ground + FVector(0.f, Size, 0.f), Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
+		break;
+	}
+
+	case ES1SkillShape::Line:
+	case ES1SkillShape::Projectile:
+	{
+		if (bHasDir == false)
+			break;
+
+		// The swept strip: the whole length is the reach, the half-width is the miss margin
+		const FVector Side = FVector(-Dir.Y, Dir.X, 0.f) * (Def->WidthCm * 0.5f);
+		const FVector End = Ground + Dir * Def->RangeCm;
+		DrawDebugLine(World, Ground + Side, End + Side, Colour, false, EFFECT_LIFETIME_SEC, 0, 4.f);
+		DrawDebugLine(World, Ground - Side, End - Side, Colour, false, EFFECT_LIFETIME_SEC, 0, 4.f);
+		DrawDebugLine(World, Ground, End, Colour, false, EFFECT_LIFETIME_SEC, 0, 8.f);
+		break;
+	}
+
+	case ES1SkillShape::Cone:
+	{
+		if (bHasDir == false)
+			break;
+
+		// Two edges and the arc between them — the angle is the lesson (stand outside it)
+		const float Half = FMath::DegreesToRadians(Def->AngleDeg * 0.5f);
+		const FVector Left = Dir.RotateAngleAxis(FMath::RadiansToDegrees(-Half), FVector::UpVector);
+		const FVector Right = Dir.RotateAngleAxis(FMath::RadiansToDegrees(Half), FVector::UpVector);
+		DrawDebugLine(World, Ground, Ground + Left * Def->RadiusCm, Colour, false, EFFECT_LIFETIME_SEC, 0, 6.f);
+		DrawDebugLine(World, Ground, Ground + Right * Def->RadiusCm, Colour, false, EFFECT_LIFETIME_SEC, 0, 6.f);
+
+		constexpr int32 Segments = 12;
+		FVector Prev = Ground + Left * Def->RadiusCm;
+		for (int32 i = 1; i <= Segments; i++)
+		{
+			const float Deg = FMath::RadiansToDegrees(-Half + (2.f * Half) * i / Segments);
+			const FVector Next = Ground + Dir.RotateAngleAxis(Deg, FVector::UpVector) * Def->RadiusCm;
+			DrawDebugLine(World, Prev, Next, Colour, false, EFFECT_LIFETIME_SEC, 0, 6.f);
+			Prev = Next;
+		}
+		break;
+	}
+
+	case ES1SkillShape::CircleSelf:
+	case ES1SkillShape::CirclePoint:
+	{
+		// A pure dash (radius 0) is an arrival marker — the mover's own position stream shows the path
+		if (Def->RadiusCm <= 0.f)
+		{
+			DrawDebugCircle(World, Ground, 70.f, 24, Colour, false, EFFECT_LIFETIME_SEC, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			break;
+		}
+
+		// The radius has to be visible or a bystander cannot learn how far it reaches,
+		// which is the only way to learn to stand outside it
+		FVector Centre = Ground;
+		if (Def->Shape == ES1SkillShape::CirclePoint && bHasDir)
+		{
+			const float Reach = FMath::Min(static_cast<float>(FVector::Dist2D(Aim, Impact)), Def->RangeCm);
+			Centre = Ground + Dir * Reach;
+		}
+		DrawDebugCircle(World, Centre, Def->RadiusCm, 40, Colour, false, EFFECT_LIFETIME_SEC, 0, 7.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		break;
+	}
+
+	default:
+		// Shape none — a self buff. A small pulse at the caster's feet says "something was used"
+		DrawDebugCircle(World, Ground, 50.f, 16, Colour, false, EFFECT_LIFETIME_SEC, 0, 3.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		break;
 	}
 }

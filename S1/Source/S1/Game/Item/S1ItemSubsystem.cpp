@@ -2,6 +2,7 @@
 
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
+#include "Game/S1SkillTable.h"
 #include "S1.h"
 #include "Protocol.pb.h"
 #include "Engine/World.h"
@@ -88,6 +89,20 @@ void US1ItemSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (Catalog.GetGradeMultipliers().Num() < 4)
 		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] grade multipliers not loaded (item_grades.csv) - every grade counts as x1.0"));
+
+	// Skills come from the same directory - skills.csv + skill_effects.csv, what the server fights with (2026-10-10 roster)
+	if (ItemDataDirectory.IsEmpty() == false)
+	{
+		FString SkillError;
+		if (FS1SkillTable::LoadFromDirectory(Directory, SkillError) == false)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[SKILL] skill table not loaded - no key can aim or fire. dir=%s error=%s"), *Directory, *SkillError);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[SKILL] skill table loaded - %d skills"), FS1SkillTable::Num());
+		}
+	}
 
 	CheckStrings();
 
@@ -613,16 +628,16 @@ void US1ItemSubsystem::FillFakeItems()
 	// Every grade at least once — the server only issues Common and Rare in the MVP.
 	const FFake Fakes[] =
 	{
-		{ 101, ES1ItemGrade::Legendary,	ES1ItemState::Equipped, 1, 1001 },
-		{ 301, ES1ItemGrade::Epic,		ES1ItemState::Equipped, 3, 0 },
-		{ 401, ES1ItemGrade::Rare,		ES1ItemState::Equipped, 4, 3001 },
-		{ 102, ES1ItemGrade::Common,	ES1ItemState::Carried,  0, 1001 },
-		{ 103, ES1ItemGrade::Rare,		ES1ItemState::Carried,  0, 1001 },
-		{ 302, ES1ItemGrade::Epic,		ES1ItemState::Carried,  0, 0 },
-		{ 402, ES1ItemGrade::Legendary,	ES1ItemState::Carried,  0, 3001 },
-		{ 501, ES1ItemGrade::Common,	ES1ItemState::Carried,  0, 2001 },
-		{ 502, ES1ItemGrade::Rare,		ES1ItemState::Vaulted,  0, 2001 },
-		{ 601, ES1ItemGrade::Epic,		ES1ItemState::Vaulted,  0, 3001 },
+		{ 101, ES1ItemGrade::Legendary,	ES1ItemState::Equipped, 1, 1007 },
+		{ 301, ES1ItemGrade::Epic,		ES1ItemState::Equipped, 3, 1002 },
+		{ 401, ES1ItemGrade::Rare,		ES1ItemState::Equipped, 4, 0 },
+		{ 102, ES1ItemGrade::Common,	ES1ItemState::Carried,  0, 1005 },
+		{ 103, ES1ItemGrade::Rare,		ES1ItemState::Carried,  0, 1018 },
+		{ 302, ES1ItemGrade::Epic,		ES1ItemState::Carried,  0, 1002 },
+		{ 402, ES1ItemGrade::Legendary,	ES1ItemState::Carried,  0, 0 },
+		{ 501, ES1ItemGrade::Common,	ES1ItemState::Carried,  0, 1003 },
+		{ 502, ES1ItemGrade::Rare,		ES1ItemState::Vaulted,  0, 1003 },
+		{ 601, ES1ItemGrade::Epic,		ES1ItemState::Vaulted,  0, 1002 },
 	};
 
 	uint64 NextId = FakeIdBase + 1;

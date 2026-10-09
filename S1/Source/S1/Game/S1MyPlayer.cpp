@@ -1091,7 +1091,7 @@ void AS1MyPlayer::DebugDashNoNotice()
 {
 	// Same distance and speed as the real dash, so the only difference the server sees is
 	// the missing notice.
-	const FS1SkillDef* Dash = FS1SkillTable::Find(2001);
+	const FS1SkillDef* Dash = FS1SkillTable::Find(1003);		// 질주 (boots) - 2026-10-10 roster
 	if (Dash == nullptr || Dash->HasMovement() == false)
 		return;
 

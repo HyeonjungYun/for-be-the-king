@@ -427,6 +427,7 @@ void US1GameInstance::HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt)
 		}
 
 		const FVector Impact(Info.impact_x(), Info.impact_y(), 0.f);
+		const FVector Aim(Info.aim_x(), Info.aim_y(), 0.f);
 
 		AS1Player* Target = nullptr;
 		if (Info.target_id() != 0)
@@ -435,7 +436,7 @@ void US1GameInstance::HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt)
 				Target = FoundTarget->Get();
 		}
 
-		AS1Player::PlaySkillEffect(GetWorld(), Info.effect_id(), Impact, Target);
+		AS1Player::PlaySkillEffect(GetWorld(), Info.effect_id(), Impact, Aim, Target);
 	}
 }
 

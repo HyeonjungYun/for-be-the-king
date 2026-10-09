@@ -107,7 +107,10 @@ namespace S1BaseCampLayout
 		{
 		case ES1SkillShape::Single:			return Text(TEXT("shape.single"));
 		case ES1SkillShape::Line:			return Text(TEXT("shape.line"));
+		case ES1SkillShape::Cone:			return Text(TEXT("shape.cone"));
 		case ES1SkillShape::CirclePoint:	return Text(TEXT("shape.circle_point"));
+		case ES1SkillShape::Projectile:		return Text(TEXT("shape.projectile"));
+		case ES1SkillShape::None:			return FText::GetEmpty();
 		default:							return Def.RadiusCm > 0.f ? Text(TEXT("shape.circle_self")) : FText::GetEmpty();
 		}
 	}
@@ -122,19 +125,36 @@ namespace S1BaseCampLayout
 		if (Shape.IsEmpty() == false)
 			Parts.Add(Shape);
 
-		// A dash's range is its travel — say "이동", not "사거리".
+		// A dash's range is its travel — say "이동", not "사거리". A cone's range is its radius — said once, below
 		if (Def.HasMovement())
 			Parts.Add(FText::Format(Text(TEXT("atomic.move")), Meters(Def.MoveDistCm)));
-		else if (Def.RangeCm > 0.f)
+		else if (Def.RangeCm > 0.f && Def.Shape != ES1SkillShape::Cone)
 			Parts.Add(FText::Format(Text(TEXT("atomic.range")), Meters(Def.RangeCm)));
 
 		if (Def.WidthCm > 0.f)
 			Parts.Add(FText::Format(Text(TEXT("atomic.width")), Meters(Def.WidthCm)));
-		if (Def.RadiusCm > 0.f)
+		if (Def.RadiusCm > 0.f && Def.Shape != ES1SkillShape::Cone)
 			Parts.Add(FText::Format(Text(TEXT("atomic.radius")), Meters(Def.RadiusCm)));
+		if (Def.Shape == ES1SkillShape::Cone)
+			Parts.Add(FText::Format(Text(TEXT("atomic.cone")), Meters(Def.RadiusCm), FText::AsNumber(static_cast<int32>(Def.AngleDeg))));
 
-		Parts.Add(Def.CastMs == 0 ? Text(TEXT("atomic.cast_instant")) : FText::Format(Text(TEXT("atomic.cast")), Seconds(Def.CastMs)));
-		Parts.Add(FText::Format(Text(TEXT("atomic.cooldown")), Seconds(Def.CooldownMs)));
+		// Passive / hold / recast keys are used differently - say so before the numbers
+		switch (Def.Kind)
+		{
+		case ES1SkillKind::Passive:	Parts.Add(Text(TEXT("kind.passive"))); break;
+		case ES1SkillKind::Hold:	Parts.Add(Text(TEXT("kind.hold"))); break;
+		case ES1SkillKind::Recast:	Parts.Add(Text(TEXT("kind.recast"))); break;
+		default: break;
+		}
+
+		if (Def.bHasHardCc)
+			Parts.Add(Text(TEXT("atomic.hard_cc")));
+
+		if (Def.Kind != ES1SkillKind::Passive)
+		{
+			Parts.Add(Def.CastMs == 0 ? Text(TEXT("atomic.cast_instant")) : FText::Format(Text(TEXT("atomic.cast")), Seconds(Def.CastMs)));
+			Parts.Add(FText::Format(Text(TEXT("atomic.cooldown")), Seconds(Def.CooldownMs)));
+		}
 
 		return FText::Join(FText::AsCultureInvariant(TEXT(" · ")), Parts);
 	}

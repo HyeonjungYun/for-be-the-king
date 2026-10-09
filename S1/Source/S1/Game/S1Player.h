@@ -179,9 +179,10 @@ public:
 	 * Static because the caster may be out of view, or dead, or never have been spawned on
 	 * this client — the effect still has to play at the impact point.
 	 *
+	 * @param Aim     Where the caster aimed — lines, cones and projectiles are drawn toward it (2026-10-10).
 	 * @param Target  The actor hit, or null for an area skill that hit nobody.
 	 */
-	static void PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, AS1Player* Target);
+	static void PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, const FVector& Aim, AS1Player* Target);
 
 protected:
 	class Protocol::PosInfo* PlayerInfo; // 현재 위치
