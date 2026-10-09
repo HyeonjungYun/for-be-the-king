@@ -8,7 +8,7 @@
 namespace
 {
 	/** A CSV split into cells. No quoting — the skill files never need commas inside a value (names live in the String Table). */
-	struct FCsv
+	struct FSkillCsv
 	{
 		TArray<FString>			Header;
 		TArray<TArray<FString>>	Rows;
@@ -17,9 +17,9 @@ namespace
 		int32 Column(const TCHAR* Name) const { return Header.IndexOfByKey(FString(Name)); }
 	};
 
-	FCsv ReadCsv(const FString& Text)
+	FSkillCsv ReadSkillCsv(const FString& Text)
 	{
-		FCsv Out;
+		FSkillCsv Out;
 
 		TArray<FString> Lines;
 		Text.ParseIntoArrayLines(Lines, /*InCullEmpty*/ false);
@@ -149,7 +149,7 @@ bool FS1SkillTable::LoadFromDirectory(const FString& Directory, FString& OutErro
 
 bool FS1SkillTable::ParseRules(const FString& RulesCsv, FString& OutError)
 {
-	const FCsv Csv = ReadCsv(RulesCsv);
+	const FSkillCsv Csv = ReadSkillCsv(RulesCsv);
 	const int32 ColKey = Csv.Column(TEXT("key"));
 	const int32 ColValue = Csv.Column(TEXT("value"));
 
@@ -189,7 +189,7 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 
 	// ── skills.csv ──
 	{
-		const FCsv Csv = ReadCsv(SkillsCsv);
+		const FSkillCsv Csv = ReadSkillCsv(SkillsCsv);
 
 		const int32 ColId		= Csv.Column(TEXT("skill_id"));
 		const int32 ColPower	= Csv.Column(TEXT("power"));
@@ -275,7 +275,7 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 
 	// ── skill_effects.csv — only the movement the client runs itself, and whether a key is hard CC ──
 	{
-		const FCsv Csv = ReadCsv(EffectsCsv);
+		const FSkillCsv Csv = ReadSkillCsv(EffectsCsv);
 
 		const int32 ColId		= Csv.Column(TEXT("skill_id"));
 		const int32 ColEffect	= Csv.Column(TEXT("effect"));

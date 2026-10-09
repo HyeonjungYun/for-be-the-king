@@ -704,8 +704,17 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 		break;
 	}
 
-	case ES1SkillShape::Line:
 	case ES1SkillShape::Projectile:
+	{
+		// Only the launch - the flight and the impact are drawn by US1ProjectileSubsystem from S_PROJECTILE (stage 2).
+		// A strip here would read as an instant hit, which is exactly what a projectile is not
+		DrawDebugCircle(World, Ground, 45.f, 12, Colour, false, EFFECT_LIFETIME_SEC * 0.5f, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		if (bHasDir)
+			DrawDebugLine(World, Ground, Ground + Dir * 90.f, Colour, false, EFFECT_LIFETIME_SEC * 0.5f, 0, 4.f);
+		break;
+	}
+
+	case ES1SkillShape::Line:
 	{
 		if (bHasDir == false)
 			break;

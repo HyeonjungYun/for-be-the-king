@@ -5,6 +5,7 @@
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/Escape/S1EscapeSubsystem.h"
 #include "Game/Login/S1LoginSubsystem.h"
+#include "Game/Skill/S1ProjectileSubsystem.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -159,6 +160,15 @@ bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 		UE_LOG(LogTemp, Warning, TEXT("[DAMAGE] %llu -> %llu dmg-%d hp=%d crit=%d"),
 			Info.attacker_id(), Info.target_id(), Info.damage(), Info.remaining_hp(), Info.is_crit() ? 1 : 0);
 	}
+	return true;
+}
+
+bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt)
+{
+	// 투사체 발사 · 끝 (skill roster stage 2, 2026-10-10 에이전트) - 클라가 스스로 날려 그린다, 판정은 서버
+	if (US1ProjectileSubsystem* Projectiles = US1ProjectileSubsystem::Get())
+		Projectiles->HandlePacket(pkt);
+
 	return true;
 }
 

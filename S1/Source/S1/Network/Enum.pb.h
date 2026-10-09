@@ -495,6 +495,33 @@ inline bool StatusKind_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<StatusKind>(
     StatusKind_descriptor(), name, value);
 }
+enum ProjectileEnd : int {
+  PROJECTILE_END_EXPIRED = 0,
+  PROJECTILE_END_HIT = 1,
+  PROJECTILE_END_WALL = 2,
+  PROJECTILE_END_LOST = 3,
+  ProjectileEnd_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  ProjectileEnd_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool ProjectileEnd_IsValid(int value);
+constexpr ProjectileEnd ProjectileEnd_MIN = PROJECTILE_END_EXPIRED;
+constexpr ProjectileEnd ProjectileEnd_MAX = PROJECTILE_END_LOST;
+constexpr int ProjectileEnd_ARRAYSIZE = ProjectileEnd_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ProjectileEnd_descriptor();
+template<typename T>
+inline const std::string& ProjectileEnd_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, ProjectileEnd>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function ProjectileEnd_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    ProjectileEnd_descriptor(), enum_t_value);
+}
+inline bool ProjectileEnd_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, ProjectileEnd* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ProjectileEnd>(
+    ProjectileEnd_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -596,6 +623,11 @@ template <> struct is_proto_enum< ::Protocol::StatusKind> : ::std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::StatusKind>() {
   return ::Protocol::StatusKind_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::ProjectileEnd> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ProjectileEnd>() {
+  return ::Protocol::ProjectileEnd_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE
