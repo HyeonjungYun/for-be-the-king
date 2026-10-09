@@ -12,7 +12,20 @@ namespace Protocol
 	class S_PROJECTILE;
 	class ProjectileInfo;
 	class ProjectileEndInfo;
+	class S_ZONE;
+	class ZoneInfo;
 }
+
+/** A ground zone (stage 3) - drawn for its duration; the ticks arrive as S_DAMAGE / S_CC / S_STATUS. */
+struct FS1ClientZone
+{
+	uint64 Id = 0;
+	FVector Pos = FVector::ZeroVector;
+	float RadiusCm = 0.f;
+	float Until = 0.f;
+	FColor Colour = FColor::White;
+	FString Param;
+};
 
 /** One projectile in flight on this client. Flown locally from the launch packet; the server decides what it hits. */
 struct FS1ClientProjectile
@@ -51,10 +64,14 @@ public:
 
 	void HandlePacket(const Protocol::S_PROJECTILE& Pkt);
 
+	/** S_ZONE - ground zones live here too: same lifetime rules, same ground-plane drawing (stage 3). */
+	void HandleZones(const Protocol::S_ZONE& Pkt);
+
 	/** Everything in flight is dropped - leaving the dungeon, or a resync. */
 	void Clear();
 
 	int32 NumFlying() const { return Flying.Num(); }
+	int32 NumZones() const { return Zones.Num(); }
 
 	// ── FTickableGameObject ───────────────────────────────────────────────
 	virtual void Tick(float DeltaTime) override;
@@ -79,6 +96,7 @@ private:
 
 	TArray<FS1ClientProjectile> Flying;
 	TArray<FImpact> Impacts;
+	TArray<FS1ClientZone> Zones;
 	bool bInitialized = false;
 
 	static constexpr float ImpactSeconds = 0.35f;

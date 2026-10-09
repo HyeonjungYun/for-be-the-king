@@ -163,6 +163,15 @@ bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 	return true;
 }
 
+bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt)
+{
+	// 장판 (skill roster stage 3, 2026-10-10 에이전트) - 바닥 원 표시만, 틱은 S_DAMAGE / S_CC / S_STATUS
+	if (US1ProjectileSubsystem* Projectiles = US1ProjectileSubsystem::Get())
+		Projectiles->HandleZones(pkt);
+
+	return true;
+}
+
 bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt)
 {
 	// 투사체 발사 · 끝 (skill roster stage 2, 2026-10-10 에이전트) - 클라가 스스로 날려 그린다, 판정은 서버

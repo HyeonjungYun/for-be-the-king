@@ -69,6 +69,37 @@ void US1ProjectileSubsystem::Clear()
 {
 	Flying.Reset();
 	Impacts.Reset();
+	Zones.Reset();
+}
+
+void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
+{
+	const UWorld* World = GetWorld();
+	const float Now = World ? World->GetTimeSeconds() : 0.f;
+
+	for (const Protocol::ZoneInfo& Info : Pkt.spawned())
+	{
+		FS1ClientZone Z;
+		Z.Id = Info.zone_id();
+		Z.Pos = FVector(Info.x(), Info.y(), GroundZ(Info.caster_id()) - 50.f);
+		Z.RadiusCm = Info.radius_cm();
+		Z.Until = Now + Info.duration_ms() / 1000.f;
+		Z.Param = UTF8_TO_TCHAR(Info.param().c_str());
+
+		// Colour by what it does - poison green, fire orange, lightning blue, mist grey, arrows tan
+		if (Z.Param == TEXT("poison"))				Z.Colour = FColor(110, 200, 60);
+		else if (Z.Param.Contains(TEXT("fire")))	Z.Colour = FColor(255, 140, 40);
+		else if (Z.Param == TEXT("lightning"))		Z.Colour = FColor(120, 160, 255);
+		else if (Z.Param == TEXT("mist"))			Z.Colour = FColor(170, 170, 190);
+		else if (Z.Param == TEXT("arrows"))			Z.Colour = FColor(220, 190, 120);
+		else										Z.Colour = ColourFor(Info.effect_id());
+
+		Zones.Add(Z);
+		UE_LOG(LogTemp, Log, TEXT("[ZONE] spawn id=%llu effect=%u r=%.0f %s for=%ums"), Z.Id, Info.effect_id(), Z.RadiusCm, *Z.Param, Info.duration_ms());
+	}
+
+	for (uint64 Id : Pkt.ended())
+		Zones.RemoveAll([Id](const FS1ClientZone& Z) { return Z.Id == Id; });
 }
 
 float US1ProjectileSubsystem::GroundZ(uint64 ActorId) const
@@ -137,11 +168,26 @@ void US1ProjectileSubsystem::OnEnded(const Protocol::ProjectileEndInfo& Info)
 void US1ProjectileSubsystem::Tick(float DeltaTime)
 {
 	UWorld* World = GetWorld();
-	if (World == nullptr || (Flying.Num() == 0 && Impacts.Num() == 0))
+	if (World == nullptr || (Flying.Num() == 0 && Impacts.Num() == 0 && Zones.Num() == 0))
 		return;
 
 	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
 	const float Now = World->GetTimeSeconds();
+
+	// Zones - the outline plus a slow inner pulse so a 5 s circle does not read as a static decal
+	for (int32 i = Zones.Num() - 1; i >= 0; i--)
+	{
+		const FS1ClientZone& Z = Zones[i];
+		if (Now > Z.Until + 1.f)
+		{
+			Zones.RemoveAtSwap(i);		// the end packet was lost - trim a second after the server's deadline
+			continue;
+		}
+
+		DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 32, Z.Colour, false, -1.f, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		const float Pulse = FMath::Fmod(Now * 0.8f, 1.f);
+		DrawDebugCircle(World, Z.Pos, Z.RadiusCm * Pulse, 24, Z.Colour, false, -1.f, 0, 1.5f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+	}
 
 	for (FS1ClientProjectile& P : Flying)
 	{

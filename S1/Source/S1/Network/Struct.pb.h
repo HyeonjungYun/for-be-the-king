@@ -97,6 +97,9 @@ extern SkillInfoDefaultTypeInternal _SkillInfo_default_instance_;
 class StatusInfo;
 struct StatusInfoDefaultTypeInternal;
 extern StatusInfoDefaultTypeInternal _StatusInfo_default_instance_;
+class ZoneInfo;
+struct ZoneInfoDefaultTypeInternal;
+extern ZoneInfoDefaultTypeInternal _ZoneInfo_default_instance_;
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
 template<> ::Protocol::AttackInfo* Arena::CreateMaybeMessage<::Protocol::AttackInfo>(Arena*);
@@ -116,6 +119,7 @@ template<> ::Protocol::SkillCastInfo* Arena::CreateMaybeMessage<::Protocol::Skil
 template<> ::Protocol::SkillHitInfo* Arena::CreateMaybeMessage<::Protocol::SkillHitInfo>(Arena*);
 template<> ::Protocol::SkillInfo* Arena::CreateMaybeMessage<::Protocol::SkillInfo>(Arena*);
 template<> ::Protocol::StatusInfo* Arena::CreateMaybeMessage<::Protocol::StatusInfo>(Arena*);
+template<> ::Protocol::ZoneInfo* Arena::CreateMaybeMessage<::Protocol::ZoneInfo>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
 
@@ -3068,6 +3072,236 @@ class ProjectileEndInfo final :
 };
 // -------------------------------------------------------------------
 
+class ZoneInfo final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.ZoneInfo) */ {
+ public:
+  inline ZoneInfo() : ZoneInfo(nullptr) {}
+  ~ZoneInfo() override;
+  explicit PROTOBUF_CONSTEXPR ZoneInfo(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  ZoneInfo(const ZoneInfo& from);
+  ZoneInfo(ZoneInfo&& from) noexcept
+    : ZoneInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline ZoneInfo& operator=(const ZoneInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline ZoneInfo& operator=(ZoneInfo&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const ZoneInfo& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const ZoneInfo* internal_default_instance() {
+    return reinterpret_cast<const ZoneInfo*>(
+               &_ZoneInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    15;
+
+  friend void swap(ZoneInfo& a, ZoneInfo& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(ZoneInfo* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(ZoneInfo* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  ZoneInfo* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<ZoneInfo>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const ZoneInfo& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const ZoneInfo& from) {
+    ZoneInfo::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(ZoneInfo* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.ZoneInfo";
+  }
+  protected:
+  explicit ZoneInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kParamFieldNumber = 8,
+    kZoneIdFieldNumber = 1,
+    kCasterIdFieldNumber = 2,
+    kEffectIdFieldNumber = 3,
+    kXFieldNumber = 4,
+    kYFieldNumber = 5,
+    kRadiusCmFieldNumber = 6,
+    kDurationMsFieldNumber = 7,
+  };
+  // string param = 8;
+  void clear_param();
+  const std::string& param() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_param(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_param();
+  PROTOBUF_NODISCARD std::string* release_param();
+  void set_allocated_param(std::string* param);
+  private:
+  const std::string& _internal_param() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_param(const std::string& value);
+  std::string* _internal_mutable_param();
+  public:
+
+  // uint64 zone_id = 1;
+  void clear_zone_id();
+  uint64_t zone_id() const;
+  void set_zone_id(uint64_t value);
+  private:
+  uint64_t _internal_zone_id() const;
+  void _internal_set_zone_id(uint64_t value);
+  public:
+
+  // uint64 caster_id = 2;
+  void clear_caster_id();
+  uint64_t caster_id() const;
+  void set_caster_id(uint64_t value);
+  private:
+  uint64_t _internal_caster_id() const;
+  void _internal_set_caster_id(uint64_t value);
+  public:
+
+  // uint32 effect_id = 3;
+  void clear_effect_id();
+  uint32_t effect_id() const;
+  void set_effect_id(uint32_t value);
+  private:
+  uint32_t _internal_effect_id() const;
+  void _internal_set_effect_id(uint32_t value);
+  public:
+
+  // float x = 4;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 5;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float radius_cm = 6;
+  void clear_radius_cm();
+  float radius_cm() const;
+  void set_radius_cm(float value);
+  private:
+  float _internal_radius_cm() const;
+  void _internal_set_radius_cm(float value);
+  public:
+
+  // uint32 duration_ms = 7;
+  void clear_duration_ms();
+  uint32_t duration_ms() const;
+  void set_duration_ms(uint32_t value);
+  private:
+  uint32_t _internal_duration_ms() const;
+  void _internal_set_duration_ms(uint32_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.ZoneInfo)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr param_;
+    uint64_t zone_id_;
+    uint64_t caster_id_;
+    uint32_t effect_id_;
+    float x_;
+    float y_;
+    float radius_cm_;
+    uint32_t duration_ms_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Struct_2eproto;
+};
+// -------------------------------------------------------------------
+
 class CharacterInfo final :
     public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.CharacterInfo) */ {
  public:
@@ -3116,7 +3350,7 @@ class CharacterInfo final :
                &_CharacterInfo_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    16;
 
   friend void swap(CharacterInfo& a, CharacterInfo& b) {
     a.Swap(&b);
@@ -3322,7 +3556,7 @@ class ItemInstance final :
                &_ItemInstance_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    17;
 
   friend void swap(ItemInstance& a, ItemInstance& b) {
     a.Swap(&b);
@@ -5264,6 +5498,200 @@ inline void ProjectileEndInfo::set_target_id(uint64_t value) {
 
 // -------------------------------------------------------------------
 
+// ZoneInfo
+
+// uint64 zone_id = 1;
+inline void ZoneInfo::clear_zone_id() {
+  _impl_.zone_id_ = uint64_t{0u};
+}
+inline uint64_t ZoneInfo::_internal_zone_id() const {
+  return _impl_.zone_id_;
+}
+inline uint64_t ZoneInfo::zone_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.zone_id)
+  return _internal_zone_id();
+}
+inline void ZoneInfo::_internal_set_zone_id(uint64_t value) {
+  
+  _impl_.zone_id_ = value;
+}
+inline void ZoneInfo::set_zone_id(uint64_t value) {
+  _internal_set_zone_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.zone_id)
+}
+
+// uint64 caster_id = 2;
+inline void ZoneInfo::clear_caster_id() {
+  _impl_.caster_id_ = uint64_t{0u};
+}
+inline uint64_t ZoneInfo::_internal_caster_id() const {
+  return _impl_.caster_id_;
+}
+inline uint64_t ZoneInfo::caster_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.caster_id)
+  return _internal_caster_id();
+}
+inline void ZoneInfo::_internal_set_caster_id(uint64_t value) {
+  
+  _impl_.caster_id_ = value;
+}
+inline void ZoneInfo::set_caster_id(uint64_t value) {
+  _internal_set_caster_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.caster_id)
+}
+
+// uint32 effect_id = 3;
+inline void ZoneInfo::clear_effect_id() {
+  _impl_.effect_id_ = 0u;
+}
+inline uint32_t ZoneInfo::_internal_effect_id() const {
+  return _impl_.effect_id_;
+}
+inline uint32_t ZoneInfo::effect_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.effect_id)
+  return _internal_effect_id();
+}
+inline void ZoneInfo::_internal_set_effect_id(uint32_t value) {
+  
+  _impl_.effect_id_ = value;
+}
+inline void ZoneInfo::set_effect_id(uint32_t value) {
+  _internal_set_effect_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.effect_id)
+}
+
+// float x = 4;
+inline void ZoneInfo::clear_x() {
+  _impl_.x_ = 0;
+}
+inline float ZoneInfo::_internal_x() const {
+  return _impl_.x_;
+}
+inline float ZoneInfo::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.x)
+  return _internal_x();
+}
+inline void ZoneInfo::_internal_set_x(float value) {
+  
+  _impl_.x_ = value;
+}
+inline void ZoneInfo::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.x)
+}
+
+// float y = 5;
+inline void ZoneInfo::clear_y() {
+  _impl_.y_ = 0;
+}
+inline float ZoneInfo::_internal_y() const {
+  return _impl_.y_;
+}
+inline float ZoneInfo::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.y)
+  return _internal_y();
+}
+inline void ZoneInfo::_internal_set_y(float value) {
+  
+  _impl_.y_ = value;
+}
+inline void ZoneInfo::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.y)
+}
+
+// float radius_cm = 6;
+inline void ZoneInfo::clear_radius_cm() {
+  _impl_.radius_cm_ = 0;
+}
+inline float ZoneInfo::_internal_radius_cm() const {
+  return _impl_.radius_cm_;
+}
+inline float ZoneInfo::radius_cm() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.radius_cm)
+  return _internal_radius_cm();
+}
+inline void ZoneInfo::_internal_set_radius_cm(float value) {
+  
+  _impl_.radius_cm_ = value;
+}
+inline void ZoneInfo::set_radius_cm(float value) {
+  _internal_set_radius_cm(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.radius_cm)
+}
+
+// uint32 duration_ms = 7;
+inline void ZoneInfo::clear_duration_ms() {
+  _impl_.duration_ms_ = 0u;
+}
+inline uint32_t ZoneInfo::_internal_duration_ms() const {
+  return _impl_.duration_ms_;
+}
+inline uint32_t ZoneInfo::duration_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.duration_ms)
+  return _internal_duration_ms();
+}
+inline void ZoneInfo::_internal_set_duration_ms(uint32_t value) {
+  
+  _impl_.duration_ms_ = value;
+}
+inline void ZoneInfo::set_duration_ms(uint32_t value) {
+  _internal_set_duration_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.duration_ms)
+}
+
+// string param = 8;
+inline void ZoneInfo::clear_param() {
+  _impl_.param_.ClearToEmpty();
+}
+inline const std::string& ZoneInfo::param() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.param)
+  return _internal_param();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void ZoneInfo::set_param(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.param_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.param)
+}
+inline std::string* ZoneInfo::mutable_param() {
+  std::string* _s = _internal_mutable_param();
+  // @@protoc_insertion_point(field_mutable:Protocol.ZoneInfo.param)
+  return _s;
+}
+inline const std::string& ZoneInfo::_internal_param() const {
+  return _impl_.param_.Get();
+}
+inline void ZoneInfo::_internal_set_param(const std::string& value) {
+  
+  _impl_.param_.Set(value, GetArenaForAllocation());
+}
+inline std::string* ZoneInfo::_internal_mutable_param() {
+  
+  return _impl_.param_.Mutable(GetArenaForAllocation());
+}
+inline std::string* ZoneInfo::release_param() {
+  // @@protoc_insertion_point(field_release:Protocol.ZoneInfo.param)
+  return _impl_.param_.Release();
+}
+inline void ZoneInfo::set_allocated_param(std::string* param) {
+  if (param != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.param_.SetAllocated(param, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.param_.IsDefault()) {
+    _impl_.param_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.ZoneInfo.param)
+}
+
+// -------------------------------------------------------------------
+
 // CharacterInfo
 
 // .Protocol.ObjectInfo object_info = 1;
@@ -5633,6 +6061,8 @@ ItemInstance::skills() const {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -480,6 +480,19 @@ void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
 		return;
 	}
 
+	// A hold in progress: the same key stops it (no aiming), any other key does nothing - the server refuses them too
+	if (HoldingSlot != 0)
+	{
+		if (HoldingSlot == EquipSlotValue)
+		{
+			Protocol::C_SKILL StopPkt;
+			StopPkt.set_slot(static_cast<Protocol::EquipSlot>(EquipSlotValue));
+			SEND_PACKET(StopPkt);
+			UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] hold stop sent slot=%d"), EquipSlotValue);
+		}
+		return;
+	}
+
 	// A skill on cooldown does not even open aiming. Letting the range circle appear and
 	// then swallowing the click would look identical to a broken skill — which is exactly
 	// the confusion this whole session ran into.
@@ -721,9 +734,16 @@ void AS1MyPlayer::FireAimedSkill()
 		CastingSlot = 0;
 		LocalCastEndsAt = 0.f;
 
-		// Instant skills land as they are sent, so the cooldown starts now.
-		if (Def != nullptr)
+		// Instant skills land as they are sent, so the cooldown starts now. A hold's cooldown waits for its end
+		if (Def != nullptr && Def->Kind == ES1SkillKind::Hold)
+		{
+			HoldingSlot = AimingSlot;
+			UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] hold start slot=%d"), HoldingSlot);
+		}
+		else if (Def != nullptr)
+		{
 			StartSlotCooldown(AimingSlot, Def->CooldownMs);
+		}
 
 		if (PendingDashDistCm > 0.f)
 		{
@@ -736,6 +756,22 @@ void AS1MyPlayer::FireAimedSkill()
 	}
 
 	AimingSlot = 0;
+}
+
+void AS1MyPlayer::OnHoldEnded()
+{
+	if (HoldingSlot == 0)
+		return;
+
+	// The cooldown starts when the hold ends (server R3) - the same moment the server set its own
+	if (const Protocol::SkillInfo* Slot = FindUsableSlot(HoldingSlot))
+	{
+		if (const FS1SkillDef* Def = FS1SkillTable::Find(Slot->skill_id()))
+			StartSlotCooldown(HoldingSlot, Def->CooldownMs);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] hold ended slot=%d"), HoldingSlot);
+	HoldingSlot = 0;
 }
 
 void AS1MyPlayer::DoMove(float Right, float Forward)

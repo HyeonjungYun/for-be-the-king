@@ -495,6 +495,10 @@ void AS1Player::ApplyStatus(const Protocol::StatusInfo& Info, bool bApplied)
 			Statuses.RemoveAt(Index);
 	}
 
+	// A hold the server ended (max duration, CC, the second press) - the owner's key state follows (stage 3)
+	if (bApplied == false && Info.kind() == Protocol::STATUS_HOLD)
+		OnHoldEnded();
+
 	// The one status the movement code reads. Several buffs on the same stat are separate skills, so they add
 	MoveSpeedBuff = 0.f;
 	for (const FS1StatusEntry& Entry : Statuses)
@@ -548,6 +552,18 @@ void AS1Player::DrawStatusDebug()
 			break;
 		case Protocol::STATUS_MARK:
 			Piece = FString::Printf(TEXT("mark:%s"), *Entry.Param);
+			break;
+		case Protocol::STATUS_HOLD:
+			Piece = FString::Printf(TEXT("hold:%s"), *Entry.Param);
+			break;
+		case Protocol::STATUS_COUNTER:
+			Piece = TEXT("COUNTER");
+			break;
+		case Protocol::STATUS_PARRY:
+			Piece = TEXT("PARRY");
+			break;
+		case Protocol::STATUS_STANCE:
+			Piece = FString::Printf(TEXT("stance:%s"), *Entry.Param);
 			break;
 		default:
 			Piece = FString::Printf(TEXT("%d:%s"), static_cast<int32>(Entry.Kind), *Entry.Param);

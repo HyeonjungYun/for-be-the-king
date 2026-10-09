@@ -181,6 +181,9 @@ public:
 	bool IsBlinded() const;
 	float GetBlindViewScale() const { return BlindViewScale; }
 
+	/** The server ended a hold skill on this character (S_STATUS hold expired). The local player starts its cooldown here. */
+	virtual void OnHoldEnded() {}
+
 	/**
 	 * A server-confirmed hit. The client never computes HP or decides whether a hit landed
 	 * (Rule 10) — it only displays what arrived.

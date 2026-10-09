@@ -50,6 +50,7 @@ enum : uint16
 	PKT_S_CHEST_STATE = 1037,
 	PKT_S_STATUS = 1038,
 	PKT_S_PROJECTILE = 1039,
+	PKT_S_ZONE = 1040,
 };
 
 // Custom Handlers
@@ -79,6 +80,7 @@ bool Handle_S_ESCAPE_GAUGE(PacketSessionRef& session, Protocol::S_ESCAPE_GAUGE& 
 bool Handle_S_CHEST_STATE(PacketSessionRef& session, Protocol::S_CHEST_STATE& pkt);
 bool Handle_S_STATUS(PacketSessionRef& session, Protocol::S_STATUS& pkt);
 bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt);
+bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt);
 
 class ClientPacketHandler
 {
@@ -112,6 +114,7 @@ public:
 		GPacketHandler[PKT_S_CHEST_STATE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CHEST_STATE>(Handle_S_CHEST_STATE, session, buffer, len); };
 		GPacketHandler[PKT_S_STATUS] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_STATUS>(Handle_S_STATUS, session, buffer, len); };
 		GPacketHandler[PKT_S_PROJECTILE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PROJECTILE>(Handle_S_PROJECTILE, session, buffer, len); };
+		GPacketHandler[PKT_S_ZONE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ZONE>(Handle_S_ZONE, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

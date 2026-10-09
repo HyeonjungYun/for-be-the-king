@@ -405,6 +405,13 @@ protected:
 	void FireRecast();
 
 	/**
+	 * Hold (kind hold — 회오리 · 빈쿨룸 · 정좌): the first press starts it, the same key stops it, no cooldown until it stops.
+	 * Mirrors Creature::holdSkillId server-side; the server also ends it on its max duration or a hard CC (stage 3).
+	 */
+	int32 HoldingSlot = 0;
+	virtual void OnHoldEnded() override;
+
+	/**
 	 * Predicted cooldown deadline per slot, in world seconds. Index is EquipSlot - 1.
 	 *
 	 * 🔴 A prediction, not authority. The server owns cooldowns and never sends them
