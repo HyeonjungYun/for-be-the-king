@@ -241,3 +241,10 @@ message S_STATUS
 	repeated StatusInfo applied = 1;	// also sent again on refresh / stack change
 	repeated StatusInfo expired = 2;
 }
+
+// Projectiles - launched and ended this flush (skill roster stage 2, 2026-10-10). Clients fly them locally; the server judges
+message S_PROJECTILE
+{
+	repeated ProjectileInfo spawned = 1;
+	repeated ProjectileEndInfo ended = 2;
+}

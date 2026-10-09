@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[16];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[17];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -77,11 +77,14 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "\017\n\013STATUS_BUFF\020\002\022\017\n\013STATUS_MARK\020\003\022\021\n\rSTA"
   "TUS_STANCE\020\004\022\021\n\rSTATUS_INVULN\020\005\022\022\n\016STATU"
   "S_COUNTER\020\006\022\020\n\014STATUS_PARRY\020\007\022\017\n\013STATUS_"
-  "HOLD\020\010\022\020\n\014STATUS_DECOY\020\tb\006proto3"
+  "HOLD\020\010\022\020\n\014STATUS_DECOY\020\t*u\n\rProjectileEn"
+  "d\022\032\n\026PROJECTILE_END_EXPIRED\020\000\022\026\n\022PROJECT"
+  "ILE_END_HIT\020\001\022\027\n\023PROJECTILE_END_WALL\020\002\022\027"
+  "\n\023PROJECTILE_END_LOST\020\003b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 1952, descriptor_table_protodef_Enum_2eproto,
+    false, false, 2071, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -361,6 +364,22 @@ bool StatusKind_IsValid(int value) {
     case 7:
     case 8:
     case 9:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ProjectileEnd_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[16];
+}
+bool ProjectileEnd_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
       return true;
     default:
       return false;

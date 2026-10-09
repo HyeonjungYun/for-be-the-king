@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "JobQueue.h"
 #include "SkillTable.h"
+#include "WallMap.h"
 #include "MonsterBrain.h"
 #include "EscapeLogic.h"
 #include "KillBatch.h"
@@ -65,6 +66,32 @@ struct SkillContext
 	float aimY = 0.f;
 	uint32 itemLevel = 0;		// 버프 크기 - 시전 슬롯 아이템의 강화 레벨
 	bool recast = false;		// 재입력의 두 번째 입력 - requires=recast 효과만 나간다
+	bool targetsOnly = false;	// 투사체 적중 - 자기 효과는 발사 때 이미 나갔다, 대상 효과만
+};
+
+// 날아가는 투사체 (skill-roster 2 단계). 스킬 투사체는 직선 · 피할 수 있다 · 벽에 막힌다 · 관통이면 지나간 적을 다 맞힌다.
+// 평타 투사체(활 · 스태프)는 대상을 쫓아간다(필중) - 날아가는 중 벽에 막히면 끝 (사용자 결정 2026-10-10). FlushCombat 마다 StepProjectiles
+constexpr uint64 PROJECTILE_ID_BASE = 5'000'000'000;
+extern atomic<uint64> GNextProjectileId;
+
+struct Projectile
+{
+	uint64				id = 0;
+	uint64				casterId = 0;
+	uint32				skillId = 0;			// 0 = 평타
+	uint32				effectId = 0;
+	float				x = 0.f;
+	float				y = 0.f;
+	float				dirX = 1.f;
+	float				dirY = 0.f;
+	float				speedCms = 0.f;
+	float				radiusCm = 0.f;
+	float				remainingCm = 0.f;		// 직선 - 남은 사거리
+	uint64				homingTargetId = 0;		// 0 이 아니면 유도
+	bool				pierce = false;
+	vector<uint64>		hitIds;					// 관통이 이미 맞힌 대상 - 두 번 맞지 않는다
+	SkillContext		ctx;
+	uint64				lastStepUs = 0;
 };
 
 class Room : public JobQueue
@@ -176,6 +203,16 @@ private:
 
 	void	UpdateStatuses(uint64 nowUs);		// 지속 피해 틱 · 상태 만료 (FlushCombat)
 	void	ResolvePendingHits(uint64 nowUs);	// 다단 히트의 남은 타
+
+	// ── 투사체 (2 단계) ──
+	void	LaunchProjectile(Projectile p);
+	void	LaunchSkillProjectile(const CreatureRef& caster, const SkillDef& def, const SkillContext& ctx, uint64 nowUs);
+	void	StepProjectiles(uint64 nowUs);
+	bool	StepStraight(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs);	// true = 끝났다
+	bool	StepHoming(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs);
+	bool	CanProjectileHit(const CreatureRef& caster, const CreatureRef& target, uint64 nowUs) const;
+	void	OnProjectileHit(Projectile& p, const CreatureRef& caster, const CreatureRef& target, uint64 nowUs);
+	void	EndProjectile(const Projectile& p, Protocol::ProjectileEnd reason, uint64 targetId);
 	void	PushStatus(bool applied, uint64 targetId, Protocol::StatusKind kind, const string& param, uint32 stacks, uint32 remainingMs, float magnitude, uint64 instigatorId);
 	void	ApplyCcRaw(const CreatureRef& target, uint64 instigatorId, Protocol::CcType type, uint32 effectiveMs, float magnitude, uint64 nowUs);
 
@@ -270,6 +307,11 @@ private:
 	vector<PendingHit>					_pendingHits;
 	vector<Protocol::StatusInfo>		_pendingStatusApplied;
 	vector<Protocol::StatusInfo>		_pendingStatusExpired;
+
+	// 2 단계 - 날아가는 투사체 · S_PROJECTILE
+	vector<Projectile>					_projectiles;
+	vector<Protocol::ProjectileInfo>	_pendingProjectileSpawns;
+	vector<Protocol::ProjectileEndInfo>	_pendingProjectileEnds;
 };
 
 constexpr int32 FLOOR_COUNT = 4;

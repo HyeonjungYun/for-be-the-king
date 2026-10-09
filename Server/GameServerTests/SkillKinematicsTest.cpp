@@ -157,3 +157,30 @@ TEST(SkillKinematics, 날아가는_시간은_거리_나누기_속도다)
 	EXPECT_EQ(TravelMs(0.f, 800.f), 0u);
 	EXPECT_EQ(TravelMs(300.f, 0.f), 0u);
 }
+
+// ── 투사체 (2 단계) - 선분이 원에 닿는 t ──
+
+TEST(SkillKinematics, 투사체_경로가_캡슐을_지나면_처음_닿는_비율을_준다)
+{
+	// (0,0) → (400,0), 원 중심 (200, 0) 반지름 82 (투사체 40 + 캡슐 42) → 118 에서 닿는다 = t 0.295
+	const float t = SegmentCircleHit(0.f, 0.f, 400.f, 0.f, 200.f, 0.f, 82.f);
+	EXPECT_NEAR(t, 118.f / 400.f, 0.001f);
+}
+
+TEST(SkillKinematics, 경로_옆을_스치면_안_닿는다)
+{
+	EXPECT_FLOAT_EQ(SegmentCircleHit(0.f, 0.f, 400.f, 0.f, 200.f, 100.f, 82.f), NO_HIT);
+	EXPECT_LT(SegmentCircleHit(0.f, 0.f, 400.f, 0.f, 200.f, 80.f, 82.f), 1.f) << "반지름 안쪽은 닿는다";
+}
+
+TEST(SkillKinematics, 뒤에_있거나_너무_멀면_안_닿는다)
+{
+	EXPECT_FLOAT_EQ(SegmentCircleHit(0.f, 0.f, 400.f, 0.f, -200.f, 0.f, 82.f), NO_HIT) << "뒤";
+	EXPECT_FLOAT_EQ(SegmentCircleHit(0.f, 0.f, 400.f, 0.f, 600.f, 0.f, 82.f), NO_HIT) << "이번 스텝 너머";
+}
+
+TEST(SkillKinematics, 시작점이_이미_원_안이면_0이고_안_움직이면_안_닿는다)
+{
+	EXPECT_FLOAT_EQ(SegmentCircleHit(0.f, 0.f, 400.f, 0.f, 30.f, 0.f, 82.f), 0.f);
+	EXPECT_FLOAT_EQ(SegmentCircleHit(0.f, 0.f, 0.f, 0.f, 200.f, 0.f, 82.f), NO_HIT);
+}

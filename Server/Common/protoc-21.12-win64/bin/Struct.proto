@@ -119,6 +119,31 @@ message StatusInfo
 	uint64 instigator_id = 7;	// 건 사람 (표식 소유자)
 }
 
+// 투사체 발사 - 클라는 이 값으로 스스로 날려 그린다. 판정은 서버 (skill-roster 2 단계, 2026-10-10)
+message ProjectileInfo
+{
+	uint64 projectile_id = 1;
+	uint64 caster_id = 2;
+	uint32 effect_id = 3;		// 0 = 평타 (활 · 스태프)
+	float x = 4;
+	float y = 5;
+	float dir_x = 6;
+	float dir_y = 7;
+	float speed_cms = 8;
+	float range_cm = 9;			// 직선 - 최대 비행 거리. 유도(target_id)면 0
+	float radius_cm = 10;
+	uint64 target_id = 11;		// 0 이 아니면 유도 - 대상을 쫓아간다 (필중, 날아가는 중 벽에 막힘)
+}
+
+message ProjectileEndInfo
+{
+	uint64 projectile_id = 1;
+	float x = 2;
+	float y = 3;
+	ProjectileEnd reason = 4;
+	uint64 target_id = 5;		// HIT 일 때 맞은 대상
+}
+
 message CharacterInfo
 {
 	ObjectInfo object_info = 1;

@@ -81,4 +81,28 @@ namespace SkillKinematics
 
 		return static_cast<uint32>(::ceilf(distCm / speedCms * 1000.f));
 	}
+
+	float SegmentCircleHit(float ax, float ay, float bx, float by, float cx, float cy, float radius)
+	{
+		const float dx = bx - ax;
+		const float dy = by - ay;
+		const float fx = ax - cx;
+		const float fy = ay - cy;
+
+		const float c = fx * fx + fy * fy - radius * radius;
+		if (c <= 0.f)
+			return 0.f;						// 시작점이 이미 원 안
+
+		const float a = dx * dx + dy * dy;
+		if (a <= 0.000001f)
+			return NO_HIT;					// 움직이지 않았다
+
+		const float b = 2.f * (fx * dx + fy * dy);
+		const float disc = b * b - 4.f * a * c;
+		if (disc < 0.f)
+			return NO_HIT;
+
+		const float t = (-b - ::sqrtf(disc)) / (2.f * a);
+		return (t >= 0.f && t <= 1.f) ? t : NO_HIT;
+	}
 }

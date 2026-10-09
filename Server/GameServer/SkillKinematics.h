@@ -32,4 +32,9 @@ namespace SkillKinematics
 
 	// 날아가는 시간 (ms) - 넉백 CC 길이. 거리 0 이면 0
 	uint32		TravelMs(float distCm, float speedCms);
+
+	// 투사체 (2 단계) - a → b 로 가는 점이 (cx, cy) 중심 반지름 radius 원에 처음 닿는 t ∈ [0, 1]. 안 닿으면 NO_HIT (2).
+	// 시작점이 이미 원 안이면 0. radius = 투사체 반지름 + 캡슐 반지름으로 부른다
+	constexpr float NO_HIT = 2.f;
+	float		SegmentCircleHit(float ax, float ay, float bx, float by, float cx, float cy, float radius);
 }

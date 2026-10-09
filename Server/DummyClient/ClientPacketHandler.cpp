@@ -419,12 +419,33 @@ bool Handle_S_SKILL_HIT(PacketSessionRef& session, Protocol::S_SKILL_HIT& pkt)
 		if (info.caster_id() != myId)
 			continue;
 
-		if (info.effect_id() != 2)
+		// 신발 질주 (2026-10-10 로스터 1003 - 예전 effect 2)
+		if (info.effect_id() != 1003)
 			continue;
 
 		bot->dashUntilUs.store(nowUs + DASH_DURATION_US);
 	}
 
+	return true;
+}
+
+bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt)
+{
+	// 투사체 (2 단계) - 봇은 그리지 않는다. 내 것의 끝만 처음 30건 찍는다 (HIT / WALL / EXPIRED 비율을 본다)
+	static atomic<int32> logged = 0;
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	const uint64 myId = bot->objectId.load();
+
+	for (const Protocol::ProjectileEndInfo& info : pkt.ended())
+	{
+		// 발사체 주인은 spawned 에만 있다 - 끝 패킷엔 없어 여기서는 전부 센다 (처음 30건)
+		if (logged.fetch_add(1) >= 30)
+			break;
+
+		LOG_LINE << "[BOT PROJ END] id=" << info.projectile_id() << " reason=" << info.reason()
+			<< " target=" << info.target_id() << " at=(" << info.x() << ", " << info.y() << ") seen_by=" << myId << '\n';
+	}
 	return true;
 }
 

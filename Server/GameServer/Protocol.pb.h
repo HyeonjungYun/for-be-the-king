@@ -150,6 +150,9 @@ extern S_LOGINDefaultTypeInternal _S_LOGIN_default_instance_;
 class S_MOVE;
 struct S_MOVEDefaultTypeInternal;
 extern S_MOVEDefaultTypeInternal _S_MOVE_default_instance_;
+class S_PROJECTILE;
+struct S_PROJECTILEDefaultTypeInternal;
+extern S_PROJECTILEDefaultTypeInternal _S_PROJECTILE_default_instance_;
 class S_SKILL_CANCEL;
 struct S_SKILL_CANCELDefaultTypeInternal;
 extern S_SKILL_CANCELDefaultTypeInternal _S_SKILL_CANCEL_default_instance_;
@@ -201,6 +204,7 @@ template<> ::Protocol::S_ITEM_RESULT* Arena::CreateMaybeMessage<::Protocol::S_IT
 template<> ::Protocol::S_LEAVE_GAME* Arena::CreateMaybeMessage<::Protocol::S_LEAVE_GAME>(Arena*);
 template<> ::Protocol::S_LOGIN* Arena::CreateMaybeMessage<::Protocol::S_LOGIN>(Arena*);
 template<> ::Protocol::S_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MOVE>(Arena*);
+template<> ::Protocol::S_PROJECTILE* Arena::CreateMaybeMessage<::Protocol::S_PROJECTILE>(Arena*);
 template<> ::Protocol::S_SKILL_CANCEL* Arena::CreateMaybeMessage<::Protocol::S_SKILL_CANCEL>(Arena*);
 template<> ::Protocol::S_SKILL_CAST* Arena::CreateMaybeMessage<::Protocol::S_SKILL_CAST>(Arena*);
 template<> ::Protocol::S_SKILL_HIT* Arena::CreateMaybeMessage<::Protocol::S_SKILL_HIT>(Arena*);
@@ -6635,6 +6639,183 @@ class S_STATUS final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_PROJECTILE final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_PROJECTILE) */ {
+ public:
+  inline S_PROJECTILE() : S_PROJECTILE(nullptr) {}
+  ~S_PROJECTILE() override;
+  explicit PROTOBUF_CONSTEXPR S_PROJECTILE(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_PROJECTILE(const S_PROJECTILE& from);
+  S_PROJECTILE(S_PROJECTILE&& from) noexcept
+    : S_PROJECTILE() {
+    *this = ::std::move(from);
+  }
+
+  inline S_PROJECTILE& operator=(const S_PROJECTILE& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_PROJECTILE& operator=(S_PROJECTILE&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_PROJECTILE& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_PROJECTILE* internal_default_instance() {
+    return reinterpret_cast<const S_PROJECTILE*>(
+               &_S_PROJECTILE_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    39;
+
+  friend void swap(S_PROJECTILE& a, S_PROJECTILE& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_PROJECTILE* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_PROJECTILE* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_PROJECTILE* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_PROJECTILE>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_PROJECTILE& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_PROJECTILE& from) {
+    S_PROJECTILE::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_PROJECTILE* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_PROJECTILE";
+  }
+  protected:
+  explicit S_PROJECTILE(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSpawnedFieldNumber = 1,
+    kEndedFieldNumber = 2,
+  };
+  // repeated .Protocol.ProjectileInfo spawned = 1;
+  int spawned_size() const;
+  private:
+  int _internal_spawned_size() const;
+  public:
+  void clear_spawned();
+  ::Protocol::ProjectileInfo* mutable_spawned(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileInfo >*
+      mutable_spawned();
+  private:
+  const ::Protocol::ProjectileInfo& _internal_spawned(int index) const;
+  ::Protocol::ProjectileInfo* _internal_add_spawned();
+  public:
+  const ::Protocol::ProjectileInfo& spawned(int index) const;
+  ::Protocol::ProjectileInfo* add_spawned();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileInfo >&
+      spawned() const;
+
+  // repeated .Protocol.ProjectileEndInfo ended = 2;
+  int ended_size() const;
+  private:
+  int _internal_ended_size() const;
+  public:
+  void clear_ended();
+  ::Protocol::ProjectileEndInfo* mutable_ended(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileEndInfo >*
+      mutable_ended();
+  private:
+  const ::Protocol::ProjectileEndInfo& _internal_ended(int index) const;
+  ::Protocol::ProjectileEndInfo* _internal_add_ended();
+  public:
+  const ::Protocol::ProjectileEndInfo& ended(int index) const;
+  ::Protocol::ProjectileEndInfo* add_ended();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileEndInfo >&
+      ended() const;
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_PROJECTILE)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileInfo > spawned_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileEndInfo > ended_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -9202,9 +9383,89 @@ S_STATUS::expired() const {
   return _impl_.expired_;
 }
 
+// -------------------------------------------------------------------
+
+// S_PROJECTILE
+
+// repeated .Protocol.ProjectileInfo spawned = 1;
+inline int S_PROJECTILE::_internal_spawned_size() const {
+  return _impl_.spawned_.size();
+}
+inline int S_PROJECTILE::spawned_size() const {
+  return _internal_spawned_size();
+}
+inline ::Protocol::ProjectileInfo* S_PROJECTILE::mutable_spawned(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_PROJECTILE.spawned)
+  return _impl_.spawned_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileInfo >*
+S_PROJECTILE::mutable_spawned() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_PROJECTILE.spawned)
+  return &_impl_.spawned_;
+}
+inline const ::Protocol::ProjectileInfo& S_PROJECTILE::_internal_spawned(int index) const {
+  return _impl_.spawned_.Get(index);
+}
+inline const ::Protocol::ProjectileInfo& S_PROJECTILE::spawned(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_PROJECTILE.spawned)
+  return _internal_spawned(index);
+}
+inline ::Protocol::ProjectileInfo* S_PROJECTILE::_internal_add_spawned() {
+  return _impl_.spawned_.Add();
+}
+inline ::Protocol::ProjectileInfo* S_PROJECTILE::add_spawned() {
+  ::Protocol::ProjectileInfo* _add = _internal_add_spawned();
+  // @@protoc_insertion_point(field_add:Protocol.S_PROJECTILE.spawned)
+  return _add;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileInfo >&
+S_PROJECTILE::spawned() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_PROJECTILE.spawned)
+  return _impl_.spawned_;
+}
+
+// repeated .Protocol.ProjectileEndInfo ended = 2;
+inline int S_PROJECTILE::_internal_ended_size() const {
+  return _impl_.ended_.size();
+}
+inline int S_PROJECTILE::ended_size() const {
+  return _internal_ended_size();
+}
+inline ::Protocol::ProjectileEndInfo* S_PROJECTILE::mutable_ended(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_PROJECTILE.ended)
+  return _impl_.ended_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileEndInfo >*
+S_PROJECTILE::mutable_ended() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_PROJECTILE.ended)
+  return &_impl_.ended_;
+}
+inline const ::Protocol::ProjectileEndInfo& S_PROJECTILE::_internal_ended(int index) const {
+  return _impl_.ended_.Get(index);
+}
+inline const ::Protocol::ProjectileEndInfo& S_PROJECTILE::ended(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_PROJECTILE.ended)
+  return _internal_ended(index);
+}
+inline ::Protocol::ProjectileEndInfo* S_PROJECTILE::_internal_add_ended() {
+  return _impl_.ended_.Add();
+}
+inline ::Protocol::ProjectileEndInfo* S_PROJECTILE::add_ended() {
+  ::Protocol::ProjectileEndInfo* _add = _internal_add_ended();
+  // @@protoc_insertion_point(field_add:Protocol.S_PROJECTILE.ended)
+  return _add;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ProjectileEndInfo >&
+S_PROJECTILE::ended() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_PROJECTILE.ended)
+  return _impl_.ended_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

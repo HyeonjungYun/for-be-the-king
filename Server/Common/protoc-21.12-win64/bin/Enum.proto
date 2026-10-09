@@ -147,3 +147,12 @@ enum StatusKind
 	STATUS_HOLD = 8;		// 유지형 진행 중 (3 단계)
 	STATUS_DECOY = 9;		// 미끼 (4 단계)
 }
+
+// 투사체가 끝난 이유 - S_PROJECTILE.ended (skill-roster 2 단계, 2026-10-10)
+enum ProjectileEnd
+{
+	PROJECTILE_END_EXPIRED = 0;	// 사거리 끝
+	PROJECTILE_END_HIT = 1;		// 맞았다 (target_id)
+	PROJECTILE_END_WALL = 2;	// 벽에 막혔다
+	PROJECTILE_END_LOST = 3;	// 시전자 · 대상이 사라졌다
+}

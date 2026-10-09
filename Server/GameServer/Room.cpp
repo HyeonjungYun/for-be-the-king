@@ -170,6 +170,9 @@ RoomRef GRooms[FLOOR_COUNT] =
 	MakeFloorRoom(3)
 };
 
+// 투사체 id - 층을 가리지 않고 유일 (클라는 한 층만 보지만 로그에서 섞이지 않게). 50 억 대역 (몬스터 40 억 위)
+atomic<uint64> GNextProjectileId = PROJECTILE_ID_BASE;
+
 RoomRef GetRoomForFloor(uint32 floorId)
 {
 	if (floorId >= FLOOR_COUNT)
@@ -929,6 +932,28 @@ void Room::ResolveAttacks(uint64 nowUs)
 			continue;
 		}
 
+		// 활 · 스태프 - 평타가 투사체로 날아간다. 피해는 도착 때 (OnProjectileHit, 그때 스탯으로). 날아가는 중 벽에 막힌다 (2 단계)
+		if (attacker->rangedAutoAttack)
+		{
+			Projectile p;
+			p.casterId = attackerId;
+			p.skillId = 0;
+			p.effectId = 0;
+			p.x = attacker->posInfo->x();
+			p.y = attacker->posInfo->y();
+			p.dirX = target->posInfo->x() - p.x;
+			p.dirY = target->posInfo->y() - p.y;
+			p.speedCms = SkillTable::Rules().basicProjectileSpeedCms;
+			p.radiusCm = SkillTable::Rules().projectileRadiusCm;
+			p.homingTargetId = targetId;
+			p.lastStepUs = nowUs;
+			p.ctx.casterId = attackerId;
+			LaunchProjectile(move(p));
+
+			attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
+			continue;
+		}
+
 		bool isCrit = false;
 		int32 damage = attacker->ComputeDamageTo(*target, attacker->autoAttackType, OUT isCrit);
 
@@ -1046,9 +1071,6 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 
 	if (def.telegraphMs == 0 || recast)
 	{
-		vector<CreatureRef> targets;
-		CollectSkillTargets(caster, def, originX, originY, castTargetId, aimX, aimY, OUT targets);
-
 		SkillContext ctx;
 		ctx.casterId = casterId;
 		ctx.originX = originX;
@@ -1057,12 +1079,34 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		ctx.aimY = aimY;
 		ctx.itemLevel = caster->castItemLevel;
 		ctx.recast = recast;
+
+		vector<CreatureRef> targets;
+
+		if (def.shape == SkillShape::Projectile && recast == false)
+		{
+			// 2 단계 - 날아가는 투사체. 대상 효과는 맞는 순간(OnProjectileHit), 자기 효과는 지금 (대상 없이)
+			LaunchSkillProjectile(caster, def, ctx, nowUs);
+		}
+		else if (def.shape == SkillShape::Projectile)
+		{
+			// 투사체 스킬의 재입력(올가미 당기기) - 투사체가 맞힌 대상에게 바로. 사거리 안이어야 한다
+			auto targetIt = _objects.find(castTargetId);
+			CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+			if (target != nullptr && target->IsAlive() && IsInSkillRange(caster, target, def.rangeCm))
+				targets.push_back(target);
+		}
+		else
+		{
+			CollectSkillTargets(caster, def, originX, originY, castTargetId, aimX, aimY, OUT targets);
+		}
+
 		ApplySkillEffects(caster, def, targets, ctx, nowUs);
 
 		LOG_LINE << "[SKILL FIRE] caster=" << casterId
 			<< " skill=" << def.skillId
 			<< " targets=" << targets.size()
 			<< (recast ? " recast" : "")
+			<< (def.shape == SkillShape::Projectile && recast == false ? " projectile" : "")
 			<< " cd=" << def.cooldownMs << "ms" << '\n';
 	}
 	else
@@ -2017,6 +2061,7 @@ void Room::FlushCombat()
 	ResolveAttacks(nowUs);
 	ResolveCasts(nowUs);
 	ResolveTelegraphs(nowUs);
+	StepProjectiles(nowUs);
 	ResolvePendingHits(nowUs);
 
 	for (const auto& kill : _kills.End())
@@ -2110,6 +2155,21 @@ void Room::FlushCombat()
 
 		_pendingStatusApplied.clear();
 		_pendingStatusExpired.clear();
+
+		SEND_PACKET_BROADCAST(pkt);
+	}
+
+	if (_pendingProjectileSpawns.empty() == false || _pendingProjectileEnds.empty() == false)
+	{
+		Protocol::S_PROJECTILE pkt;
+
+		for (const Protocol::ProjectileInfo& info : _pendingProjectileSpawns)
+			pkt.add_spawned()->CopyFrom(info);
+		for (const Protocol::ProjectileEndInfo& info : _pendingProjectileEnds)
+			pkt.add_ended()->CopyFrom(info);
+
+		_pendingProjectileSpawns.clear();
+		_pendingProjectileEnds.clear();
 
 		SEND_PACKET_BROADCAST(pkt);
 	}
@@ -2651,17 +2711,16 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 		return;
 	}
 
-	case SkillShape::Line:
 	case SkillShape::Projectile:
+		// 2 단계 - 즉시 판정하지 않는다. FireSkill 이 투사체를 날리고 StepProjectiles 가 맞는 순간 판정한다
+		return;
+
+	case SkillShape::Line:
 	{
-		// 시전자에서 range 만큼 뻗는 선분 - 선분까지의 거리가 반폭 + 캡슐 반경 이내면 맞는다.
-		// 🔴 투사체는 0 단계에서 직선 즉시 판정이다. 2 단계가 실제로 날린다 (관통 아니면 가장 가까운 하나만)
+		// 시전자에서 range 만큼 뻗는 선분 - 선분까지의 거리가 반폭 + 캡슐 반경 이내면 맞는다
 		constexpr float CAPSULE_RADIUS = 42.f;
 		const float halfWidth = def.widthCm * 0.5f + CAPSULE_RADIUS;
 		const WallMap& walls = WallTable::Get(_floorId);
-
-		CreatureRef nearest = nullptr;
-		float nearestT = 0.f;
 
 		for (auto& item : _objects)
 		{
@@ -2686,21 +2745,8 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 			if (walls.SweepBlocked(originX, originY, target->posInfo->x(), target->posInfo->y(), 0.f))
 				continue;
 
-			if (def.shape == SkillShape::Projectile && def.pierce == false)
-			{
-				if (nearest == nullptr || t < nearestT)
-				{
-					nearest = target;
-					nearestT = t;
-				}
-				continue;
-			}
-
 			outTargets.push_back(target);
 		}
-
-		if (nearest != nullptr)
-			outTargets.push_back(nearest);
 		return;
 	}
 	}
@@ -2716,10 +2762,11 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 	const bool anyHit = targets.empty() == false;
 	bool anyKill = false;
 
-	// 1) 자기 효과 - 결과와 무관한 것 먼저 (이동 · 버프). 적중 · 미처치 조건은 대상 효과 뒤에
+	// 1) 자기 효과 - 결과와 무관한 것 먼저 (이동 · 버프). 적중 · 미처치 조건은 대상 효과 뒤에.
+	//    투사체 적중(targetsOnly)은 발사 때 이미 나갔으니 건너뛴다
 	for (const SkillEffect& e : def.effects)
 	{
-		if (e.self == false || e.condition == SkillRequire::Hit || e.condition == SkillRequire::NoKill)
+		if (ctx.targetsOnly || e.self == false || e.condition == SkillRequire::Hit || e.condition == SkillRequire::NoKill)
 			continue;
 		if (MeetsCondition(e, ctx, nullptr, anyHit, anyKill, nowUs) == false)
 			continue;
@@ -2765,10 +2812,10 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 		}
 	}
 
-	// 3) 결과 조건의 자기 효과 - 적중했으면(hit) · 처치하지 못했으면(no_kill)
+	// 3) 결과 조건의 자기 효과 - 적중했으면(hit) · 처치하지 못했으면(no_kill). 투사체 적중에서는 보지 않는다 (해당 스킬 없음)
 	for (const SkillEffect& e : def.effects)
 	{
-		if (e.self == false || (e.condition != SkillRequire::Hit && e.condition != SkillRequire::NoKill))
+		if (ctx.targetsOnly || e.self == false || (e.condition != SkillRequire::Hit && e.condition != SkillRequire::NoKill))
 			continue;
 		if (MeetsCondition(e, ctx, nullptr, anyHit, anyKill, nowUs) == false)
 			continue;
@@ -3412,6 +3459,324 @@ void Room::PushStatus(bool applied, uint64 targetId, Protocol::StatusKind kind, 
 	info.set_remaining_ms(remainingMs);
 	info.set_magnitude(magnitude);
 	info.set_instigator_id(instigatorId);
+}
+
+// ── 투사체 (2 단계) ──
+
+void Room::LaunchProjectile(Projectile p)
+{
+	const float len = ::sqrtf(p.dirX * p.dirX + p.dirY * p.dirY);
+	if (len > 0.0001f)
+	{
+		p.dirX /= len;
+		p.dirY /= len;
+	}
+	else
+	{
+		p.dirX = 1.f;
+		p.dirY = 0.f;
+	}
+
+	p.id = GNextProjectileId.fetch_add(1);
+
+	Protocol::ProjectileInfo& info = _pendingProjectileSpawns.emplace_back();
+	info.set_projectile_id(p.id);
+	info.set_caster_id(p.casterId);
+	info.set_effect_id(p.effectId);
+	info.set_x(p.x);
+	info.set_y(p.y);
+	info.set_dir_x(p.dirX);
+	info.set_dir_y(p.dirY);
+	info.set_speed_cms(p.speedCms);
+	info.set_range_cm(p.homingTargetId != 0 ? 0.f : p.remainingCm);
+	info.set_radius_cm(p.radiusCm);
+	info.set_target_id(p.homingTargetId);
+
+	if (p.skillId != 0)
+		LOG_LINE << "[PROJ] launch id=" << p.id << " caster=" << p.casterId << " skill=" << p.skillId << " range=" << p.remainingCm
+			<< " speed=" << p.speedCms << (p.pierce ? " pierce" : "") << '\n';
+
+	_projectiles.push_back(move(p));
+}
+
+void Room::LaunchSkillProjectile(const CreatureRef& caster, const SkillDef& def, const SkillContext& ctx, uint64 nowUs)
+{
+	Projectile p;
+	p.casterId = ctx.casterId;
+	p.skillId = def.skillId;
+	p.effectId = def.effectId;
+	p.x = ctx.originX;
+	p.y = ctx.originY;
+	p.dirX = ctx.aimX - ctx.originX;
+	p.dirY = ctx.aimY - ctx.originY;
+
+	// 조준점이 발밑이면 바라보는 방향 (CollectSkillTargets 와 같은 규칙)
+	if (p.dirX * p.dirX + p.dirY * p.dirY <= 1.f)
+	{
+		const float yawRad = caster->posInfo->yaw() * 3.14159265f / 180.f;
+		p.dirX = ::cosf(yawRad);
+		p.dirY = ::sinf(yawRad);
+	}
+
+	p.speedCms = def.projectileSpeedCms;
+	p.radiusCm = SkillTable::Rules().projectileRadiusCm;
+	p.remainingCm = def.rangeCm;
+	p.pierce = def.pierce;
+	p.ctx = ctx;
+	p.ctx.targetsOnly = true;
+	p.lastStepUs = nowUs;
+
+	LaunchProjectile(move(p));
+}
+
+bool Room::CanProjectileHit(const CreatureRef& caster, const CreatureRef& target, uint64 nowUs) const
+{
+	if (target == nullptr || target->IsAlive() == false)
+		return false;
+	if (caster->IsMonster() && target->IsMonster())
+		return false;
+	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+		return false;
+	return true;
+}
+
+void Room::StepProjectiles(uint64 nowUs)
+{
+	if (_projectiles.empty())
+		return;
+
+	const WallMap& walls = WallTable::Get(_floorId);
+
+	// 통째로 옮겨 놓고 돈다 - 적중 효과가 다른 투사체를 낳아도(지금은 없다) 벡터가 흔들리지 않는다
+	vector<Projectile> flying;
+	flying.swap(_projectiles);
+
+	for (Projectile& p : flying)
+	{
+		const float dtSec = (nowUs > p.lastStepUs) ? static_cast<float>(nowUs - p.lastStepUs) / 1'000'000.f : 0.f;
+		p.lastStepUs = nowUs;
+
+		auto casterIt = _objects.find(p.casterId);
+		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+
+		bool ended = false;
+		if (caster == nullptr)
+		{
+			EndProjectile(p, Protocol::PROJECTILE_END_LOST, 0);
+			ended = true;
+		}
+		else if (p.homingTargetId != 0)
+		{
+			ended = StepHoming(p, caster, walls, dtSec, nowUs);
+		}
+		else
+		{
+			ended = StepStraight(p, caster, walls, dtSec, nowUs);
+		}
+
+		if (ended == false)
+			_projectiles.push_back(move(p));
+	}
+}
+
+bool Room::StepStraight(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs)
+{
+	float step = p.speedCms * dtSec;
+	if (step <= 0.f)
+		return false;
+	if (step > p.remainingCm)
+		step = p.remainingCm;
+
+	const float x0 = p.x;
+	const float y0 = p.y;
+	const float x1 = x0 + p.dirX * step;
+	const float y1 = y0 + p.dirY * step;
+
+	// 벽 - 투사체 반지름으로 스윕. 닿는 비율보다 앞에 있는 대상만 맞는다
+	const float wallT = walls.SweepFirstHit(x0, y0, x1, y1, p.radiusCm);
+
+	struct Candidate { float t; CreatureRef target; };
+	vector<Candidate> candidates;
+
+	for (auto& item : _objects)
+	{
+		if (item.first == p.casterId || find(p.hitIds.begin(), p.hitIds.end(), item.first) != p.hitIds.end())
+			continue;
+
+		CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+		if (CanProjectileHit(caster, target, nowUs) == false)
+			continue;
+
+		const float t = SkillKinematics::SegmentCircleHit(x0, y0, x1, y1, target->posInfo->x(), target->posInfo->y(), p.radiusCm + SkillKinematics::CAPSULE_RADIUS_CM);
+		if (t <= 1.f && t < wallT)
+			candidates.push_back({ t, target });
+	}
+
+	sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.t < b.t; });
+
+	for (const Candidate& c : candidates)
+	{
+		OnProjectileHit(p, caster, c.target, nowUs);
+
+		if (p.pierce == false)
+		{
+			p.x = x0 + p.dirX * step * c.t;
+			p.y = y0 + p.dirY * step * c.t;
+			EndProjectile(p, Protocol::PROJECTILE_END_HIT, c.target->objectInfo->object_id());
+			return true;
+		}
+	}
+
+	if (wallT < 1.f)
+	{
+		p.x = x0 + p.dirX * step * wallT;
+		p.y = y0 + p.dirY * step * wallT;
+		EndProjectile(p, Protocol::PROJECTILE_END_WALL, 0);
+		return true;
+	}
+
+	p.x = x1;
+	p.y = y1;
+	p.remainingCm -= step;
+
+	if (p.remainingCm <= 0.f)
+	{
+		EndProjectile(p, Protocol::PROJECTILE_END_EXPIRED, 0);
+		return true;
+	}
+	return false;
+}
+
+bool Room::StepHoming(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs)
+{
+	auto targetIt = _objects.find(p.homingTargetId);
+	CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+
+	// 대상이 사라지거나 죽으면 허공에 - 필중은 "피할 수 없다" 지 "죽은 뒤에도 맞는다" 가 아니다
+	if (target == nullptr || target->IsAlive() == false)
+	{
+		EndProjectile(p, Protocol::PROJECTILE_END_LOST, 0);
+		return true;
+	}
+
+	const float tx = target->posInfo->x();
+	const float ty = target->posInfo->y();
+	float dx = tx - p.x;
+	float dy = ty - p.y;
+	const float dist = ::sqrtf(dx * dx + dy * dy);
+	const float reach = p.radiusCm + SkillKinematics::CAPSULE_RADIUS_CM;
+	const float step = p.speedCms * dtSec;
+
+	if (dist > 0.001f)
+	{
+		p.dirX = dx / dist;
+		p.dirY = dy / dist;
+	}
+
+	// 이번 스텝에 닿는다 - 사이에 벽이 없어야 한다
+	if (dist <= reach + step)
+	{
+		if (walls.SweepBlocked(p.x, p.y, tx, ty, p.radiusCm))
+		{
+			EndProjectile(p, Protocol::PROJECTILE_END_WALL, 0);
+			return true;
+		}
+
+		p.x = tx;
+		p.y = ty;
+
+		if (CanProjectileHit(caster, target, nowUs))
+			OnProjectileHit(p, caster, target, nowUs);
+
+		EndProjectile(p, Protocol::PROJECTILE_END_HIT, p.homingTargetId);
+		return true;
+	}
+
+	if (step <= 0.f)
+		return false;
+
+	const float x1 = p.x + p.dirX * step;
+	const float y1 = p.y + p.dirY * step;
+
+	// 날아가는 중 벽에 막힌다 (사용자 결정 2026-10-10)
+	const float wallT = walls.SweepFirstHit(p.x, p.y, x1, y1, p.radiusCm);
+	if (wallT < 1.f)
+	{
+		p.x += p.dirX * step * wallT;
+		p.y += p.dirY * step * wallT;
+		EndProjectile(p, Protocol::PROJECTILE_END_WALL, 0);
+		return true;
+	}
+
+	p.x = x1;
+	p.y = y1;
+	return false;
+}
+
+void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const CreatureRef& target, uint64 nowUs)
+{
+	const uint64 targetId = target->objectInfo->object_id();
+	p.hitIds.push_back(targetId);
+
+	// 평타 도착 - ResolveAttacks 의 근접 경로와 같은 계산, 도착 시점 스탯으로
+	if (p.skillId == 0)
+	{
+		bool isCrit = false;
+		int32 damage = caster->ComputeDamageTo(*target, caster->autoAttackType, OUT isCrit);
+
+		if (target->status.HasMark("spear", p.casterId))
+			damage = static_cast<int32>(damage * (1.f + SkillTable::Rules().markSpearBasicBonus));
+
+		const int32 remainingHp = DealDamage(caster, p.casterId, target, damage, caster->autoAttackType, isCrit, nowUs);
+
+		if (remainingHp > 0 && caster->IsPlayer())
+			ApplyOnHitPassives(caster, target, nowUs);
+		return;
+	}
+
+	const SkillDef* def = SkillTable::Find(p.skillId);
+	if (def == nullptr)
+		return;
+
+	// 재입력 대상 = 투사체가 처음 맞힌 것 (올가미 → 당기기)
+	if (caster->recastSkillId == p.skillId && caster->recastTargetId == 0)
+		caster->recastTargetId = targetId;
+
+	vector<CreatureRef> one;
+	one.push_back(target);
+	ApplySkillEffects(caster, *def, one, p.ctx, nowUs);
+
+	LOG_LINE << "[PROJ] hit id=" << p.id << " skill=" << p.skillId << " target=" << targetId << '\n';
+}
+
+void Room::EndProjectile(const Projectile& p, Protocol::ProjectileEnd reason, uint64 targetId)
+{
+	Protocol::ProjectileEndInfo& info = _pendingProjectileEnds.emplace_back();
+	info.set_projectile_id(p.id);
+	info.set_x(p.x);
+	info.set_y(p.y);
+	info.set_reason(reason);
+	info.set_target_id(targetId);
+
+	if (p.skillId != 0 && reason != Protocol::PROJECTILE_END_HIT)
+		LOG_LINE << "[PROJ] end id=" << p.id << " skill=" << p.skillId << " reason=" << static_cast<int32>(reason) << '\n';
+
+	// 평타 투사체는 양이 많아 500 발마다 한 줄 - HIT / WALL / LOST 비율 (필중이 벽에 얼마나 막히는지)
+	if (p.skillId == 0)
+	{
+		static atomic<uint64> basicEnds = 0;
+		static atomic<uint64> basicHits = 0;
+		static atomic<uint64> basicWalls = 0;
+		static atomic<uint64> basicLost = 0;
+
+		if (reason == Protocol::PROJECTILE_END_HIT)			basicHits.fetch_add(1);
+		else if (reason == Protocol::PROJECTILE_END_WALL)	basicWalls.fetch_add(1);
+		else												basicLost.fetch_add(1);
+
+		const uint64 n = basicEnds.fetch_add(1) + 1;
+		if (n % 100 == 0)
+			LOG_LINE << "[PROJ] basic ends=" << n << " hit=" << basicHits.load() << " wall=" << basicWalls.load() << " lost=" << basicLost.load() << '\n';
+	}
 }
 
 void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs)

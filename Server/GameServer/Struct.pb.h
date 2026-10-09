@@ -79,6 +79,12 @@ extern ObjectInfoDefaultTypeInternal _ObjectInfo_default_instance_;
 class PosInfo;
 struct PosInfoDefaultTypeInternal;
 extern PosInfoDefaultTypeInternal _PosInfo_default_instance_;
+class ProjectileEndInfo;
+struct ProjectileEndInfoDefaultTypeInternal;
+extern ProjectileEndInfoDefaultTypeInternal _ProjectileEndInfo_default_instance_;
+class ProjectileInfo;
+struct ProjectileInfoDefaultTypeInternal;
+extern ProjectileInfoDefaultTypeInternal _ProjectileInfo_default_instance_;
 class SkillCastInfo;
 struct SkillCastInfoDefaultTypeInternal;
 extern SkillCastInfoDefaultTypeInternal _SkillCastInfo_default_instance_;
@@ -104,6 +110,8 @@ template<> ::Protocol::ItemInstance* Arena::CreateMaybeMessage<::Protocol::ItemI
 template<> ::Protocol::KnockbackInfo* Arena::CreateMaybeMessage<::Protocol::KnockbackInfo>(Arena*);
 template<> ::Protocol::ObjectInfo* Arena::CreateMaybeMessage<::Protocol::ObjectInfo>(Arena*);
 template<> ::Protocol::PosInfo* Arena::CreateMaybeMessage<::Protocol::PosInfo>(Arena*);
+template<> ::Protocol::ProjectileEndInfo* Arena::CreateMaybeMessage<::Protocol::ProjectileEndInfo>(Arena*);
+template<> ::Protocol::ProjectileInfo* Arena::CreateMaybeMessage<::Protocol::ProjectileInfo>(Arena*);
 template<> ::Protocol::SkillCastInfo* Arena::CreateMaybeMessage<::Protocol::SkillCastInfo>(Arena*);
 template<> ::Protocol::SkillHitInfo* Arena::CreateMaybeMessage<::Protocol::SkillHitInfo>(Arena*);
 template<> ::Protocol::SkillInfo* Arena::CreateMaybeMessage<::Protocol::SkillInfo>(Arena*);
@@ -2610,6 +2618,456 @@ class StatusInfo final :
 };
 // -------------------------------------------------------------------
 
+class ProjectileInfo final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.ProjectileInfo) */ {
+ public:
+  inline ProjectileInfo() : ProjectileInfo(nullptr) {}
+  ~ProjectileInfo() override;
+  explicit PROTOBUF_CONSTEXPR ProjectileInfo(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  ProjectileInfo(const ProjectileInfo& from);
+  ProjectileInfo(ProjectileInfo&& from) noexcept
+    : ProjectileInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline ProjectileInfo& operator=(const ProjectileInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline ProjectileInfo& operator=(ProjectileInfo&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const ProjectileInfo& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const ProjectileInfo* internal_default_instance() {
+    return reinterpret_cast<const ProjectileInfo*>(
+               &_ProjectileInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    13;
+
+  friend void swap(ProjectileInfo& a, ProjectileInfo& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(ProjectileInfo* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(ProjectileInfo* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  ProjectileInfo* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<ProjectileInfo>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const ProjectileInfo& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const ProjectileInfo& from) {
+    ProjectileInfo::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(ProjectileInfo* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.ProjectileInfo";
+  }
+  protected:
+  explicit ProjectileInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kProjectileIdFieldNumber = 1,
+    kCasterIdFieldNumber = 2,
+    kEffectIdFieldNumber = 3,
+    kXFieldNumber = 4,
+    kYFieldNumber = 5,
+    kDirXFieldNumber = 6,
+    kDirYFieldNumber = 7,
+    kSpeedCmsFieldNumber = 8,
+    kRangeCmFieldNumber = 9,
+    kRadiusCmFieldNumber = 10,
+    kTargetIdFieldNumber = 11,
+  };
+  // uint64 projectile_id = 1;
+  void clear_projectile_id();
+  uint64_t projectile_id() const;
+  void set_projectile_id(uint64_t value);
+  private:
+  uint64_t _internal_projectile_id() const;
+  void _internal_set_projectile_id(uint64_t value);
+  public:
+
+  // uint64 caster_id = 2;
+  void clear_caster_id();
+  uint64_t caster_id() const;
+  void set_caster_id(uint64_t value);
+  private:
+  uint64_t _internal_caster_id() const;
+  void _internal_set_caster_id(uint64_t value);
+  public:
+
+  // uint32 effect_id = 3;
+  void clear_effect_id();
+  uint32_t effect_id() const;
+  void set_effect_id(uint32_t value);
+  private:
+  uint32_t _internal_effect_id() const;
+  void _internal_set_effect_id(uint32_t value);
+  public:
+
+  // float x = 4;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 5;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float dir_x = 6;
+  void clear_dir_x();
+  float dir_x() const;
+  void set_dir_x(float value);
+  private:
+  float _internal_dir_x() const;
+  void _internal_set_dir_x(float value);
+  public:
+
+  // float dir_y = 7;
+  void clear_dir_y();
+  float dir_y() const;
+  void set_dir_y(float value);
+  private:
+  float _internal_dir_y() const;
+  void _internal_set_dir_y(float value);
+  public:
+
+  // float speed_cms = 8;
+  void clear_speed_cms();
+  float speed_cms() const;
+  void set_speed_cms(float value);
+  private:
+  float _internal_speed_cms() const;
+  void _internal_set_speed_cms(float value);
+  public:
+
+  // float range_cm = 9;
+  void clear_range_cm();
+  float range_cm() const;
+  void set_range_cm(float value);
+  private:
+  float _internal_range_cm() const;
+  void _internal_set_range_cm(float value);
+  public:
+
+  // float radius_cm = 10;
+  void clear_radius_cm();
+  float radius_cm() const;
+  void set_radius_cm(float value);
+  private:
+  float _internal_radius_cm() const;
+  void _internal_set_radius_cm(float value);
+  public:
+
+  // uint64 target_id = 11;
+  void clear_target_id();
+  uint64_t target_id() const;
+  void set_target_id(uint64_t value);
+  private:
+  uint64_t _internal_target_id() const;
+  void _internal_set_target_id(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.ProjectileInfo)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t projectile_id_;
+    uint64_t caster_id_;
+    uint32_t effect_id_;
+    float x_;
+    float y_;
+    float dir_x_;
+    float dir_y_;
+    float speed_cms_;
+    float range_cm_;
+    float radius_cm_;
+    uint64_t target_id_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Struct_2eproto;
+};
+// -------------------------------------------------------------------
+
+class ProjectileEndInfo final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.ProjectileEndInfo) */ {
+ public:
+  inline ProjectileEndInfo() : ProjectileEndInfo(nullptr) {}
+  ~ProjectileEndInfo() override;
+  explicit PROTOBUF_CONSTEXPR ProjectileEndInfo(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  ProjectileEndInfo(const ProjectileEndInfo& from);
+  ProjectileEndInfo(ProjectileEndInfo&& from) noexcept
+    : ProjectileEndInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline ProjectileEndInfo& operator=(const ProjectileEndInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline ProjectileEndInfo& operator=(ProjectileEndInfo&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const ProjectileEndInfo& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const ProjectileEndInfo* internal_default_instance() {
+    return reinterpret_cast<const ProjectileEndInfo*>(
+               &_ProjectileEndInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    14;
+
+  friend void swap(ProjectileEndInfo& a, ProjectileEndInfo& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(ProjectileEndInfo* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(ProjectileEndInfo* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  ProjectileEndInfo* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<ProjectileEndInfo>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const ProjectileEndInfo& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const ProjectileEndInfo& from) {
+    ProjectileEndInfo::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(ProjectileEndInfo* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.ProjectileEndInfo";
+  }
+  protected:
+  explicit ProjectileEndInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kProjectileIdFieldNumber = 1,
+    kXFieldNumber = 2,
+    kYFieldNumber = 3,
+    kTargetIdFieldNumber = 5,
+    kReasonFieldNumber = 4,
+  };
+  // uint64 projectile_id = 1;
+  void clear_projectile_id();
+  uint64_t projectile_id() const;
+  void set_projectile_id(uint64_t value);
+  private:
+  uint64_t _internal_projectile_id() const;
+  void _internal_set_projectile_id(uint64_t value);
+  public:
+
+  // float x = 2;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 3;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // uint64 target_id = 5;
+  void clear_target_id();
+  uint64_t target_id() const;
+  void set_target_id(uint64_t value);
+  private:
+  uint64_t _internal_target_id() const;
+  void _internal_set_target_id(uint64_t value);
+  public:
+
+  // .Protocol.ProjectileEnd reason = 4;
+  void clear_reason();
+  ::Protocol::ProjectileEnd reason() const;
+  void set_reason(::Protocol::ProjectileEnd value);
+  private:
+  ::Protocol::ProjectileEnd _internal_reason() const;
+  void _internal_set_reason(::Protocol::ProjectileEnd value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.ProjectileEndInfo)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t projectile_id_;
+    float x_;
+    float y_;
+    uint64_t target_id_;
+    int reason_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Struct_2eproto;
+};
+// -------------------------------------------------------------------
+
 class CharacterInfo final :
     public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.CharacterInfo) */ {
  public:
@@ -2658,7 +3116,7 @@ class CharacterInfo final :
                &_CharacterInfo_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    13;
+    15;
 
   friend void swap(CharacterInfo& a, CharacterInfo& b) {
     a.Swap(&b);
@@ -2864,7 +3322,7 @@ class ItemInstance final :
                &_ItemInstance_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    14;
+    16;
 
   friend void swap(ItemInstance& a, ItemInstance& b) {
     a.Swap(&b);
@@ -4478,6 +4936,334 @@ inline void StatusInfo::set_instigator_id(uint64_t value) {
 
 // -------------------------------------------------------------------
 
+// ProjectileInfo
+
+// uint64 projectile_id = 1;
+inline void ProjectileInfo::clear_projectile_id() {
+  _impl_.projectile_id_ = uint64_t{0u};
+}
+inline uint64_t ProjectileInfo::_internal_projectile_id() const {
+  return _impl_.projectile_id_;
+}
+inline uint64_t ProjectileInfo::projectile_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.projectile_id)
+  return _internal_projectile_id();
+}
+inline void ProjectileInfo::_internal_set_projectile_id(uint64_t value) {
+  
+  _impl_.projectile_id_ = value;
+}
+inline void ProjectileInfo::set_projectile_id(uint64_t value) {
+  _internal_set_projectile_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.projectile_id)
+}
+
+// uint64 caster_id = 2;
+inline void ProjectileInfo::clear_caster_id() {
+  _impl_.caster_id_ = uint64_t{0u};
+}
+inline uint64_t ProjectileInfo::_internal_caster_id() const {
+  return _impl_.caster_id_;
+}
+inline uint64_t ProjectileInfo::caster_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.caster_id)
+  return _internal_caster_id();
+}
+inline void ProjectileInfo::_internal_set_caster_id(uint64_t value) {
+  
+  _impl_.caster_id_ = value;
+}
+inline void ProjectileInfo::set_caster_id(uint64_t value) {
+  _internal_set_caster_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.caster_id)
+}
+
+// uint32 effect_id = 3;
+inline void ProjectileInfo::clear_effect_id() {
+  _impl_.effect_id_ = 0u;
+}
+inline uint32_t ProjectileInfo::_internal_effect_id() const {
+  return _impl_.effect_id_;
+}
+inline uint32_t ProjectileInfo::effect_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.effect_id)
+  return _internal_effect_id();
+}
+inline void ProjectileInfo::_internal_set_effect_id(uint32_t value) {
+  
+  _impl_.effect_id_ = value;
+}
+inline void ProjectileInfo::set_effect_id(uint32_t value) {
+  _internal_set_effect_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.effect_id)
+}
+
+// float x = 4;
+inline void ProjectileInfo::clear_x() {
+  _impl_.x_ = 0;
+}
+inline float ProjectileInfo::_internal_x() const {
+  return _impl_.x_;
+}
+inline float ProjectileInfo::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.x)
+  return _internal_x();
+}
+inline void ProjectileInfo::_internal_set_x(float value) {
+  
+  _impl_.x_ = value;
+}
+inline void ProjectileInfo::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.x)
+}
+
+// float y = 5;
+inline void ProjectileInfo::clear_y() {
+  _impl_.y_ = 0;
+}
+inline float ProjectileInfo::_internal_y() const {
+  return _impl_.y_;
+}
+inline float ProjectileInfo::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.y)
+  return _internal_y();
+}
+inline void ProjectileInfo::_internal_set_y(float value) {
+  
+  _impl_.y_ = value;
+}
+inline void ProjectileInfo::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.y)
+}
+
+// float dir_x = 6;
+inline void ProjectileInfo::clear_dir_x() {
+  _impl_.dir_x_ = 0;
+}
+inline float ProjectileInfo::_internal_dir_x() const {
+  return _impl_.dir_x_;
+}
+inline float ProjectileInfo::dir_x() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.dir_x)
+  return _internal_dir_x();
+}
+inline void ProjectileInfo::_internal_set_dir_x(float value) {
+  
+  _impl_.dir_x_ = value;
+}
+inline void ProjectileInfo::set_dir_x(float value) {
+  _internal_set_dir_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.dir_x)
+}
+
+// float dir_y = 7;
+inline void ProjectileInfo::clear_dir_y() {
+  _impl_.dir_y_ = 0;
+}
+inline float ProjectileInfo::_internal_dir_y() const {
+  return _impl_.dir_y_;
+}
+inline float ProjectileInfo::dir_y() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.dir_y)
+  return _internal_dir_y();
+}
+inline void ProjectileInfo::_internal_set_dir_y(float value) {
+  
+  _impl_.dir_y_ = value;
+}
+inline void ProjectileInfo::set_dir_y(float value) {
+  _internal_set_dir_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.dir_y)
+}
+
+// float speed_cms = 8;
+inline void ProjectileInfo::clear_speed_cms() {
+  _impl_.speed_cms_ = 0;
+}
+inline float ProjectileInfo::_internal_speed_cms() const {
+  return _impl_.speed_cms_;
+}
+inline float ProjectileInfo::speed_cms() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.speed_cms)
+  return _internal_speed_cms();
+}
+inline void ProjectileInfo::_internal_set_speed_cms(float value) {
+  
+  _impl_.speed_cms_ = value;
+}
+inline void ProjectileInfo::set_speed_cms(float value) {
+  _internal_set_speed_cms(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.speed_cms)
+}
+
+// float range_cm = 9;
+inline void ProjectileInfo::clear_range_cm() {
+  _impl_.range_cm_ = 0;
+}
+inline float ProjectileInfo::_internal_range_cm() const {
+  return _impl_.range_cm_;
+}
+inline float ProjectileInfo::range_cm() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.range_cm)
+  return _internal_range_cm();
+}
+inline void ProjectileInfo::_internal_set_range_cm(float value) {
+  
+  _impl_.range_cm_ = value;
+}
+inline void ProjectileInfo::set_range_cm(float value) {
+  _internal_set_range_cm(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.range_cm)
+}
+
+// float radius_cm = 10;
+inline void ProjectileInfo::clear_radius_cm() {
+  _impl_.radius_cm_ = 0;
+}
+inline float ProjectileInfo::_internal_radius_cm() const {
+  return _impl_.radius_cm_;
+}
+inline float ProjectileInfo::radius_cm() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.radius_cm)
+  return _internal_radius_cm();
+}
+inline void ProjectileInfo::_internal_set_radius_cm(float value) {
+  
+  _impl_.radius_cm_ = value;
+}
+inline void ProjectileInfo::set_radius_cm(float value) {
+  _internal_set_radius_cm(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.radius_cm)
+}
+
+// uint64 target_id = 11;
+inline void ProjectileInfo::clear_target_id() {
+  _impl_.target_id_ = uint64_t{0u};
+}
+inline uint64_t ProjectileInfo::_internal_target_id() const {
+  return _impl_.target_id_;
+}
+inline uint64_t ProjectileInfo::target_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileInfo.target_id)
+  return _internal_target_id();
+}
+inline void ProjectileInfo::_internal_set_target_id(uint64_t value) {
+  
+  _impl_.target_id_ = value;
+}
+inline void ProjectileInfo::set_target_id(uint64_t value) {
+  _internal_set_target_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileInfo.target_id)
+}
+
+// -------------------------------------------------------------------
+
+// ProjectileEndInfo
+
+// uint64 projectile_id = 1;
+inline void ProjectileEndInfo::clear_projectile_id() {
+  _impl_.projectile_id_ = uint64_t{0u};
+}
+inline uint64_t ProjectileEndInfo::_internal_projectile_id() const {
+  return _impl_.projectile_id_;
+}
+inline uint64_t ProjectileEndInfo::projectile_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileEndInfo.projectile_id)
+  return _internal_projectile_id();
+}
+inline void ProjectileEndInfo::_internal_set_projectile_id(uint64_t value) {
+  
+  _impl_.projectile_id_ = value;
+}
+inline void ProjectileEndInfo::set_projectile_id(uint64_t value) {
+  _internal_set_projectile_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileEndInfo.projectile_id)
+}
+
+// float x = 2;
+inline void ProjectileEndInfo::clear_x() {
+  _impl_.x_ = 0;
+}
+inline float ProjectileEndInfo::_internal_x() const {
+  return _impl_.x_;
+}
+inline float ProjectileEndInfo::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileEndInfo.x)
+  return _internal_x();
+}
+inline void ProjectileEndInfo::_internal_set_x(float value) {
+  
+  _impl_.x_ = value;
+}
+inline void ProjectileEndInfo::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileEndInfo.x)
+}
+
+// float y = 3;
+inline void ProjectileEndInfo::clear_y() {
+  _impl_.y_ = 0;
+}
+inline float ProjectileEndInfo::_internal_y() const {
+  return _impl_.y_;
+}
+inline float ProjectileEndInfo::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileEndInfo.y)
+  return _internal_y();
+}
+inline void ProjectileEndInfo::_internal_set_y(float value) {
+  
+  _impl_.y_ = value;
+}
+inline void ProjectileEndInfo::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileEndInfo.y)
+}
+
+// .Protocol.ProjectileEnd reason = 4;
+inline void ProjectileEndInfo::clear_reason() {
+  _impl_.reason_ = 0;
+}
+inline ::Protocol::ProjectileEnd ProjectileEndInfo::_internal_reason() const {
+  return static_cast< ::Protocol::ProjectileEnd >(_impl_.reason_);
+}
+inline ::Protocol::ProjectileEnd ProjectileEndInfo::reason() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileEndInfo.reason)
+  return _internal_reason();
+}
+inline void ProjectileEndInfo::_internal_set_reason(::Protocol::ProjectileEnd value) {
+  
+  _impl_.reason_ = value;
+}
+inline void ProjectileEndInfo::set_reason(::Protocol::ProjectileEnd value) {
+  _internal_set_reason(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileEndInfo.reason)
+}
+
+// uint64 target_id = 5;
+inline void ProjectileEndInfo::clear_target_id() {
+  _impl_.target_id_ = uint64_t{0u};
+}
+inline uint64_t ProjectileEndInfo::_internal_target_id() const {
+  return _impl_.target_id_;
+}
+inline uint64_t ProjectileEndInfo::target_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ProjectileEndInfo.target_id)
+  return _internal_target_id();
+}
+inline void ProjectileEndInfo::_internal_set_target_id(uint64_t value) {
+  
+  _impl_.target_id_ = value;
+}
+inline void ProjectileEndInfo::set_target_id(uint64_t value) {
+  _internal_set_target_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ProjectileEndInfo.target_id)
+}
+
+// -------------------------------------------------------------------
+
 // CharacterInfo
 
 // .Protocol.ObjectInfo object_info = 1;
@@ -4847,6 +5633,10 @@ ItemInstance::skills() const {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
