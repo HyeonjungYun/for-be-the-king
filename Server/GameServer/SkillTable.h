@@ -188,6 +188,8 @@ struct SkillRules
 	uint32	spinMaxMs = 0;
 	uint32	holdMaxMs = 0;			// 0 = 상한 없음 (빈쿨룸)
 	float	buffPerLevelDefault = 0.f;
+	uint32	trailBuffMs = 0;		// 핏자국을 밟았을 때 이속 버프 길이 (4 단계)
+	float	trailPickupCm = 0.f;	// 핏자국을 "밟았다" 로 보는 거리
 };
 
 class SkillTable

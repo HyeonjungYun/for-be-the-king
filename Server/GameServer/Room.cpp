@@ -16,6 +16,7 @@
 #include "TowerTable.h"
 #include "Telemetry.h"
 #include "SkillKinematics.h"
+#include "Decoy.h"
 
 namespace
 {
@@ -172,6 +173,9 @@ RoomRef GRooms[FLOOR_COUNT] =
 
 // 투사체 id - 층을 가리지 않고 유일 (클라는 한 층만 보지만 로그에서 섞이지 않게). 50 억 대역 (몬스터 40 억 위)
 atomic<uint64> GNextProjectileId = PROJECTILE_ID_BASE;
+
+// 미끼 id - 60 억 대역. 오브젝트라 _objects 에 들어가므로 플레이어 · 몬스터 · 가방과 겹치면 안 된다
+atomic<uint64> GNextDecoyId = DECOY_ID_BASE;
 
 RoomRef GetRoomForFloor(uint32 floorId)
 {
@@ -835,8 +839,10 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 
 	const uint64 nowUs = Utils::NowMicroseconds();
 
-	// 진입 무적 - CC 도 받지 않는다 (AC-10)
+	// 진입 무적 - CC 도 받지 않는다 (AC-10). 니힐도
 	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+		return;
+	if (target->IsInvulnerable(nowUs))
 		return;
 
 	const uint32 effectiveMs = target->ComputeCcDurationMs(baseDurationMs);
@@ -1096,7 +1102,43 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		hit.set_aim_y(aimY);
 	}
 
-	if (def.telegraphMs == 0 || recast)
+	// 벽력일창 (fall_on_hit) - 도약은 지금, 내리찍기(대상 효과)는 도약이 끝나는 때. 그사이 맞으면 추락 = 예고 취소 (4 단계)
+	const SkillEffect* fall = (recast == false) ? def.FindEffect(SkillEffectType::FallOnHit) : nullptr;
+	const SkillEffect* leap = (fall != nullptr) ? def.FindEffect(SkillEffectType::Movement) : nullptr;
+	const uint32 leapMs = (leap != nullptr) ? SkillKinematics::TravelMs(leap->distCm, leap->speedCms) : 0;
+
+	if (fall != nullptr && leapMs > 0)
+	{
+		SkillContext ctx;
+		ctx.casterId = casterId;
+		ctx.originX = originX;
+		ctx.originY = originY;
+		ctx.aimX = aimX;
+		ctx.aimY = aimY;
+		ctx.itemLevel = caster->castItemLevel;
+		ctx.slot = slot;
+
+		vector<CreatureRef> none;
+		ApplySkillEffects(caster, def, none, ctx, nowUs);		// 자기 효과(도약)만
+
+		caster->leapUntilUs = nowUs + static_cast<uint64>(leapMs) * 1000;
+		caster->leapSkillId = def.skillId;
+
+		PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
+		pending.casterId = casterId;
+		pending.skillId = def.skillId;
+		pending.fireAtUs = caster->leapUntilUs;
+		pending.targetId = castTargetId;
+		pending.originX = originX;
+		pending.originY = originY;
+		pending.aimX = aimX;
+		pending.aimY = aimY;
+		pending.itemLevel = caster->castItemLevel;
+		pending.targetsOnly = true;
+
+		LOG_LINE << "[LEAP] char=" << casterId << " skill=" << def.skillId << " lands in=" << leapMs << "ms" << '\n';
+	}
+	else if (def.telegraphMs == 0 || recast)
 	{
 		SkillContext ctx;
 		ctx.casterId = casterId;
@@ -1187,6 +1229,7 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		const float aimX = pending.aimX;
 		const float aimY = pending.aimY;
 		const uint32 itemLevel = pending.itemLevel;
+		const bool targetsOnly = pending.targetsOnly;
 
 		_pendingTelegraphs.erase(_pendingTelegraphs.begin() + i);
 
@@ -1215,6 +1258,12 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		ctx.aimY = aimY;
 		ctx.itemLevel = itemLevel;
 		ctx.slot = caster->castSlot;
+		ctx.targetsOnly = targetsOnly;
+		if (targetsOnly)
+		{
+			caster->leapUntilUs = 0;		// 내리찍었다 - 더는 도약 중이 아니다
+			caster->leapSkillId = 0;
+		}
 		ApplySkillEffects(caster, *def, targets, ctx, nowUs);
 
 		LOG_LINE << "[SKILL FIRE] caster=" << casterId
@@ -2040,6 +2089,7 @@ void Room::UpdateTick()
 
 	UpdateDetached(nowUs);
 	UpdateMonsters(nowUs);
+	UpdateDecoys(nowUs);
 
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
@@ -2087,6 +2137,7 @@ void Room::FlushCombat()
 
 	UpdateCc(nowUs);
 	UpdateStatuses(nowUs);
+	UpdateTrails(nowUs);
 	UpdateZones(nowUs);
 	UpdateHolds(nowUs);
 	UpdateWindows(nowUs);
@@ -3019,8 +3070,19 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 		LOG_LINE << "[PETRIFY] window char=" << ctx.casterId << " for=" << e.durationMs << "ms stun=" << e.magnitude << '\n';
 		break;
 
+	case SkillEffectType::Invuln:
+		// 니힐 - 피해 · CC · 밀기 전부 무효 (4 단계). "기척을 지운다" 는 FoW 가 없어 제외
+		caster->invulnUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+		PushStatus(true, ctx.casterId, Protocol::STATUS_INVULN, "invuln", 1, e.durationMs, 0.f, ctx.casterId);
+		LOG_LINE << "[INVULN] skill char=" << ctx.casterId << " for=" << e.durationMs << "ms" << '\n';
+		break;
+
+	case SkillEffectType::Decoy:
+		SpawnDecoy(caster, e, ctx, nowUs);
+		break;
+
 	default:
-		// OnHit · LethalSave 는 패시브 - 평타 · 피해 경로에서 발동한다. Invuln · Decoy · Trail · FallOnHit 는 4 단계
+		// OnHit · LethalSave 는 패시브 - 평타 · 피해 경로에서 발동한다. FallOnHit 는 FireSkill 이 예고로 돌린다
 		break;
 	}
 }
@@ -3072,6 +3134,18 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 	case SkillEffectType::SoftCc:
 		if (e.durationMs > 0)
 		{
+			// 뇌섬 (param facing) - 시전자 쪽을 바라보던 적만 (바라보는 방향과 시전자 방향의 내적 > 0)
+			if (e.ccType == Protocol::CC_TYPE_BLIND && e.param == "facing")
+			{
+				const float yawRad = target->posInfo->yaw() * 3.14159265f / 180.f;
+				const float fx = ::cosf(yawRad);
+				const float fy = ::sinf(yawRad);
+				const float dx = ctx.originX - target->posInfo->x();
+				const float dy = ctx.originY - target->posInfo->y();
+				if (dx * fx + dy * fy <= 0.f)
+					break;
+			}
+
 			// 실명의 크기는 규칙 하나 (blind_view_scale) - 서버는 시간만 세고 클라가 시야를 줄인다
 			const float magnitude = (e.ccType == Protocol::CC_TYPE_BLIND && e.magnitude <= 0.f) ? rules.blindViewScale : e.magnitude;
 			ApplyCc(targetId, casterId, e.ccType, e.durationMs, magnitude);
@@ -3200,6 +3274,22 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 	if (damage < 0)
 		damage = 0;
 
+	// 니힐 - 모든 공격 무효 (4 단계)
+	if (target->IsInvulnerable(nowUs))
+		return target->hp;
+
+	// 벽력일창 - 도약 중에 맞으면 추락: 예고된 내리찍기를 지운다 (4 단계). 피해는 그대로 받는다
+	if (target->IsLeaping(nowUs))
+	{
+		const uint64 leaperId = target->objectInfo->object_id();
+		const uint32 leapSkillId = target->leapSkillId;
+		_pendingTelegraphs.erase(remove_if(_pendingTelegraphs.begin(), _pendingTelegraphs.end(),
+			[leaperId, leapSkillId](const PendingTelegraph& p) { return p.casterId == leaperId && p.skillId == leapSkillId; }), _pendingTelegraphs.end());
+		target->leapUntilUs = 0;
+		target->leapSkillId = 0;
+		LOG_LINE << "[LEAP] fall char=" << leaperId << " hit by=" << attackerId << '\n';
+	}
+
 	// 치명상 방어 (맹수의 본능) - 죽을 피해를 체력 1 로 막고 뒤로 도약
 	if (damage >= target->hp && target->IsPlayer())
 		TryLethalSave(static_pointer_cast<Player>(target), attacker, OUT damage, nowUs);
@@ -3311,8 +3401,10 @@ void Room::PushCreature(const CreatureRef& target, uint64 instigatorId, float di
 
 	const uint64 targetId = target->objectInfo->object_id();
 
-	// 진입 무적은 밀리지도 않는다 (AC-10)
+	// 진입 무적은 밀리지도 않는다 (AC-10). 니힐도. 미끼는 밀리지 않는다 (인형)
 	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+		return;
+	if (target->IsInvulnerable(nowUs) || target->IsDecoy())
 		return;
 
 	const float len = ::sqrtf(dirX * dirX + dirY * dirY);
@@ -3538,6 +3630,10 @@ void Room::UpdateStatuses(uint64 nowUs)
 						instigator = dynamic_pointer_cast<Creature>(instIt->second);
 
 					DealDamage(instigator, d.instigatorId, target, damage, d.type, false, nowUs);
+
+					// 과다출혈 - 틱마다 핏자국 (스킬에 trail 효과가 있으면)
+					if (target->IsAlive())
+						DropTrail(target, d, nowUs);
 				});
 		}
 
@@ -4262,6 +4358,13 @@ void Room::HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillE
 		info.set_duration_ms(ccMs);
 	}
 
+	// 회오리 - 휘두르는 망치가 벽에 닿았다 (반경 안에 벽) → 자기 기절 · 주위 감속 · 유지 끝 (4 단계)
+	if (hold.param == "spin" && WallTable::Get(_floorId).Overlaps(cx, cy, radius))
+	{
+		OnSpinTouchedWall(caster, def, nowUs);
+		return;
+	}
+
 	int32 hitCount = 0;
 	for (auto& item : _objects)
 	{
@@ -4629,6 +4732,216 @@ void Room::ApplyThrow(const CreatureRef& caster, const CreatureRef& target, cons
 	LOG_LINE << "[THROW] target=" << targetId << " by=" << casterId << " to=(" << lx << "," << ly << ") splash=" << hitCount << '\n';
 }
 
+// ── 4 단계 ──
+
+void Room::SpawnDecoy(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
+{
+	const SkillRules& rules = SkillTable::Rules();
+	const int32 decoyHp = static_cast<int32>(e.magnitude > 0.f ? e.magnitude : static_cast<float>(rules.decoyHp));
+
+	auto decoy = make_shared<Decoy>(GNextDecoyId.fetch_add(1), ctx.casterId, nowUs + static_cast<uint64>(e.durationMs) * 1000, max(1, decoyHp));
+	decoy->posInfo->set_x(caster->posInfo->x());
+	decoy->posInfo->set_y(caster->posInfo->y());
+	decoy->posInfo->set_z(caster->posInfo->z());
+	decoy->posInfo->set_yaw(caster->posInfo->yaw());
+	decoy->posInfo->set_state(Protocol::MOVE_STATE_IDLE);
+
+	if (AddObject(decoy) == false)
+		return;
+
+	const uint64 id = decoy->objectInfo->object_id();
+	_decoys.insert(id);
+	_pendingSpawns.push_back(id);
+
+	PushStatus(true, ctx.casterId, Protocol::STATUS_DECOY, "decoy", 1, e.durationMs, 0.f, ctx.casterId);
+	LOG_LINE << "[DECOY] spawn id=" << id << " owner=" << ctx.casterId << " hp=" << decoy->hp << " for=" << e.durationMs << "ms" << '\n';
+}
+
+void Room::DespawnDecoy(const CreatureRef& decoy, const char* why)
+{
+	const uint64 id = decoy->objectInfo->object_id();
+	const uint64 ownerId = decoy->IsDecoy() ? static_pointer_cast<Decoy>(decoy)->ownerId : 0;
+
+	_decoys.erase(id);
+	_statusTargets.erase(id);
+	RemoveObject(id);
+
+	Protocol::S_DESPAWN despawnPkt;
+	despawnPkt.add_object_ids(id);
+	SEND_PACKET_BROADCAST(despawnPkt);
+
+	if (ownerId != 0)
+		PushStatus(false, ownerId, Protocol::STATUS_DECOY, "decoy", 0, 0, 0.f, ownerId);
+
+	LOG_LINE << "[DECOY] despawn id=" << id << " why=" << why << '\n';
+}
+
+void Room::UpdateDecoys(uint64 nowUs)
+{
+	if (_decoys.empty())
+		return;
+
+	const vector<uint64> ids(_decoys.begin(), _decoys.end());
+	for (uint64 id : ids)
+	{
+		auto findIt = _objects.find(id);
+		if (findIt == _objects.end())
+		{
+			_decoys.erase(id);
+			continue;
+		}
+
+		CreatureRef decoy = dynamic_pointer_cast<Creature>(findIt->second);
+		if (decoy == nullptr || decoy->IsDecoy() == false)
+		{
+			_decoys.erase(id);
+			continue;
+		}
+
+		if (nowUs >= static_pointer_cast<Decoy>(decoy)->expiresUs)
+			DespawnDecoy(decoy, "expired");
+	}
+}
+
+void Room::DropTrail(const CreatureRef& bleeder, const DotInstance& dot, uint64 nowUs)
+{
+	const SkillDef* def = SkillTable::Find(dot.skillId);
+	if (def == nullptr)
+		return;
+
+	const SkillEffect* trail = def->FindEffect(SkillEffectType::Trail);
+	if (trail == nullptr)
+		return;
+
+	const float x = bleeder->posInfo->x();
+	const float y = bleeder->posInfo->y();
+
+	// 서 있으면 한 자리에 쌓이지 않게 - 같은 주인의 마지막 자국에서 pickup 거리 안이면 건너뛴다
+	for (auto it = _trails.rbegin(); it != _trails.rend(); ++it)
+	{
+		if (it->ownerId != dot.instigatorId)
+			continue;
+		const float dx = it->x - x;
+		const float dy = it->y - y;
+		const float pickup = SkillTable::Rules().trailPickupCm;
+		if (dx * dx + dy * dy < pickup * pickup)
+			return;
+		break;
+	}
+
+	TrailPoint t;
+	t.zoneId = _nextZoneId++;
+	t.ownerId = dot.instigatorId;
+	t.x = x;
+	t.y = y;
+	t.expiresUs = nowUs + static_cast<uint64>(trail->durationMs) * 1000;
+	t.buffMagnitude = trail->magnitude;
+	t.skillId = dot.skillId;
+	_trails.push_back(t);
+
+	Protocol::ZoneInfo& info = _pendingZoneSpawns.emplace_back();
+	info.set_zone_id(t.zoneId);
+	info.set_caster_id(t.ownerId);
+	info.set_effect_id(def->effectId);
+	info.set_x(x);
+	info.set_y(y);
+	info.set_radius_cm(SkillTable::Rules().trailPickupCm * 0.5f);
+	info.set_duration_ms(trail->durationMs);
+	info.set_param("blood");
+}
+
+void Room::UpdateTrails(uint64 nowUs)
+{
+	if (_trails.empty())
+		return;
+
+	const SkillRules& rules = SkillTable::Rules();
+	const float pickupSq = rules.trailPickupCm * rules.trailPickupCm;
+
+	for (size_t i = 0; i < _trails.size(); )
+	{
+		TrailPoint& t = _trails[i];
+
+		if (nowUs >= t.expiresUs)
+		{
+			_pendingZoneEnds.push_back(t.zoneId);
+			_trails.erase(_trails.begin() + i);
+			continue;
+		}
+
+		auto ownerIt = _objects.find(t.ownerId);
+		CreatureRef owner = (ownerIt != _objects.end()) ? dynamic_pointer_cast<Creature>(ownerIt->second) : nullptr;
+
+		if (owner != nullptr && owner->IsAlive())
+		{
+			const float dx = owner->posInfo->x() - t.x;
+			const float dy = owner->posInfo->y() - t.y;
+			if (dx * dx + dy * dy <= pickupSq)
+			{
+				// 밟았다 - 이속 버프 (같은 버프는 갱신)
+				BuffInstance buff;
+				buff.skillId = t.skillId;
+				buff.stat = SkillBuffStat::MoveSpeed;
+				buff.magnitude = t.buffMagnitude;
+				buff.endUs = nowUs + static_cast<uint64>(rules.trailBuffMs) * 1000;
+				owner->status.AddBuff(buff);
+				owner->OnBuffsChanged();
+				_statusTargets.insert(t.ownerId);
+				PushStatus(true, t.ownerId, Protocol::STATUS_BUFF, SkillTable::BuffStatName(SkillBuffStat::MoveSpeed), 1, rules.trailBuffMs, t.buffMagnitude, t.ownerId);
+
+				_pendingZoneEnds.push_back(t.zoneId);
+				_trails.erase(_trails.begin() + i);
+				LOG_LINE << "[TRAIL] picked char=" << t.ownerId << " +" << t.buffMagnitude << " ms for=" << rules.trailBuffMs << "ms" << '\n';
+				continue;
+			}
+		}
+
+		i++;
+	}
+}
+
+void Room::OnSpinTouchedWall(const CreatureRef& caster, const SkillDef& def, uint64 nowUs)
+{
+	const uint64 casterId = caster->objectInfo->object_id();
+	const float cx = caster->posInfo->x();
+	const float cy = caster->posInfo->y();
+
+	LOG_LINE << "[HOLD] wall char=" << casterId << " skill=" << def.skillId << '\n';
+	StopHold(caster, nowUs, "wall");
+
+	// requires=wall 효과 - 자기 기절(self_cc) · 주위 감속(soft_cc, radius_cm)
+	for (const SkillEffect& e : def.effects)
+	{
+		if (e.condition != SkillRequire::Wall)
+			continue;
+
+		if (e.self && e.type == SkillEffectType::SelfCc && e.durationMs > 0)
+		{
+			ApplyCc(casterId, casterId, e.ccType, e.durationMs, e.magnitude);
+			continue;
+		}
+
+		if (e.self == false && e.type == SkillEffectType::SoftCc && e.durationMs > 0)
+		{
+			const float radius = e.radiusCm > 0.f ? e.radiusCm : def.radiusCm;
+			for (auto& item : _objects)
+			{
+				if (item.first == casterId)
+					continue;
+
+				CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+				if (CanProjectileHit(caster, target, nowUs) == false)
+					continue;
+
+				const float dx = target->posInfo->x() - cx;
+				const float dy = target->posInfo->y() - cy;
+				if (dx * dx + dy * dy <= radius * radius)
+					ApplyCc(item.first, casterId, e.ccType, e.durationMs, e.magnitude);
+			}
+		}
+	}
+}
+
 void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs)
 {
 	if (effect.distCm <= 0.f || effect.speedCms <= 0.f)
@@ -4831,6 +5144,13 @@ bool Room::CanStillStrike(const CreatureRef& creature) const
 void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs)
 {
 	const uint64 victimId = victim->objectInfo->object_id();
+
+	// 미끼 - 죽음이 아니라 사라짐 (S_DIED 없음, 사망 커밋 없음)
+	if (victim->IsDecoy())
+	{
+		DespawnDecoy(victim, "hit");
+		return;
+	}
 
 	// 원인은 가해자 기준이다 - 예전에는 피해자 종류를 넣어 몬스터에게 죽은 플레이어가 PLAYER 로 나갔다 (monster-ai.md Core Rule 19)
 	Protocol::DiedInfo& died = _pendingDeaths.emplace_back();

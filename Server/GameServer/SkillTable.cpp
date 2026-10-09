@@ -527,7 +527,9 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 			|| ReadRule(kv, "delayed_burst_ms", OUT rules.delayedBurstMs, OUT error) == false
 			|| ReadRule(kv, "spin_max_ms", OUT rules.spinMaxMs, OUT error) == false
 			|| ReadRule(kv, "hold_max_ms", OUT rules.holdMaxMs, OUT error) == false
-			|| ReadRule(kv, "buff_per_level_default", OUT rules.buffPerLevelDefault, OUT error) == false)
+			|| ReadRule(kv, "buff_per_level_default", OUT rules.buffPerLevelDefault, OUT error) == false
+			|| ReadRule(kv, "trail_buff_ms", OUT rules.trailBuffMs, OUT error) == false
+			|| ReadRule(kv, "trail_pickup_cm", OUT rules.trailPickupCm, OUT error) == false)
 			return false;
 
 		uint32 decoyHp = 0;
@@ -752,7 +754,7 @@ void SkillTable::Init()
 		"key,value\n"
 		"dot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
 		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
-		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\n";
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\n";
 
 	string error;
 	if (Parse(skills, effects, rules, OUT error) == false)

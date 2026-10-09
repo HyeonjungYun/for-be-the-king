@@ -172,6 +172,14 @@ public:
 	bool IsParrying(uint64 nowUs) const { return nowUs < parryUntilUs; }
 	bool IsHolding() const { return holdSkillId != 0; }
 
+	// ── 4 단계 ──
+	uint64				invulnUntilUs = 0;			// 니힐 - 피해 · CC · 밀기 전부 무효
+	uint64				leapUntilUs = 0;			// 벽력일창 - 도약 중 (맞으면 추락 = 예고된 내리찍기 취소)
+	uint32				leapSkillId = 0;
+
+	bool IsInvulnerable(uint64 nowUs) const { return nowUs < invulnUntilUs; }
+	bool IsLeaping(uint64 nowUs) const { return nowUs < leapUntilUs; }
+
 	vector<SlowSource>	slowSources;
 
 	float				activeSlow = 0.f;

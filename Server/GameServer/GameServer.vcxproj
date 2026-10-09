@@ -238,6 +238,7 @@
     <ClInclude Include="ServerPacketHandler.h" />
     <ClInclude Include="SkillTable.h" />
     <ClInclude Include="StatusEffects.h" />
+    <ClInclude Include="Decoy.h" />
     <ClInclude Include="SkillKinematics.h" />
     <ClInclude Include="Struct.pb.h" />
   </ItemGroup>

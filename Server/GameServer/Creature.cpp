@@ -129,6 +129,9 @@ void Creature::ClearCombatState()
 	petrifyTargets.clear();
 	stance.clear();
 	stanceRatio = 0.f;
+	invulnUntilUs = 0;
+	leapUntilUs = 0;
+	leapSkillId = 0;
 
 	status.Clear();
 	OnBuffsChanged();

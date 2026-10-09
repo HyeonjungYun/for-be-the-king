@@ -17,3 +17,5 @@ delayed_burst_ms,1500
 spin_max_ms,3000
 hold_max_ms,0
 buff_per_level_default,0.03
+trail_buff_ms,2000
+trail_pickup_cm,80

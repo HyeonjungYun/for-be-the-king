@@ -43,6 +43,19 @@ struct PendingTelegraph
 	float aimX = 0.f;
 	float aimY = 0.f;
 	uint32 itemLevel = 0;
+	bool targetsOnly = false;		// 벽력일창 - 도약은 이미 시작했고 내리찍기(대상 효과)만 뒤에
+};
+
+// 핏자국 (4 단계) - 과다 출혈 중인 적이 남긴다. 주인이 밟으면 이속 버프, 아니면 지속 뒤 사라진다. 클라는 S_ZONE "blood" 로 그린다
+struct TrailPoint
+{
+	uint64 zoneId = 0;
+	uint64 ownerId = 0;
+	float x = 0.f;
+	float y = 0.f;
+	uint64 expiresUs = 0;
+	float buffMagnitude = 0.f;
+	uint32 skillId = 0;
 };
 
 // 다단 히트의 남은 타 - hits × interval_ms (skill-roster 1 단계). 첫 타는 발동 순간, 나머지는 간격마다 FlushCombat 이 넣는다.
@@ -257,6 +270,14 @@ private:
 	void	SetStance(const CreatureRef& caster, const string& element, float ratio, uint64 nowUs);
 	void	ApplyThrow(const CreatureRef& caster, const CreatureRef& target, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
 
+	// ── 4 단계 - 미끼 · 무적 · 핏자국 · 도약 추락 · 회오리 벽 ──
+	void	SpawnDecoy(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
+	void	DespawnDecoy(const CreatureRef& decoy, const char* why);
+	void	UpdateDecoys(uint64 nowUs);
+	void	DropTrail(const CreatureRef& bleeder, const DotInstance& dot, uint64 nowUs);
+	void	UpdateTrails(uint64 nowUs);
+	void	OnSpinTouchedWall(const CreatureRef& caster, const SkillDef& def, uint64 nowUs);
+
 	// ── 투사체 (2 단계) ──
 	void	LaunchProjectile(Projectile p);
 	void	LaunchSkillProjectile(const CreatureRef& caster, const SkillDef& def, const SkillContext& ctx, uint64 nowUs);
@@ -374,6 +395,10 @@ private:
 	unordered_set<uint64>				_windowOwners;
 	vector<Protocol::ZoneInfo>			_pendingZoneSpawns;
 	vector<uint64>						_pendingZoneEnds;
+
+	// 4 단계 - 미끼 · 핏자국
+	unordered_set<uint64>				_decoys;
+	vector<TrailPoint>					_trails;
 };
 
 constexpr int32 FLOOR_COUNT = 4;
