@@ -398,6 +398,17 @@ protected:
 	float RecastUntil = 0.f;
 	uint64 RecastTargetId = 0;
 
+	/**
+	 * Blind (stage 4): the view shrinks to skill_rules blind_view_scale of the normal camera distance while the
+	 * server says we are blinded (S_CC blind), and eases back afterwards. The user's choice for "눈을 멀게 한다" (2026-10-10).
+	 */
+	float DefaultArmLength = 2600.f;
+	void TickBlindCamera(float DeltaTime);
+
+	/** Console: DebugBlind <seconds> - pretend the server blinded us, to look at the camera shrink without a bot (TEMP). */
+	UFUNCTION(Exec)
+	void DebugBlind(float Seconds = 2.f);
+
 	/** Opens the recast window for the slot whose first press just landed. */
 	void OpenRecastWindow(int32 EquipSlotValue);
 

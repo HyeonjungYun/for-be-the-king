@@ -565,6 +565,12 @@ void AS1Player::DrawStatusDebug()
 		case Protocol::STATUS_STANCE:
 			Piece = FString::Printf(TEXT("stance:%s"), *Entry.Param);
 			break;
+		case Protocol::STATUS_INVULN:
+			Piece = TEXT("INVULN");
+			break;
+		case Protocol::STATUS_DECOY:
+			Piece = TEXT("decoy out");
+			break;
 		default:
 			Piece = FString::Printf(TEXT("%d:%s"), static_cast<int32>(Entry.Kind), *Entry.Param);
 			break;

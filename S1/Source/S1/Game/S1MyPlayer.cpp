@@ -51,7 +51,7 @@ AS1MyPlayer::AS1MyPlayer()
 	// budget in game-concept.md (0.22 players visible on average in the open field).
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 2600.0f;
+	CameraBoom->TargetArmLength = DefaultArmLength;
 
 	// The camera never rotates. Zooming or rotating would let players buy information,
 	// which breaks Pillar 4 ("information is the most expensive resource").
@@ -224,6 +224,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	UpdateCursorFacing(DeltaTime);
+	TickBlindCamera(DeltaTime);
 	DrawWindupDebug();
 	DrawSkillBarDebug();
 	DrawAimIndicator();
@@ -756,6 +757,26 @@ void AS1MyPlayer::FireAimedSkill()
 	}
 
 	AimingSlot = 0;
+}
+
+void AS1MyPlayer::TickBlindCamera(float DeltaTime)
+{
+	if (CameraBoom == nullptr)
+		return;
+
+	// Shrinks fast (the hit lands), eases back slow (sight returning) - both server-timed, nothing predicted
+	const float Target = IsBlinded() ? DefaultArmLength * FMath::Clamp(GetBlindViewScale(), 0.2f, 1.f) : DefaultArmLength;
+	const float Speed = IsBlinded() ? 12.f : 3.f;
+	CameraBoom->TargetArmLength = FMath::FInterpTo(CameraBoom->TargetArmLength, Target, DeltaTime, Speed);
+}
+
+void AS1MyPlayer::DebugBlind(float Seconds)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	BlindUntil = Now + Seconds;
+	if (BlindViewScale >= 1.f)
+		BlindViewScale = 0.5f;		// skill_rules blind_view_scale - the real value arrives with the CC event
+	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] blind for %.1fs scale=%.2f"), Seconds, BlindViewScale);
 }
 
 void AS1MyPlayer::OnHoldEnded()

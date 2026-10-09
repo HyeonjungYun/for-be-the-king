@@ -88,6 +88,7 @@ void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
 
 		// Colour by what it does - poison green, fire orange, lightning blue, mist grey, arrows tan
 		if (Z.Param == TEXT("poison"))				Z.Colour = FColor(110, 200, 60);
+		else if (Z.Param == TEXT("blood"))			Z.Colour = FColor(150, 20, 20);
 		else if (Z.Param.Contains(TEXT("fire")))	Z.Colour = FColor(255, 140, 40);
 		else if (Z.Param == TEXT("lightning"))		Z.Colour = FColor(120, 160, 255);
 		else if (Z.Param == TEXT("mist"))			Z.Colour = FColor(170, 170, 190);
