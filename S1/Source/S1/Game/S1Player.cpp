@@ -127,6 +127,17 @@ void AS1Player::Tick(float DeltaTime)
 
 void AS1Player::TickRemotePlayer(float DeltaTime)
 {
+	// A server push (knockback / pull) is animated by TickDash. The S_MOVE with the end point arrives in the same
+	// flush and would otherwise snap the proxy there; let the push play out and resume interpolation from wherever
+	// it left the actor, so the resulting lerp is a few cm, not a jump back to a stale start.
+	if (IsDashing())
+	{
+		InterpStartLocation = GetActorLocation();
+		InterpStartYaw = GetActorRotation().Yaw;
+		InterpElapsed = 0.f;
+		return;
+	}
+
 	const FVector CurLocation = GetActorLocation();
 	const FVector DestLocation = ToVector(*DestInfo);
 
@@ -176,11 +187,12 @@ void AS1Player::TickCc()
 	if (Movement == nullptr)
 		return;
 
-	// Formula C5 — the server aggregates slow sources and sends the max; we only apply it. The equipment bonus goes
-	// in once, before the slow — the same order as the server's Player::ComputeMoveSpeed (its ceiling for our moves)
+	// Formula C5 — the server aggregates slow sources and sends the max; we only apply it. The equipment bonus and
+	// the move-speed buff go in once, added together before the slow — the same order as the server's
+	// Player::ComputeMoveSpeed (its ceiling for our moves), where the buff is added to percentMsBonus
 	const US1ItemSubsystem* Items = US1ItemSubsystem::Get();
 	const float Bonus = Items != nullptr ? Items->GetMoveSpeedBonus() : 0.f;
-	Movement->MaxWalkSpeed = BaseWalkSpeed * (1.f + Bonus) * (1.f - ActiveSlow);
+	Movement->MaxWalkSpeed = BaseWalkSpeed * (1.f + Bonus + MoveSpeedBuff) * (1.f - ActiveSlow);
 
 	if (CanMove() == false)
 		Movement->StopMovementImmediately();
@@ -196,6 +208,10 @@ void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 N
 	}
 
 	CurrentHp = RemainingHp;
+
+	// Death ends every status; the server does not send expiries for them (Room::OnCreatureKilled)
+	if (RemainingHp <= 0)
+		ClearStatuses();
 
 	// Damage 0 is a resync, not a hit — a monster that walked home heals to full and the server says so with
 	// S_DAMAGE { damage 0, remaining_hp = max } because there is no heal packet (monster-ai.md T11)
@@ -365,6 +381,9 @@ void AS1Player::DrawCombatDebug()
 	Mark(Now < KnockbackUntil, FColor::Magenta);
 	Mark(Now < LaunchUntil, FColor::Purple);
 	Mark(ActiveSlow > 0.f, FColor::Cyan);
+	Mark(Now < BlindUntil, FColor::Black);
+
+	DrawStatusDebug();
 
 	// 🔴 Everyone sees this, enemies included. It says "busy" and nothing else — no skill,
 	// no remaining time, no range. skill-system.md B2a: the observer's payload is
@@ -413,11 +432,139 @@ void AS1Player::ApplyCcEvent(const Protocol::CcEventInfo& Info, bool bApplied)
 			ActiveSlow = Info.magnitude();
 		break;
 
+	case Protocol::CC_TYPE_BLIND:
+		// magnitude = skill_rules blind_view_scale. The camera shrink is stage 4; the deadline is kept now
+		BlindUntil = Until;
+		if (bApplied && Info.magnitude() > 0.f)
+			BlindViewScale = Info.magnitude();
+		break;
+
 	default:
 		// Silence and heal reduction have no movement effect — they are gameplay-only and
 		// will be read by the skill system (P1.5) and healing (P2).
 		break;
 	}
+}
+
+bool AS1Player::IsBlinded() const
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	return Now < BlindUntil;
+}
+
+void AS1Player::ApplyKnockback(const FVector& Direction, float DistCm, float SpeedCms)
+{
+	// Same mechanics as a dash: swept, stops at geometry — which is also where the server's 2D walls stopped it
+	RequestDash(Direction, DistCm, SpeedCms);
+}
+
+void AS1Player::ApplyStatus(const Protocol::StatusInfo& Info, bool bApplied)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	const FString Param = UTF8_TO_TCHAR(Info.param().c_str());
+
+	int32 Index = INDEX_NONE;
+	for (int32 i = 0; i < Statuses.Num(); i++)
+	{
+		if (Statuses[i].Kind == Info.kind() && Statuses[i].Param == Param && Statuses[i].InstigatorId == Info.instigator_id())
+		{
+			Index = i;
+			break;
+		}
+	}
+
+	if (bApplied)
+	{
+		if (Index == INDEX_NONE)
+			Index = Statuses.AddDefaulted();
+
+		FS1StatusEntry& Entry = Statuses[Index];
+		Entry.Kind = Info.kind();
+		Entry.Param = Param;
+		Entry.InstigatorId = Info.instigator_id();
+		Entry.Stacks = Info.stacks();
+		Entry.Magnitude = Info.magnitude();
+		Entry.Until = Now + Info.remaining_ms() / 1000.f;
+	}
+	else if (Index != INDEX_NONE)
+	{
+		// A dot expiry carries the stacks still running; 0 (or any other kind) means the line is gone
+		if (Info.kind() == Protocol::STATUS_DOT && Info.stacks() > 0)
+			Statuses[Index].Stacks = Info.stacks();
+		else
+			Statuses.RemoveAt(Index);
+	}
+
+	// The one status the movement code reads. Several buffs on the same stat are separate skills, so they add
+	MoveSpeedBuff = 0.f;
+	for (const FS1StatusEntry& Entry : Statuses)
+	{
+		if (Entry.Kind == Protocol::STATUS_BUFF && Entry.Param == TEXT("move_speed"))
+			MoveSpeedBuff += Entry.Magnitude;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[STATUS%s] id=%llu kind=%d param=%s stacks=%u mag=%.2f ms=%u by=%llu"),
+		bApplied ? TEXT("+") : TEXT("-"), PlayerInfo ? PlayerInfo->object_id() : 0, static_cast<int32>(Info.kind()),
+		*Param, Info.stacks(), Info.magnitude(), Info.remaining_ms(), Info.instigator_id());
+}
+
+void AS1Player::ClearStatuses()
+{
+	Statuses.Reset();
+	MoveSpeedBuff = 0.f;
+}
+
+void AS1Player::DrawStatusDebug()
+{
+	if (Statuses.Num() == 0)
+		return;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+		return;
+
+	// ASCII only — the debug font has no Hangul. "bleed x3 | atk +15% | mark:spear". Expired lines drop
+	// when the server says so; the deadline here only trims lines whose expiry packet was lost
+	const float Now = World->GetTimeSeconds();
+	FString Line;
+
+	for (int32 i = Statuses.Num() - 1; i >= 0; i--)
+	{
+		const FS1StatusEntry& Entry = Statuses[i];
+		if (Now > Entry.Until + 1.f)
+		{
+			Statuses.RemoveAt(i);
+			continue;
+		}
+
+		FString Piece;
+		switch (Entry.Kind)
+		{
+		case Protocol::STATUS_DOT:
+			Piece = FString::Printf(TEXT("%s x%u"), *Entry.Param, Entry.Stacks);
+			break;
+		case Protocol::STATUS_BUFF:
+			Piece = FString::Printf(TEXT("%s +%d%%"), *Entry.Param, FMath::RoundToInt(Entry.Magnitude * 100.f));
+			break;
+		case Protocol::STATUS_MARK:
+			Piece = FString::Printf(TEXT("mark:%s"), *Entry.Param);
+			break;
+		default:
+			Piece = FString::Printf(TEXT("%d:%s"), static_cast<int32>(Entry.Kind), *Entry.Param);
+			break;
+		}
+
+		if (Line.IsEmpty() == false)
+			Line += TEXT(" | ");
+		Line += Piece;
+	}
+
+	if (Line.IsEmpty())
+		return;
+
+	// Duration 0 = drawn this frame, dropped next tick — it tracks the actor instead of trailing it
+	const FVector Where = GetActorLocation() + FVector(DEBUG_BAR_OFFSET_X - 30.f, 0.f, 0.f);
+	DrawDebugString(World, Where, Line, nullptr, FColor(255, 200, 120), 0.f, true, 1.1f);
 }
 
 void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
@@ -431,6 +578,7 @@ void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
 	RootUntil = 0.f;
 	KnockbackUntil = 0.f;
 	LaunchUntil = 0.f;
+	BlindUntil = 0.f;
 
 	for (const Protocol::CcSlot& Slot : State.slots())
 	{
@@ -442,6 +590,11 @@ void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
 		case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
 		case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
 		case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
+		case Protocol::CC_TYPE_BLIND:
+			BlindUntil = Until;
+			if (Slot.magnitude() > 0.f)
+				BlindViewScale = Slot.magnitude();
+			break;
 
 		default:
 			// Slow arrives as the aggregate below; silence and heal reduction have no

@@ -100,7 +100,14 @@ bool FS1SkillTableParseTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("recast kind"), static_cast<int32>(Recast->Kind), static_cast<int32>(ES1SkillKind::Recast));
 		TestEqual(TEXT("first press moves back"), Recast->MoveKind, FName(TEXT("back")));
 		TestEqual(TEXT("back dist"), Recast->MoveDistCm, 200.f);
+		TestEqual(TEXT("second press dashes"), Recast->RecastMoveKind, FName(TEXT("dash")));
+		TestEqual(TEXT("second press dist"), Recast->RecastMoveDistCm, 400.f);
+		TestEqual(TEXT("second press speed"), Recast->RecastMoveSpeedCms, 1200.f);
 	}
+
+	// Skills without a recast have no second-press movement
+	if (Dash != nullptr)
+		TestEqual(TEXT("dash has no recast move"), Dash->RecastMoveDistCm, 0.f);
 
 	// Blink: instant (speed 0) through walls
 	const FS1SkillDef* Blink = FS1SkillTable::Find(1075);
@@ -137,6 +144,26 @@ bool FS1SkillTableRejectTest::RunTest(const FString& Parameters)
 	// A failed parse keeps the previous table, so a good one afterwards still works
 	TestTrue(TEXT("good parse after bad"), FS1SkillTable::Parse(GSkillsCsv, GEffectsCsv, Error));
 	TestEqual(TEXT("count"), FS1SkillTable::Num(), 7);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1SkillTableRulesTest, "S1.Skill.Table.ParseRules_ReadsRecastWindow", GS1SkillTestFlags)
+bool FS1SkillTableRulesTest::RunTest(const FString& Parameters)
+{
+	FString Error;
+
+	TestTrue(TEXT("rules parse"), FS1SkillTable::ParseRules(TEXT("key,value\r\ndot_tick_ms,500\r\nrecast_window_ms,2000\r\n"), Error));
+	TestEqual(TEXT("window"), static_cast<int32>(FS1SkillTable::RecastWindowMs()), 2000);
+
+	// Missing key - the client would never open the window, so refuse the file
+	TestFalse(TEXT("missing window"), FS1SkillTable::ParseRules(TEXT("key,value\r\ndot_tick_ms,500\r\n"), Error));
+	TestTrue(TEXT("names the key"), Error.Contains(TEXT("recast_window_ms")));
+
+	// Not a number
+	TestFalse(TEXT("bad number"), FS1SkillTable::ParseRules(TEXT("key,value\r\nrecast_window_ms,soon\r\n"), Error));
+
+	// A failed parse keeps the previous value
+	TestEqual(TEXT("window kept"), static_cast<int32>(FS1SkillTable::RecastWindowMs()), 2000);
 	return true;
 }
 

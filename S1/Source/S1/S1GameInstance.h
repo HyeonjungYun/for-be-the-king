@@ -60,6 +60,7 @@ public:
 	void HandleMove(const Protocol::S_MOVE& MovePkt);
 	void HandleCc(const Protocol::S_CC& CcPkt);
 	void HandleCcState(const Protocol::S_CC_STATE& StatePkt);
+	void HandleStatus(const Protocol::S_STATUS& StatusPkt);
 	void HandleDamage(const Protocol::S_DAMAGE& DamagePkt);
 	void HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt);
 	void HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt);

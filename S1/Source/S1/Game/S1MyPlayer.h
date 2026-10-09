@@ -388,6 +388,23 @@ protected:
 	float PendingDashSpeedCms = 0.f;
 
 	/**
+	 * Recast (kind recast — 피의 추적 · 올가미): after the first press lands, the same key within
+	 * skill_rules recast_window_ms fires the second part at the target the first press locked.
+	 * Mirrors Creature::recastSkillId server-side; the server re-checks everything (skill roster stage 1).
+	 */
+	bool bPendingRecast = false;
+	uint64 PendingRecastTargetId = 0;
+	int32 RecastSlot = 0;
+	float RecastUntil = 0.f;
+	uint64 RecastTargetId = 0;
+
+	/** Opens the recast window for the slot whose first press just landed. */
+	void OpenRecastWindow(int32 EquipSlotValue);
+
+	/** Second press inside the window: sends C_SKILL at the locked target and runs the recast dash toward it. */
+	void FireRecast();
+
+	/**
 	 * Predicted cooldown deadline per slot, in world seconds. Index is EquipSlot - 1.
 	 *
 	 * 🔴 A prediction, not authority. The server owns cooldowns and never sends them

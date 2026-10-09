@@ -94,6 +94,11 @@ struct FS1SkillDef
 	bool				bMoveIgnoresWalls = false;
 	FName				MoveKind;			// dash · leap · back · forward · blink
 
+	/** The recast's second-press dash (requires=recast). Zero when the second press does not move you (stage 1, 2026-10-10). */
+	float				RecastMoveDistCm = 0.f;
+	float				RecastMoveSpeedCms = 0.f;
+	FName				RecastMoveKind;
+
 	bool				bHasHardCc = false;	// For the detail pane — "this key stuns" is part of how a key is used
 
 	bool HasMovement() const { return MoveDistCm > 0.f && (MoveSpeedCms > 0.f || MoveKind == TEXT("blink")); }
@@ -115,11 +120,18 @@ public:
 	/** Parses the two CSV texts. Columns are found by header name. */
 	static bool Parse(const FString& SkillsCsv, const FString& EffectsCsv, FString& OutError);
 
+	/** skill_rules.csv — only the keys the client acts on (recast window). Unknown keys are ignored. */
+	static bool ParseRules(const FString& RulesCsv, FString& OutError);
+
 	/** Null when the id is unknown — treat that as "cannot aim, cannot fire". */
 	static const FS1SkillDef* Find(uint32 SkillId);
 
 	static int32 Num();
 
+	/** How long after a recast skill fires the same key fires its second part (skill_rules recast_window_ms). 0 until rules load. */
+	static uint32 RecastWindowMs();
+
 private:
 	static TMap<uint32, FS1SkillDef>& Defs();
+	static uint32& RecastWindow();
 };

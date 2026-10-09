@@ -350,6 +350,40 @@ void US1GameInstance::HandleCc(const Protocol::S_CC& CcPkt)
 
 	for (const Protocol::CcEventInfo& Info : CcPkt.expired())
 		ApplyTo(Info, false);
+
+	// Knockback / pull - the server moved its copy to the end point; every client (owner and observers) animates
+	// the same path so nobody sees a teleport (skill roster stage 1, 2026-10-10)
+	for (const Protocol::KnockbackInfo& Info : CcPkt.knockbacks())
+	{
+		TWeakObjectPtr<AS1Player>* FindActor = Players.Find(Info.target_id());
+		if (FindActor == nullptr)
+			continue;
+
+		if (AS1Player* Player = FindActor->Get())
+			Player->ApplyKnockback(FVector(Info.dir_x(), Info.dir_y(), 0.f), Info.distance(), Info.speed());
+	}
+}
+
+void US1GameInstance::HandleStatus(const Protocol::S_STATUS& StatusPkt)
+{
+	if (Socket == nullptr || GameServerSession == nullptr)
+		return;
+
+	auto ApplyTo = [this](const Protocol::StatusInfo& Info, bool bApplied)
+		{
+			TWeakObjectPtr<AS1Player>* FindActor = Players.Find(Info.target_id());
+			if (FindActor == nullptr)
+				return;
+
+			if (AS1Player* Player = FindActor->Get())
+				Player->ApplyStatus(Info, bApplied);
+		};
+
+	for (const Protocol::StatusInfo& Info : StatusPkt.applied())
+		ApplyTo(Info, true);
+
+	for (const Protocol::StatusInfo& Info : StatusPkt.expired())
+		ApplyTo(Info, false);
 }
 
 void US1GameInstance::HandleCcState(const Protocol::S_CC_STATE& StatePkt)

@@ -39,6 +39,17 @@ struct FDamagePopup
 	bool bActive = false;
 };
 
+/** One status line on a character (S_STATUS): a dot with its stacks, a buff with its magnitude, or a mark. Plain struct — not reflected. */
+struct FS1StatusEntry
+{
+	Protocol::StatusKind Kind = Protocol::STATUS_NONE;
+	FString Param;
+	uint64 InstigatorId = 0;
+	uint32 Stacks = 0;
+	float Magnitude = 0.f;
+	float Until = 0.f;
+};
+
 UCLASS()
 class S1_API AS1Player : public ACharacter
 {
@@ -148,6 +159,29 @@ public:
 	bool IsDashing() const { return DashRemainingCm > 0.f; }
 
 	/**
+	 * A server-driven push — knockback, pull, the lethal-save leap (S_CC.knockbacks, skill roster stage 1).
+	 *
+	 * 🔴 The server already moved its copy to the end point and ignores our C_MOVE while the knockback CC runs;
+	 * this animates the same path locally so the two meet at the same spot. Remote proxies run it too, which is
+	 * what keeps a 300 cm push from reading as a teleport when the next S_MOVE arrives 33 ms later.
+	 */
+	void ApplyKnockback(const FVector& Direction, float DistCm, float SpeedCms);
+
+	/**
+	 * S_STATUS — a damage-over-time, buff or mark on this character. Display only: the server owns every number
+	 * and ticks every effect; the client just shows what it was told (skill roster stage 1, 2026-10-10).
+	 */
+	void ApplyStatus(const Protocol::StatusInfo& Info, bool bApplied);
+	void ClearStatuses();
+
+	/** Sum of active move_speed buffs — goes into MaxWalkSpeed the same way the server adds it to its ceiling. */
+	float GetMoveSpeedBuff() const { return MoveSpeedBuff; }
+
+	/** Blind (soft CC) — the view shrink itself is stage 4; the deadline is kept now so the debug readout shows it. */
+	bool IsBlinded() const;
+	float GetBlindViewScale() const { return BlindViewScale; }
+
+	/**
 	 * A server-confirmed hit. The client never computes HP or decides whether a hit landed
 	 * (Rule 10) — it only displays what arrived.
 	 *
@@ -225,6 +259,16 @@ protected:
 
 	/** [0, soft_cc_slow_cap]. 0 means unslowed. */
 	float ActiveSlow = 0.f;
+
+	float BlindUntil = 0.f;
+	float BlindViewScale = 1.f;
+
+	/** Status readout lines. Keyed by kind + param + instigator — a refresh overwrites, a stack change updates. */
+	TArray<FS1StatusEntry> Statuses;
+	float MoveSpeedBuff = 0.f;
+
+	/** TEMP — ASCII text above the health bar (the debug font has no Hangul). Replaced by the HUD later. */
+	void DrawStatusDebug();
 
 	/** Base walk speed captured at construction so slow is applied against a fixed value. */
 	float BaseWalkSpeed = 340.f;

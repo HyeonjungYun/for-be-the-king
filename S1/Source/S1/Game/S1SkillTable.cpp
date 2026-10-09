@@ -107,13 +107,26 @@ TMap<uint32, FS1SkillDef>& FS1SkillTable::Defs()
 	return Table;
 }
 
+uint32& FS1SkillTable::RecastWindow()
+{
+	static uint32 WindowMs = 0;
+	return WindowMs;
+}
+
+uint32 FS1SkillTable::RecastWindowMs()
+{
+	return RecastWindow();
+}
+
 bool FS1SkillTable::LoadFromDirectory(const FString& Directory, FString& OutError)
 {
 	FString SkillsCsv;
 	FString EffectsCsv;
+	FString RulesCsv;
 
 	const FString SkillsPath = FPaths::Combine(Directory, TEXT("skills.csv"));
 	const FString EffectsPath = FPaths::Combine(Directory, TEXT("skill_effects.csv"));
+	const FString RulesPath = FPaths::Combine(Directory, TEXT("skill_rules.csv"));
 
 	if (FFileHelper::LoadFileToString(SkillsCsv, *SkillsPath) == false)
 	{
@@ -125,8 +138,49 @@ bool FS1SkillTable::LoadFromDirectory(const FString& Directory, FString& OutErro
 		OutError = FString::Printf(TEXT("cannot read %s"), *EffectsPath);
 		return false;
 	}
+	if (FFileHelper::LoadFileToString(RulesCsv, *RulesPath) == false)
+	{
+		OutError = FString::Printf(TEXT("cannot read %s"), *RulesPath);
+		return false;
+	}
 
-	return Parse(SkillsCsv, EffectsCsv, OutError);
+	return Parse(SkillsCsv, EffectsCsv, OutError) && ParseRules(RulesCsv, OutError);
+}
+
+bool FS1SkillTable::ParseRules(const FString& RulesCsv, FString& OutError)
+{
+	const FCsv Csv = ReadCsv(RulesCsv);
+	const int32 ColKey = Csv.Column(TEXT("key"));
+	const int32 ColValue = Csv.Column(TEXT("value"));
+
+	if (ColKey == INDEX_NONE || ColValue == INDEX_NONE)
+	{
+		OutError = TEXT("skill_rules.csv: header needs key,value");
+		return false;
+	}
+
+	int32 WindowMs = -1;
+	for (int32 r = 0; r < Csv.Rows.Num(); r++)
+	{
+		const TArray<FString>& Cells = Csv.Rows[r];
+		if (Cells.Num() < 2 || Cells[ColKey] != TEXT("recast_window_ms"))
+			continue;
+
+		if (FDefaultValueHelper::ParseInt(Cells[ColValue], WindowMs) == false || WindowMs < 0)
+		{
+			OutError = FString::Printf(TEXT("skill_rules.csv line %d: recast_window_ms is not a number >= 0"), Csv.LineNumbers[r]);
+			return false;
+		}
+	}
+
+	if (WindowMs < 0)
+	{
+		OutError = TEXT("skill_rules.csv: missing recast_window_ms");
+		return false;
+	}
+
+	RecastWindow() = static_cast<uint32>(WindowMs);
+	return true;
 }
 
 bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, FString& OutError)
@@ -284,6 +338,18 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 				}
 				Def->bMoveIgnoresWalls = (Walls != 0);
 				Def->MoveKind = FName(*Cells[ColParam]);
+			}
+
+			// The recast's second press - the client runs that dash too, toward the target the first press locked
+			if (Effect == TEXT("move") && Cells[ColWho] == TEXT("self") && Cells[ColRequires] == TEXT("recast") && Def->RecastMoveDistCm <= 0.f)
+			{
+				if (FDefaultValueHelper::ParseFloat(Cells[ColDist], Def->RecastMoveDistCm) == false
+					|| FDefaultValueHelper::ParseFloat(Cells[ColSpeed], Def->RecastMoveSpeedCms) == false)
+				{
+					OutError = FString::Printf(TEXT("skill_effects.csv line %d: recast move dist_cm / speed_cms are not numbers"), Line);
+					return false;
+				}
+				Def->RecastMoveKind = FName(*Cells[ColParam]);
 			}
 		}
 	}

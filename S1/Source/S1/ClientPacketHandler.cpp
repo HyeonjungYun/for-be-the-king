@@ -162,6 +162,15 @@ bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 	return true;
 }
 
+bool Handle_S_STATUS(PacketSessionRef& session, Protocol::S_STATUS& pkt)
+{
+	// 지속 피해 · 버프 · 표식 (skill roster stage 1, 2026-10-10 에이전트) - 표시만, 수치는 서버
+	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
+		GameInstance->HandleStatus(pkt);
+
+	return true;
+}
+
 bool Handle_S_CC(PacketSessionRef& session, Protocol::S_CC& pkt)
 {
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))

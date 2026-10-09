@@ -245,6 +245,10 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		if (PendingDashDistCm > 0.f)
 			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms);
 
+		// A recast's first press landed - the window for the second press starts now
+		if (bPendingRecast)
+			OpenRecastWindow(CastingSlot);
+
 		CastingSlot = 0;
 		LocalCastEndsAt = 0.f;
 		LocalCastCooldownMs = 0;
@@ -460,14 +464,26 @@ void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
 	if (Slot == nullptr)
 		return;
 
+	const FS1SkillDef* Def = FS1SkillTable::Find(Slot->skill_id());
+	if (Def == nullptr)
+		return;
+
+	// A passive holds the key and does nothing when pressed (user decision 2026-10-10). Its effect fires on a
+	// basic-attack hit or a lethal blow, server-side; the server also refuses the packet
+	if (Def->Kind == ES1SkillKind::Passive)
+		return;
+
+	// Second press of a recast inside its window - fires through the cooldown, at the locked target
+	if (RecastSlot == EquipSlotValue && GetWorld() != nullptr && GetWorld()->GetTimeSeconds() < RecastUntil)
+	{
+		FireRecast();
+		return;
+	}
+
 	// A skill on cooldown does not even open aiming. Letting the range circle appear and
 	// then swallowing the click would look identical to a broken skill — which is exactly
 	// the confusion this whole session ran into.
 	if (GetSlotCooldownRemaining(EquipSlotValue) > 0.f)
-		return;
-
-	const FS1SkillDef* Def = FS1SkillTable::Find(Slot->skill_id());
-	if (Def == nullptr)
 		return;
 
 	// Nothing to point at — the key fires it outright. This is what keeps instant skills
@@ -495,6 +511,73 @@ void AS1MyPlayer::AbortCast()
 	LocalCastEndsAt = 0.f;
 	LocalCastCooldownMs = 0;
 	PendingDashDistCm = 0.f;
+	bPendingRecast = false;
+	PendingRecastTargetId = 0;
+}
+
+void AS1MyPlayer::OpenRecastWindow(int32 EquipSlotValue)
+{
+	const UWorld* World = GetWorld();
+	if (World == nullptr)
+		return;
+
+	RecastSlot = EquipSlotValue;
+	RecastUntil = World->GetTimeSeconds() + FS1SkillTable::RecastWindowMs() / 1000.f;
+	RecastTargetId = PendingRecastTargetId;
+
+	bPendingRecast = false;
+	PendingRecastTargetId = 0;
+
+	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] recast window open slot=%d target=%llu for %ums"), RecastSlot, RecastTargetId, FS1SkillTable::RecastWindowMs());
+}
+
+void AS1MyPlayer::FireRecast()
+{
+	const int32 SlotValue = RecastSlot;
+	const uint64 TargetId = RecastTargetId;
+
+	// One second press per window, whatever the server makes of it
+	RecastSlot = 0;
+	RecastUntil = 0.f;
+	RecastTargetId = 0;
+
+	const Protocol::SkillInfo* Slot = FindUsableSlot(SlotValue);
+	if (Slot == nullptr)
+		return;
+
+	const FS1SkillDef* Def = FS1SkillTable::Find(Slot->skill_id());
+
+	// Aim at the locked target's current position - the server does the same (Room::FireSkill recast)
+	FVector Aim = GetActorLocation() + GetActorForwardVector() * 100.f;
+	if (const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+	{
+		if (const TWeakObjectPtr<AS1Player>* Found = GameInstance->Players.Find(TargetId))
+		{
+			if (const AS1Player* Target = Found->Get())
+				Aim = Target->GetActorLocation();
+		}
+	}
+
+	Protocol::C_SKILL SkillPkt;
+	SkillPkt.set_slot(static_cast<Protocol::EquipSlot>(SlotValue));
+	SkillPkt.set_target_id(TargetId);
+	SkillPkt.set_aim_x(static_cast<float>(Aim.X));
+	SkillPkt.set_aim_y(static_cast<float>(Aim.Y));
+	SEND_PACKET(SkillPkt);
+
+	// The second press's dash runs here, toward the target, inside the speed window the server opens for it
+	if (Def != nullptr && Def->RecastMoveDistCm > 0.f && Def->RecastMoveSpeedCms > 0.f)
+	{
+		FVector Dir = Aim - GetActorLocation();
+		Dir.Z = 0.0;
+		if (Def->RecastMoveKind == TEXT("back"))
+			Dir = -Dir;
+
+		if (Dir.Normalize())
+			RequestDash(Dir, Def->RecastMoveDistCm, Def->RecastMoveSpeedCms);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] recast fired slot=%d target=%llu"), SlotValue, TargetId);
 }
 
 void AS1MyPlayer::OnConfirmPressed()
@@ -594,10 +677,14 @@ void AS1MyPlayer::FireAimedSkill()
 
 	// Freeze the dash direction now. The server stored the same aim when this packet
 	// arrived, so re-reading the cursor on completion would send the two apart.
-	if (Def != nullptr && Def->HasMovement())
+	// 🔴 blink is the one movement the server performs itself (through walls, landing corrected) - it arrives
+	//    as an S_MOVE correction, so nothing is queued here. back = away from the aim; dash / leap / forward = toward it
+	if (Def != nullptr && Def->HasMovement() && Def->MoveKind != TEXT("blink"))
 	{
 		FVector DashDir = FVector(SkillPkt.aim_x(), SkillPkt.aim_y(), 0.f) - GetActorLocation();
 		DashDir.Z = 0.0;
+		if (Def->MoveKind == TEXT("back"))
+			DashDir = -DashDir;
 
 		if (DashDir.Normalize())
 		{
@@ -605,6 +692,13 @@ void AS1MyPlayer::FireAimedSkill()
 			PendingDashDistCm = Def->MoveDistCm;
 			PendingDashSpeedCms = Def->MoveSpeedCms;
 		}
+	}
+
+	// A recast remembers who the first press locked - the second press goes after them
+	if (Def != nullptr && Def->Kind == ES1SkillKind::Recast)
+	{
+		bPendingRecast = true;
+		PendingRecastTargetId = SkillPkt.target_id();
 	}
 
 	// A cast lives as long as the button is held, so remember which slot is in flight.
@@ -636,6 +730,9 @@ void AS1MyPlayer::FireAimedSkill()
 			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms);
 			PendingDashDistCm = 0.f;
 		}
+
+		if (bPendingRecast)
+			OpenRecastWindow(AimingSlot);
 	}
 
 	AimingSlot = 0;
