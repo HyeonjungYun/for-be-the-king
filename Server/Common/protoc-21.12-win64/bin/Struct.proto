@@ -144,6 +144,19 @@ message ProjectileEndInfo
 	uint64 target_id = 5;		// HIT 일 때 맞은 대상
 }
 
+// 장판 (skill-roster 3 단계, 2026-10-10) - 바닥 원. 클라는 지속 시간 동안 그린다, 틱 피해 · 감속은 서버가 S_DAMAGE · S_CC 로
+message ZoneInfo
+{
+	uint64 zone_id = 1;
+	uint64 caster_id = 2;
+	uint32 effect_id = 3;
+	float x = 4;
+	float y = 5;
+	float radius_cm = 6;
+	uint32 duration_ms = 7;
+	string param = 8;			// poison · fire_path · element_path · mist · arrows (색)
+}
+
 message CharacterInfo
 {
 	ObjectInfo object_info = 1;

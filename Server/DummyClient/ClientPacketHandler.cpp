@@ -429,6 +429,20 @@ bool Handle_S_SKILL_HIT(PacketSessionRef& session, Protocol::S_SKILL_HIT& pkt)
 	return true;
 }
 
+bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt)
+{
+	// 장판 (3 단계) - 봇은 그리지 않는다. 처음 20건만 찍는다
+	static atomic<int32> logged = 0;
+	for (const Protocol::ZoneInfo& info : pkt.spawned())
+	{
+		if (logged.fetch_add(1) >= 20)
+			break;
+		LOG_LINE << "[BOT ZONE] id=" << info.zone_id() << " caster=" << info.caster_id() << " effect=" << info.effect_id()
+			<< " r=" << info.radius_cm() << " " << info.param() << " for=" << info.duration_ms() << "ms" << '\n';
+	}
+	return true;
+}
+
 bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt)
 {
 	// 투사체 (2 단계) - 봇은 그리지 않는다. 내 것의 끝만 처음 30건 찍는다 (HIT / WALL / EXPIRED 비율을 본다)

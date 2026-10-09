@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "JobQueue.h"
 #include "SkillTable.h"
+#include "StatusEffects.h"
 #include "WallMap.h"
 #include "MonsterBrain.h"
 #include "EscapeLogic.h"
@@ -67,6 +68,42 @@ struct SkillContext
 	uint32 itemLevel = 0;		// 버프 크기 - 시전 슬롯 아이템의 강화 레벨
 	bool recast = false;		// 재입력의 두 번째 입력 - requires=recast 효과만 나간다
 	bool targetsOnly = false;	// 투사체 적중 - 자기 효과는 발사 때 이미 나갔다, 대상 효과만
+	Protocol::EquipSlot slot = Protocol::SLOT_NONE;		// 시전 슬롯 - 유지형이 끝날 때 쿨다운을 건다
+};
+
+// 장판 (3 단계) - 바닥 원. 틱마다 안에 있는 적에게 틱 피해 · 소프트 CC · (스킬의) 지속 피해 갱신. 겹치면 각각 틱 = 피해 중첩 (사용자 결정)
+struct Zone
+{
+	uint64				id = 0;
+	uint64				casterId = 0;
+	uint32				skillId = 0;
+	uint32				effectIndex = 0;
+	float				x = 0.f;
+	float				y = 0.f;
+	float				radiusCm = 0.f;
+	uint64				endUs = 0;
+	uint64				nextTickUs = 0;
+	uint32				intervalMs = 0;
+	float				tickBaseDamage = 0.f;		// 놓을 때 시전자 힘으로 고정 - 시전자가 떠나도 틱은 계속
+	Protocol::DamageType tickType = Protocol::DAMAGE_TYPE_MAGIC;
+	Protocol::CcType	ccType = Protocol::CC_TYPE_NONE;
+	float				ccMagnitude = 0.f;
+	vector<DotInstance>	dotTemplates;				// 스킬의 dot 효과 - 안에 있는 동안 틱마다 갱신 (중첩 아님)
+	uint32				dotDurationMs = 0;
+	string				param;
+};
+
+// 지연 폭발 (전염) - duration 뒤 대상에게 피해 + radius 안으로 스킬의 지속 피해
+struct PendingBurst
+{
+	uint64				casterId = 0;
+	uint64				targetId = 0;
+	uint32				skillId = 0;
+	uint32				effectIndex = 0;
+	uint64				atUs = 0;
+	float				baseDamage = 0.f;
+	Protocol::DamageType type = Protocol::DAMAGE_TYPE_MAGIC;
+	SkillContext		ctx;
 };
 
 // 날아가는 투사체 (skill-roster 2 단계). 스킬 투사체는 직선 · 피할 수 있다 · 벽에 막힌다 · 관통이면 지나간 적을 다 맞힌다.
@@ -204,6 +241,22 @@ private:
 	void	UpdateStatuses(uint64 nowUs);		// 지속 피해 틱 · 상태 만료 (FlushCombat)
 	void	ResolvePendingHits(uint64 nowUs);	// 다단 히트의 남은 타
 
+	// ── 3 단계 - 장판 · 유지 · 반격 · 받아넘기기 · 연쇄 · 지연 폭발 · 속성 · 던지기 · 경독 ──
+	void	PlaceZone(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, float x, float y, const SkillContext& ctx, uint64 nowUs);
+	void	PlaceZonesFor(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const SkillContext& ctx, uint64 nowUs);	// 모양에 따라 지점 하나 · 경로 여러 개
+	void	UpdateZones(uint64 nowUs);
+	void	StartHold(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, Protocol::EquipSlot slot, const SkillContext& ctx, uint64 nowUs);
+	void	StopHold(const CreatureRef& caster, uint64 nowUs, const char* why);
+	void	UpdateHolds(uint64 nowUs);
+	void	HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillEffect& hold, uint64 nowUs);
+	bool	TryCounter(const CreatureRef& target, const CreatureRef& attacker, uint64 attackerId, uint64 nowUs);	// true = 막고 반격했다
+	bool	TryParry(const CreatureRef& target, float fromX, float fromY, uint64 nowUs);							// true = 받아넘겼다
+	void	ApplyChain(const CreatureRef& caster, const CreatureRef& first, const SkillEffect& e, uint32 effectId, uint64 nowUs);
+	void	ResolveBursts(uint64 nowUs);
+	void	UpdateWindows(uint64 nowUs);		// 경독 창 닫힘 · 반격 끝
+	void	SetStance(const CreatureRef& caster, const string& element, float ratio, uint64 nowUs);
+	void	ApplyThrow(const CreatureRef& caster, const CreatureRef& target, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
+
 	// ── 투사체 (2 단계) ──
 	void	LaunchProjectile(Projectile p);
 	void	LaunchSkillProjectile(const CreatureRef& caster, const SkillDef& def, const SkillContext& ctx, uint64 nowUs);
@@ -312,6 +365,15 @@ private:
 	vector<Projectile>					_projectiles;
 	vector<Protocol::ProjectileInfo>	_pendingProjectileSpawns;
 	vector<Protocol::ProjectileEndInfo>	_pendingProjectileEnds;
+
+	// 3 단계 - 장판 · 유지 중인 시전자 · 지연 폭발 · 창(경독 · 반격) · S_ZONE
+	vector<Zone>						_zones;
+	uint64								_nextZoneId = 1;
+	unordered_set<uint64>				_holders;
+	vector<PendingBurst>				_pendingBursts;
+	unordered_set<uint64>				_windowOwners;
+	vector<Protocol::ZoneInfo>			_pendingZoneSpawns;
+	vector<uint64>						_pendingZoneEnds;
 };
 
 constexpr int32 FLOOR_COUNT = 4;

@@ -50,6 +50,7 @@ enum : uint16
 	PKT_S_CHEST_STATE = 1037,
 	PKT_S_STATUS = 1038,
 	PKT_S_PROJECTILE = 1039,
+	PKT_S_ZONE = 1040,
 };
 
 // Custom Handlers
@@ -124,6 +125,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_CHEST_STATE& pkt) { return MakeSendBuffer(pkt, PKT_S_CHEST_STATE); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_STATUS& pkt) { return MakeSendBuffer(pkt, PKT_S_STATUS); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_PROJECTILE& pkt) { return MakeSendBuffer(pkt, PKT_S_PROJECTILE); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_ZONE& pkt) { return MakeSendBuffer(pkt, PKT_S_ZONE); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

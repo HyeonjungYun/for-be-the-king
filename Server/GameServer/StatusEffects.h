@@ -43,6 +43,10 @@ class StatusSet
 public:
 	// 같은 종류가 maxStacks 개면 가장 먼저 끝나는 것을 새 것으로 바꾼다. 돌려주는 값 = 그 종류의 중첩 수
 	uint32	AddDot(const DotInstance& dot, uint32 maxStacks);
+
+	// 장판 틱 (3 단계) - 같은 스킬 · 같은 주인 · 같은 종류가 이미 있으면 그것을 갱신(끝 시각 · 피해), 없으면 AddDot.
+	// 장판 위에 서 있는 동안 틱마다 중첩이 쌓이지 않게 한다. 돌려주는 값 = 그 종류의 중첩 수
+	uint32	RefreshOrAddDot(const DotInstance& dot, uint32 maxStacks);
 	uint32	DotStacks(const string& kind) const;
 
 	// nowUs 에 틱이 돌아온 인스턴스마다 fn(const DotInstance&) 를 부른다. 한 호출에 인스턴스당 최대 한 틱 -

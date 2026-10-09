@@ -248,3 +248,10 @@ message S_PROJECTILE
 	repeated ProjectileInfo spawned = 1;
 	repeated ProjectileEndInfo ended = 2;
 }
+
+// Ground zones - placed and ended this flush (skill roster stage 3, 2026-10-10). Display only; ticks arrive as S_DAMAGE / S_CC
+message S_ZONE
+{
+	repeated ZoneInfo spawned = 1;
+	repeated uint64 ended = 2;
+}

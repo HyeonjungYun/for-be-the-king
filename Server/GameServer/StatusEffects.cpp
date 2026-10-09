@@ -30,6 +30,21 @@ uint32 StatusSet::AddDot(const DotInstance& dot, uint32 maxStacks)
 	return static_cast<uint32>(count + 1);
 }
 
+uint32 StatusSet::RefreshOrAddDot(const DotInstance& dot, uint32 maxStacks)
+{
+	for (DotInstance& d : _dots)
+	{
+		if (d.skillId == dot.skillId && d.instigatorId == dot.instigatorId && d.kind == dot.kind)
+		{
+			d.endUs = max(d.endUs, dot.endUs);
+			d.baseDamage = dot.baseDamage;
+			d.type = dot.type;
+			return DotStacks(dot.kind);
+		}
+	}
+	return AddDot(dot, maxStacks);
+}
+
 uint32 StatusSet::DotStacks(const string& kind) const
 {
 	uint32 count = 0;

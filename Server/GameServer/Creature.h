@@ -140,6 +140,38 @@ public:
 	float				recastAimX = 0.f;
 	float				recastAimY = 0.f;
 
+	// ── 3 단계 ──
+	// 유지형 (kind hold) - 같은 키를 다시 누르면 끝. holdEndUs 0 = 상한 없음 (빈쿨룸). 틱마다 UpdateHolds
+	uint32				holdSkillId = 0;
+	Protocol::EquipSlot	holdSlot = Protocol::SLOT_NONE;
+	uint32				holdEffectIndex = 0;
+	uint64				holdStartUs = 0;
+	uint64				holdEndUs = 0;
+	uint64				holdNextTickUs = 0;
+	float				holdOriginX = 0.f;		// 회오리 - 시작 자리 (can_move 0 이라 그 자리)
+	float				holdOriginY = 0.f;
+
+	// 반격 (정좌) - 평타 · 대상 지정 · 직선 스킬을 받으면 무효 + 반격 피해, 한 번 받으면 끝
+	uint64				counterUntilUs = 0;
+	float				counterRatio = 0.f;
+	uint32				counterSkillId = 0;
+
+	// 받아넘기기 (유수) - 전방에서 오는 평타 · 투사체 무효
+	uint64				parryUntilUs = 0;
+
+	// 경독 - 창이 열린 동안 내 단검 평타에 맞은 적을 모았다가 창이 닫힐 때 기절
+	uint64				petrifyEndUs = 0;
+	uint32				petrifyStunMs = 0;
+	vector<uint64>		petrifyTargets;
+
+	// 스태프 속성 - 지속 없음 · 교체 · clear 로 지움. stanceRatio = 속성이 깃든 동안 평타 추가 피해 계수(AP)
+	string				stance;
+	float				stanceRatio = 0.f;
+
+	bool IsCountering(uint64 nowUs) const { return nowUs < counterUntilUs; }
+	bool IsParrying(uint64 nowUs) const { return nowUs < parryUntilUs; }
+	bool IsHolding() const { return holdSkillId != 0; }
+
 	vector<SlowSource>	slowSources;
 
 	float				activeSlow = 0.f;

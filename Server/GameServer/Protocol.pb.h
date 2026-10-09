@@ -168,6 +168,9 @@ extern S_SPAWNDefaultTypeInternal _S_SPAWN_default_instance_;
 class S_STATUS;
 struct S_STATUSDefaultTypeInternal;
 extern S_STATUSDefaultTypeInternal _S_STATUS_default_instance_;
+class S_ZONE;
+struct S_ZONEDefaultTypeInternal;
+extern S_ZONEDefaultTypeInternal _S_ZONE_default_instance_;
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
 template<> ::Protocol::C_ATTACK* Arena::CreateMaybeMessage<::Protocol::C_ATTACK>(Arena*);
@@ -210,6 +213,7 @@ template<> ::Protocol::S_SKILL_CAST* Arena::CreateMaybeMessage<::Protocol::S_SKI
 template<> ::Protocol::S_SKILL_HIT* Arena::CreateMaybeMessage<::Protocol::S_SKILL_HIT>(Arena*);
 template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(Arena*);
 template<> ::Protocol::S_STATUS* Arena::CreateMaybeMessage<::Protocol::S_STATUS>(Arena*);
+template<> ::Protocol::S_ZONE* Arena::CreateMaybeMessage<::Protocol::S_ZONE>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
 
@@ -6816,6 +6820,188 @@ class S_PROJECTILE final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_ZONE final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_ZONE) */ {
+ public:
+  inline S_ZONE() : S_ZONE(nullptr) {}
+  ~S_ZONE() override;
+  explicit PROTOBUF_CONSTEXPR S_ZONE(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_ZONE(const S_ZONE& from);
+  S_ZONE(S_ZONE&& from) noexcept
+    : S_ZONE() {
+    *this = ::std::move(from);
+  }
+
+  inline S_ZONE& operator=(const S_ZONE& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_ZONE& operator=(S_ZONE&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_ZONE& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_ZONE* internal_default_instance() {
+    return reinterpret_cast<const S_ZONE*>(
+               &_S_ZONE_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    40;
+
+  friend void swap(S_ZONE& a, S_ZONE& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_ZONE* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_ZONE* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_ZONE* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_ZONE>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_ZONE& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_ZONE& from) {
+    S_ZONE::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_ZONE* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_ZONE";
+  }
+  protected:
+  explicit S_ZONE(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSpawnedFieldNumber = 1,
+    kEndedFieldNumber = 2,
+  };
+  // repeated .Protocol.ZoneInfo spawned = 1;
+  int spawned_size() const;
+  private:
+  int _internal_spawned_size() const;
+  public:
+  void clear_spawned();
+  ::Protocol::ZoneInfo* mutable_spawned(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ZoneInfo >*
+      mutable_spawned();
+  private:
+  const ::Protocol::ZoneInfo& _internal_spawned(int index) const;
+  ::Protocol::ZoneInfo* _internal_add_spawned();
+  public:
+  const ::Protocol::ZoneInfo& spawned(int index) const;
+  ::Protocol::ZoneInfo* add_spawned();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ZoneInfo >&
+      spawned() const;
+
+  // repeated uint64 ended = 2;
+  int ended_size() const;
+  private:
+  int _internal_ended_size() const;
+  public:
+  void clear_ended();
+  private:
+  uint64_t _internal_ended(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >&
+      _internal_ended() const;
+  void _internal_add_ended(uint64_t value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >*
+      _internal_mutable_ended();
+  public:
+  uint64_t ended(int index) const;
+  void set_ended(int index, uint64_t value);
+  void add_ended(uint64_t value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >&
+      ended() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >*
+      mutable_ended();
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_ZONE)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ZoneInfo > spawned_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t > ended_;
+    mutable std::atomic<int> _ended_cached_byte_size_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -9461,9 +9647,99 @@ S_PROJECTILE::ended() const {
   return _impl_.ended_;
 }
 
+// -------------------------------------------------------------------
+
+// S_ZONE
+
+// repeated .Protocol.ZoneInfo spawned = 1;
+inline int S_ZONE::_internal_spawned_size() const {
+  return _impl_.spawned_.size();
+}
+inline int S_ZONE::spawned_size() const {
+  return _internal_spawned_size();
+}
+inline ::Protocol::ZoneInfo* S_ZONE::mutable_spawned(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_ZONE.spawned)
+  return _impl_.spawned_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ZoneInfo >*
+S_ZONE::mutable_spawned() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_ZONE.spawned)
+  return &_impl_.spawned_;
+}
+inline const ::Protocol::ZoneInfo& S_ZONE::_internal_spawned(int index) const {
+  return _impl_.spawned_.Get(index);
+}
+inline const ::Protocol::ZoneInfo& S_ZONE::spawned(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ZONE.spawned)
+  return _internal_spawned(index);
+}
+inline ::Protocol::ZoneInfo* S_ZONE::_internal_add_spawned() {
+  return _impl_.spawned_.Add();
+}
+inline ::Protocol::ZoneInfo* S_ZONE::add_spawned() {
+  ::Protocol::ZoneInfo* _add = _internal_add_spawned();
+  // @@protoc_insertion_point(field_add:Protocol.S_ZONE.spawned)
+  return _add;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ZoneInfo >&
+S_ZONE::spawned() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_ZONE.spawned)
+  return _impl_.spawned_;
+}
+
+// repeated uint64 ended = 2;
+inline int S_ZONE::_internal_ended_size() const {
+  return _impl_.ended_.size();
+}
+inline int S_ZONE::ended_size() const {
+  return _internal_ended_size();
+}
+inline void S_ZONE::clear_ended() {
+  _impl_.ended_.Clear();
+}
+inline uint64_t S_ZONE::_internal_ended(int index) const {
+  return _impl_.ended_.Get(index);
+}
+inline uint64_t S_ZONE::ended(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ZONE.ended)
+  return _internal_ended(index);
+}
+inline void S_ZONE::set_ended(int index, uint64_t value) {
+  _impl_.ended_.Set(index, value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ZONE.ended)
+}
+inline void S_ZONE::_internal_add_ended(uint64_t value) {
+  _impl_.ended_.Add(value);
+}
+inline void S_ZONE::add_ended(uint64_t value) {
+  _internal_add_ended(value);
+  // @@protoc_insertion_point(field_add:Protocol.S_ZONE.ended)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >&
+S_ZONE::_internal_ended() const {
+  return _impl_.ended_;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >&
+S_ZONE::ended() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_ZONE.ended)
+  return _internal_ended();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >*
+S_ZONE::_internal_mutable_ended() {
+  return &_impl_.ended_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< uint64_t >*
+S_ZONE::mutable_ended() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_ZONE.ended)
+  return _internal_mutable_ended();
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

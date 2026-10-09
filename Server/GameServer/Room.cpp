@@ -728,6 +728,14 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 
 	const uint64 nowUs = Utils::NowMicroseconds();
 
+	// 유지형 - 같은 키를 다시 누르면 끝 (사용자 결정). 유지 중엔 다른 스킬을 쓸 수 없다
+	if (caster->IsHolding())
+	{
+		if (caster->holdSkillId == def->skillId && caster->holdSlot == pkt.slot())
+			StopHold(caster, nowUs, "key");
+		return;
+	}
+
 	// 재입력 - 첫 발동 뒤 창(skill_rules recast_window_ms) 안의 같은 키. 쿨다운 · 캐스트 없이 바로, 첫 조준 대상을 그대로 쓴다
 	if (caster->recastSkillId == def->skillId && caster->recastSlot == pkt.slot() && nowUs < caster->recastUntilUs)
 	{
@@ -869,6 +877,13 @@ void Room::ApplyCcRaw(const CreatureRef& target, uint64 instigatorId, Protocol::
 
 	if (isHard || type == Protocol::CC_TYPE_SILENCE)
 		CancelCast(target);
+
+	// 행동 불능이면 유지형도 끊긴다 (속박은 아니다 - 빈쿨룸은 자기를 속박하면서 유지한다)
+	if (type == Protocol::CC_TYPE_STUN || type == Protocol::CC_TYPE_KNOCKBACK || type == Protocol::CC_TYPE_LAUNCH)
+	{
+		if (target->IsHolding())
+			StopHold(target, nowUs, "cc");
+	}
 }
 
 void Room::ResolveAttacks(uint64 nowUs)
@@ -954,6 +969,14 @@ void Room::ResolveAttacks(uint64 nowUs)
 			continue;
 		}
 
+		// 반격(정좌) · 받아넘기기(유수) - 평타가 무효. 후딜은 소모된다 (3 단계)
+		if (TryCounter(target, attacker, attackerId, nowUs) || TryParry(target, attacker->posInfo->x(), attacker->posInfo->y(), nowUs))
+		{
+			attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
+			_pendingAttackCancels.push_back(attackerId);
+			continue;
+		}
+
 		bool isCrit = false;
 		int32 damage = attacker->ComputeDamageTo(*target, attacker->autoAttackType, OUT isCrit);
 
@@ -970,6 +993,10 @@ void Room::ResolveAttacks(uint64 nowUs)
 		// 패시브 - 평타 적중마다 추가 피해 (뇌신 · 화신). 죽은 대상에겐 들어가지 않는다
 		if (remainingHp > 0 && attacker->IsPlayer())
 			ApplyOnHitPassives(attacker, target, nowUs);
+
+		// 경독 창 - 창이 닫힐 때 기절시킬 대상을 모은다
+		if (remainingHp > 0 && nowUs < attacker->petrifyEndUs && find(attacker->petrifyTargets.begin(), attacker->petrifyTargets.end(), targetId) == attacker->petrifyTargets.end())
+			attacker->petrifyTargets.push_back(targetId);
 	}
 
 	for (uint64 id : resolved)
@@ -1037,8 +1064,8 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 {
 	const uint64 casterId = caster->objectInfo->object_id();
 
-	// 쿨다운은 효과가 나가는 순간 (R3). 재입력의 두 번째 입력은 첫 발동의 쿨다운을 그대로 둔다
-	if (recast == false)
+	// 쿨다운은 효과가 나가는 순간 (R3). 재입력의 두 번째 입력은 첫 발동의 쿨다운을 그대로 둔다. 유지형은 끝날 때 (StopHold)
+	if (recast == false && def.kind != SkillKind::Hold)
 	{
 		if (SkillSlot* skillSlot = caster->GetSlot(slot))
 			skillSlot->cooldownEndUs = nowUs + static_cast<uint64>(def.cooldownMs) * 1000;
@@ -1079,6 +1106,7 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		ctx.aimY = aimY;
 		ctx.itemLevel = caster->castItemLevel;
 		ctx.recast = recast;
+		ctx.slot = slot;
 
 		vector<CreatureRef> targets;
 
@@ -1186,6 +1214,7 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		ctx.aimX = aimX;
 		ctx.aimY = aimY;
 		ctx.itemLevel = itemLevel;
+		ctx.slot = caster->castSlot;
 		ApplySkillEffects(caster, *def, targets, ctx, nowUs);
 
 		LOG_LINE << "[SKILL FIRE] caster=" << casterId
@@ -2058,11 +2087,15 @@ void Room::FlushCombat()
 
 	UpdateCc(nowUs);
 	UpdateStatuses(nowUs);
+	UpdateZones(nowUs);
+	UpdateHolds(nowUs);
+	UpdateWindows(nowUs);
 	ResolveAttacks(nowUs);
 	ResolveCasts(nowUs);
 	ResolveTelegraphs(nowUs);
 	StepProjectiles(nowUs);
 	ResolvePendingHits(nowUs);
+	ResolveBursts(nowUs);
 
 	for (const auto& kill : _kills.End())
 	{
@@ -2170,6 +2203,21 @@ void Room::FlushCombat()
 
 		_pendingProjectileSpawns.clear();
 		_pendingProjectileEnds.clear();
+
+		SEND_PACKET_BROADCAST(pkt);
+	}
+
+	if (_pendingZoneSpawns.empty() == false || _pendingZoneEnds.empty() == false)
+	{
+		Protocol::S_ZONE pkt;
+
+		for (const Protocol::ZoneInfo& info : _pendingZoneSpawns)
+			pkt.add_spawned()->CopyFrom(info);
+		for (uint64 id : _pendingZoneEnds)
+			pkt.add_ended(id);
+
+		_pendingZoneSpawns.clear();
+		_pendingZoneEnds.clear();
 
 		SEND_PACKET_BROADCAST(pkt);
 	}
@@ -2774,16 +2822,31 @@ void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, con
 		ApplySelfEffect(caster, def, e, ctx, nowUs);
 	}
 
+	// 1.5) 장판 - 대상이 아니라 자리에 놓인다. 한 발동에 한 번 (모양에 따라 지점 하나 · 경로 여러 개)
+	if (ctx.targetsOnly == false)
+	{
+		for (uint32 i = 0; i < def.effects.size(); i++)
+		{
+			const SkillEffect& e = def.effects[i];
+			if (e.type == SkillEffectType::Zone && MeetsCondition(e, ctx, nullptr, anyHit, anyKill, nowUs))
+				PlaceZonesFor(caster, def, i, ctx, nowUs);
+		}
+	}
+
 	// 2) 대상 효과 - seq 순서대로. 표식 조건은 그 대상의 효과를 전부 본 뒤 한 번만 지운다 (피해 + 처형이 같은 표식을 본다)
 	for (size_t ti = 0; ti < targets.size(); ti++)
 	{
 		const CreatureRef& target = targets[ti];
 		vector<string> consumedMarks;
 
+		// 반격(정좌) - 대상 지정 · 직선 스킬은 그 대상에게 아무것도 못 하고 반격을 받는다 (3 단계)
+		if ((def.shape == SkillShape::Single || def.shape == SkillShape::Line) && TryCounter(target, caster, casterId, nowUs))
+			continue;
+
 		for (uint32 i = 0; i < def.effects.size(); i++)
 		{
 			const SkillEffect& e = def.effects[i];
-			if (e.self)
+			if (e.self || e.type == SkillEffectType::Zone)
 				continue;
 
 			// param first - 처음 맞은 하나에게만 (방패 돌진의 피해 · 기절)
@@ -2855,8 +2918,16 @@ bool Room::MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const C
 
 	case SkillRequire::Element:
 	case SkillRequire::NoElement:
+	{
+		// 스태프 속성 - 시전자에게 깃든 것이 있는가
+		auto casterIt = _objects.find(ctx.casterId);
+		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		const bool hasElement = (caster != nullptr && caster->stance.empty() == false);
+		return (e.condition == SkillRequire::Element) ? hasElement : hasElement == false;
+	}
+
 	case SkillRequire::Wall:
-		return false;		// 3 단계 - 스태프 속성 · 유지형 벽 충돌
+		return false;		// 4 단계 - 회오리 벽 충돌
 	}
 
 	return false;
@@ -2901,8 +2972,55 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 		break;
 	}
 
+	case SkillEffectType::Hold:
+	case SkillEffectType::Counter:
+	{
+		// 유지형(회오리 · 빈쿨룸 · 정좌) - 다시 누를 때까지 (상한은 duration, 0 = 없음). 정좌는 유지 동안 반격 창
+		uint32 index = 0;
+		for (; index < def.effects.size(); index++)
+			if (&def.effects[index] == &e)
+				break;
+
+		if (e.type == SkillEffectType::Counter)
+		{
+			caster->counterUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+			caster->counterRatio = e.adRatio;
+			caster->counterSkillId = def.skillId;
+			PushStatus(true, ctx.casterId, Protocol::STATUS_COUNTER, "counter", 1, e.durationMs, e.adRatio, ctx.casterId);
+		}
+
+		if (def.kind == SkillKind::Hold)
+			StartHold(caster, def, index, ctx.slot, ctx, nowUs);
+		break;
+	}
+
+	case SkillEffectType::Parry:
+		caster->parryUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+		PushStatus(true, ctx.casterId, Protocol::STATUS_PARRY, "parry", 1, e.durationMs, 0.f, ctx.casterId);
+		LOG_LINE << "[PARRY] start char=" << ctx.casterId << " for=" << e.durationMs << "ms" << '\n';
+		break;
+
+	case SkillEffectType::Stance:
+		SetStance(caster, e.param, e.apRatio, nowUs);
+		break;
+
+	case SkillEffectType::SelfCc:
+		// 속성 없이 끝났다(no_element) 등 - 자기에게 CC. at_end 는 캐스트가 0 이라 지금
+		if (e.durationMs > 0)
+			ApplyCc(ctx.casterId, ctx.casterId, e.ccType, e.durationMs, e.magnitude);
+		break;
+
+	case SkillEffectType::PetrifyWindow:
+		caster->petrifyEndUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+		caster->petrifyStunMs = static_cast<uint32>(e.magnitude);
+		caster->petrifyTargets.clear();
+		_windowOwners.insert(ctx.casterId);
+		PushStatus(true, ctx.casterId, Protocol::STATUS_STANCE, "petrify", 1, e.durationMs, e.magnitude, ctx.casterId);
+		LOG_LINE << "[PETRIFY] window char=" << ctx.casterId << " for=" << e.durationMs << "ms stun=" << e.magnitude << '\n';
+		break;
+
 	default:
-		// OnHit · LethalSave 는 패시브 - 평타 · 피해 경로에서 발동한다. 나머지 자기 효과는 3 ~ 4 단계
+		// OnHit · LethalSave 는 패시브 - 평타 · 피해 경로에서 발동한다. Invuln · Decoy · Trail · FallOnHit 는 4 단계
 		break;
 	}
 }
@@ -3043,8 +3161,33 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 		break;
 	}
 
+	case SkillEffectType::Chain:
+		ApplyChain(caster, target, e, def.effectId, nowUs);
+		break;
+
+	case SkillEffectType::Delayed:
+	{
+		// 잠복 - duration 뒤 터진다 (ResolveBursts). 피해는 지금 시전자 힘으로 고정
+		PendingBurst& burst = _pendingBursts.emplace_back();
+		burst.casterId = casterId;
+		burst.targetId = targetId;
+		burst.skillId = def.skillId;
+		burst.effectIndex = effectIndex;
+		burst.atUs = nowUs + static_cast<uint64>(e.durationMs > 0 ? e.durationMs : rules.delayedBurstMs) * 1000;
+		burst.baseDamage = static_cast<float>(caster->SkillPower()) * (max(e.adRatio, 0.f) + max(e.apRatio, 0.f)) * (1.f + caster->outgoingDamagePct);
+		burst.type = e.DamageType();
+		burst.ctx = ctx;
+		PushStatus(true, targetId, Protocol::STATUS_DOT, "incubating", 1, e.durationMs, burst.baseDamage, casterId);
+		LOG_LINE << "[BURST] planted target=" << targetId << " by=" << casterId << " in=" << e.durationMs << "ms" << '\n';
+		break;
+	}
+
+	case SkillEffectType::Throw:
+		ApplyThrow(caster, target, e, ctx, nowUs);
+		break;
+
 	default:
-		// Zone · Chain · Delayed · Throw · Reveal · Trail · FallOnHit … - 2 ~ 4 단계
+		// Reveal(FoW 없음) · Trail · FallOnHit - 4 단계 / 제외
 		break;
 	}
 }
@@ -3333,14 +3476,29 @@ void Room::ApplyOnHitPassives(const CreatureRef& attacker, const CreatureRef& ta
 
 		for (const SkillEffect& e : def->effects)
 		{
-			if (e.type != SkillEffectType::OnHit || target->IsAlive() == false)
-				continue;
+			if (target->IsAlive() == false)
+				break;
 
-			// 연쇄(chain)는 3 단계 - 지금은 적중한 대상에게 추가 피해만
-			bool isCrit = false;
-			const int32 extra = attacker->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
-			DealDamage(attacker, attackerId, target, extra, e.DamageType(), isCrit, nowUs);
+			if (e.type == SkillEffectType::OnHit)
+			{
+				bool isCrit = false;
+				const int32 extra = attacker->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
+				DealDamage(attacker, attackerId, target, extra, e.DamageType(), isCrit, nowUs);
+			}
+			else if (e.type == SkillEffectType::Chain)
+			{
+				// 뇌신 - 적중한 대상에서 번개가 옮겨 간다 (3 단계)
+				ApplyChain(attacker, target, e, def->effectId, nowUs);
+			}
 		}
+	}
+
+	// 스태프 속성 - 속성이 깃든 동안 평타에 그 속성 추가 피해 (AP)
+	if (attacker->stanceRatio > 0.f && target->IsAlive())
+	{
+		bool isCrit = false;
+		const int32 extra = attacker->ComputeSkillDamageTo(*target, 0.f, attacker->stanceRatio, OUT isCrit);
+		DealDamage(attacker, attackerId, target, extra, Protocol::DAMAGE_TYPE_MAGIC, isCrit, nowUs);
 	}
 }
 
@@ -3718,9 +3876,16 @@ void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const Creat
 	const uint64 targetId = target->objectInfo->object_id();
 	p.hitIds.push_back(targetId);
 
+	// 받아넘기기(유수) - 전방에서 오는 투사체는 무효 (평타 · 스킬 모두)
+	if (TryParry(target, p.x - p.dirX * 10.f, p.y - p.dirY * 10.f, nowUs))
+		return;
+
 	// 평타 도착 - ResolveAttacks 의 근접 경로와 같은 계산, 도착 시점 스탯으로
 	if (p.skillId == 0)
 	{
+		if (TryCounter(target, caster, p.casterId, nowUs))
+			return;
+
 		bool isCrit = false;
 		int32 damage = caster->ComputeDamageTo(*target, caster->autoAttackType, OUT isCrit);
 
@@ -3731,6 +3896,9 @@ void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const Creat
 
 		if (remainingHp > 0 && caster->IsPlayer())
 			ApplyOnHitPassives(caster, target, nowUs);
+
+		if (remainingHp > 0 && nowUs < caster->petrifyEndUs && find(caster->petrifyTargets.begin(), caster->petrifyTargets.end(), targetId) == caster->petrifyTargets.end())
+			caster->petrifyTargets.push_back(targetId);
 		return;
 	}
 
@@ -3777,6 +3945,688 @@ void Room::EndProjectile(const Projectile& p, Protocol::ProjectileEnd reason, ui
 		if (n % 100 == 0)
 			LOG_LINE << "[PROJ] basic ends=" << n << " hit=" << basicHits.load() << " wall=" << basicWalls.load() << " lost=" << basicLost.load() << '\n';
 	}
+}
+
+// ── 3 단계 ──
+
+void Room::PlaceZone(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, float x, float y, const SkillContext& ctx, uint64 nowUs)
+{
+	const SkillEffect& e = def.effects[effectIndex];
+	const SkillRules& rules = SkillTable::Rules();
+
+	Zone z;
+	z.id = _nextZoneId++;
+	z.casterId = ctx.casterId;
+	z.skillId = def.skillId;
+	z.effectIndex = effectIndex;
+	z.x = x;
+	z.y = y;
+	z.radiusCm = e.radiusCm;
+	z.endUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+	z.intervalMs = e.intervalMs > 0 ? e.intervalMs : rules.dotTickMs;
+	z.nextTickUs = nowUs + static_cast<uint64>(z.intervalMs) * 1000;
+	z.tickBaseDamage = static_cast<float>(caster->SkillPower()) * (max(e.adRatio, 0.f) + max(e.apRatio, 0.f)) * (1.f + caster->outgoingDamagePct);
+	z.tickType = e.DamageType();
+	z.ccType = e.ccType;
+	z.ccMagnitude = e.magnitude;
+	z.param = (e.param == "element_path") ? caster->stance : e.param;
+
+	// 스킬의 지속 피해는 장판 안에 있는 동안 갱신된다 (틱마다 쌓이지 않는다)
+	for (const SkillEffect& d : def.effects)
+	{
+		if (d.type != SkillEffectType::Dot || d.self || d.condition != SkillRequire::None)
+			continue;
+
+		DotInstance dot;
+		dot.skillId = def.skillId;
+		dot.kind = d.param;
+		dot.instigatorId = ctx.casterId;
+		dot.type = d.DamageType();
+		dot.baseDamage = static_cast<float>(caster->SkillPower()) * (max(d.adRatio, 0.f) + max(d.apRatio, 0.f)) * (1.f + caster->outgoingDamagePct);
+		z.dotTemplates.push_back(dot);
+		z.dotDurationMs = max(z.dotDurationMs, d.durationMs);
+	}
+
+	Protocol::ZoneInfo& info = _pendingZoneSpawns.emplace_back();
+	info.set_zone_id(z.id);
+	info.set_caster_id(z.casterId);
+	info.set_effect_id(def.effectId);
+	info.set_x(z.x);
+	info.set_y(z.y);
+	info.set_radius_cm(z.radiusCm);
+	info.set_duration_ms(e.durationMs);
+	info.set_param(z.param);
+
+	LOG_LINE << "[ZONE] place id=" << z.id << " caster=" << z.casterId << " skill=" << def.skillId << " at=(" << x << "," << y << ") r=" << z.radiusCm
+		<< " " << z.param << " for=" << e.durationMs << "ms" << '\n';
+
+	_zones.push_back(move(z));
+}
+
+void Room::PlaceZonesFor(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const SkillContext& ctx, uint64 nowUs)
+{
+	const SkillEffect& e = def.effects[effectIndex];
+	if (e.radiusCm <= 0.f || e.durationMs == 0)
+		return;
+
+	float dirX = ctx.aimX - ctx.originX;
+	float dirY = ctx.aimY - ctx.originY;
+	const float dirLen = ::sqrtf(dirX * dirX + dirY * dirY);
+	if (dirLen > 1.f)
+	{
+		dirX /= dirLen;
+		dirY /= dirLen;
+	}
+	else
+	{
+		const float yawRad = caster->posInfo->yaw() * 3.14159265f / 180.f;
+		dirX = ::cosf(yawRad);
+		dirY = ::sinf(yawRad);
+	}
+
+	switch (def.shape)
+	{
+	case SkillShape::CirclePoint:
+	{
+		// 지점 - 사거리 밖을 찍었으면 사거리 끝 (판정과 같은 규칙)
+		const float reach = min(dirLen, def.rangeCm);
+		PlaceZone(caster, def, effectIndex, ctx.originX + dirX * reach, ctx.originY + dirY * reach, ctx, nowUs);
+		break;
+	}
+
+	case SkillShape::Line:
+	{
+		// 경로 - 길이를 따라 지름 간격으로 (화염 질주 · 속성의 길). 벽에 닿으면 거기까지
+		const float stepCm = e.radiusCm * 2.f;
+		const WallMap& walls = WallTable::Get(_floorId);
+		for (float d = e.radiusCm; d <= def.rangeCm; d += stepCm)
+		{
+			const float x = ctx.originX + dirX * d;
+			const float y = ctx.originY + dirY * d;
+			if (walls.SweepBlocked(ctx.originX, ctx.originY, x, y, 0.f))
+				break;
+			PlaceZone(caster, def, effectIndex, x, y, ctx, nowUs);
+		}
+		break;
+	}
+
+	default:
+		PlaceZone(caster, def, effectIndex, ctx.originX, ctx.originY, ctx, nowUs);
+		break;
+	}
+}
+
+void Room::UpdateZones(uint64 nowUs)
+{
+	if (_zones.empty())
+		return;
+
+	const SkillRules& rules = SkillTable::Rules();
+
+	for (size_t zi = 0; zi < _zones.size(); )
+	{
+		Zone& z = _zones[zi];
+
+		if (nowUs >= z.endUs)
+		{
+			_pendingZoneEnds.push_back(z.id);
+			_zones.erase(_zones.begin() + zi);
+			continue;
+		}
+
+		if (nowUs >= z.nextTickUs)
+		{
+			z.nextTickUs += static_cast<uint64>(z.intervalMs) * 1000;
+
+			auto casterIt = _objects.find(z.casterId);
+			CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+
+			for (auto& item : _objects)
+			{
+				if (item.first == z.casterId)
+					continue;
+
+				CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+				if (target == nullptr || target->IsAlive() == false)
+					continue;
+				if (caster != nullptr && CanProjectileHit(caster, target, nowUs) == false)
+					continue;
+				if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+					continue;
+
+				const float dx = target->posInfo->x() - z.x;
+				const float dy = target->posInfo->y() - z.y;
+				if (dx * dx + dy * dy > z.radiusCm * z.radiusCm)
+					continue;
+
+				const uint64 targetId = item.first;
+
+				if (z.tickBaseDamage > 0.f)
+				{
+					const int32 damage = target->ApplyMitigation(z.tickBaseDamage, *target, z.tickType);
+					DealDamage(caster, z.casterId, target, damage, z.tickType, false, nowUs);
+				}
+
+				// 감속 장판 - 틱 간격 + 여유만큼, 나가면 곧 풀린다
+				if (z.ccType != Protocol::CC_TYPE_NONE && target->IsAlive())
+					ApplyCc(targetId, z.casterId, z.ccType, z.intervalMs + 200, z.ccMagnitude);
+
+				for (const DotInstance& tmpl : z.dotTemplates)
+				{
+					if (target->IsAlive() == false)
+						break;
+
+					DotInstance dot = tmpl;
+					dot.endUs = nowUs + static_cast<uint64>(z.dotDurationMs) * 1000;
+					dot.nextTickUs = nowUs + static_cast<uint64>(rules.dotTickMs) * 1000;
+					const uint32 stacks = target->status.RefreshOrAddDot(dot, rules.dotMaxStacks);
+					_statusTargets.insert(targetId);
+					PushStatus(true, targetId, Protocol::STATUS_DOT, dot.kind, stacks, z.dotDurationMs, dot.baseDamage, z.casterId);
+				}
+			}
+		}
+
+		zi++;
+	}
+}
+
+void Room::StartHold(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, Protocol::EquipSlot slot, const SkillContext& ctx, uint64 nowUs)
+{
+	const SkillEffect& e = def.effects[effectIndex];
+
+	caster->holdSkillId = def.skillId;
+	caster->holdSlot = slot;
+	caster->holdEffectIndex = effectIndex;
+	caster->holdStartUs = nowUs;
+	caster->holdEndUs = (e.durationMs > 0) ? nowUs + static_cast<uint64>(e.durationMs) * 1000 : 0;
+	caster->holdNextTickUs = nowUs;
+	caster->holdOriginX = caster->posInfo->x();
+	caster->holdOriginY = caster->posInfo->y();
+	_holders.insert(ctx.casterId);
+
+	PushStatus(true, ctx.casterId, Protocol::STATUS_HOLD, e.param.empty() ? "hold" : e.param, 1, e.durationMs, 0.f, ctx.casterId);
+	LOG_LINE << "[HOLD] start char=" << ctx.casterId << " skill=" << def.skillId << " " << e.param << " max=" << e.durationMs << "ms" << '\n';
+}
+
+void Room::StopHold(const CreatureRef& caster, uint64 nowUs, const char* why)
+{
+	if (caster == nullptr || caster->IsHolding() == false)
+		return;
+
+	const uint64 casterId = caster->objectInfo->object_id();
+	const uint32 skillId = caster->holdSkillId;
+	const SkillDef* def = SkillTable::Find(skillId);
+
+	// 쿨다운은 끝날 때 (R3 의 "효과가 끝나는 순간")
+	if (def != nullptr)
+	{
+		if (SkillSlot* skillSlot = caster->GetSlot(caster->holdSlot))
+			skillSlot->cooldownEndUs = nowUs + static_cast<uint64>(def->cooldownMs) * 1000;
+	}
+
+	const string param = (def != nullptr && caster->holdEffectIndex < def->effects.size()) ? def->effects[caster->holdEffectIndex].param : "";
+	const uint64 heldMs = (nowUs > caster->holdStartUs) ? (nowUs - caster->holdStartUs) / 1000 : 0;
+
+	caster->holdSkillId = 0;
+	caster->holdSlot = Protocol::SLOT_NONE;
+	caster->holdEffectIndex = 0;
+	caster->holdStartUs = caster->holdEndUs = caster->holdNextTickUs = 0;
+	_holders.erase(casterId);
+
+	// 정좌 - 유지가 끝나면 반격 창도 닫힌다
+	if (caster->counterSkillId == skillId)
+	{
+		caster->counterUntilUs = 0;
+		PushStatus(false, casterId, Protocol::STATUS_COUNTER, "counter", 0, 0, 0.f, casterId);
+	}
+
+	PushStatus(false, casterId, Protocol::STATUS_HOLD, param.empty() ? "hold" : param, 0, 0, 0.f, casterId);
+	LOG_LINE << "[HOLD] stop char=" << casterId << " skill=" << skillId << " why=" << why << " held=" << heldMs << "ms" << '\n';
+}
+
+void Room::UpdateHolds(uint64 nowUs)
+{
+	if (_holders.empty())
+		return;
+
+	const vector<uint64> ids(_holders.begin(), _holders.end());
+
+	for (uint64 id : ids)
+	{
+		auto findIt = _objects.find(id);
+		CreatureRef caster = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		if (caster == nullptr || caster->IsHolding() == false)
+		{
+			_holders.erase(id);
+			continue;
+		}
+
+		if (caster->IsAlive() == false)
+		{
+			StopHold(caster, nowUs, "dead");
+			continue;
+		}
+
+		if (caster->holdEndUs != 0 && nowUs >= caster->holdEndUs)
+		{
+			StopHold(caster, nowUs, "max");
+			continue;
+		}
+
+		const SkillDef* def = SkillTable::Find(caster->holdSkillId);
+		if (def == nullptr || caster->holdEffectIndex >= def->effects.size())
+		{
+			StopHold(caster, nowUs, "nodef");
+			continue;
+		}
+
+		const SkillEffect& hold = def->effects[caster->holdEffectIndex];
+		if (hold.type != SkillEffectType::Hold)
+			continue;		// 정좌 - 틱 없음, 반격 창만
+
+		if (nowUs >= caster->holdNextTickUs)
+		{
+			const uint32 intervalMs = hold.intervalMs > 0 ? hold.intervalMs : SkillTable::Rules().dotTickMs;
+			caster->holdNextTickUs = nowUs + static_cast<uint64>(intervalMs) * 1000;
+			HoldTick(caster, *def, hold, nowUs);
+		}
+	}
+}
+
+void Room::HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillEffect& hold, uint64 nowUs)
+{
+	const uint64 casterId = caster->objectInfo->object_id();
+	const float cx = caster->posInfo->x();
+	const float cy = caster->posInfo->y();
+	const float radius = def.radiusCm;
+
+	SkillContext ctx;
+	ctx.casterId = casterId;
+	ctx.originX = cx;
+	ctx.originY = cy;
+	ctx.aimX = cx;
+	ctx.aimY = cy;
+	ctx.itemLevel = caster->castItemLevel;
+	ctx.slot = caster->holdSlot;
+
+	// 빈쿨룸 - 자기도 속박 (ApplyCcRaw 를 거치지 않는다 - 유지를 끊지 않게). 틱 간격 + 여유
+	const uint32 ccMs = (hold.intervalMs > 0 ? hold.intervalMs : SkillTable::Rules().dotTickMs) + 200;
+	if (hold.param == "chains")
+	{
+		caster->ApplyHardCc(Protocol::CC_TYPE_ROOT, nowUs, ccMs);
+		_ccTargets.insert(casterId);
+		Protocol::CcEventInfo& info = _pendingCcApplied.emplace_back();
+		info.set_target_id(casterId);
+		info.set_instigator_id(casterId);
+		info.set_cc_type(Protocol::CC_TYPE_ROOT);
+		info.set_duration_ms(ccMs);
+	}
+
+	int32 hitCount = 0;
+	for (auto& item : _objects)
+	{
+		if (item.first == casterId)
+			continue;
+
+		CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+		if (CanProjectileHit(caster, target, nowUs) == false)
+			continue;
+
+		const float dx = target->posInfo->x() - cx;
+		const float dy = target->posInfo->y() - cy;
+		if (dx * dx + dy * dy > radius * radius)
+			continue;
+
+		hitCount++;
+
+		if (hold.param == "chains")
+		{
+			ApplyCc(item.first, casterId, Protocol::CC_TYPE_ROOT, ccMs, 0.f);
+			continue;
+		}
+
+		// 회오리 - 틱 피해 + 스킬의 넉백 효과
+		if (hold.adRatio > 0.f || hold.apRatio > 0.f)
+		{
+			bool isCrit = false;
+			const int32 damage = caster->ComputeSkillDamageTo(*target, hold.adRatio, hold.apRatio, OUT isCrit);
+			DealDamage(caster, casterId, target, damage, hold.DamageType(), isCrit, nowUs);
+		}
+
+		for (uint32 i = 0; i < def.effects.size() && target->IsAlive(); i++)
+		{
+			const SkillEffect& e = def.effects[i];
+			if (e.self == false && e.type == SkillEffectType::Knockback && e.condition == SkillRequire::None)
+				ApplyTargetEffect(caster, def, i, target, ctx, nowUs);
+		}
+	}
+
+	// 연출 - 틱마다 한 번 (effect_id 만)
+	Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
+	hit.set_caster_id(casterId);
+	hit.set_effect_id(def.effectId);
+	hit.set_impact_x(cx);
+	hit.set_impact_y(cy);
+	hit.set_aim_x(cx);
+	hit.set_aim_y(cy);
+
+	if (hitCount > 0)
+		LOG_LINE << "[HOLD] tick char=" << casterId << " skill=" << def.skillId << " hits=" << hitCount << '\n';
+}
+
+bool Room::TryCounter(const CreatureRef& target, const CreatureRef& attacker, uint64 attackerId, uint64 nowUs)
+{
+	if (target == nullptr || attacker == nullptr || target->IsCountering(nowUs) == false || attacker == target)
+		return false;
+
+	const uint64 targetId = target->objectInfo->object_id();
+	const float ratio = target->counterRatio;
+	const uint32 skillId = target->counterSkillId;
+
+	// 한 번 받아치면 끝
+	target->counterUntilUs = 0;
+
+	bool isCrit = false;
+	const int32 damage = target->ComputeSkillDamageTo(*attacker, ratio, 0.f, OUT isCrit);
+	DealDamage(target, targetId, attacker, damage, Protocol::DAMAGE_TYPE_PHYSICAL, isCrit, nowUs);
+
+	if (const SkillDef* def = SkillTable::Find(skillId))
+	{
+		Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
+		hit.set_caster_id(targetId);
+		hit.set_effect_id(def->effectId);
+		hit.set_target_id(attackerId);
+		hit.set_impact_x(attacker->posInfo->x());
+		hit.set_impact_y(attacker->posInfo->y());
+		hit.set_aim_x(attacker->posInfo->x());
+		hit.set_aim_y(attacker->posInfo->y());
+	}
+
+	LOG_LINE << "[COUNTER] char=" << targetId << " hit " << attackerId << " dmg=" << damage << '\n';
+
+	if (target->IsHolding() && target->holdSkillId == skillId)
+		StopHold(target, nowUs, "countered");
+	else
+		PushStatus(false, targetId, Protocol::STATUS_COUNTER, "counter", 0, 0, 0.f, targetId);
+
+	return true;
+}
+
+bool Room::TryParry(const CreatureRef& target, float fromX, float fromY, uint64 nowUs)
+{
+	if (target == nullptr || target->IsParrying(nowUs) == false)
+		return false;
+
+	// 전방 반평면 - 바라보는 방향과 공격이 오는 방향의 내적
+	const float yawRad = target->posInfo->yaw() * 3.14159265f / 180.f;
+	const float fx = ::cosf(yawRad);
+	const float fy = ::sinf(yawRad);
+	const float dx = fromX - target->posInfo->x();
+	const float dy = fromY - target->posInfo->y();
+
+	if (dx * fx + dy * fy < 0.f)
+		return false;
+
+	LOG_LINE << "[PARRY] char=" << target->objectInfo->object_id() << " deflected" << '\n';
+	return true;
+}
+
+void Room::ApplyChain(const CreatureRef& caster, const CreatureRef& first, const SkillEffect& e, uint32 effectId, uint64 nowUs)
+{
+	if (first == nullptr || e.hits == 0 || e.radiusCm <= 0.f)
+		return;
+
+	const uint64 casterId = caster->objectInfo->object_id();
+	vector<uint64> visited;
+	visited.push_back(first->objectInfo->object_id());
+	CreatureRef current = first;
+
+	for (uint32 jump = 0; jump < e.hits; jump++)
+	{
+		CreatureRef next = nullptr;
+		float bestSq = e.radiusCm * e.radiusCm;
+
+		for (auto& item : _objects)
+		{
+			if (item.first == casterId || find(visited.begin(), visited.end(), item.first) != visited.end())
+				continue;
+
+			CreatureRef candidate = dynamic_pointer_cast<Creature>(item.second);
+			if (CanProjectileHit(caster, candidate, nowUs) == false)
+				continue;
+
+			const float dx = candidate->posInfo->x() - current->posInfo->x();
+			const float dy = candidate->posInfo->y() - current->posInfo->y();
+			const float distSq = dx * dx + dy * dy;
+			if (distSq <= bestSq)
+			{
+				bestSq = distSq;
+				next = candidate;
+			}
+		}
+
+		if (next == nullptr)
+			break;
+
+		visited.push_back(next->objectInfo->object_id());
+
+		bool isCrit = false;
+		const int32 damage = caster->ComputeSkillDamageTo(*next, e.adRatio, e.apRatio, OUT isCrit);
+		DealDamage(caster, casterId, next, damage, e.DamageType(), isCrit, nowUs);
+
+		Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
+		hit.set_caster_id(casterId);
+		hit.set_effect_id(effectId);
+		hit.set_target_id(next->objectInfo->object_id());
+		hit.set_impact_x(next->posInfo->x());
+		hit.set_impact_y(next->posInfo->y());
+		hit.set_aim_x(current->posInfo->x());
+		hit.set_aim_y(current->posInfo->y());
+
+		LOG_LINE << "[CHAIN] caster=" << casterId << " jump=" << (jump + 1) << " " << current->objectInfo->object_id() << " -> " << next->objectInfo->object_id() << " dmg=" << damage << '\n';
+		current = next;
+	}
+}
+
+void Room::ResolveBursts(uint64 nowUs)
+{
+	if (_pendingBursts.empty())
+		return;
+
+	const SkillRules& rules = SkillTable::Rules();
+	vector<PendingBurst> due;
+	due.swap(_pendingBursts);
+
+	for (PendingBurst& b : due)
+	{
+		if (nowUs < b.atUs)
+		{
+			_pendingBursts.push_back(b);
+			continue;
+		}
+
+		const SkillDef* def = SkillTable::Find(b.skillId);
+		auto targetIt = _objects.find(b.targetId);
+		CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+		if (def == nullptr || target == nullptr || target->IsAlive() == false || b.effectIndex >= def->effects.size())
+			continue;
+
+		auto casterIt = _objects.find(b.casterId);
+		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		const SkillEffect& e = def->effects[b.effectIndex];
+
+		const float tx = target->posInfo->x();
+		const float ty = target->posInfo->y();
+
+		PushStatus(false, b.targetId, Protocol::STATUS_DOT, "incubating", 0, 0, 0.f, b.casterId);
+
+		// 터진다 - 대상에게 피해
+		const int32 damage = target->ApplyMitigation(b.baseDamage, *target, b.type);
+		DealDamage(caster, b.casterId, target, damage, b.type, false, nowUs);
+
+		// radius 안으로 스킬의 지속 피해가 퍼진다 (대상 포함)
+		int32 spread = 0;
+		for (auto& item : _objects)
+		{
+			if (item.first == b.casterId)
+				continue;
+
+			CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+			if (other == nullptr || other->IsAlive() == false)
+				continue;
+			if (caster != nullptr && CanProjectileHit(caster, other, nowUs) == false)
+				continue;
+
+			const float dx = other->posInfo->x() - tx;
+			const float dy = other->posInfo->y() - ty;
+			if (dx * dx + dy * dy > e.radiusCm * e.radiusCm)
+				continue;
+
+			for (const SkillEffect& d : def->effects)
+			{
+				if (d.type != SkillEffectType::Dot || d.self || d.condition != SkillRequire::None)
+					continue;
+
+				DotInstance dot;
+				dot.skillId = def->skillId;
+				dot.kind = d.param;
+				dot.instigatorId = b.casterId;
+				dot.type = d.DamageType();
+				dot.baseDamage = b.baseDamage / max(e.apRatio + e.adRatio, 0.001f) * (max(d.adRatio, 0.f) + max(d.apRatio, 0.f));
+				dot.endUs = nowUs + static_cast<uint64>(d.durationMs) * 1000;
+				dot.nextTickUs = nowUs + static_cast<uint64>(rules.dotTickMs) * 1000;
+				const uint32 stacks = other->status.AddDot(dot, rules.dotMaxStacks);
+				_statusTargets.insert(item.first);
+				PushStatus(true, item.first, Protocol::STATUS_DOT, d.param, stacks, d.durationMs, dot.baseDamage, b.casterId);
+				spread++;
+			}
+		}
+
+		Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
+		hit.set_caster_id(b.casterId);
+		hit.set_effect_id(def->effectId);
+		hit.set_target_id(b.targetId);
+		hit.set_impact_x(tx);
+		hit.set_impact_y(ty);
+		hit.set_aim_x(tx);
+		hit.set_aim_y(ty);
+
+		LOG_LINE << "[BURST] target=" << b.targetId << " by=" << b.casterId << " dmg=" << damage << " spread=" << spread << '\n';
+	}
+}
+
+void Room::UpdateWindows(uint64 nowUs)
+{
+	if (_windowOwners.empty())
+		return;
+
+	const vector<uint64> ids(_windowOwners.begin(), _windowOwners.end());
+
+	for (uint64 id : ids)
+	{
+		auto findIt = _objects.find(id);
+		CreatureRef owner = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		if (owner == nullptr)
+		{
+			_windowOwners.erase(id);
+			continue;
+		}
+
+		// 경독 - 창이 닫히면 모아 둔 적을 한꺼번에 기절
+		if (owner->petrifyEndUs != 0 && nowUs >= owner->petrifyEndUs)
+		{
+			int32 stunned = 0;
+			for (uint64 targetId : owner->petrifyTargets)
+			{
+				ApplyCc(targetId, id, Protocol::CC_TYPE_STUN, owner->petrifyStunMs, 0.f);
+				stunned++;
+			}
+
+			LOG_LINE << "[PETRIFY] close char=" << id << " stunned=" << stunned << '\n';
+			PushStatus(false, id, Protocol::STATUS_STANCE, "petrify", 0, 0, 0.f, id);
+
+			owner->petrifyEndUs = 0;
+			owner->petrifyTargets.clear();
+		}
+
+		if (owner->petrifyEndUs == 0)
+			_windowOwners.erase(id);
+	}
+}
+
+void Room::SetStance(const CreatureRef& caster, const string& element, float ratio, uint64 nowUs)
+{
+	const uint64 casterId = caster->objectInfo->object_id();
+
+	if (element == "clear" || element.empty())
+	{
+		if (caster->stance.empty())
+			return;
+
+		PushStatus(false, casterId, Protocol::STATUS_STANCE, caster->stance, 0, 0, 0.f, casterId);
+		LOG_LINE << "[STANCE] clear char=" << casterId << " was=" << caster->stance << '\n';
+		caster->stance.clear();
+		caster->stanceRatio = 0.f;
+		return;
+	}
+
+	// 교체 - 지속 없음 (사용자 결정)
+	if (caster->stance.empty() == false && caster->stance != element)
+		PushStatus(false, casterId, Protocol::STATUS_STANCE, caster->stance, 0, 0, 0.f, casterId);
+
+	caster->stance = element;
+	caster->stanceRatio = ratio;
+	PushStatus(true, casterId, Protocol::STATUS_STANCE, element, 1, 0, ratio, casterId);
+	LOG_LINE << "[STANCE] char=" << casterId << " " << element << " ratio=" << ratio << '\n';
+}
+
+void Room::ApplyThrow(const CreatureRef& caster, const CreatureRef& target, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
+{
+	if (target == nullptr || target->IsAlive() == false)
+		return;
+
+	const uint64 casterId = ctx.casterId;
+	const uint64 targetId = target->objectInfo->object_id();
+
+	// 시전자 뒤로 - 대상 → 시전자 방향으로 (거리 + dist) 만큼
+	float dx = caster->posInfo->x() - target->posInfo->x();
+	float dy = caster->posInfo->y() - target->posInfo->y();
+	const float gap = ::sqrtf(dx * dx + dy * dy);
+	if (gap < 1.f)
+	{
+		const float yawRad = caster->posInfo->yaw() * 3.14159265f / 180.f;
+		dx = -::cosf(yawRad);
+		dy = -::sinf(yawRad);
+	}
+
+	PushCreature(target, casterId, dx, dy, gap + e.distCm, e.speedCms, /*wallStun*/ false, nowUs);
+
+	// 떨어진 자리 둘레의 적에게 피해 (던져진 대상은 이미 스킬 피해를 받았다)
+	const float lx = target->posInfo->x();
+	const float ly = target->posInfo->y();
+	int32 hitCount = 0;
+
+	for (auto& item : _objects)
+	{
+		if (item.first == casterId || item.first == targetId)
+			continue;
+
+		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+		if (CanProjectileHit(caster, other, nowUs) == false)
+			continue;
+
+		const float ox = other->posInfo->x() - lx;
+		const float oy = other->posInfo->y() - ly;
+		if (ox * ox + oy * oy > e.radiusCm * e.radiusCm)
+			continue;
+
+		bool isCrit = false;
+		const int32 damage = caster->ComputeSkillDamageTo(*other, e.adRatio, e.apRatio, OUT isCrit);
+		DealDamage(caster, casterId, other, damage, e.DamageType(), isCrit, nowUs);
+		hitCount++;
+	}
+
+	LOG_LINE << "[THROW] target=" << targetId << " by=" << casterId << " to=(" << lx << "," << ly << ") splash=" << hitCount << '\n';
 }
 
 void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs)
@@ -3993,11 +4843,18 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 	victim->attackHitAtUs = 0;
 	CancelCast(victim);
 
-	// 상태 효과 · 재입력은 죽음과 함께 끝난다 - 클라는 S_DIED 로 지운다 (따로 expired 를 보내지 않는다)
+	// 상태 효과 · 재입력 · 유지 · 창은 죽음과 함께 끝난다 - 클라는 S_DIED 로 지운다 (따로 expired 를 보내지 않는다)
+	if (victim->IsHolding())
+		StopHold(victim, nowUs, "died");
 	victim->status.Clear();
 	victim->OnBuffsChanged();
 	victim->recastSkillId = 0;
+	victim->counterUntilUs = 0;
+	victim->parryUntilUs = 0;
+	victim->petrifyEndUs = 0;
+	victim->petrifyTargets.clear();
 	_statusTargets.erase(victimId);
+	_windowOwners.erase(victimId);
 
 	LOG_LINE << "[DIED] victim=" << victimId << " by=" << instigatorId << '\n';
 

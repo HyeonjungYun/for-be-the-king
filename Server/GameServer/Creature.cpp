@@ -117,6 +117,19 @@ void Creature::ClearCombatState()
 	recastUntilUs = 0;
 	recastTargetId = 0;
 
+	holdSkillId = 0;
+	holdSlot = Protocol::SLOT_NONE;
+	holdEndUs = holdStartUs = holdNextTickUs = 0;
+	counterUntilUs = 0;
+	counterRatio = 0.f;
+	counterSkillId = 0;
+	parryUntilUs = 0;
+	petrifyEndUs = 0;
+	petrifyStunMs = 0;
+	petrifyTargets.clear();
+	stance.clear();
+	stanceRatio = 0.f;
+
 	status.Clear();
 	OnBuffsChanged();
 }
