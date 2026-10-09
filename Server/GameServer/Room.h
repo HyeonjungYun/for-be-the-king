@@ -40,6 +40,31 @@ struct PendingTelegraph
 	float originY = 0.f;
 	float aimX = 0.f;
 	float aimY = 0.f;
+	uint32 itemLevel = 0;
+};
+
+// 다단 히트의 남은 타 - hits × interval_ms (skill-roster 1 단계). 첫 타는 발동 순간, 나머지는 간격마다 FlushCombat 이 넣는다.
+// 사거리를 다시 재지 않는다 - 대상이 살아 있고 시전자가 칠 수 있으면 들어간다 (TEMP: 연타 중 이탈은 2 단계 투사체와 함께 본다)
+struct PendingHit
+{
+	uint64 casterId = 0;
+	uint64 targetId = 0;
+	uint32 skillId = 0;
+	uint32 effectIndex = 0;
+	uint32 remaining = 0;
+	uint64 nextAtUs = 0;
+};
+
+// 스킬 효과를 적용할 때의 문맥 - 발동 시점에 고정한 값들
+struct SkillContext
+{
+	uint64 casterId = 0;
+	float originX = 0.f;
+	float originY = 0.f;
+	float aimX = 0.f;
+	float aimY = 0.f;
+	uint32 itemLevel = 0;		// 버프 크기 - 시전 슬롯 아이템의 강화 레벨
+	bool recast = false;		// 재입력의 두 번째 입력 - requires=recast 효과만 나간다
 };
 
 class Room : public JobQueue
@@ -122,8 +147,37 @@ private:
 	void	PushBagContents(const BagRef& bag);
 
 	void	CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, const float originX, float originY, uint64 castTargetId, float aimX, float aimY, OUT vector<CreatureRef>& outTargets);
-	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs);
+	void	ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, const SkillContext& ctx, uint64 nowUs);
 	void	ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs);
+
+	// ── 스킬 로스터 1 단계 (design/quick-specs/skill-roster-2026-10-10.md) ──
+
+	// 발동 공통 - 쿨다운 · S_SKILL_HIT · 판정 · 효과 (예고가 있으면 PendingTelegraph). recast = 재입력 두 번째 입력
+	void	FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::EquipSlot slot, uint64 castTargetId, float aimX, float aimY, bool recast, uint64 nowUs);
+
+	// 효과 하나의 requires 조건. 표식은 시전자 본인 것만 (사용자 결정)
+	bool	MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const CreatureRef& target, bool anyHit, bool anyKill, uint64 nowUs) const;
+	void	ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
+	void	ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const CreatureRef& target, const SkillContext& ctx, uint64 nowUs);
+
+	// 모든 피해는 여기를 지난다 - 치명상 방어(맹수의 본능) → 체력 차감 → S_DAMAGE → 몬스터 어그로 → 사망. 돌려주는 값 = 남은 체력.
+	// attacker 는 없을 수 있다 (떠난 사람의 지속 피해) - attackerId 만 패킷에 실린다. 이미 죽은 대상은 건드리지 않는다
+	int32	DealDamage(const CreatureRef& attacker, uint64 attackerId, const CreatureRef& target, int32 damage, Protocol::DamageType type, bool isCrit, uint64 nowUs);
+	bool	TryLethalSave(const PlayerRef& victim, const CreatureRef& attacker, OUT int32& damage, uint64 nowUs);
+
+	// 서버가 옮기는 변위 - 위치를 끝점으로 바로 놓고(S_MOVE) 날아가는 동안 넉백 CC. 클라는 KnockbackInfo 로 같은 끝점까지 밀려간다.
+	// 그동안의 C_MOVE 는 HandleMove 가 무시한다 (서버가 위치를 소유하는 구간). 벽에 닿으면 wallStun 일 때 벽 기절
+	void	PushCreature(const CreatureRef& target, uint64 instigatorId, float dirX, float dirY, float distCm, float speedCms, bool wallStun, uint64 nowUs);
+	void	PullCreature(const CreatureRef& target, const CreatureRef& caster, float speedCms, uint64 nowUs);
+	void	BlinkCaster(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
+
+	// 평타 적중 패시브 (on_hit) - 공격자의 패시브 슬롯마다 추가 피해
+	void	ApplyOnHitPassives(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs);
+
+	void	UpdateStatuses(uint64 nowUs);		// 지속 피해 틱 · 상태 만료 (FlushCombat)
+	void	ResolvePendingHits(uint64 nowUs);	// 다단 히트의 남은 타
+	void	PushStatus(bool applied, uint64 targetId, Protocol::StatusKind kind, const string& param, uint32 stacks, uint32 remainingMs, float magnitude, uint64 instigatorId);
+	void	ApplyCcRaw(const CreatureRef& target, uint64 instigatorId, Protocol::CcType type, uint32 effectiveMs, float magnitude, uint64 nowUs);
 
 	void	SavePlayer(PlayerRef player);
 	void	UpdateSaves(uint64 nowUs);
@@ -208,7 +262,14 @@ private:
 	unordered_set<uint64>				_ccTargets;
 	vector<Protocol::CcEventInfo>		_pendingCcApplied;
 	vector<Protocol::CcEventInfo>		_pendingCcExpired;
+	vector<Protocol::KnockbackInfo>		_pendingKnockbacks;
 	int32 _ccStateTickCounter = 0;
+
+	// 스킬 로스터 1 단계 - 상태 효과가 있는 대상 · 다단 히트 · S_STATUS
+	unordered_set<uint64>				_statusTargets;
+	vector<PendingHit>					_pendingHits;
+	vector<Protocol::StatusInfo>		_pendingStatusApplied;
+	vector<Protocol::StatusInfo>		_pendingStatusExpired;
 };
 
 constexpr int32 FLOOR_COUNT = 4;

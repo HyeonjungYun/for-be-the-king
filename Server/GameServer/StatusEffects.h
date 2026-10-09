@@ -1,0 +1,132 @@
+#pragma once
+#include "SkillTable.h"
+
+/*-----------------
+	StatusEffects
+------------------*/
+
+// 스킬이 남기는 상태 - 지속 피해 · 자기 버프 · 표식 (design/quick-specs/skill-roster-2026-10-10.md 1 단계).
+// Creature 하나가 StatusSet 하나를 가진다. 순수 자료구조 - Room 이 시각을 넘겨 틱 · 만료를 묻고 패킷(S_STATUS)은 Room 이 만든다.
+// 규칙 수치(틱 · 중첩 상한)는 skill_rules.csv - 여기엔 없다. GameServerTests StatusEffectsTest 가 검사한다.
+//
+// 사용자 결정 (2026-10-10): 지속 피해는 같은 종류도 중첩(상한은 규칙) · 표식은 본인 것만 쓰고 중첩 없이 갱신 ·
+// 버프는 같은 것이면 갱신, 크기는 아이템 강화 레벨로 (크기 계산은 Room - 여기는 받은 값을 든다)
+
+struct DotInstance
+{
+	uint32					skillId = 0;
+	string					kind;					// bleed · poison · burn · heavy_bleed (skill_effects.csv param)
+	uint64					instigatorId = 0;
+	float					baseDamage = 0.f;		// 틱당 완화 전 피해 - 걸 때 시전자 스탯으로 고정한다 (나중에 버프가 꺼져도 그대로)
+	Protocol::DamageType	type = Protocol::DAMAGE_TYPE_MAGIC;
+	uint64					endUs = 0;
+	uint64					nextTickUs = 0;
+};
+
+struct BuffInstance
+{
+	uint32					skillId = 0;
+	SkillBuffStat			stat = SkillBuffStat::None;
+	float					magnitude = 0.f;		// 강화 레벨 반영 뒤 값 (0.15 = +15 %)
+	uint64					endUs = 0;
+};
+
+struct MarkInstance
+{
+	string					kind;					// spear · arrow · blood · heavy_bleed · rope
+	uint64					instigatorId = 0;
+	uint64					endUs = 0;
+};
+
+class StatusSet
+{
+public:
+	// 같은 종류가 maxStacks 개면 가장 먼저 끝나는 것을 새 것으로 바꾼다. 돌려주는 값 = 그 종류의 중첩 수
+	uint32	AddDot(const DotInstance& dot, uint32 maxStacks);
+	uint32	DotStacks(const string& kind) const;
+
+	// nowUs 에 틱이 돌아온 인스턴스마다 fn(const DotInstance&) 를 부른다. 한 호출에 인스턴스당 최대 한 틱 -
+	// Flush 가 밀려도 틱을 몰아 터뜨리지 않는다. 끝난(endUs 지난) 것은 틱하지 않는다 (Expire 가 뺀다)
+	template <typename Fn>
+	void	TickDots(uint64 nowUs, uint32 tickMs, Fn&& fn)
+	{
+		for (DotInstance& d : _dots)
+		{
+			if (nowUs >= d.endUs || nowUs < d.nextTickUs)
+				continue;
+
+			fn(static_cast<const DotInstance&>(d));
+			d.nextTickUs += static_cast<uint64>(tickMs) * 1000;
+		}
+	}
+
+	// 같은 skill + stat 은 갱신 (지속 · 크기 모두 새 값). true = 새로 생겼다
+	bool	AddBuff(const BuffInstance& buff);
+	float	BuffSum(SkillBuffStat stat) const;
+
+	// 같은 종류 + 같은 주인은 갱신. true = 새로 생겼다
+	bool	AddMark(const MarkInstance& mark);
+	bool	HasMark(const string& kind, uint64 instigatorId) const;
+	bool	ConsumeMark(const string& kind, uint64 instigatorId);
+
+	// 끝난 것을 빼며 fn(Protocol::StatusKind, const string& param, uint64 instigatorId, uint32 remainingStacks) 를 부른다.
+	// 돌려주는 값 = 버프가 하나라도 빠졌다 (스탯 재계산 필요)
+	template <typename Fn>
+	bool	Expire(uint64 nowUs, Fn&& fn)
+	{
+		for (size_t i = 0; i < _dots.size(); )
+		{
+			if (nowUs < _dots[i].endUs)
+			{
+				i++;
+				continue;
+			}
+
+			const DotInstance gone = _dots[i];
+			_dots.erase(_dots.begin() + i);
+			fn(Protocol::STATUS_DOT, gone.kind, gone.instigatorId, DotStacks(gone.kind));
+		}
+
+		bool buffGone = false;
+		for (size_t i = 0; i < _buffs.size(); )
+		{
+			if (nowUs < _buffs[i].endUs)
+			{
+				i++;
+				continue;
+			}
+
+			const BuffInstance gone = _buffs[i];
+			_buffs.erase(_buffs.begin() + i);
+			buffGone = true;
+			fn(Protocol::STATUS_BUFF, string(SkillTable::BuffStatName(gone.stat)), 0, 0);
+		}
+
+		for (size_t i = 0; i < _marks.size(); )
+		{
+			if (nowUs < _marks[i].endUs)
+			{
+				i++;
+				continue;
+			}
+
+			const MarkInstance gone = _marks[i];
+			_marks.erase(_marks.begin() + i);
+			fn(Protocol::STATUS_MARK, gone.kind, gone.instigatorId, 0);
+		}
+
+		return buffGone;
+	}
+
+	bool	Empty() const { return _dots.empty() && _buffs.empty() && _marks.empty(); }
+	void	Clear();
+
+	const vector<DotInstance>&	Dots() const { return _dots; }
+	const vector<BuffInstance>&	Buffs() const { return _buffs; }
+	const vector<MarkInstance>&	Marks() const { return _marks; }
+
+private:
+	vector<DotInstance>		_dots;
+	vector<BuffInstance>	_buffs;
+	vector<MarkInstance>	_marks;
+};

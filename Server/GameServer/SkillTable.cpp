@@ -463,6 +463,16 @@ const char* SkillTable::EffectName(SkillEffectType type)
 	return "?";
 }
 
+const char* SkillTable::BuffStatName(SkillBuffStat stat)
+{
+	for (const auto& [name, value] : STAT_NAMES)
+	{
+		if (value == stat)
+			return name;
+	}
+	return "?";
+}
+
 bool SkillTable::Load(const string& dataDir, OUT string& error)
 {
 	const char* names[3] = { "skills.csv", "skill_effects.csv", "skill_rules.csv" };

@@ -71,7 +71,7 @@ int32 Creature::ComputeDamageTo(const Creature& target, Protocol::DamageType typ
 
 	// 마법 무기 평타는 magic_power 로 때리고 magic_resist 로 막힌다 (combat-system.md Core Rule 2 · C3-b)
 	const int32 power = (type == Protocol::DAMAGE_TYPE_MAGIC) ? magicPower : attackPower;
-	const float effectiveBase = power * (isCrit ? critMultiplier : 1.f);
+	const float effectiveBase = power * (isCrit ? critMultiplier : 1.f) * (1.f + outgoingDamagePct);
 
 	return ApplyMitigation(effectiveBase, target, type);
 }
@@ -79,16 +79,46 @@ int32 Creature::ComputeDamageTo(const Creature& target, Protocol::DamageType typ
 int32 Creature::ComputeSkillDamageTo(const Creature& target, float adRatio, float apRatio, bool& isCrit) const
 {
 	isCrit = (critChance > 0.f) && (Utils::GetRandom(0.f, 1.f) < critChance);
-	const float critMul = isCrit ? critMultiplier : 1.f;
+	const float critMul = (isCrit ? critMultiplier : 1.f) * (1.f + outgoingDamagePct);
 
+	// 두 항 모두 무기의 주 능력치에 곱한다 - 계수가 종류를, 능력치가 크기를 정한다 (S3: 항마다 따로 완화)
+	const float power = static_cast<float>(SkillPower());
 	int32 total = 0;
 
 	if (adRatio > 0.f)
-		total += ApplyMitigation(attackPower * adRatio * critMul, target, Protocol::DAMAGE_TYPE_PHYSICAL);
+		total += ApplyMitigation(power * adRatio * critMul, target, Protocol::DAMAGE_TYPE_PHYSICAL);
 	if (apRatio > 0.f)
-		total += ApplyMitigation(magicPower * apRatio * critMul, target, Protocol::DAMAGE_TYPE_MAGIC);
+		total += ApplyMitigation(power * apRatio * critMul, target, Protocol::DAMAGE_TYPE_MAGIC);
 
 	return total;
+}
+
+void Creature::ClearCombatState()
+{
+	stunEndUs = rootEndUs = knockbackEndUs = launchEndUs = 0;
+	silenceEndUs = healReductionEndUs = blindEndUs = 0;
+	healReductionMagnitude = 0.f;
+	slowSources.clear();
+	activeSlow = 0.f;
+	speedGraceUntilUs = 0;
+	preGraceSlow = 0.f;
+
+	attackTargetId = 0;
+	attackHitAtUs = 0;
+
+	castEndAtUs = 0;
+	castSkillId = 0;
+	castSlot = Protocol::SLOT_NONE;
+	castTargetId = 0;
+	castItemLevel = 0;
+
+	recastSkillId = 0;
+	recastSlot = Protocol::SLOT_NONE;
+	recastUntilUs = 0;
+	recastTargetId = 0;
+
+	status.Clear();
+	OnBuffsChanged();
 }
 
 int32 Creature::TakeDamage(int32 amount)
@@ -172,6 +202,11 @@ void Creature::ApplySoftCc(Protocol::CcType type, uint64 nowUs, uint32 effective
 			healReductionEndUs = endUs;
 		if (magnitude > healReductionMagnitude)
 			healReductionMagnitude = magnitude;
+		break;
+	case Protocol::CC_TYPE_BLIND:
+		// 갱신 - 더 긴 쪽. 시야 배율은 규칙 하나뿐이라 들고 있지 않는다
+		if (endUs > blindEndUs)
+			blindEndUs = endUs;
 		break;
 	default:
 		break;

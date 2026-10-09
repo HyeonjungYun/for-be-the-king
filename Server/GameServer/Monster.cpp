@@ -67,14 +67,5 @@ Monster::~Monster()
 void Monster::RestoreFull()
 {
 	hp = maxHp;
-
-	stunEndUs = 0;
-	rootEndUs = 0;
-	knockbackEndUs = 0;
-	launchEndUs = 0;
-	silenceEndUs = 0;
-	healReductionEndUs = 0;
-	healReductionMagnitude = 0.f;
-	slowSources.clear();
-	activeSlow = 0.f;
+	ClearCombatState();
 }

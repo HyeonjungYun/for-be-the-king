@@ -462,6 +462,39 @@ inline bool ItemResult_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ItemResult>(
     ItemResult_descriptor(), name, value);
 }
+enum StatusKind : int {
+  STATUS_NONE = 0,
+  STATUS_DOT = 1,
+  STATUS_BUFF = 2,
+  STATUS_MARK = 3,
+  STATUS_STANCE = 4,
+  STATUS_INVULN = 5,
+  STATUS_COUNTER = 6,
+  STATUS_PARRY = 7,
+  STATUS_HOLD = 8,
+  STATUS_DECOY = 9,
+  StatusKind_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  StatusKind_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool StatusKind_IsValid(int value);
+constexpr StatusKind StatusKind_MIN = STATUS_NONE;
+constexpr StatusKind StatusKind_MAX = STATUS_DECOY;
+constexpr int StatusKind_ARRAYSIZE = StatusKind_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* StatusKind_descriptor();
+template<typename T>
+inline const std::string& StatusKind_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, StatusKind>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function StatusKind_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    StatusKind_descriptor(), enum_t_value);
+}
+inline bool StatusKind_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, StatusKind* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<StatusKind>(
+    StatusKind_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -558,6 +591,11 @@ template <> struct is_proto_enum< ::Protocol::ItemResult> : ::std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ItemResult>() {
   return ::Protocol::ItemResult_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::StatusKind> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::StatusKind>() {
+  return ::Protocol::StatusKind_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE

@@ -234,3 +234,10 @@ message S_CHEST_STATE
 	repeated uint64 looted_ids = 1;		// looted chest object ids (CHEST_ID_BASE + chest_id)
 	bool snapshot = 2;					// true: the full list (absent = Sealed), false: just looted
 }
+
+// Status effects from skills - dots, buffs, marks (skill roster stage 1, 2026-10-10). Broadcast to the floor
+message S_STATUS
+{
+	repeated StatusInfo applied = 1;	// also sent again on refresh / stack change
+	repeated StatusInfo expired = 2;
+}

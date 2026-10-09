@@ -48,6 +48,7 @@ enum : uint16
 	PKT_C_BAG_OPEN = 1035,
 	PKT_S_ESCAPE_GAUGE = 1036,
 	PKT_S_CHEST_STATE = 1037,
+	PKT_S_STATUS = 1038,
 };
 
 // Custom Handlers
@@ -120,6 +121,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_BAG_CONTENTS& pkt) { return MakeSendBuffer(pkt, PKT_S_BAG_CONTENTS); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_ESCAPE_GAUGE& pkt) { return MakeSendBuffer(pkt, PKT_S_ESCAPE_GAUGE); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_CHEST_STATE& pkt) { return MakeSendBuffer(pkt, PKT_S_CHEST_STATE); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_STATUS& pkt) { return MakeSendBuffer(pkt, PKT_S_STATUS); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

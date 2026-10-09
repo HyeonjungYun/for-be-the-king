@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Object.h"
+#include "StatusEffects.h"
 
 constexpr int32		SKILL_SLOT_COUNT = 6;
 
@@ -62,7 +63,12 @@ public:
 	int32				ApplyMitigation(float baseDamage, const Creature& target, Protocol::DamageType type) const;
 
 	int32				ComputeDamageTo(const Creature& target, Protocol::DamageType type, OUT bool& isCrit) const;
-	
+
+	// 스킬 계수가 곱해지는 힘 - 무기의 주 능력치 하나 (물리 무기 = 공격력 · 마법 무기 = 마력 · 몬스터 = 공격력).
+	// AD/AP 는 피해 종류(방어력 / 마법 저항 중 무엇이 막는가)만 가른다 - 단검의 AP 스킬이 마력 0 으로 0 이 되지 않게
+	// (2026-10-10 에이전트 결정. 물리 무기에 magic_power 를 주는 길은 C3-b 로더 규칙이 막는다)
+	int32				SkillPower() const { return autoAttackType == Protocol::DAMAGE_TYPE_MAGIC ? magicPower : attackPower; }
+
 	int32				ComputeSkillDamageTo(const Creature& target, float adRatio, float apRatio, OUT bool& isCrit) const;
 
 	int32				TakeDamage(int32 amount);
@@ -79,6 +85,12 @@ public:
 	bool				CanTurn(uint64 nowUs) const;
 	bool				CanAttack(uint64 nowUs) const;
 	bool				CanUseSkill(uint64 nowUs) const;
+
+	// 버프가 걸리거나 끝났다 - 플레이어는 장비 합산 위에 버프를 다시 얹는다 (Player::RebuildCombatStats). 몬스터는 버프가 없다
+	virtual void		OnBuffsChanged() {}
+
+	// 전투 중 상태를 전부 지운다 - 입장 · 몬스터 복귀. CC · 상태 효과 · 재입력 · 시전
+	void				ClearCombatState();
 
 public:
 	SkillSlot*			GetSlot(Protocol::EquipSlot slot);
@@ -104,6 +116,7 @@ public:
 	float				critMultiplier	= BaseStats::CRIT_MULITPLIER;
 	Protocol::DamageType autoAttackType	= Protocol::DAMAGE_TYPE_PHYSICAL;	// 맨몸 · 몬스터는 물리. 플레이어는 무기가 정한다
 	bool				rangedAutoAttack = false;	// 활 · 스태프 - 평타가 투사체로 날아간다 (필중 · 날아가는 중 벽에 막힘). 2 단계에서 쓴다
+	float				outgoingDamagePct = 0.f;	// damage_pct 버프 합 - 평타 · 스킬 피해 × (1 + 이 값). 지속 피해는 걸 때 고정
 
 public:
 	uint64				stunEndUs = 0;
@@ -113,6 +126,19 @@ public:
 	uint64				silenceEndUs = 0;
 	uint64				healReductionEndUs = 0;
 	float				healReductionMagnitude = 0.f;
+	uint64				blindEndUs = 0;				// 실명 - 소프트. 서버는 시간만 센다, 시야 축소는 클라 (skill_rules blind_view_scale)
+
+public:
+	// 상태 효과 - 지속 피해 · 버프 · 표식 (StatusEffects.h). Room 이 Flush 마다 틱 · 만료를 돌린다
+	StatusSet			status;
+
+	// 재입력 (kind recast) - 첫 발동 뒤 recast_window_ms 안의 같은 키. 두 번째 입력은 첫 조준 대상을 그대로 쓴다
+	uint32				recastSkillId = 0;
+	Protocol::EquipSlot	recastSlot = Protocol::SLOT_NONE;
+	uint64				recastUntilUs = 0;
+	uint64				recastTargetId = 0;
+	float				recastAimX = 0.f;
+	float				recastAimY = 0.f;
 
 	vector<SlowSource>	slowSources;
 
@@ -133,6 +159,7 @@ public:
 	uint64				castTargetId = 0;
 	float				castAimX = 0.f;
 	float				castAimY = 0.f;
+	uint32				castItemLevel = 0;			// 시전 슬롯 아이템의 강화 레벨 - 버프 크기 (사용자 결정: 스킬 레벨 = 아이템 강화). 몬스터 0
 
 public:
 	SkillSlot			skillSlots[SKILL_SLOT_COUNT];

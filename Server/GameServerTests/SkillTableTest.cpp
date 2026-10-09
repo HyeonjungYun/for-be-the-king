@@ -245,3 +245,77 @@ TEST(SkillTable, 잘못된_데이터는_거부한다)
 
 	EXPECT_TRUE(SkillTable::All().empty());
 }
+
+// 1 단계 - 종류(kind)와 효과가 맞물리는가. 패시브는 평타 적중 · 치명상 효과로만 발동하고, 재입력은 두 번째 입력의 효과가 있어야 한다
+TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력은_recast_효과를_가진다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	int32 passives = 0;
+	int32 recasts = 0;
+
+	for (const auto& [skillId, def] : SkillTable::All())
+	{
+		if (def.kind == SkillKind::Passive)
+		{
+			++passives;
+			const bool hasTrigger = def.FindEffect(SkillEffectType::OnHit) != nullptr || def.FindEffect(SkillEffectType::LethalSave) != nullptr;
+			EXPECT_TRUE(hasTrigger) << "passive skill " << skillId << " has no on_hit / lethal_save effect";
+			EXPECT_EQ(def.castMs, 0u) << "passive skill " << skillId;
+		}
+
+		if (def.kind == SkillKind::Recast)
+		{
+			++recasts;
+			bool hasRecast = false;
+			for (const SkillEffect& e : def.effects)
+				hasRecast |= (e.condition == SkillRequire::Recast);
+			EXPECT_TRUE(hasRecast) << "recast skill " << skillId << " has no requires=recast effect";
+		}
+
+		// requires=recast 는 kind recast 에만
+		for (const SkillEffect& e : def.effects)
+		{
+			if (e.condition == SkillRequire::Recast)
+				EXPECT_EQ(def.kind, SkillKind::Recast) << "skill " << skillId << " has a recast effect but kind is not recast";
+		}
+	}
+
+	EXPECT_EQ(passives, 3) << "#24 뇌신 · #34 맹수의 본능 · #67 화신";
+	EXPECT_EQ(recasts, 2) << "#38 피의 추적 · #45 올가미";
+}
+
+// 1 단계 - 버프 · 지속 피해 · 표식 · 처형 효과의 필수 열. 엔진이 읽는 열이 비어 있으면 조용히 아무 일도 없다 - 여기서 잡는다
+TEST(SkillRoster, 버프_지속피해_표식_효과는_필수_열이_채워져_있다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	const set<string> dotKinds = { "bleed", "poison", "burn", "heavy_bleed" };
+	const set<string> markKinds = { "spear", "arrow", "blood", "heavy_bleed", "rope" };
+
+	for (const auto& [skillId, def] : SkillTable::All())
+	{
+		for (const SkillEffect& e : def.effects)
+		{
+			switch (e.type)
+			{
+			case SkillEffectType::SelfBuff:
+				EXPECT_TRUE(e.self && e.stat != SkillBuffStat::None && e.durationMs > 0 && e.magnitude > 0.f) << "skill " << skillId << " buff";
+				break;
+			case SkillEffectType::Dot:
+				EXPECT_TRUE(dotKinds.count(e.param) > 0 && e.durationMs > 0 && (e.adRatio > 0.f || e.apRatio > 0.f)) << "skill " << skillId << " dot";
+				break;
+			case SkillEffectType::Mark:
+				EXPECT_TRUE(markKinds.count(e.param) > 0 && e.durationMs > 0) << "skill " << skillId << " mark";
+				break;
+			case SkillEffectType::Knockback:
+				EXPECT_TRUE(e.distCm > 0.f && e.speedCms > 0.f) << "skill " << skillId << " knockback";
+				break;
+			default:
+				break;
+			}
+		}
+	}
+}

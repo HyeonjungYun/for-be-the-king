@@ -54,30 +54,52 @@ bool Player::ApplyEquipmentStats(bool refill)
 			worn.push_back({ e.itemTypeId, e.grade });
 	}
 
-	const EquipStatTotals totals = EquipStats::Compute(worn, nakedMaxHp);
+	equipTotals = EquipStats::Compute(worn, nakedMaxHp);
 
 	const int32 oldMaxHp = maxHp;
 	const int32 oldHp = hp;
 
-	maxHp			= totals.maxHp;
-	attackPower		= totals.attackPower;
-	magicPower		= totals.magicPower;
-	armor			= totals.armor;
-	magicResist		= totals.magicResist;
-	critChance		= totals.critChance;
-	critMultiplier	= totals.critMultiplier;
-	percentAsBonus	= totals.percentAsBonus;
-	percentMsBonus	= totals.percentMsBonus;
-	resistance		= totals.resistance;
-	attackRange		= totals.attackRange;
-	attackSpeed		= totals.attackSpeed;
-	rangedAutoAttack = totals.rangedAttack;
-	autoAttackType	= totals.autoAttackType;
+	maxHp = equipTotals.maxHp;
+	RebuildCombatStats();
 
 	hp = refill ? maxHp : EquipStats::RescaleHp(hp, oldMaxHp, maxHp);
 
 	// 최대치만 바뀌고 체력은 반올림으로 그대로일 수 있다 (체력 1 등) - 그래도 알려야 남의 체력 바 비율이 맞는다
 	return hp != oldHp || maxHp != oldMaxHp;
+}
+
+void Player::RebuildCombatStats()
+{
+	const EquipStatTotals& t = equipTotals;
+	auto pct = [&](SkillBuffStat stat) { return status.BuffSum(stat); };
+	auto scaled = [](int32 base, float bonus) { return static_cast<int32>(::lroundf(base * (1.f + bonus))); };
+
+	attackPower		= scaled(t.attackPower, pct(SkillBuffStat::AttackPower));
+	magicPower		= scaled(t.magicPower, pct(SkillBuffStat::MagicPower));
+	armor			= scaled(t.armor, pct(SkillBuffStat::Armor));
+	magicResist		= scaled(t.magicResist, pct(SkillBuffStat::MagicResist));
+	critChance		= min(EquipStats::CRIT_CHANCE_MAX, t.critChance + pct(SkillBuffStat::CritChance));
+	critMultiplier	= t.critMultiplier;
+	percentAsBonus	= t.percentAsBonus + pct(SkillBuffStat::AttackSpeed);
+	percentMsBonus	= t.percentMsBonus + pct(SkillBuffStat::MoveSpeed);
+	resistance		= t.resistance;
+	attackRange		= t.attackRange;
+	attackSpeed		= t.attackSpeed;
+	rangedAutoAttack = t.rangedAttack;
+	autoAttackType	= t.autoAttackType;
+	outgoingDamagePct = pct(SkillBuffStat::DamagePct);
+}
+
+uint32 Player::ItemLevelOfSlot(Protocol::EquipSlot slot) const
+{
+	int32 index = static_cast<int32>(slot) - 1;
+	if (slot == Protocol::SLOT_WEAPON_SECONDARY)
+		index = Protocol::SLOT_WEAPON_PRIMARY - 1;
+
+	if (index < 0 || index >= SKILL_SLOT_COUNT || equipped[index].instanceId == 0)
+		return 0;
+
+	return equipped[index].level;
 }
 
 void Player::RebuildSkillSlotsFromEquipment()

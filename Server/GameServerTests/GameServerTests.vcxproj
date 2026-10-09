@@ -102,6 +102,9 @@
     <ClCompile Include="ItemTableTest.cpp" />
     <ClCompile Include="StarterKitTest.cpp" />
     <ClCompile Include="SkillTableTest.cpp" />
+    <ClCompile Include="StatusEffectsTest.cpp" />
+    <ClCompile Include="SkillKinematicsTest.cpp" />
+    <ClCompile Include="BuffStatsTest.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -115,6 +118,9 @@
     <ClCompile Include="..\GameServer\Object.cpp" />
     <ClCompile Include="..\GameServer\Creature.cpp" />
     <ClCompile Include="..\GameServer\SkillTable.cpp" />
+    <ClCompile Include="..\GameServer\StatusEffects.cpp" />
+    <ClCompile Include="..\GameServer\SkillKinematics.cpp" />
+    <ClCompile Include="..\GameServer\Player.cpp" />
     <ClCompile Include="..\GameServer\ItemTable.cpp" />
     <ClCompile Include="..\GameServer\ItemRoller.cpp" />
     <ClCompile Include="..\GameServer\CsvTable.cpp" />

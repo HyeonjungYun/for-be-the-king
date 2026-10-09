@@ -302,11 +302,45 @@ bool Handle_S_CC(PacketSessionRef& session, Protocol::S_CC& pkt)
 		}
 	}
 
+	// 넉백 · 끌기 - 서버가 위치를 끝점으로 옮겼다. 봇은 벽을 모르니 끝점을 그대로 받는다 (서버 값 = 벽 보정 뒤 실제 거리).
+	// 틀리면 CC 뒤 첫 이동이 거부되고 보정(S_MOVE correction)으로 맞춰진다 (skill-roster 1 단계)
+	for (const Protocol::KnockbackInfo& info : pkt.knockbacks())
+	{
+		if (info.target_id() != bot->objectId.load())
+			continue;
+
+		bot->x += info.dir_x() * info.distance();
+		bot->y += info.dir_y() * info.distance();
+		bot->destX = bot->x;
+		bot->destY = bot->y;
+
+		LOG_LINE << "[BOT PUSHED] id=" << bot->objectId.load() << " by=" << info.instigator_id()
+			<< " dist=" << info.distance() << " -> (" << bot->x << ", " << bot->y << ")" << '\n';
+	}
+
 	return true;
 }
 
 bool Handle_S_CC_STATE(PacketSessionRef& session, Protocol::S_CC_STATE& pkt)
 {
+	return true;
+}
+
+bool Handle_S_STATUS(PacketSessionRef& session, Protocol::S_STATUS& pkt)
+{
+	// 상태 효과 (지속 피해 · 버프 · 표식) - 봇은 처음 20건만 찍는다. 서버 [DOT] · [BUFF] · [MARK] 와 맞춰 읽는다 (skill-roster 1 단계)
+	static atomic<int32> logged = 0;
+
+	auto bot = static_pointer_cast<BotSession>(session);
+	for (const Protocol::StatusInfo& info : pkt.applied())
+	{
+		if (info.target_id() != bot->objectId.load() || logged.fetch_add(1) >= 20)
+			continue;
+
+		LOG_LINE << "[BOT STATUS] target=" << info.target_id() << " kind=" << info.kind() << " param=" << info.param()
+			<< " stacks=" << info.stacks() << " ms=" << info.remaining_ms() << " mag=" << info.magnitude()
+			<< " by=" << info.instigator_id() << '\n';
+	}
 	return true;
 }
 

@@ -15,6 +15,7 @@
 #include "MonsterTable.h"
 #include "TowerTable.h"
 #include "Telemetry.h"
+#include "SkillKinematics.h"
 
 namespace
 {
@@ -119,6 +120,20 @@ namespace
 		return (dx * dx + dy * dy) <= (rangeCm * rangeCm);
 	}
 
+	// requires=mark:X 가 보는 표식 종류 (skill_effects.csv param 과 같은 이름). 표식 조건이 아니면 nullptr
+	const char* RequiredMark(SkillRequire condition)
+	{
+		switch (condition)
+		{
+		case SkillRequire::MarkSpear:		return "spear";
+		case SkillRequire::MarkArrow:		return "arrow";
+		case SkillRequire::MarkBlood:		return "blood";
+		case SkillRequire::MarkHeavyBleed:	return "heavy_bleed";
+		case SkillRequire::MarkRope:		return "rope";
+		default:							return nullptr;
+		}
+	}
+
 	bool IsInLootRange(const PlayerRef& player, const BagRef& bag)
 	{
 		const float dx = bag->posInfo->x() - player->posInfo->x();
@@ -219,6 +234,9 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->lastMoveUs = enterUs;
 		player->moveClock.Reset();
 		player->lastSaveUs = enterUs;
+
+		// 지난 런의 CC · 상태 효과 · 재입력이 따라오지 않는다
+		player->ClearCombatState();
 
 		// 장비 스탯 - 입장 체력은 새 최대치로 가득. S_ENTER_GAME · 스폰 스냅샷이 이 체력을 싣는다 (TR-combat-026)
 		player->ApplyEquipmentStats(true);
@@ -420,6 +438,12 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		return;
 
 	const uint64 blockCheckUs = Utils::NowMicroseconds();
+
+	// 넉백 · 끌기 중 - 서버가 위치를 끝점으로 옮겼고 클라는 KnockbackInfo 로 같은 끝점까지 밀려가는 중이다.
+	// 되돌리지 않고 조용히 무시한다 (서버가 위치를 소유하는 구간). CC 가 끝난 뒤의 첫 이동이 끝점에서 검증된다 (스킬 로스터 1 단계)
+	if (blockCheckUs < player->knockbackEndUs)
+		return;
+
 	if (player->CanMove(blockCheckUs) == false)
 	{
 		uint64 remainMs = 0;
@@ -695,7 +719,31 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	if (def == nullptr)
 		return;
 
+	// 패시브는 키를 차지할 뿐 - 눌러도 아무 일 없다 (사용자 결정 2026-10-10). 효과는 평타 적중(on_hit) · 치명상(lethal_save)에서 나간다
+	if (def->kind == SkillKind::Passive)
+		return;
+
 	const uint64 nowUs = Utils::NowMicroseconds();
+
+	// 재입력 - 첫 발동 뒤 창(skill_rules recast_window_ms) 안의 같은 키. 쿨다운 · 캐스트 없이 바로, 첫 조준 대상을 그대로 쓴다
+	if (caster->recastSkillId == def->skillId && caster->recastSlot == pkt.slot() && nowUs < caster->recastUntilUs)
+	{
+		if (caster->CanUseSkill(nowUs) == false || caster->IsCasting())
+			return;
+
+		const uint64 targetId = caster->recastTargetId;
+		const float aimX = caster->recastAimX;
+		const float aimY = caster->recastAimY;
+
+		caster->recastSkillId = 0;
+		caster->recastUntilUs = 0;
+		caster->recastTargetId = 0;
+		caster->castItemLevel = caster->IsPlayer() ? static_pointer_cast<Player>(caster)->ItemLevelOfSlot(pkt.slot()) : 0;
+
+		LOG_LINE << "[SKILL RECAST] caster=" << casterId << " skill=" << def->skillId << " target=" << targetId << '\n';
+		FireSkill(caster, *def, pkt.slot(), targetId, aimX, aimY, /*recast*/ true, nowUs);
+		return;
+	}
 
 	if (nowUs < skillSlot->cooldownEndUs)
 		return;
@@ -706,7 +754,8 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	if (caster->IsCasting())
 		return;
 
-	if (def->shape == SkillShape::Single)
+	// 대상 지정 단일기만 대상을 검사한다 - 조준 없는 단일기(맹수의 포효)는 서버가 전방에서 고른다 (CollectSkillTargets)
+	if (def->shape == SkillShape::Single && def->aimType == SkillAimType::Target)
 	{
 		if (casterId == pkt.target_id())
 			return;
@@ -740,6 +789,7 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	caster->castTargetId = pkt.target_id();
 	caster->castAimX = pkt.aim_x();
 	caster->castAimY = pkt.aim_y();
+	caster->castItemLevel = caster->IsPlayer() ? static_pointer_cast<Player>(caster)->ItemLevelOfSlot(pkt.slot()) : 0;
 	caster->castEndAtUs = nowUs + static_cast<uint64>(def->castMs) * 1000;
 	_casters.insert(casterId);
 
@@ -782,6 +832,13 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 	if (effectiveMs == 0)
 		return;
 
+	ApplyCcRaw(target, instigatorId, type, effectiveMs, magnitude, nowUs);
+}
+
+// 저항 계산 없이 그 길이 그대로 - 넉백 CC(날아가는 시간)는 거리가 이미 저항으로 줄었다 (공식 C6)
+void Room::ApplyCcRaw(const CreatureRef& target, uint64 instigatorId, Protocol::CcType type, uint32 effectiveMs, float magnitude, uint64 nowUs)
+{
+	const uint64 targetId = target->objectInfo->object_id();
 	const bool isHard = IsHardCcType(type);
 
 	if (isHard)
@@ -818,7 +875,10 @@ void Room::ResolveAttacks(uint64 nowUs)
 
 	vector<uint64> resolved;
 
-	for (uint64 attackerId : _attackers)
+	// 스냅샷 - 피해 경로(치명상 방어 · 밀기)가 대상의 평타를 지우며 _attackers 를 고친다
+	const vector<uint64> attackers(_attackers.begin(), _attackers.end());
+
+	for (uint64 attackerId : attackers)
 	{
 		auto attackerIt = _objects.find(attackerId);
 		if (attackerIt == _objects.end())
@@ -870,32 +930,21 @@ void Room::ResolveAttacks(uint64 nowUs)
 		}
 
 		bool isCrit = false;
-		const int32 damage = attacker->ComputeDamageTo(*target, attacker->autoAttackType, OUT isCrit);
-		const int32 remainingHp = target->TakeDamage(damage);
+		int32 damage = attacker->ComputeDamageTo(*target, attacker->autoAttackType, OUT isCrit);
 
-		Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
-		dmg.set_attacker_id(attackerId);
-		dmg.set_target_id(targetId);
-		dmg.set_damage(damage);
-		dmg.set_remaining_hp(remainingHp);
-		dmg.set_is_crit(isCrit);
-		dmg.set_damage_type(attacker->autoAttackType);
+		// 점지 - 내 창 표식이 남은 적에게 평타 추가 피해 (skill_rules mark_spear_basic_bonus). 표식은 남는다
+		if (target->status.HasMark("spear", attackerId))
+			damage = static_cast<int32>(damage * (1.f + SkillTable::Rules().markSpearBasicBonus));
+
+		// 사망 처리는 Flush 끝 (FlushCombat → KillBatch)
+		const int32 remainingHp = DealDamage(attacker, attackerId, target, damage, attacker->autoAttackType, isCrit, nowUs);
 
 		// 후딜 소모는 히트에 성공했을 때만
 		attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
 
-		if (target->IsMonster())
-			OnMonsterDamaged(static_pointer_cast<Monster>(target), attackerId, damage, nowUs);
-
-		if (attacker->IsMonster())
-		{
-			MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(attacker)->brain, nowUs);
-			GMonsterStats.hits.fetch_add(1);
-		}
-
-		// 이 루프가 _attackers 를 돌고 있다 - 사망 처리는 Flush 끝 (FlushCombat → KillBatch)
-		if (remainingHp <= 0)
-			KillCreature(target, attacker, attackerId, nowUs);
+		// 패시브 - 평타 적중마다 추가 피해 (뇌신 · 화신). 죽은 대상에겐 들어가지 않는다
+		if (remainingHp > 0 && attacker->IsPlayer())
+			ApplyOnHitPassives(attacker, target, nowUs);
 	}
 
 	for (uint64 id : resolved)
@@ -909,7 +958,10 @@ void Room::ResolveCasts(uint64 nowUs)
 
 	vector<uint64> resolved;
 
-	for (uint64 casterId : _casters)
+	// 스냅샷 - 효과(CC · 밀기)가 대상의 시전을 지우며 _casters 를 고친다
+	const vector<uint64> casters(_casters.begin(), _casters.end());
+
+	for (uint64 casterId : casters)
 	{
 		auto casterIt = _objects.find(casterId);
 		if (casterIt == _objects.end())
@@ -948,55 +1000,99 @@ void Room::ResolveCasts(uint64 nowUs)
 		if (def == nullptr)
 			continue;
 
-		// 효과 적용 시점
-		if (SkillSlot* skillSlot = caster->GetSlot(slot))
-			skillSlot->cooldownEndUs = nowUs + static_cast<uint64>(def->cooldownMs) * 1000;
-
-		const float originX = caster->posInfo->x();
-		const float originY = caster->posInfo->y();
-
-		{
-			Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
-			hit.set_caster_id(casterId);
-			hit.set_effect_id(def->effectId);
-			hit.set_target_id(castTargetId);
-			hit.set_impact_x(originX);
-			hit.set_impact_y(originY);
-			hit.set_aim_x(castAimX);
-			hit.set_aim_y(castAimY);
-		}
-
-		if (def->telegraphMs == 0)
-		{
-			vector<CreatureRef> targets;
-			CollectSkillTargets(caster, *def, originX, originY, castTargetId, castAimX, castAimY, OUT targets);
-			ApplySkillEffects(caster, *def, targets, nowUs);
-
-			LOG_LINE << "[SKILL FIRE] caster=" << casterId
-				<< " skill=" << skillId
-				<< " targets=" << targets.size()
-				<< " cd=" << def->cooldownMs << "ms" << '\n';
-		}
-		else
-		{
-			PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
-			pending.casterId = casterId;
-			pending.skillId = skillId;
-			pending.fireAtUs = nowUs + static_cast<uint64>(def->telegraphMs) * 1000;
-			pending.targetId = castTargetId;
-			pending.originX = originX;
-			pending.originY = originY;
-			pending.aimX = castAimX;
-			pending.aimY = castAimY;
-
-			LOG_LINE << "[SKILL TELEGRAPH] caster=" << casterId
-				<< " skill=" << skillId
-				<< " in=" << def->telegraphMs << "ms" << '\n';
-		}
+		// 효과 적용 시점 - 쿨다운 · S_SKILL_HIT · 판정 · 효과 (예고가 있으면 PendingTelegraph)
+		FireSkill(caster, *def, slot, castTargetId, castAimX, castAimY, /*recast*/ false, nowUs);
 	}
 
 	for (uint64 id : resolved)
 		_casters.erase(id);
+}
+
+void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::EquipSlot slot, uint64 castTargetId, float aimX, float aimY, bool recast, uint64 nowUs)
+{
+	const uint64 casterId = caster->objectInfo->object_id();
+
+	// 쿨다운은 효과가 나가는 순간 (R3). 재입력의 두 번째 입력은 첫 발동의 쿨다운을 그대로 둔다
+	if (recast == false)
+	{
+		if (SkillSlot* skillSlot = caster->GetSlot(slot))
+			skillSlot->cooldownEndUs = nowUs + static_cast<uint64>(def.cooldownMs) * 1000;
+	}
+
+	const float originX = caster->posInfo->x();
+	const float originY = caster->posInfo->y();
+
+	// 재입력은 첫 대상의 지금 위치를 조준한다 (피의 추적 - 대상 쪽으로 돌진)
+	if (recast && castTargetId != 0)
+	{
+		auto targetIt = _objects.find(castTargetId);
+		if (targetIt != _objects.end())
+		{
+			aimX = targetIt->second->posInfo->x();
+			aimY = targetIt->second->posInfo->y();
+		}
+	}
+
+	{
+		Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
+		hit.set_caster_id(casterId);
+		hit.set_effect_id(def.effectId);
+		hit.set_target_id(castTargetId);
+		hit.set_impact_x(originX);
+		hit.set_impact_y(originY);
+		hit.set_aim_x(aimX);
+		hit.set_aim_y(aimY);
+	}
+
+	if (def.telegraphMs == 0 || recast)
+	{
+		vector<CreatureRef> targets;
+		CollectSkillTargets(caster, def, originX, originY, castTargetId, aimX, aimY, OUT targets);
+
+		SkillContext ctx;
+		ctx.casterId = casterId;
+		ctx.originX = originX;
+		ctx.originY = originY;
+		ctx.aimX = aimX;
+		ctx.aimY = aimY;
+		ctx.itemLevel = caster->castItemLevel;
+		ctx.recast = recast;
+		ApplySkillEffects(caster, def, targets, ctx, nowUs);
+
+		LOG_LINE << "[SKILL FIRE] caster=" << casterId
+			<< " skill=" << def.skillId
+			<< " targets=" << targets.size()
+			<< (recast ? " recast" : "")
+			<< " cd=" << def.cooldownMs << "ms" << '\n';
+	}
+	else
+	{
+		PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
+		pending.casterId = casterId;
+		pending.skillId = def.skillId;
+		pending.fireAtUs = nowUs + static_cast<uint64>(def.telegraphMs) * 1000;
+		pending.targetId = castTargetId;
+		pending.originX = originX;
+		pending.originY = originY;
+		pending.aimX = aimX;
+		pending.aimY = aimY;
+		pending.itemLevel = caster->castItemLevel;
+
+		LOG_LINE << "[SKILL TELEGRAPH] caster=" << casterId
+			<< " skill=" << def.skillId
+			<< " in=" << def.telegraphMs << "ms" << '\n';
+	}
+
+	// 재입력 창 - 첫 발동 뒤 recast_window_ms 안의 같은 키 (사용자 결정 2026-10-10: 2 초)
+	if (recast == false && def.kind == SkillKind::Recast)
+	{
+		caster->recastSkillId = def.skillId;
+		caster->recastSlot = slot;
+		caster->recastUntilUs = nowUs + static_cast<uint64>(SkillTable::Rules().recastWindowMs) * 1000;
+		caster->recastTargetId = castTargetId;
+		caster->recastAimX = aimX;
+		caster->recastAimY = aimY;
+	}
 }
 
 void Room::ResolveTelegraphs(uint64 nowUs)
@@ -1018,6 +1114,7 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		const uint64 targetId = pending.targetId;
 		const float aimX = pending.aimX;
 		const float aimY = pending.aimY;
+		const uint32 itemLevel = pending.itemLevel;
 
 		_pendingTelegraphs.erase(_pendingTelegraphs.begin() + i);
 
@@ -1037,7 +1134,15 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 
 		vector<CreatureRef> targets;
 		CollectSkillTargets(caster, *def, originX, originY, targetId, aimX, aimY, OUT targets);
-		ApplySkillEffects(caster, *def, targets, nowUs);
+
+		SkillContext ctx;
+		ctx.casterId = casterId;
+		ctx.originX = originX;
+		ctx.originY = originY;
+		ctx.aimX = aimX;
+		ctx.aimY = aimY;
+		ctx.itemLevel = itemLevel;
+		ApplySkillEffects(caster, *def, targets, ctx, nowUs);
 
 		LOG_LINE << "[SKILL FIRE] caster=" << casterId
 			<< " skill=" << skillId
@@ -1087,6 +1192,7 @@ void Room::UpdateCc(uint64 nowUs)
 		expire(target->launchEndUs, Protocol::CC_TYPE_LAUNCH);
 		expire(target->silenceEndUs, Protocol::CC_TYPE_SILENCE);
 		expire(target->healReductionEndUs, Protocol::CC_TYPE_HEAL_REDUCTION);
+		expire(target->blindEndUs, Protocol::CC_TYPE_BLIND);
 
 		if (target->healReductionEndUs == 0)
 			target->healReductionMagnitude = 0.f;
@@ -1104,6 +1210,7 @@ void Room::UpdateCc(uint64 nowUs)
 		const bool stillCced = target->stunEndUs || target->rootEndUs
 			|| target->knockbackEndUs || target->launchEndUs
 			|| target->silenceEndUs || target->healReductionEndUs
+			|| target->blindEndUs
 			|| target->slowSources.empty() == false;
 
 		if (stillCced == false)
@@ -1152,7 +1259,8 @@ void Room::FlushCcState(uint64 nowUs)
 		addSlot(target->launchEndUs,		Protocol::CC_TYPE_LAUNCH,			0.f);
 		addSlot(target->silenceEndUs,		Protocol::CC_TYPE_SILENCE,			0.f);
 		addSlot(target->healReductionEndUs,	Protocol::CC_TYPE_HEAL_REDUCTION,	target->healReductionMagnitude);
-		
+		addSlot(target->blindEndUs,			Protocol::CC_TYPE_BLIND,			SkillTable::Rules().blindViewScale);
+
 		uint64 slowEndUs = 0;
 		for (const SlowSource& src : target->slowSources)
 		{
@@ -1905,9 +2013,11 @@ void Room::FlushCombat()
 	_kills.Begin();
 
 	UpdateCc(nowUs);
+	UpdateStatuses(nowUs);
 	ResolveAttacks(nowUs);
 	ResolveCasts(nowUs);
 	ResolveTelegraphs(nowUs);
+	ResolvePendingHits(nowUs);
 
 	for (const auto& kill : _kills.End())
 	{
@@ -1971,7 +2081,7 @@ void Room::FlushCombat()
 		SEND_PACKET_BROADCAST(pkt);
 	}
 
-	if (_pendingCcApplied.empty() == false || _pendingCcExpired.empty() == false)
+	if (_pendingCcApplied.empty() == false || _pendingCcExpired.empty() == false || _pendingKnockbacks.empty() == false)
 	{
 		Protocol::S_CC pkt;
 
@@ -1979,9 +2089,27 @@ void Room::FlushCombat()
 			pkt.add_applied()->CopyFrom(info);
 		for (const Protocol::CcEventInfo& info : _pendingCcExpired)
 			pkt.add_expired()->CopyFrom(info);
+		for (const Protocol::KnockbackInfo& info : _pendingKnockbacks)
+			pkt.add_knockbacks()->CopyFrom(info);
 
 		_pendingCcApplied.clear();
 		_pendingCcExpired.clear();
+		_pendingKnockbacks.clear();
+
+		SEND_PACKET_BROADCAST(pkt);
+	}
+
+	if (_pendingStatusApplied.empty() == false || _pendingStatusExpired.empty() == false)
+	{
+		Protocol::S_STATUS pkt;
+
+		for (const Protocol::StatusInfo& info : _pendingStatusApplied)
+			pkt.add_applied()->CopyFrom(info);
+		for (const Protocol::StatusInfo& info : _pendingStatusExpired)
+			pkt.add_expired()->CopyFrom(info);
+
+		_pendingStatusApplied.clear();
+		_pendingStatusExpired.clear();
 
 		SEND_PACKET_BROADCAST(pkt);
 	}
@@ -2578,95 +2706,712 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 	}
 }
 
-void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, uint64 nowUs)
+void Room::ApplySkillEffects(const CreatureRef& caster, const SkillDef& def, const vector<CreatureRef>& targets, const SkillContext& ctx, uint64 nowUs)
 {
-	const uint64 casterId = caster->objectInfo->object_id();
+	// 🔴 1 단계 - 피해(다단 간격) · CC · 넉백 · 끌기 · 이동(블링크 포함) · 버프 · 지속 피해 · 표식 · 처형 · 조건(requires).
+	//    Zone · Chain · Delayed · Throw · Counter · Parry · Hold · Stance · Decoy · Invuln · Reveal · Trail · SelfCc · PetrifyWindow · FallOnHit 는 2 ~ 4 단계
+	const uint64 casterId = ctx.casterId;
 
-	// 🔴 0 단계 - 피해 · 하드/소프트 CC · 이동만. requires 가 붙은 효과(표식 · 재입력 · 적중 조건 …)와 나머지 종류는 1 ~ 4 단계가 채운다.
-	//    여기 걸리는 효과는 부팅 로그 [SKILL] 에 세지 않는다 - 데이터는 전부 실려 있고 엔진이 뒤따라온다
-	auto isActiveNow = [](const SkillEffect& e)
-		{
-			return e.condition == SkillRequire::None;
-		};
+	// 적중 = 판정에 걸린 대상이 하나라도 있다 (hit 조건). 처치 = 이 발동이 대상을 죽였다 (no_kill 조건)
+	const bool anyHit = targets.empty() == false;
+	bool anyKill = false;
 
+	// 1) 자기 효과 - 결과와 무관한 것 먼저 (이동 · 버프). 적중 · 미처치 조건은 대상 효과 뒤에
 	for (const SkillEffect& e : def.effects)
 	{
-		if (e.self == false || isActiveNow(e) == false)
+		if (e.self == false || e.condition == SkillRequire::Hit || e.condition == SkillRequire::NoKill)
+			continue;
+		if (MeetsCondition(e, ctx, nullptr, anyHit, anyKill, nowUs) == false)
 			continue;
 
-		switch (e.type)
-		{
-		case SkillEffectType::Movement:
-			ApplyMovement(caster, e, nowUs);
-			break;
-		default:
-			break;
-		}
+		ApplySelfEffect(caster, def, e, ctx, nowUs);
 	}
 
-	for (const CreatureRef& target : targets)
+	// 2) 대상 효과 - seq 순서대로. 표식 조건은 그 대상의 효과를 전부 본 뒤 한 번만 지운다 (피해 + 처형이 같은 표식을 본다)
+	for (size_t ti = 0; ti < targets.size(); ti++)
 	{
-		const uint64 targetId = target->objectInfo->object_id();
+		const CreatureRef& target = targets[ti];
+		vector<string> consumedMarks;
 
-		for (const SkillEffect& e : def.effects)
+		for (uint32 i = 0; i < def.effects.size(); i++)
 		{
-			if (e.self || isActiveNow(e) == false)
+			const SkillEffect& e = def.effects[i];
+			if (e.self)
 				continue;
 
-			switch (e.type)
+			// param first - 처음 맞은 하나에게만 (방패 돌진의 피해 · 기절)
+			if (e.param == "first" && ti > 0)
+				continue;
+
+			if (MeetsCondition(e, ctx, target, anyHit, anyKill, nowUs) == false)
+				continue;
+
+			if (const char* markKind = RequiredMark(e.condition))
+				consumedMarks.push_back(markKind);
+
+			ApplyTargetEffect(caster, def, i, target, ctx, nowUs);
+
+			if (target->IsAlive() == false)
 			{
-			case SkillEffectType::Damage:
-			{
-				if (e.adRatio <= 0.f && e.apRatio <= 0.f)
-					break;
-
-				// 다단 히트는 0 단계에서 한 번에 - 간격은 1 단계 (hits 만큼 합산해 같은 총량을 낸다)
-				for (uint32 hit = 0; hit < max(1u, e.hits); hit++)
-				{
-					if (target->IsAlive() == false)
-						break;
-
-					bool isCrit = false;
-					const int32 damage = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
-					const int32 remainingHp = target->TakeDamage(damage);
-
-					Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
-					dmg.set_attacker_id(casterId);
-					dmg.set_target_id(targetId);
-					dmg.set_damage(damage);
-					dmg.set_remaining_hp(remainingHp);
-					dmg.set_is_crit(isCrit);
-					dmg.set_damage_type(e.DamageType());
-
-					if (target->IsMonster())
-						OnMonsterDamaged(static_pointer_cast<Monster>(target), casterId, damage, nowUs);
-
-					if (caster->IsMonster())
-					{
-						MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(caster)->brain, nowUs);
-						GMonsterStats.hits.fetch_add(1);
-					}
-
-					if (remainingHp <= 0)
-					{
-						KillCreature(target, caster, casterId, nowUs);
-						break;
-					}
-				}
-				break;
-			}
-			case SkillEffectType::HardCc:
-			case SkillEffectType::SoftCc:
-				if (e.durationMs > 0)
-					ApplyCc(targetId, casterId, e.ccType, e.durationMs, e.magnitude);
-				break;
-
-			default:
-				// 1 ~ 4 단계: Knockback · Pull · Dot · Mark · Execute · Zone · Chain · Delayed · Throw …
+				anyKill = true;
 				break;
 			}
 		}
+
+		for (const string& kind : consumedMarks)
+		{
+			if (target->status.ConsumeMark(kind, casterId))
+				PushStatus(false, target->objectInfo->object_id(), Protocol::STATUS_MARK, kind, 0, 0, 0.f, casterId);
+		}
 	}
+
+	// 3) 결과 조건의 자기 효과 - 적중했으면(hit) · 처치하지 못했으면(no_kill)
+	for (const SkillEffect& e : def.effects)
+	{
+		if (e.self == false || (e.condition != SkillRequire::Hit && e.condition != SkillRequire::NoKill))
+			continue;
+		if (MeetsCondition(e, ctx, nullptr, anyHit, anyKill, nowUs) == false)
+			continue;
+
+		ApplySelfEffect(caster, def, e, ctx, nowUs);
+	}
+}
+
+bool Room::MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const CreatureRef& target, bool anyHit, bool anyKill, uint64 nowUs) const
+{
+	// 재입력의 두 번째 입력은 recast 효과만, 첫 입력은 recast 효과를 빼고
+	if (ctx.recast != (e.condition == SkillRequire::Recast))
+		return false;
+
+	switch (e.condition)
+	{
+	case SkillRequire::None:
+	case SkillRequire::Recast:
+		return true;
+
+	case SkillRequire::MarkSpear:
+	case SkillRequire::MarkArrow:
+	case SkillRequire::MarkBlood:
+	case SkillRequire::MarkHeavyBleed:
+	case SkillRequire::MarkRope:
+		// 본인 표식만 (사용자 결정) - 남이 남긴 표식은 쓸 수 없다
+		return target != nullptr && target->status.HasMark(RequiredMark(e.condition), ctx.casterId);
+
+	case SkillRequire::Stunned:
+		return target != nullptr && nowUs < target->stunEndUs;
+
+	case SkillRequire::Hit:
+		return anyHit;
+
+	case SkillRequire::NoKill:
+		return anyHit && anyKill == false;
+
+	case SkillRequire::Element:
+	case SkillRequire::NoElement:
+	case SkillRequire::Wall:
+		return false;		// 3 단계 - 스태프 속성 · 유지형 벽 충돌
+	}
+
+	return false;
+}
+
+void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
+{
+	switch (e.type)
+	{
+	case SkillEffectType::Movement:
+		// dash · leap · forward · back 은 클라가 옮기고 서버는 속도 창만 연다 (방향은 클라 몫 - 서버는 거리 · 속도만 검증).
+		// blink 는 서버가 옮긴다 (벽 무시 · 도착 보정)
+		if (e.param == "blink")
+			BlinkCaster(caster, e, ctx, nowUs);
+		else
+			ApplyMovement(caster, e, nowUs);
+		break;
+
+	case SkillEffectType::SelfBuff:
+	{
+		if (e.stat == SkillBuffStat::None || e.durationMs == 0)
+			break;
+
+		// 크기 = magnitude + per_level × 아이템 강화 레벨 (사용자 결정: 스킬 레벨 = 아이템 강화). 같은 버프는 갱신
+		const float magnitude = e.magnitude + e.perLevel * static_cast<float>(ctx.itemLevel);
+
+		BuffInstance buff;
+		buff.skillId = def.skillId;
+		buff.stat = e.stat;
+		buff.magnitude = magnitude;
+		buff.endUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+
+		caster->status.AddBuff(buff);
+		caster->OnBuffsChanged();
+		_statusTargets.insert(ctx.casterId);
+
+		PushStatus(true, ctx.casterId, Protocol::STATUS_BUFF, SkillTable::BuffStatName(e.stat), 1, e.durationMs, magnitude, ctx.casterId);
+
+		LOG_LINE << "[BUFF] caster=" << ctx.casterId << " skill=" << def.skillId
+			<< " stat=" << SkillTable::BuffStatName(e.stat) << " +" << magnitude << " lv=" << ctx.itemLevel
+			<< " for=" << e.durationMs << "ms" << '\n';
+		break;
+	}
+
+	default:
+		// OnHit · LethalSave 는 패시브 - 평타 · 피해 경로에서 발동한다. 나머지 자기 효과는 3 ~ 4 단계
+		break;
+	}
+}
+
+void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const CreatureRef& target, const SkillContext& ctx, uint64 nowUs)
+{
+	const SkillEffect& e = def.effects[effectIndex];
+	const uint64 casterId = ctx.casterId;
+	const uint64 targetId = target->objectInfo->object_id();
+	const SkillRules& rules = SkillTable::Rules();
+
+	switch (e.type)
+	{
+	case SkillEffectType::Damage:
+	{
+		if (e.adRatio <= 0.f && e.apRatio <= 0.f)
+			break;
+
+		bool isCrit = false;
+		const int32 damage = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
+		DealDamage(caster, casterId, target, damage, e.DamageType(), isCrit, nowUs);
+
+		// 다단 - 간격이 있으면 남은 타를 예약(ResolvePendingHits), 없으면 지금 전부 (0 단계와 같은 총량)
+		if (e.hits > 1)
+		{
+			if (e.intervalMs > 0)
+			{
+				PendingHit& pending = _pendingHits.emplace_back();
+				pending.casterId = casterId;
+				pending.targetId = targetId;
+				pending.skillId = def.skillId;
+				pending.effectIndex = effectIndex;
+				pending.remaining = e.hits - 1;
+				pending.nextAtUs = nowUs + static_cast<uint64>(e.intervalMs) * 1000;
+			}
+			else
+			{
+				for (uint32 hit = 1; hit < e.hits && target->IsAlive(); hit++)
+				{
+					const int32 more = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
+					DealDamage(caster, casterId, target, more, e.DamageType(), isCrit, nowUs);
+				}
+			}
+		}
+		break;
+	}
+
+	case SkillEffectType::HardCc:
+	case SkillEffectType::SoftCc:
+		if (e.durationMs > 0)
+		{
+			// 실명의 크기는 규칙 하나 (blind_view_scale) - 서버는 시간만 세고 클라가 시야를 줄인다
+			const float magnitude = (e.ccType == Protocol::CC_TYPE_BLIND && e.magnitude <= 0.f) ? rules.blindViewScale : e.magnitude;
+			ApplyCc(targetId, casterId, e.ccType, e.durationMs, magnitude);
+		}
+		break;
+
+	case SkillEffectType::Knockback:
+	{
+		float dx = target->posInfo->x() - ctx.originX;
+		float dy = target->posInfo->y() - ctx.originY;
+
+		// param near + radius_cm - 그 안의 적만 밀린다 (강궁)
+		if (e.param == "near" && e.radiusCm > 0.f && (dx * dx + dy * dy) > e.radiusCm * e.radiusCm)
+			break;
+
+		// 겹쳐 있으면 조준 방향으로
+		if (dx * dx + dy * dy < 1.f)
+		{
+			dx = ctx.aimX - ctx.originX;
+			dy = ctx.aimY - ctx.originY;
+		}
+
+		// 저항은 거리를 줄인다 (공식 C6). CC 길이는 실제 날아가는 시간이라 클라와 끝점 · 시간이 맞는다
+		const float dist = e.distCm * (1.f - target->resistance * BaseStats::RESISTANCE_MAX_REDUCTION);
+		PushCreature(target, casterId, dx, dy, dist, e.speedCms, /*wallStun*/ true, nowUs);
+		break;
+	}
+
+	case SkillEffectType::Pull:
+		PullCreature(target, caster, e.speedCms > 0.f ? e.speedCms : rules.pullSpeedCms, nowUs);
+		break;
+
+	case SkillEffectType::Dot:
+	{
+		if (e.durationMs == 0 || (e.adRatio <= 0.f && e.apRatio <= 0.f))
+			break;
+
+		// 틱당 피해는 걸 때 시전자 스탯으로 고정 - 완화는 틱마다 대상 방어로 (UpdateStatuses)
+		DotInstance dot;
+		dot.skillId = def.skillId;
+		dot.kind = e.param;
+		dot.instigatorId = casterId;
+		dot.type = e.DamageType();
+		dot.baseDamage = static_cast<float>(caster->SkillPower()) * (max(e.adRatio, 0.f) + max(e.apRatio, 0.f)) * (1.f + caster->outgoingDamagePct);
+		dot.endUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+		dot.nextTickUs = nowUs + static_cast<uint64>(rules.dotTickMs) * 1000;
+
+		const uint32 stacks = target->status.AddDot(dot, rules.dotMaxStacks);
+		_statusTargets.insert(targetId);
+
+		PushStatus(true, targetId, Protocol::STATUS_DOT, e.param, stacks, e.durationMs, dot.baseDamage, casterId);
+
+		LOG_LINE << "[DOT] target=" << targetId << " by=" << casterId << " kind=" << e.param
+			<< " stacks=" << stacks << " tick=" << dot.baseDamage << '\n';
+		break;
+	}
+
+	case SkillEffectType::Mark:
+	{
+		if (e.durationMs == 0 || e.param.empty())
+			break;
+
+		MarkInstance mark;
+		mark.kind = e.param;
+		mark.instigatorId = casterId;
+		mark.endUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+
+		target->status.AddMark(mark);
+		_statusTargets.insert(targetId);
+
+		PushStatus(true, targetId, Protocol::STATUS_MARK, e.param, 1, e.durationMs, e.magnitude, casterId);
+
+		LOG_LINE << "[MARK] target=" << targetId << " by=" << casterId << " kind=" << e.param << '\n';
+		break;
+	}
+
+	case SkillEffectType::Execute:
+	{
+		// 몬스터 · 보스 제외 (사용자 결정). 피해 뒤 남은 체력이 최대의 magnitude % 이하면 즉시 처치
+		if (target->IsMonster() || target->IsAlive() == false || e.magnitude <= 0.f)
+			break;
+		if (static_cast<float>(target->hp) * 100.f > static_cast<float>(target->maxHp) * e.magnitude)
+			break;
+
+		LOG_LINE << "[EXECUTE] target=" << targetId << " by=" << casterId << " hp=" << target->hp << "/" << target->maxHp << '\n';
+		DealDamage(caster, casterId, target, target->hp, Protocol::DAMAGE_TYPE_PHYSICAL, false, nowUs);
+		break;
+	}
+
+	default:
+		// Zone · Chain · Delayed · Throw · Reveal · Trail · FallOnHit … - 2 ~ 4 단계
+		break;
+	}
+}
+
+int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const CreatureRef& target, int32 damage, Protocol::DamageType type, bool isCrit, uint64 nowUs)
+{
+	if (target == nullptr || target->IsAlive() == false)
+		return 0;
+
+	if (damage < 0)
+		damage = 0;
+
+	// 치명상 방어 (맹수의 본능) - 죽을 피해를 체력 1 로 막고 뒤로 도약
+	if (damage >= target->hp && target->IsPlayer())
+		TryLethalSave(static_pointer_cast<Player>(target), attacker, OUT damage, nowUs);
+
+	const uint64 targetId = target->objectInfo->object_id();
+	const int32 remainingHp = target->TakeDamage(damage);
+
+	Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
+	dmg.set_attacker_id(attackerId);
+	dmg.set_target_id(targetId);
+	dmg.set_damage(damage);
+	dmg.set_remaining_hp(remainingHp);
+	dmg.set_is_crit(isCrit);
+	dmg.set_damage_type(type);
+
+	if (target->IsMonster())
+		OnMonsterDamaged(static_pointer_cast<Monster>(target), attackerId, damage, nowUs);
+
+	if (attacker != nullptr && attacker->IsMonster())
+	{
+		MonsterBrain::NoteEngaged(static_pointer_cast<Monster>(attacker)->brain, nowUs);
+		GMonsterStats.hits.fetch_add(1);
+	}
+
+	// 전투 Flush 안이면 Flush 끝으로 미뤄진다 (KillBatch), 밖이면 바로
+	if (remainingHp <= 0)
+		KillCreature(target, attacker, attackerId, nowUs);
+
+	return remainingHp;
+}
+
+bool Room::TryLethalSave(const PlayerRef& victim, const CreatureRef& attacker, OUT int32& damage, uint64 nowUs)
+{
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		SkillSlot& slot = victim->skillSlots[i];
+		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
+			continue;
+
+		const SkillDef* def = SkillTable::Find(slot.skillId);
+		if (def == nullptr || def->kind != SkillKind::Passive)
+			continue;
+
+		const SkillEffect* save = def->FindEffect(SkillEffectType::LethalSave);
+		if (save == nullptr || nowUs < slot.cooldownEndUs)
+			continue;
+
+		// 쿨다운 = duration_ms (사용자 결정: 맹수의 본능에 쿨다운). 피해는 체력 1 을 남기는 만큼으로
+		slot.cooldownEndUs = nowUs + static_cast<uint64>(save->durationMs) * 1000;
+		damage = max(0, victim->hp - 1);
+
+		const uint64 victimId = victim->objectInfo->object_id();
+		const float x = victim->posInfo->x();
+		const float y = victim->posInfo->y();
+
+		// 뒤로 도약 - 가해자 반대쪽. 가해자를 모르거나 겹쳐 있으면 바라보는 반대쪽
+		float dx = 0.f;
+		float dy = 0.f;
+		if (attacker != nullptr)
+		{
+			dx = x - attacker->posInfo->x();
+			dy = y - attacker->posInfo->y();
+		}
+		if (dx * dx + dy * dy < 1.f)
+		{
+			const float yawRad = victim->posInfo->yaw() * 3.14159265f / 180.f;
+			dx = -::cosf(yawRad);
+			dy = -::sinf(yawRad);
+		}
+		PushCreature(victim, victimId, dx, dy, save->distCm, save->speedCms, /*wallStun*/ false, nowUs);
+
+		// 패시브에 붙은 버프 (이속) - 그 슬롯 아이템의 강화 레벨로
+		SkillContext ctx;
+		ctx.casterId = victimId;
+		ctx.originX = x;
+		ctx.originY = y;
+		ctx.aimX = x;
+		ctx.aimY = y;
+		ctx.itemLevel = victim->ItemLevelOfSlot(static_cast<Protocol::EquipSlot>(i + 1));
+
+		for (const SkillEffect& e : def->effects)
+		{
+			if (e.self && e.type == SkillEffectType::SelfBuff)
+				ApplySelfEffect(victim, *def, e, ctx, nowUs);
+		}
+
+		// 연출 - 발동을 모두에게 (effect_id 만, 스킬 id 는 숨긴다)
+		Protocol::SkillHitInfo& hit = _pendingSkillHits.emplace_back();
+		hit.set_caster_id(victimId);
+		hit.set_effect_id(def->effectId);
+		hit.set_target_id(victimId);
+		hit.set_impact_x(x);
+		hit.set_impact_y(y);
+		hit.set_aim_x(x);
+		hit.set_aim_y(y);
+
+		LOG_LINE << "[LETHAL SAVE] char=" << victimId << " skill=" << def->skillId
+			<< " hp=" << victim->hp << " cd=" << save->durationMs << "ms" << '\n';
+		return true;
+	}
+
+	return false;
+}
+
+void Room::PushCreature(const CreatureRef& target, uint64 instigatorId, float dirX, float dirY, float distCm, float speedCms, bool wallStun, uint64 nowUs)
+{
+	if (target == nullptr || target->IsAlive() == false || distCm <= 0.f || speedCms <= 0.f)
+		return;
+
+	const uint64 targetId = target->objectInfo->object_id();
+
+	// 진입 무적은 밀리지도 않는다 (AC-10)
+	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+		return;
+
+	const float len = ::sqrtf(dirX * dirX + dirY * dirY);
+	if (len < 0.0001f)
+		return;
+	dirX /= len;
+	dirY /= len;
+
+	const SkillKinematics::PushResult r = SkillKinematics::Push(WallTable::Get(_floorId), target->posInfo->x(), target->posInfo->y(), dirX, dirY, distCm);
+	const uint32 travelMs = SkillKinematics::TravelMs(r.distCm, speedCms);
+
+	if (r.moved)
+	{
+		target->posInfo->set_x(r.endX);
+		target->posInfo->set_y(r.endY);
+		_dirtyMovers.insert(targetId);
+	}
+
+	// 날아가는 동안 넉백 CC - 길이는 실제 시간 그대로 (저항은 거리에서 이미 깎였다)
+	if (travelMs > 0)
+		ApplyCcRaw(target, instigatorId, Protocol::CC_TYPE_KNOCKBACK, travelMs, 0.f, nowUs);
+
+	// 벽 기절 - 벽에 부딪혀 멈췄다 (skill_rules wall_stun_ms). 보통 CC 처럼 저항이 깎는다
+	if (r.hitWall && wallStun)
+	{
+		const uint32 stunMs = target->ComputeCcDurationMs(SkillTable::Rules().wallStunMs);
+		if (stunMs > 0)
+			ApplyCcRaw(target, instigatorId, Protocol::CC_TYPE_STUN, stunMs, 0.f, nowUs);
+	}
+
+	// 클라는 이 값으로 같은 끝점까지 밀려간다 (S_CC.knockbacks). 거리 0 이어도 보낸다 - 벽에 붙어 못 밀린 것도 연출이 있다
+	Protocol::KnockbackInfo& info = _pendingKnockbacks.emplace_back();
+	info.set_target_id(targetId);
+	info.set_instigator_id(instigatorId);
+	info.set_dir_x(dirX);
+	info.set_dir_y(dirY);
+	info.set_distance(r.distCm);
+	info.set_speed(speedCms);
+
+	LOG_LINE << "[PUSH] target=" << targetId << " by=" << instigatorId
+		<< " dist=" << r.distCm << "/" << distCm << " ms=" << travelMs << (r.hitWall ? " wall" : "") << '\n';
+}
+
+void Room::PullCreature(const CreatureRef& target, const CreatureRef& caster, float speedCms, uint64 nowUs)
+{
+	if (target == nullptr || target->IsAlive() == false || caster == nullptr || speedCms <= 0.f)
+		return;
+
+	const uint64 targetId = target->objectInfo->object_id();
+	const uint64 casterId = caster->objectInfo->object_id();
+
+	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
+		return;
+
+	const float startX = target->posInfo->x();
+	const float startY = target->posInfo->y();
+
+	// 시전자 바로 앞(pull_stop_cm)까지. 사이에 벽이 있으면 끌리지 않는다 (사용자 결정)
+	const SkillKinematics::PushResult r = SkillKinematics::PullToward(WallTable::Get(_floorId), startX, startY,
+		caster->posInfo->x(), caster->posInfo->y(), SkillTable::Rules().pullStopCm);
+
+	if (r.moved == false)
+	{
+		LOG_LINE << "[PULL] target=" << targetId << " by=" << casterId << (r.hitWall ? " blocked=wall" : " blocked=close") << '\n';
+		return;
+	}
+
+	target->posInfo->set_x(r.endX);
+	target->posInfo->set_y(r.endY);
+	_dirtyMovers.insert(targetId);
+
+	const uint32 travelMs = SkillKinematics::TravelMs(r.distCm, speedCms);
+	if (travelMs > 0)
+		ApplyCcRaw(target, casterId, Protocol::CC_TYPE_KNOCKBACK, travelMs, 0.f, nowUs);
+
+	float dirX = r.endX - startX;
+	float dirY = r.endY - startY;
+	const float len = ::sqrtf(dirX * dirX + dirY * dirY);
+	if (len > 0.0001f)
+	{
+		dirX /= len;
+		dirY /= len;
+	}
+
+	Protocol::KnockbackInfo& info = _pendingKnockbacks.emplace_back();
+	info.set_target_id(targetId);
+	info.set_instigator_id(casterId);
+	info.set_dir_x(dirX);
+	info.set_dir_y(dirY);
+	info.set_distance(r.distCm);
+	info.set_speed(speedCms);
+
+	LOG_LINE << "[PULL] target=" << targetId << " by=" << casterId << " dist=" << r.distCm << " ms=" << travelMs << '\n';
+}
+
+void Room::BlinkCaster(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
+{
+	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	if (player == nullptr || e.distCm <= 0.f)
+		return;
+
+	float dx = ctx.aimX - ctx.originX;
+	float dy = ctx.aimY - ctx.originY;
+	const float len = ::sqrtf(dx * dx + dy * dy);
+	float reach = e.distCm;
+
+	if (len >= 1.f)
+	{
+		dx /= len;
+		dy /= len;
+		reach = min(len, e.distCm);
+	}
+	else
+	{
+		const float yawRad = player->posInfo->yaw() * 3.14159265f / 180.f;
+		dx = ::cosf(yawRad);
+		dy = ::sinf(yawRad);
+	}
+
+	const float wantX = ctx.originX + dx * reach;
+	const float wantY = ctx.originY + dy * reach;
+
+	// 벽 · 경계 보정 - 가장 가까운 빈 자리 (skill-system R13 · ADR-0006 § ⑦). 못 찾으면 발동 실패 - 쿨다운은 이미 들어갔다 (TEMP)
+	float outX = wantX;
+	float outY = wantY;
+	if (WallTable::Get(_floorId).FindNearestFree(wantX, wantY, SkillKinematics::CAPSULE_RADIUS_CM, 200.f, OUT outX, OUT outY) == false)
+	{
+		LOG_LINE << "[BLINK] failed - no free spot char=" << ctx.casterId << " at=(" << wantX << "," << wantY << ")" << '\n';
+		return;
+	}
+
+	player->posInfo->set_x(outX);
+	player->posInfo->set_y(outY);
+	_dirtyMovers.insert(ctx.casterId);
+
+	// 본인에게는 보정 S_MOVE - 클라가 그 자리로 옮긴다. 그 전에 보낸 C_MOVE 는 거리 초과로 거부되고 같은 자리로 되돌아온다
+	Protocol::S_MOVE snap;
+	snap.set_correction(true);
+	snap.add_infos()->CopyFrom(*player->posInfo);
+
+	SEND_PACKET_DECLARATION(snap);
+	if (auto session = player->session.lock())
+		session->Send(sendBuffer);
+
+	LOG_LINE << "[BLINK] char=" << ctx.casterId << " to=(" << outX << "," << outY << ") reach=" << reach << '\n';
+}
+
+void Room::ApplyOnHitPassives(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs)
+{
+	const uint64 attackerId = attacker->objectInfo->object_id();
+
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		const SkillSlot& slot = attacker->skillSlots[i];
+		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
+			continue;
+
+		const SkillDef* def = SkillTable::Find(slot.skillId);
+		if (def == nullptr || def->kind != SkillKind::Passive)
+			continue;
+
+		for (const SkillEffect& e : def->effects)
+		{
+			if (e.type != SkillEffectType::OnHit || target->IsAlive() == false)
+				continue;
+
+			// 연쇄(chain)는 3 단계 - 지금은 적중한 대상에게 추가 피해만
+			bool isCrit = false;
+			const int32 extra = attacker->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
+			DealDamage(attacker, attackerId, target, extra, e.DamageType(), isCrit, nowUs);
+		}
+	}
+}
+
+void Room::UpdateStatuses(uint64 nowUs)
+{
+	if (_statusTargets.empty())
+		return;
+
+	const SkillRules& rules = SkillTable::Rules();
+	vector<uint64> cleared;
+
+	// 스냅샷 - 틱 피해가 사망(KillBatch 로 미뤄짐) · 버프 재계산을 일으켜도 집합은 그대로
+	const vector<uint64> ids(_statusTargets.begin(), _statusTargets.end());
+
+	for (uint64 id : ids)
+	{
+		auto findIt = _objects.find(id);
+		CreatureRef target = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		if (target == nullptr)
+		{
+			cleared.push_back(id);
+			continue;
+		}
+
+		if (target->IsAlive())
+		{
+			target->status.TickDots(nowUs, rules.dotTickMs, [&](const DotInstance& d)
+				{
+					if (target->IsAlive() == false)
+						return;
+
+					const int32 damage = target->ApplyMitigation(d.baseDamage, *target, d.type);
+
+					CreatureRef instigator = nullptr;
+					auto instIt = _objects.find(d.instigatorId);
+					if (instIt != _objects.end())
+						instigator = dynamic_pointer_cast<Creature>(instIt->second);
+
+					DealDamage(instigator, d.instigatorId, target, damage, d.type, false, nowUs);
+				});
+		}
+
+		const bool buffGone = target->status.Expire(nowUs, [&](Protocol::StatusKind kind, const string& param, uint64 instigatorId, uint32 stacks)
+			{
+				PushStatus(false, id, kind, param, stacks, 0, 0.f, instigatorId);
+			});
+
+		if (buffGone)
+			target->OnBuffsChanged();
+
+		if (target->status.Empty())
+			cleared.push_back(id);
+	}
+
+	for (uint64 id : cleared)
+		_statusTargets.erase(id);
+}
+
+void Room::ResolvePendingHits(uint64 nowUs)
+{
+	if (_pendingHits.empty())
+		return;
+
+	vector<PendingHit> due;
+	due.swap(_pendingHits);
+
+	vector<PendingHit> keep;
+	keep.reserve(due.size());
+
+	for (PendingHit& p : due)
+	{
+		if (nowUs < p.nextAtUs)
+		{
+			keep.push_back(p);
+			continue;
+		}
+
+		const SkillDef* def = SkillTable::Find(p.skillId);
+		if (def == nullptr || p.effectIndex >= def->effects.size())
+			continue;
+
+		const SkillEffect& e = def->effects[p.effectIndex];
+
+		auto casterIt = _objects.find(p.casterId);
+		auto targetIt = _objects.find(p.targetId);
+		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+
+		// 시전자가 이번 Flush 에 막 죽었으면 남은 타는 동시다 (TR-combat-022) - 그 전에 죽었으면 끊긴다
+		if (caster == nullptr || CanStillStrike(caster) == false || target == nullptr || target->IsAlive() == false)
+			continue;
+
+		bool isCrit = false;
+		const int32 damage = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
+		DealDamage(caster, p.casterId, target, damage, e.DamageType(), isCrit, nowUs);
+
+		if (--p.remaining > 0 && target->IsAlive())
+		{
+			p.nextAtUs += static_cast<uint64>(e.intervalMs) * 1000;
+			keep.push_back(p);
+		}
+	}
+
+	// 처리 중 새로 예약된 것(없어야 하지만)은 뒤에 붙인다
+	keep.insert(keep.end(), _pendingHits.begin(), _pendingHits.end());
+	_pendingHits.swap(keep);
+}
+
+void Room::PushStatus(bool applied, uint64 targetId, Protocol::StatusKind kind, const string& param, uint32 stacks, uint32 remainingMs, float magnitude, uint64 instigatorId)
+{
+	Protocol::StatusInfo& info = (applied ? _pendingStatusApplied : _pendingStatusExpired).emplace_back();
+	info.set_target_id(targetId);
+	info.set_kind(kind);
+	info.set_param(param);
+	info.set_stacks(stacks);
+	info.set_remaining_ms(remainingMs);
+	info.set_magnitude(magnitude);
+	info.set_instigator_id(instigatorId);
 }
 
 void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, uint64 nowUs)
@@ -2882,6 +3627,12 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 	victim->attackTargetId = 0;
 	victim->attackHitAtUs = 0;
 	CancelCast(victim);
+
+	// 상태 효과 · 재입력은 죽음과 함께 끝난다 - 클라는 S_DIED 로 지운다 (따로 expired 를 보내지 않는다)
+	victim->status.Clear();
+	victim->OnBuffsChanged();
+	victim->recastSkillId = 0;
+	_statusTargets.erase(victimId);
 
 	LOG_LINE << "[DIED] victim=" << victimId << " by=" << instigatorId << '\n';
 

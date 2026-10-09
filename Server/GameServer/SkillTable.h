@@ -207,6 +207,7 @@ public:
 	static const unordered_map<uint32, SkillDef>& All() { return s_defs; }
 
 	static const char*		EffectName(SkillEffectType type);
+	static const char*		BuffStatName(SkillBuffStat stat);		// skill_effects.csv stat 열 이름 그대로 - S_STATUS param
 
 private:
 	static unordered_map<uint32, SkillDef> s_defs;

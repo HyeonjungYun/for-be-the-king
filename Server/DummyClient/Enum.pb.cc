@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[15];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[16];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -72,11 +72,16 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "ItemResult\022\013\n\007ITEM_OK\020\000\022\020\n\014ITEM_ALREADY\020"
   "\001\022\022\n\016ITEM_NOT_FOUND\020\002\022\026\n\022ITEM_INVALID_ST"
   "ATE\020\003\022\027\n\023ITEM_INVENTORY_FULL\020\004\022\024\n\020ITEM_B"
-  "AD_REQUEST\020\005\022\021\n\rITEM_DB_ERROR\020\006b\006proto3"
+  "AD_REQUEST\020\005\022\021\n\rITEM_DB_ERROR\020\006*\276\001\n\nStat"
+  "usKind\022\017\n\013STATUS_NONE\020\000\022\016\n\nSTATUS_DOT\020\001\022"
+  "\017\n\013STATUS_BUFF\020\002\022\017\n\013STATUS_MARK\020\003\022\021\n\rSTA"
+  "TUS_STANCE\020\004\022\021\n\rSTATUS_INVULN\020\005\022\022\n\016STATU"
+  "S_COUNTER\020\006\022\020\n\014STATUS_PARRY\020\007\022\017\n\013STATUS_"
+  "HOLD\020\010\022\020\n\014STATUS_DECOY\020\tb\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 1759, descriptor_table_protodef_Enum_2eproto,
+    false, false, 1952, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -334,6 +339,28 @@ bool ItemResult_IsValid(int value) {
     case 4:
     case 5:
     case 6:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* StatusKind_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[15];
+}
+bool StatusKind_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
       return true;
     default:
       return false;

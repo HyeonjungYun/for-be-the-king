@@ -194,6 +194,8 @@
     <ClCompile Include="Room.cpp" />
     <ClCompile Include="ServerPacketHandler.cpp" />
     <ClCompile Include="SkillTable.cpp" />
+    <ClCompile Include="StatusEffects.cpp" />
+    <ClCompile Include="SkillKinematics.cpp" />
     <ClCompile Include="Struct.pb.cc">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
@@ -235,6 +237,8 @@
     <ClInclude Include="Room.h" />
     <ClInclude Include="ServerPacketHandler.h" />
     <ClInclude Include="SkillTable.h" />
+    <ClInclude Include="StatusEffects.h" />
+    <ClInclude Include="SkillKinematics.h" />
     <ClInclude Include="Struct.pb.h" />
   </ItemGroup>
   <ItemGroup>

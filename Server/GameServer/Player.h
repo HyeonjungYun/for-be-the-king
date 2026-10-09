@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Creature.h"
 #include "MoveClock.h"
+#include "EquipStats.h"
 
 class GameSession;
 class Room;
@@ -41,6 +42,15 @@ public:
 	// 착용 6칸 → 전투 스탯 (EquipStats). refill = 입장 - 체력을 새 최대치로 채운다.
 	// 아니면 체력 비율을 유지한다. 체력이나 최대 체력이 바뀌었으면 true - 부른 쪽이 S_DAMAGE 0 (+ max_hp) 으로 알린다
 	bool	ApplyEquipmentStats(bool refill);
+
+	// 장비 합산(equipTotals) 위에 스킬 버프(status)를 얹어 전투 스탯을 다시 만든다. 최대 체력은 건드리지 않는다.
+	// 비율 버프는 가산 뒤 1회 곱 (entities.yaml 과 같은 원칙) - 공격력 · 마력 · 방어 · 마법 저항 × (1 + 합), 치명 확률 · 공속 · 이속은 + 합
+	void	RebuildCombatStats();
+	virtual void OnBuffsChanged() override { RebuildCombatStats(); }
+
+	// 슬롯이 든 아이템의 강화 레벨 - 보조 무기 슬롯은 주무기 아이템의 것. 비었으면 0
+	uint32	ItemLevelOfSlot(Protocol::EquipSlot slot) const;
+
 	ItemEntry* FindInInventory(uint64 instanceId);
 	bool IsInventoryFull() const { return inventory.size() >= INVENTORY_SLOT_COUNT; }
 
@@ -58,7 +68,8 @@ public:
 
 public:
 	int32					nakedMaxHp = BaseStats::MAX_HP;		// characters.max_hp - 장비 합산의 바닥
-	float					percentMsBonus = 0.f;				// 장비 합산 - 이동 검증 상한에 들어간다
+	float					percentMsBonus = 0.f;				// 장비 합산 + 이속 버프 - 이동 검증 상한에 들어간다
+	EquipStatTotals			equipTotals;						// 마지막 장비 합산 - 버프가 바뀔 때 여기서 다시 출발한다
 
 public:
 

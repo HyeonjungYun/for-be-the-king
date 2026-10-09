@@ -132,3 +132,18 @@ enum ItemResult
 	ITEM_BAD_REQUEST = 5;
 	ITEM_DB_ERROR = 6;
 }
+
+// 스킬 상태 효과 종류 - S_STATUS (skill-roster 1 단계, 2026-10-10). param 이 세부(출혈 종류 · 버프 스탯 · 표식 종류 · 속성)
+enum StatusKind
+{
+	STATUS_NONE = 0;
+	STATUS_DOT = 1;			// 지속 피해 - stacks 가 중첩 수
+	STATUS_BUFF = 2;		// 자기 버프 - magnitude 가 증가율 (강화 레벨 포함)
+	STATUS_MARK = 3;		// 표식 - instigator 의 것만 그 사람이 쓴다
+	STATUS_STANCE = 4;		// 스태프 속성 (3 단계)
+	STATUS_INVULN = 5;		// 니힐 (4 단계)
+	STATUS_COUNTER = 6;		// 정좌 (3 단계)
+	STATUS_PARRY = 7;		// 유수 (3 단계)
+	STATUS_HOLD = 8;		// 유지형 진행 중 (3 단계)
+	STATUS_DECOY = 9;		// 미끼 (4 단계)
+}

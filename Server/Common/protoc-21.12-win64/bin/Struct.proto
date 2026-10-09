@@ -107,6 +107,18 @@ message SkillHitInfo
 	float aim_y = 7;
 }
 
+// 상태 효과 하나 - 걸림(applied) · 끝남(expired). 걸림은 갱신 · 중첩 증가에도 다시 온다 (skill-roster 1 단계, 2026-10-10)
+message StatusInfo
+{
+	uint64 target_id = 1;
+	StatusKind kind = 2;
+	string param = 3;			// dot: bleed · poison · burn · heavy_bleed / buff: attack_power … / mark: spear · arrow · blood · heavy_bleed · rope
+	uint32 stacks = 4;			// dot 중첩 수. 그 외 1
+	uint32 remaining_ms = 5;
+	float magnitude = 6;		// buff 증가율 등
+	uint64 instigator_id = 7;	// 건 사람 (표식 소유자)
+}
+
 message CharacterInfo
 {
 	ObjectInfo object_info = 1;
