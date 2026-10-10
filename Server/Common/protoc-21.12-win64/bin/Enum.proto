@@ -51,6 +51,7 @@ enum CcType
 	CC_TYPE_HEAL_REDUCTION = 32;
 	CC_TYPE_SILENCE = 64;
 	CC_TYPE_BLIND = 128;		// soft - the client shrinks the view (skill_rules.csv blind_view_scale). 2026-10-10 skill roster
+	CC_TYPE_TAUNT = 256;		// hard - walks slowly toward the instigator (server moves it), no attack / skill / turn (2026-10-10 user request)
 }
 
 enum DeathCause

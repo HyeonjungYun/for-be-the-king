@@ -190,6 +190,8 @@ struct SkillRules
 	float	buffPerLevelDefault = 0.f;
 	uint32	trailBuffMs = 0;		// 핏자국을 밟았을 때 이속 버프 길이 (4 단계)
 	float	trailPickupCm = 0.f;	// 핏자국을 "밟았다" 로 보는 거리
+	float	tauntSpeedCms = 0.f;	// 도발 - 시전자에게 끌려가는 속도 (느리게). 서버가 옮긴다
+	float	tauntStopCm = 0.f;		// 도발 - 시전자 앞 이만큼에서 멈춘다
 };
 
 class SkillTable

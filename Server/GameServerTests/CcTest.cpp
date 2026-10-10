@@ -175,3 +175,47 @@ TEST(CreatureCc, 가장_센_감속이_끝나면_다음_최대값으로_내려온
 	EXPECT_FLOAT_EQ(target.activeSlow, 0.f);
 	EXPECT_TRUE(target.slowSources.empty());
 }
+
+// ── 도발 (2026-10-10 사용자 요청) - 걸리면 시전자에게 끌려가고(Room::StepTaunts) 어떤 공격 · 스킬도 못 한다 ──
+
+TEST(CreatureCc, 도발은_이동_회전_평타_스킬을_전부_막는다)
+{
+	Creature target;
+	target.ApplyHardCc(Protocol::CC_TYPE_TAUNT, AtMs(0), 1000);
+
+	EXPECT_FALSE(target.CanMove(AtMs(500)));
+	EXPECT_FALSE(target.CanTurn(AtMs(500)));
+	EXPECT_FALSE(target.CanAttack(AtMs(500)));
+	EXPECT_FALSE(target.CanUseSkill(AtMs(500)));
+	EXPECT_TRUE(target.IsTaunted(AtMs(999)));
+
+	EXPECT_FALSE(target.IsTaunted(AtMs(1000)));
+	EXPECT_TRUE(target.CanMove(AtMs(1000)));
+	EXPECT_TRUE(target.CanAttack(AtMs(1000)));
+	EXPECT_TRUE(target.CanUseSkill(AtMs(1000)));
+}
+
+TEST(CreatureCc, 도발은_겹치면_더_긴_쪽이_남고_저항이_깎는다)
+{
+	Creature target;
+	target.resistance = 0.5f;		// × (1 - 0.5 × 0.4) = 0.8
+
+	EXPECT_EQ(target.ComputeCcDurationMs(1000), 800u);
+
+	target.ApplyHardCc(Protocol::CC_TYPE_TAUNT, AtMs(0), 800);
+	target.ApplyHardCc(Protocol::CC_TYPE_TAUNT, AtMs(100), 400);		// 끝 500 < 800 - 갱신 안 됨
+	EXPECT_TRUE(target.IsTaunted(AtMs(799)));
+	EXPECT_FALSE(target.IsTaunted(AtMs(800)));
+}
+
+TEST(CreatureCc, 도발은_전투_상태_초기화로_풀린다)
+{
+	Creature target;
+	target.ApplyHardCc(Protocol::CC_TYPE_TAUNT, AtMs(0), 1000);
+	target.tauntSourceId = 42;
+
+	target.ClearCombatState();
+
+	EXPECT_FALSE(target.IsTaunted(AtMs(1)));
+	EXPECT_EQ(target.tauntSourceId, 0u);
+}

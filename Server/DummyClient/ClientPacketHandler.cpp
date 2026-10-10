@@ -270,7 +270,8 @@ bool Handle_S_CC(PacketSessionRef& session, Protocol::S_CC& pkt)
 		const bool isHard = (type == Protocol::CC_TYPE_STUN)
 			|| (type == Protocol::CC_TYPE_ROOT)
 			|| (type == Protocol::CC_TYPE_KNOCKBACK)
-			|| (type == Protocol::CC_TYPE_LAUNCH);
+			|| (type == Protocol::CC_TYPE_LAUNCH)
+			|| (type == Protocol::CC_TYPE_TAUNT);		// 도발 - 서버가 끌고 간다, 봇은 가만히 (보정으로 위치를 받는다)
 
 		if (isHard)
 		{

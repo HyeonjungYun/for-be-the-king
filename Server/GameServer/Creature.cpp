@@ -97,6 +97,8 @@ void Creature::ClearCombatState()
 {
 	stunEndUs = rootEndUs = knockbackEndUs = launchEndUs = 0;
 	silenceEndUs = healReductionEndUs = blindEndUs = 0;
+	tauntEndUs = 0;
+	tauntSourceId = 0;
 	healReductionMagnitude = 0.f;
 	slowSources.clear();
 	activeSlow = 0.f;
@@ -174,6 +176,9 @@ void Creature::ApplyHardCc(Protocol::CcType type, uint64 nowUs, uint32 effective
 		break;
 	case Protocol::CC_TYPE_LAUNCH:
 		slot = &launchEndUs;
+		break;
+	case Protocol::CC_TYPE_TAUNT:
+		slot = &tauntEndUs;
 		break;
 	default:
 		return;
@@ -257,7 +262,8 @@ bool Creature::IsHardCced(uint64 nowUs) const
 	return nowUs < stunEndUs
 		|| nowUs < rootEndUs
 		|| nowUs < knockbackEndUs
-		|| nowUs < launchEndUs;
+		|| nowUs < launchEndUs
+		|| nowUs < tauntEndUs;
 }
 
 bool Creature::CanMove(uint64 nowUs) const
@@ -267,12 +273,14 @@ bool Creature::CanMove(uint64 nowUs) const
 
 bool Creature::CanTurn(uint64 nowUs) const
 {
-	return (nowUs >= stunEndUs) && (nowUs >= knockbackEndUs) && (nowUs >= launchEndUs);
+	// 도발은 시전자를 바라본다 - 서버가 yaw 를 돌린다
+	return (nowUs >= stunEndUs) && (nowUs >= knockbackEndUs) && (nowUs >= launchEndUs) && (nowUs >= tauntEndUs);
 }
 
 bool Creature::CanAttack(uint64 nowUs) const
 {
-	return (nowUs >= stunEndUs) && (nowUs >= knockbackEndUs) && (nowUs >= launchEndUs);
+	// 도발 - 어떤 공격도 스킬도 못 한다 (사용자 결정 2026-10-10). CanUseSkill 은 이 위에 침묵을 더한다
+	return (nowUs >= stunEndUs) && (nowUs >= knockbackEndUs) && (nowUs >= launchEndUs) && (nowUs >= tauntEndUs);
 }
 
 bool Creature::CanUseSkill(uint64 nowUs) const

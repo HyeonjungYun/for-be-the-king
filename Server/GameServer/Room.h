@@ -270,6 +270,9 @@ private:
 	void	SetStance(const CreatureRef& caster, const string& element, float ratio, uint64 nowUs);
 	void	ApplyThrow(const CreatureRef& caster, const CreatureRef& target, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
 
+	// ── 도발 (2026-10-10 사용자 요청) - 걸린 쪽을 서버가 시전자 쪽으로 taunt_speed_cms 로 옮긴다 (FlushMoves 마다). 플레이어면 보정 S_MOVE 로 본인에게도 알린다 ──
+	void	StepTaunts(uint64 nowUs);
+
 	// ── 4 단계 - 미끼 · 무적 · 핏자국 · 도약 추락 · 회오리 벽 ──
 	void	SpawnDecoy(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
 	void	DespawnDecoy(const CreatureRef& decoy, const char* why);

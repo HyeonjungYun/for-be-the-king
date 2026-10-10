@@ -11,6 +11,7 @@ namespace
 	constexpr uint32	STUN_CAP_MS			= 1250;
 	constexpr uint32	LAUNCH_CAP_MS		= 1000;
 	constexpr uint32	ROOT_CAP_MS			= 1750;
+	constexpr uint32	TAUNT_CAP_MS		= 1500;		// 도발 (2026-10-10 추가) - 속박과 같은 상한. 평타 · 스킬을 막으니 기절보다 길게 두지 않는다
 	constexpr float		KNOCKBACK_DIST_CAP	= 300.f;
 	constexpr float		KNOCKBACK_SPEED_MIN	= 450.f;
 	constexpr float		KNOCKBACK_SPEED_MAX	= 1360.f;
@@ -81,7 +82,7 @@ namespace
 	{
 		{ "none", Protocol::CC_TYPE_NONE }, { "stun", Protocol::CC_TYPE_STUN }, { "root", Protocol::CC_TYPE_ROOT },
 		{ "knockback", Protocol::CC_TYPE_KNOCKBACK }, { "launch", Protocol::CC_TYPE_LAUNCH }, { "slow", Protocol::CC_TYPE_SLOW },
-		{ "silence", Protocol::CC_TYPE_SILENCE }, { "blind", Protocol::CC_TYPE_BLIND },
+		{ "silence", Protocol::CC_TYPE_SILENCE }, { "blind", Protocol::CC_TYPE_BLIND }, { "taunt", Protocol::CC_TYPE_TAUNT },
 	};
 
 	const vector<pair<const char*, SkillBuffStat>> STAT_NAMES =
@@ -113,7 +114,7 @@ namespace
 			return true;
 		case SkillEffectType::HardCc:
 			return e.ccType == Protocol::CC_TYPE_STUN || e.ccType == Protocol::CC_TYPE_KNOCKBACK
-				|| e.ccType == Protocol::CC_TYPE_LAUNCH || e.ccType == Protocol::CC_TYPE_ROOT;
+				|| e.ccType == Protocol::CC_TYPE_LAUNCH || e.ccType == Protocol::CC_TYPE_ROOT || e.ccType == Protocol::CC_TYPE_TAUNT;
 		case SkillEffectType::Hold:
 			return e.ccType == Protocol::CC_TYPE_ROOT;		// 빈쿨룸
 		default:
@@ -238,8 +239,9 @@ namespace
 				case Protocol::CC_TYPE_STUN:	cap = STUN_CAP_MS; break;
 				case Protocol::CC_TYPE_LAUNCH:	cap = LAUNCH_CAP_MS; break;
 				case Protocol::CC_TYPE_ROOT:	cap = ROOT_CAP_MS; break;
+				case Protocol::CC_TYPE_TAUNT:	cap = TAUNT_CAP_MS; break;
 				default:
-					error = ew + " cc_type must be stun / launch / root (knockback is its own effect)";
+					error = ew + " cc_type must be stun / launch / root / taunt (knockback is its own effect)";
 					return false;
 				}
 				if (e.durationMs == 0 || e.durationMs > cap)
@@ -529,7 +531,9 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 			|| ReadRule(kv, "hold_max_ms", OUT rules.holdMaxMs, OUT error) == false
 			|| ReadRule(kv, "buff_per_level_default", OUT rules.buffPerLevelDefault, OUT error) == false
 			|| ReadRule(kv, "trail_buff_ms", OUT rules.trailBuffMs, OUT error) == false
-			|| ReadRule(kv, "trail_pickup_cm", OUT rules.trailPickupCm, OUT error) == false)
+			|| ReadRule(kv, "trail_pickup_cm", OUT rules.trailPickupCm, OUT error) == false
+			|| ReadRule(kv, "taunt_speed_cms", OUT rules.tauntSpeedCms, OUT error) == false
+			|| ReadRule(kv, "taunt_stop_cm", OUT rules.tauntStopCm, OUT error) == false)
 			return false;
 
 		uint32 decoyHp = 0;
@@ -539,7 +543,8 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 
 		if (rules.dotTickMs == 0 || rules.dotMaxStacks == 0 || rules.wallStunMs > STUN_CAP_MS || rules.recastWindowMs == 0
 			|| rules.executeHpPct <= 0.f || rules.executeHpPct >= 100.f || rules.blindViewScale <= 0.f || rules.blindViewScale > 1.f
-			|| rules.pullSpeedCms <= 0.f || rules.projectileRadiusCm <= 0.f || rules.basicProjectileSpeedCms <= 0.f || rules.confrontRangeCm <= 0.f)
+			|| rules.pullSpeedCms <= 0.f || rules.projectileRadiusCm <= 0.f || rules.basicProjectileSpeedCms <= 0.f || rules.confrontRangeCm <= 0.f
+			|| rules.tauntSpeedCms <= 0.f || rules.tauntStopCm < 0.f)
 		{
 			error = "skill_rules.csv has a value out of range";
 			return false;
@@ -754,7 +759,7 @@ void SkillTable::Init()
 		"key,value\n"
 		"dot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
 		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
-		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\n";
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\n";
 
 	string error;
 	if (Parse(skills, effects, rules, OUT error) == false)

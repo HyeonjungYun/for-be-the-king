@@ -127,6 +127,10 @@ public:
 	uint64				healReductionEndUs = 0;
 	float				healReductionMagnitude = 0.f;
 	uint64				blindEndUs = 0;				// 실명 - 소프트. 서버는 시간만 센다, 시야 축소는 클라 (skill_rules blind_view_scale)
+	uint64				tauntEndUs = 0;				// 도발 - 하드. 시전자(tauntSourceId)에게 taunt_speed_cms 로 끌려간다 (Room::StepTaunts), 평타 · 스킬 · 회전 불가
+	uint64				tauntSourceId = 0;
+
+	bool				IsTaunted(uint64 nowUs) const { return nowUs < tauntEndUs; }
 
 public:
 	// 상태 효과 - 지속 피해 · 버프 · 표식 (StatusEffects.h). Room 이 Flush 마다 틱 · 만료를 돌린다

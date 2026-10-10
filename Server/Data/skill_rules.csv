@@ -19,3 +19,5 @@ hold_max_ms,0
 buff_per_level_default,0.03
 trail_buff_ms,2000
 trail_pickup_cm,80
+taunt_speed_cms,150
+taunt_stop_cm,100

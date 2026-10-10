@@ -48,6 +48,7 @@ namespace
 		if (c.rootEndUs > endUs) { endUs = c.rootEndUs; reason = "root"; }
 		if (c.knockbackEndUs > endUs) { endUs = c.knockbackEndUs; reason = "knockback"; }
 		if (c.launchEndUs > endUs) { endUs = c.launchEndUs; reason = "launch"; }
+		if (c.tauntEndUs > endUs) { endUs = c.tauntEndUs; reason = "taunt"; }
 
 		outRemainMs = (endUs > nowUs) ? ((endUs - nowUs) / 1000) : 0;
 		return reason;
@@ -110,7 +111,8 @@ namespace
 		return type == Protocol::CC_TYPE_STUN
 			|| type == Protocol::CC_TYPE_KNOCKBACK
 			|| type == Protocol::CC_TYPE_LAUNCH
-			|| type == Protocol::CC_TYPE_ROOT;
+			|| type == Protocol::CC_TYPE_ROOT
+			|| type == Protocol::CC_TYPE_TAUNT;
 	}
 
 	bool IsInSkillRange(const CreatureRef& caster, const CreatureRef& target, float rangeCm)
@@ -448,7 +450,8 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 
 	// 넉백 · 끌기 중 - 서버가 위치를 끝점으로 옮겼고 클라는 KnockbackInfo 로 같은 끝점까지 밀려가는 중이다.
 	// 되돌리지 않고 조용히 무시한다 (서버가 위치를 소유하는 구간). CC 가 끝난 뒤의 첫 이동이 끝점에서 검증된다 (스킬 로스터 1 단계)
-	if (blockCheckUs < player->knockbackEndUs)
+	// 도발도 같다 - 서버가 매 틱 시전자 쪽으로 옮기고 보정 S_MOVE 로 알린다 (StepTaunts)
+	if (blockCheckUs < player->knockbackEndUs || blockCheckUs < player->tauntEndUs)
 		return;
 
 	if (player->CanMove(blockCheckUs) == false)
@@ -863,6 +866,13 @@ void Room::ApplyCcRaw(const CreatureRef& target, uint64 instigatorId, Protocol::
 	else
 		target->ApplySoftCc(type, nowUs, effectiveMs, magnitude);
 
+	// 도발 - 누구에게 끌려가는가 (시전자). 겹치면 나중 것
+	if (type == Protocol::CC_TYPE_TAUNT)
+	{
+		target->tauntSourceId = instigatorId;
+		LOG_LINE << "[TAUNT] target=" << targetId << " by=" << instigatorId << " for=" << effectiveMs << "ms" << '\n';
+	}
+
 	_ccTargets.insert(targetId);
 
 	Protocol::CcEventInfo& info = _pendingCcApplied.emplace_back();
@@ -885,7 +895,7 @@ void Room::ApplyCcRaw(const CreatureRef& target, uint64 instigatorId, Protocol::
 		CancelCast(target);
 
 	// 행동 불능이면 유지형도 끊긴다 (속박은 아니다 - 빈쿨룸은 자기를 속박하면서 유지한다)
-	if (type == Protocol::CC_TYPE_STUN || type == Protocol::CC_TYPE_KNOCKBACK || type == Protocol::CC_TYPE_LAUNCH)
+	if (type == Protocol::CC_TYPE_STUN || type == Protocol::CC_TYPE_KNOCKBACK || type == Protocol::CC_TYPE_LAUNCH || type == Protocol::CC_TYPE_TAUNT)
 	{
 		if (target->IsHolding())
 			StopHold(target, nowUs, "cc");
@@ -1315,6 +1325,9 @@ void Room::UpdateCc(uint64 nowUs)
 		expire(target->silenceEndUs, Protocol::CC_TYPE_SILENCE);
 		expire(target->healReductionEndUs, Protocol::CC_TYPE_HEAL_REDUCTION);
 		expire(target->blindEndUs, Protocol::CC_TYPE_BLIND);
+		expire(target->tauntEndUs, Protocol::CC_TYPE_TAUNT);
+		if (target->tauntEndUs == 0)
+			target->tauntSourceId = 0;
 
 		if (target->healReductionEndUs == 0)
 			target->healReductionMagnitude = 0.f;
@@ -1332,7 +1345,7 @@ void Room::UpdateCc(uint64 nowUs)
 		const bool stillCced = target->stunEndUs || target->rootEndUs
 			|| target->knockbackEndUs || target->launchEndUs
 			|| target->silenceEndUs || target->healReductionEndUs
-			|| target->blindEndUs
+			|| target->blindEndUs || target->tauntEndUs
 			|| target->slowSources.empty() == false;
 
 		if (stillCced == false)
@@ -1382,6 +1395,7 @@ void Room::FlushCcState(uint64 nowUs)
 		addSlot(target->silenceEndUs,		Protocol::CC_TYPE_SILENCE,			0.f);
 		addSlot(target->healReductionEndUs,	Protocol::CC_TYPE_HEAL_REDUCTION,	target->healReductionMagnitude);
 		addSlot(target->blindEndUs,			Protocol::CC_TYPE_BLIND,			SkillTable::Rules().blindViewScale);
+		addSlot(target->tauntEndUs,			Protocol::CC_TYPE_TAUNT,			0.f);
 
 		uint64 slowEndUs = 0;
 		for (const SlowSource& src : target->slowSources)
@@ -2101,6 +2115,9 @@ void Room::FlushMoves()
 
 	// 몬스터 이동을 같은 틱에 적분해 같은 S_MOVE 에 싣는다 - 패킷 · Send 수가 늘지 않는다 (monster-ai.md Core Rule 25)
 	StepMonsters(Utils::NowMicroseconds());
+
+	// 도발당한 쪽은 서버가 시전자 쪽으로 옮긴다 - 같은 S_MOVE 에 실린다
+	StepTaunts(Utils::NowMicroseconds());
 
 	if (_dirtyMovers.empty() == false)
 	{
@@ -4730,6 +4747,87 @@ void Room::ApplyThrow(const CreatureRef& caster, const CreatureRef& target, cons
 	}
 
 	LOG_LINE << "[THROW] target=" << targetId << " by=" << casterId << " to=(" << lx << "," << ly << ") splash=" << hitCount << '\n';
+}
+
+// ── 도발 ──
+
+void Room::StepTaunts(uint64 nowUs)
+{
+	if (_ccTargets.empty())
+		return;
+
+	const SkillRules& rules = SkillTable::Rules();
+	const WallMap& walls = WallTable::Get(_floorId);
+	constexpr float STEP_SEC = MOVE_FLUSH_MS / 1000.f;		// FlushMoves 간격 - 틱마다 같은 거리
+
+	for (uint64 targetId : _ccTargets)
+	{
+		auto findIt = _objects.find(targetId);
+		CreatureRef target = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		if (target == nullptr || target->IsAlive() == false || target->IsTaunted(nowUs) == false)
+			continue;
+
+		// 넉백 · 끌기가 겹치면 그쪽이 위치를 쓰고 있다 - 이 틱은 쉰다
+		if (nowUs < target->knockbackEndUs)
+			continue;
+
+		auto sourceIt = _objects.find(target->tauntSourceId);
+		CreatureRef source = (sourceIt != _objects.end()) ? dynamic_pointer_cast<Creature>(sourceIt->second) : nullptr;
+		if (source == nullptr || source->IsAlive() == false)
+		{
+			// 시전자가 사라졌다 - 도발이 풀린다
+			target->tauntEndUs = 0;
+			target->tauntSourceId = 0;
+			Protocol::CcEventInfo& info = _pendingCcExpired.emplace_back();
+			info.set_target_id(targetId);
+			info.set_cc_type(Protocol::CC_TYPE_TAUNT);
+			continue;
+		}
+
+		const float x0 = target->posInfo->x();
+		const float y0 = target->posInfo->y();
+		float dx = source->posInfo->x() - x0;
+		float dy = source->posInfo->y() - y0;
+		const float dist = ::sqrtf(dx * dx + dy * dy);
+
+		// 시전자를 바라본다 (CanTurn 이 막혀 있어 서버가 돌린다)
+		if (dist > 1.f)
+			target->posInfo->set_yaw(::atan2f(dy, dx) * 180.f / 3.14159265f);
+
+		const float room = dist - rules.tauntStopCm;
+		float step = min(rules.tauntSpeedCms * STEP_SEC, room);
+		if (dist > 1.f && step > 0.f)
+		{
+			dx /= dist;
+			dy /= dist;
+
+			// 벽에 닿으면 그 앞에서 멈춘다 (끌려가다 벽에 끼지 않게 - 캡슐 반지름 스윕)
+			const float x1 = x0 + dx * step;
+			const float y1 = y0 + dy * step;
+			const float t = walls.SweepFirstHit(x0, y0, x1, y1, SkillKinematics::CAPSULE_RADIUS_CM);
+			step *= t;
+
+			if (step > 0.01f)
+			{
+				target->posInfo->set_x(x0 + dx * step);
+				target->posInfo->set_y(y0 + dy * step);
+			}
+		}
+
+		target->posInfo->set_state(Protocol::MOVE_STATE_RUN);
+		_dirtyMovers.insert(targetId);
+
+		// 본인 클라는 보정으로만 움직인다 - 매 틱 5 cm 안팎이라 끊겨 보이지 않는다
+		if (target->IsPlayer())
+		{
+			Protocol::S_MOVE snap;
+			snap.set_correction(true);
+			snap.add_infos()->CopyFrom(*target->posInfo);
+			SEND_PACKET_DECLARATION(snap);
+			if (auto session = static_pointer_cast<Player>(target)->session.lock())
+				session->Send(sendBuffer);
+		}
+	}
 }
 
 // ── 4 단계 ──
