@@ -596,6 +596,10 @@ void AS1Player::DrawStatusDebug()
 		case Protocol::STATUS_DECOY:
 			Piece = TEXT("decoy out");
 			break;
+		case Protocol::STATUS_STEALTH:
+			// 은신 (그림자 감추기 · 니힐, FoW) - 다른 사람에겐 이 캐릭터가 아예 오지 않으므로 나만 본다
+			Piece = TEXT("STEALTH");
+			break;
 		default:
 			Piece = FString::Printf(TEXT("%d:%s"), static_cast<int32>(Entry.Kind), *Entry.Param);
 			break;

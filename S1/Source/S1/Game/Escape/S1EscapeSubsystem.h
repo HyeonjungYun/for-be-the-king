@@ -18,6 +18,7 @@ class US1RunHudWidget;
 class US1RadarWidget;
 class US1WorldLabelWidget;
 class US1BlindOverlayWidget;
+class US1FogOfWarWidget;
 
 /**
  * The client half of design/gdd/escape-timer.md — time left, tower gauges, the alarm, the run result.
@@ -57,11 +58,13 @@ public:
 	virtual bool IsTickable() const override { return bInitialized; }
 	virtual bool IsTickableInEditor() const override { return false; }
 
+	/** In the dungeon and alive - the run HUD, radar and fog of war show only then. */
+	bool InDungeon() const;
+
 private:
 	void EnsureHud();
 	void UpdateHud(double Now);
 	void DrawTowerZones(double Now);
-	bool InDungeon() const;
 
 	TArray<FS1TowerView>		Towers;
 	TArray<int32>				Warnings;
@@ -84,4 +87,5 @@ private:
 	UPROPERTY() TObjectPtr<US1RadarWidget> Radar;
 	UPROPERTY() TObjectPtr<US1WorldLabelWidget> WorldLabels;
 	UPROPERTY() TObjectPtr<US1BlindOverlayWidget> BlindOverlay;
+	UPROPERTY() TObjectPtr<US1FogOfWarWidget> FogOfWar;
 };

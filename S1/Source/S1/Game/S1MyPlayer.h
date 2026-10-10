@@ -237,6 +237,12 @@ public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 
+	/**
+	 * Camera distance multiplier from S_VISION.camera_scale — 천리안 (helmet 1132, "기본 시야가 넓어진다") pulls the camera
+	 * back with the wider sight (user decision 2026-10-11). Blind never moves the camera (US1BlindOverlayWidget draws it).
+	 */
+	void SetCameraScale(float Scale);
+
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 	/**

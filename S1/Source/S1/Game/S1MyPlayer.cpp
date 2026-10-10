@@ -759,6 +759,15 @@ void AS1MyPlayer::FireAimedSkill()
 	AimingSlot = 0;
 }
 
+void AS1MyPlayer::SetCameraScale(float Scale)
+{
+	if (CameraBoom == nullptr)
+		return;
+
+	CameraBoom->TargetArmLength = DefaultArmLength * FMath::Clamp(Scale, 0.5f, 2.f);
+	UE_LOG(LogTemp, Log, TEXT("[FOW] camera arm=%.0f (x%.2f)"), CameraBoom->TargetArmLength, Scale);
+}
+
 void AS1MyPlayer::DebugBlind(float Seconds)
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;

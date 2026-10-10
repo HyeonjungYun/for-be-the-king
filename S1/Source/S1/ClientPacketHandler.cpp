@@ -6,6 +6,7 @@
 #include "Game/Escape/S1EscapeSubsystem.h"
 #include "Game/Login/S1LoginSubsystem.h"
 #include "Game/Skill/S1ProjectileSubsystem.h"
+#include "Game/Vision/S1VisionSubsystem.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -168,6 +169,15 @@ bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& 
 	// 총명 (#91, 2026-10-10 에이전트) - 상대의 스킬 구성. 나에게만 온다
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
 		GameInstance->HandleSkillReveal(pkt);
+
+	return true;
+}
+
+bool Handle_S_VISION(PacketSessionRef& session, Protocol::S_VISION& pkt)
+{
+	// FoW (fog-of-war.md, 2026-10-11 에이전트) - 내 시야 반경 · 추가 시야원 · 카메라 배율. 안개를 그리는 데만 쓴다 (보이는 것은 서버가 이미 골라 보낸다)
+	if (US1VisionSubsystem* Vision = US1VisionSubsystem::Get())
+		Vision->HandleVision(pkt);
 
 	return true;
 }

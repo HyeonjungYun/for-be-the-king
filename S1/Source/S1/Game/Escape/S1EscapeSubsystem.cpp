@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/UI/S1BlindOverlayWidget.h"
+#include "Game/UI/S1FogOfWarWidget.h"
 #include "Game/UI/S1RunHudWidget.h"
 #include "Game/UI/S1RadarWidget.h"
 #include "Game/UI/S1WorldLabelWidget.h"
@@ -27,6 +28,7 @@ namespace
 	// radar or run HUD — a blinded player loses the surroundings, not their UI
 	constexpr int32 BlindOverlayZOrder = 9;
 	constexpr int32 WorldLabelsZOrder = 8;
+	constexpr int32 FogOfWarZOrder = 7;
 	constexpr double WarningSeconds = 3.0;
 	constexpr double ResultSeconds = 6.0;
 
@@ -76,9 +78,15 @@ void US1EscapeSubsystem::Deinitialize()
 		Radar->RemoveFromParent();
 	if (WorldLabels != nullptr)
 		WorldLabels->RemoveFromParent();
+	if (BlindOverlay != nullptr)
+		BlindOverlay->RemoveFromParent();
+	if (FogOfWar != nullptr)
+		FogOfWar->RemoveFromParent();
 	Hud = nullptr;
 	Radar = nullptr;
 	WorldLabels = nullptr;
+	BlindOverlay = nullptr;
+	FogOfWar = nullptr;
 	GEscape = nullptr;
 	Super::Deinitialize();
 }
@@ -187,6 +195,11 @@ void US1EscapeSubsystem::EnsureHud()
 	BlindOverlay = CreateWidget<US1BlindOverlayWidget>(PC, US1BlindOverlayWidget::StaticClass());
 	if (BlindOverlay != nullptr)
 		BlindOverlay->AddToViewport(BlindOverlayZOrder);
+
+	// Fog of war (2026-10-11) - under the monster names: a name at the sight edge stays readable while its owner fades
+	FogOfWar = CreateWidget<US1FogOfWarWidget>(PC, US1FogOfWarWidget::StaticClass());
+	if (FogOfWar != nullptr)
+		FogOfWar->AddToViewport(FogOfWarZOrder);
 }
 
 void US1EscapeSubsystem::UpdateHud(double Now)
