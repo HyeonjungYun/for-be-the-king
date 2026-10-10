@@ -386,6 +386,7 @@ protected:
 	FVector PendingDashDirection = FVector::ZeroVector;
 	float PendingDashDistCm = 0.f;
 	float PendingDashSpeedCms = 0.f;
+	bool bPendingDashIgnoresWalls = false;		// skill_effects.csv ignores_walls (유령 신랑의 저주)
 
 	/**
 	 * Recast (kind recast — 피의 추적 · 올가미): after the first press lands, the same key within

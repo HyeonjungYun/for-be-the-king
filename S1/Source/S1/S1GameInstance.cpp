@@ -364,6 +364,32 @@ void US1GameInstance::HandleCc(const Protocol::S_CC& CcPkt)
 	}
 }
 
+void US1GameInstance::HandleSkillReveal(const Protocol::S_SKILL_REVEAL& RevealPkt)
+{
+	// 총명 - 상대 머리 위에 키별 스킬 이름을 duration 동안 (TEMP 텍스트)
+	TWeakObjectPtr<AS1Player>* FindActor = Players.Find(RevealPkt.target_id());
+	if (FindActor == nullptr)
+		return;
+
+	AS1Player* Target = FindActor->Get();
+	if (Target == nullptr)
+		return;
+
+	static const TCHAR* KeyNames[] = { TEXT("?"), TEXT("Shift"), TEXT("Q"), TEXT("E"), TEXT("R"), TEXT("Z"), TEXT("X") };
+	FString Line;
+	for (const Protocol::SkillInfo& Info : RevealPkt.skills())
+	{
+		const int32 Slot = static_cast<int32>(Info.slot());
+		const FText Name = FText::FromStringTable(TEXT("S1Items"), FString::Printf(TEXT("skill.%u"), Info.skill_id()));
+		if (Line.IsEmpty() == false)
+			Line += TEXT("  ");
+		Line += FString::Printf(TEXT("%s:%s"), (Slot >= 1 && Slot <= 6) ? KeyNames[Slot] : TEXT("?"), *Name.ToString());
+	}
+
+	Target->ShowRevealedSkills(Line, RevealPkt.duration_ms() / 1000.f);
+	UE_LOG(LogTemp, Log, TEXT("[REVEAL] target=%llu %s"), RevealPkt.target_id(), *Line);
+}
+
 void US1GameInstance::HandleStatus(const Protocol::S_STATUS& StatusPkt)
 {
 	if (Socket == nullptr || GameServerSession == nullptr)

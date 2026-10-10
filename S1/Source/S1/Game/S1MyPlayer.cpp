@@ -244,7 +244,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		// The displacement lands with the rest of the effect, not at cast start. The server
 		// opened its speed window at the same moment, so the two line up.
 		if (PendingDashDistCm > 0.f)
-			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms);
+			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls);
 
 		// A recast's first press landed - the window for the second press starts now
 		if (bPendingRecast)
@@ -705,6 +705,7 @@ void AS1MyPlayer::FireAimedSkill()
 			PendingDashDirection = DashDir;
 			PendingDashDistCm = Def->MoveDistCm;
 			PendingDashSpeedCms = Def->MoveSpeedCms;
+			bPendingDashIgnoresWalls = Def->bMoveIgnoresWalls;		// 유령 신랑의 저주 - through walls (server skips its wall check for the window)
 		}
 	}
 
@@ -748,7 +749,7 @@ void AS1MyPlayer::FireAimedSkill()
 
 		if (PendingDashDistCm > 0.f)
 		{
-			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms);
+			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls);
 			PendingDashDistCm = 0.f;
 		}
 

@@ -152,8 +152,10 @@ public:
 	 * @param Direction  Normalised, XY only.
 	 * @param DistCm     Total travel. Ends early on a wall.
 	 * @param SpeedCms   Must satisfy DistCm / SpeedCms <= 0.4s (skill-system.md S2).
+	 * @param bIgnoresWalls  skill_effects.csv ignores_walls (유령 신랑의 저주): moves unswept, and the end
+	 *                       point is pushed out of any wall it lands in (forward first, then back the way it came).
 	 */
-	void RequestDash(const FVector& Direction, float DistCm, float SpeedCms);
+	void RequestDash(const FVector& Direction, float DistCm, float SpeedCms, bool bIgnoresWalls = false);
 
 	/** True while a dash is travelling. Walk input is ignored throughout. */
 	bool IsDashing() const { return DashRemainingCm > 0.f; }
@@ -183,6 +185,9 @@ public:
 
 	/** The server ended a hold skill on this character (S_STATUS hold expired). The local player starts its cooldown here. */
 	virtual void OnHoldEnded() {}
+
+	/** 총명 (#91): this character's revealed loadout, shown above them for Seconds (TEMP text; the owner's own String Table names). */
+	void ShowRevealedSkills(const FString& Line, float Seconds);
 
 	/**
 	 * A server-confirmed hit. The client never computes HP or decides whether a hit landed
@@ -242,6 +247,11 @@ protected:
 	FVector DashDirection = FVector::ZeroVector;
 	float DashRemainingCm = 0.f;
 	float DashSpeedCms = 0.f;
+	bool bDashIgnoresWalls = false;		// 유령 신랑의 저주 - unswept, end point resolved out of walls
+	FVector DashStartLocation = FVector::ZeroVector;
+
+	/** Wall-passing dash just ended: if the capsule sits inside blocking geometry, step forward (then back) to the first free spot. */
+	void ResolveDashEndOutOfWalls();
 
 	/**
 	 * Casting marker shown to everyone. Server-driven, not predicted — this is what other
@@ -272,6 +282,9 @@ protected:
 	/** Status readout lines. Keyed by kind + param + instigator — a refresh overwrites, a stack change updates. */
 	TArray<FS1StatusEntry> Statuses;
 	float MoveSpeedBuff = 0.f;
+
+	FString RevealedSkills;
+	float RevealedUntil = 0.f;
 
 	/** TEMP — ASCII text above the health bar (the debug font has no Hangul). Replaced by the HUD later. */
 	void DrawStatusDebug();

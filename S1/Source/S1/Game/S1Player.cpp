@@ -520,13 +520,27 @@ void AS1Player::ClearStatuses()
 	MoveSpeedBuff = 0.f;
 }
 
+void AS1Player::ShowRevealedSkills(const FString& Line, float Seconds)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	RevealedSkills = Line;
+	RevealedUntil = Now + FMath::Max(Seconds, 1.f);
+}
+
 void AS1Player::DrawStatusDebug()
 {
-	if (Statuses.Num() == 0)
-		return;
-
 	UWorld* World = GetWorld();
 	if (World == nullptr)
+		return;
+
+	// 총명 - 드러난 스킬 구성 (한 줄, 머리 위)
+	if (RevealedSkills.IsEmpty() == false && World->GetTimeSeconds() < RevealedUntil)
+	{
+		const FVector Where = GetActorLocation() + FVector(DEBUG_BAR_OFFSET_X - 60.f, 0.f, 0.f);
+		DrawDebugString(World, Where, RevealedSkills, nullptr, FColor(120, 220, 255), 0.f, true, 1.1f);
+	}
+
+	if (Statuses.Num() == 0)
 		return;
 
 	// ASCII only — the debug font has no Hangul. "bleed x3 | atk +15% | mark:spear". Expired lines drop
@@ -550,7 +564,15 @@ void AS1Player::DrawStatusDebug()
 			Piece = FString::Printf(TEXT("%s x%u"), *Entry.Param, Entry.Stacks);
 			break;
 		case Protocol::STATUS_BUFF:
-			Piece = FString::Printf(TEXT("%s +%d%%"), *Entry.Param, FMath::RoundToInt(Entry.Magnitude * 100.f));
+			// 모자 로스터 - 의미가 다른 버프 세 가지: 벽 통과 · 면역 · 피해 배율 (param 이 "stat:selector")
+			if (Entry.Param.StartsWith(TEXT("wall_pierce")))
+				Piece = TEXT("WALLS");
+			else if (Entry.Param.StartsWith(TEXT("immune:")))
+				Piece = Entry.Param;
+			else if (Entry.Param.StartsWith(TEXT("damage_mod:")))
+				Piece = FString::Printf(TEXT("dmg+%d%% %s"), FMath::RoundToInt(Entry.Magnitude * 100.f), *Entry.Param.Mid(11));
+			else
+				Piece = FString::Printf(TEXT("%s %+d%%"), *Entry.Param, FMath::RoundToInt(Entry.Magnitude * 100.f));
 			break;
 		case Protocol::STATUS_MARK:
 			Piece = FString::Printf(TEXT("mark:%s"), *Entry.Param);
@@ -808,7 +830,7 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 	}
 }
 
-void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedCms)
+void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedCms, bool bIgnoresWalls)
 {
 	if (DistCm <= 0.f || SpeedCms <= 0.f)
 		return;
@@ -822,6 +844,8 @@ void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedC
 	DashDirection = Flat;
 	DashRemainingCm = DistCm;
 	DashSpeedCms = SpeedCms;
+	bDashIgnoresWalls = bIgnoresWalls;
+	DashStartLocation = GetActorLocation();
 }
 
 void AS1Player::TickDash(float DeltaTime)
@@ -830,6 +854,21 @@ void AS1Player::TickDash(float DeltaTime)
 		return;
 
 	const float Step = FMath::Min(DashSpeedCms * DeltaTime, DashRemainingCm);
+
+	if (bDashIgnoresWalls)
+	{
+		// 유령 신랑의 저주 (skill_effects.csv ignores_walls) - no sweep, so the capsule passes through walls. The server
+		// skips its C_MOVE wall check for the same window (Room::ApplyMovement). Only the end point must be free.
+		AddActorWorldOffset(DashDirection * Step, false, nullptr, ETeleportType::TeleportPhysics);
+		DashRemainingCm -= Step;
+
+		if (DashRemainingCm <= 0.f)
+		{
+			DashRemainingCm = 0.f;
+			ResolveDashEndOutOfWalls();
+		}
+		return;
+	}
 
 	// Swept so the capsule is stopped by geometry rather than tunnelling through it. At
 	// 1200 cm/s a 33ms frame covers 40cm, which is comfortably under the capsule radius —
@@ -847,6 +886,54 @@ void AS1Player::TickDash(float DeltaTime)
 	}
 
 	DashRemainingCm -= Step;
+}
+
+void AS1Player::ResolveDashEndOutOfWalls()
+{
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UWorld* World = GetWorld();
+	if (Capsule == nullptr || World == nullptr)
+		return;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DashEndOutOfWalls), false, this);
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), Capsule->GetScaledCapsuleHalfHeight());
+	const ECollisionChannel Channel = Capsule->GetCollisionObjectType();
+	const FVector End = GetActorLocation();
+
+	auto IsFree = [&](const FVector& At) { return World->OverlapBlockingTestByChannel(At, FQuat::Identity, Channel, Shape, Params) == false; };
+
+	if (IsFree(End))
+		return;
+
+	// Forward first - the other side of the wall is where the dash was going. Then back toward the start (the spot in
+	// front of the wall is always free). 25 cm steps: under the capsule radius, so no gap is skipped.
+	constexpr float StepCm = 25.f;
+	constexpr float MaxForwardCm = 400.f;
+	for (float Extra = StepCm; Extra <= MaxForwardCm; Extra += StepCm)
+	{
+		const FVector Probe = End + DashDirection * Extra;
+		if (IsFree(Probe))
+		{
+			SetActorLocation(Probe, false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogTemp, Warning, TEXT("[DASH] wall-pass end inside a wall - pushed forward %.0f cm"), Extra);
+			return;
+		}
+	}
+
+	const float BackCm = FVector::Dist2D(End, DashStartLocation);
+	for (float Back = StepCm; Back <= BackCm; Back += StepCm)
+	{
+		const FVector Probe = End - DashDirection * Back;
+		if (IsFree(Probe))
+		{
+			SetActorLocation(Probe, false, nullptr, ETeleportType::TeleportPhysics);
+			UE_LOG(LogTemp, Warning, TEXT("[DASH] wall-pass end inside a wall - pulled back %.0f cm"), Back);
+			return;
+		}
+	}
+
+	SetActorLocation(DashStartLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	UE_LOG(LogTemp, Warning, TEXT("[DASH] wall-pass end inside a wall - no free spot, back to the start"));
 }
 
 bool AS1Player::CanAttack() const

@@ -163,6 +163,15 @@ bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 	return true;
 }
 
+bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& pkt)
+{
+	// 총명 (#91, 2026-10-10 에이전트) - 상대의 스킬 구성. 나에게만 온다
+	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
+		GameInstance->HandleSkillReveal(pkt);
+
+	return true;
+}
+
 bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt)
 {
 	// 장판 (skill roster stage 3, 2026-10-10 에이전트) - 바닥 원 표시만, 틱은 S_DAMAGE / S_CC / S_STATUS

@@ -61,6 +61,7 @@ public:
 	void HandleCc(const Protocol::S_CC& CcPkt);
 	void HandleCcState(const Protocol::S_CC_STATE& StatePkt);
 	void HandleStatus(const Protocol::S_STATUS& StatusPkt);
+	void HandleSkillReveal(const Protocol::S_SKILL_REVEAL& RevealPkt);
 	void HandleDamage(const Protocol::S_DAMAGE& DamagePkt);
 	void HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt);
 	void HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt);
