@@ -584,7 +584,8 @@ void AS1Player::DrawStatusDebug()
 			Piece = TEXT("COUNTER");
 			break;
 		case Protocol::STATUS_PARRY:
-			Piece = TEXT("PARRY");
+			// 자업자득(갑옷 #107)은 같은 종류에 param "reflect" 로 온다 - 투사체를 되돌려 보내는 창
+			Piece = (Entry.Param == TEXT("reflect")) ? TEXT("REFLECT") : TEXT("PARRY");
 			break;
 		case Protocol::STATUS_STANCE:
 			Piece = FString::Printf(TEXT("stance:%s"), *Entry.Param);
