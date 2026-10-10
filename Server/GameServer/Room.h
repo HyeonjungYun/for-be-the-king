@@ -237,9 +237,35 @@ private:
 	void	ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
 	void	ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const CreatureRef& target, const SkillContext& ctx, uint64 nowUs);
 
-	// 모든 피해는 여기를 지난다 - 치명상 방어(맹수의 본능) → 체력 차감 → S_DAMAGE → 몬스터 어그로 → 사망. 돌려주는 값 = 남은 체력.
+	// 피해의 출처 - 모자 로스터의 배율 · 면역 · 트리거가 본다. skillId 0 = 평타 · 지속 피해 등, elem = fire · lightning · poison · bleed · frost
+	struct DamageSource
+	{
+		uint32 skillId = 0;
+		string elem;
+		bool basic = false;
+	};
+
+	// 모든 피해는 여기를 지난다 - 배율 · 면역 · 첫 타 경감 → 치명상 방어(맹수의 본능) → 체력 차감 → S_DAMAGE → 몬스터 어그로 → 사망. 돌려주는 값 = 남은 체력.
 	// attacker 는 없을 수 있다 (떠난 사람의 지속 피해) - attackerId 만 패킷에 실린다. 이미 죽은 대상은 건드리지 않는다
-	int32	DealDamage(const CreatureRef& attacker, uint64 attackerId, const CreatureRef& target, int32 damage, Protocol::DamageType type, bool isCrit, uint64 nowUs);
+	int32	DealDamage(const CreatureRef& attacker, uint64 attackerId, const CreatureRef& target, int32 damage, Protocol::DamageType type, bool isCrit, uint64 nowUs, const DamageSource& src = DamageSource());
+
+	// ── 모자 로스터 #78 ~ #104 (2026-10-10) ──
+	int32	ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& target, int32 damage, const DamageSource& src, uint64 nowUs);	// 일편단심 · damage_mod · 면역 · 염두
+	bool	HasImmunity(const CreatureRef& creature, const string& elem, uint64 nowUs) const;		// 패시브(피뢰 · 방염) + 버프(만독불침)
+	string	ElementOf(const string& param) const;														// 효과 param → 속성 이름
+	bool	IgnoresWalls(const CreatureRef& creature) const;										// 유령 신부의 축복
+	bool	IsAlone(const CreatureRef& creature, float radiusCm) const;								// 외로운 외침
+	void	OnSkillDamageLanded(const CreatureRef& attacker, const CreatureRef& target, uint32 skillId, uint64 nowUs);	// 패시브 on_skill:<id> (월척)
+	void	OnDotApplied(const CreatureRef& attacker, const string& kind, uint64 nowUs);					// 패시브 on_dot:<kind> (혈기)
+	void	TriggerDashMarks(const CreatureRef& dasher, float dirX, float dirY, uint64 nowUs);			// 패시브 on_dash (간파)
+	void	ApplyPassiveEffect(const CreatureRef& owner, const SkillDef& def, uint32 effectIndex, const CreatureRef& target, Protocol::EquipSlot slot, float scale, uint64 nowUs);
+	void	Cleanse(const CreatureRef& creature, const string& what, uint64 nowUs);					// poison / burn / all
+	void	Heal(const CreatureRef& creature, uint64 healerId, int32 amount, uint64 nowUs);
+	void	RevealNearest(const CreatureRef& caster, const SkillDef& def, uint64 nowUs);				// 외로운 외침 - 시전자에게만
+	void	RevealSkills(const CreatureRef& caster, const CreatureRef& target, uint32 durationMs);		// 총명 - S_SKILL_REVEAL
+	void	MoveToMark(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const string& markKind, uint64 nowUs);	// 집념
+	void	StartDoom(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);
+	void	LiftDoom(const CreatureRef& caster, bool killed, uint64 nowUs);
 	bool	TryLethalSave(const PlayerRef& victim, const CreatureRef& attacker, OUT int32& damage, uint64 nowUs);
 
 	// 서버가 옮기는 변위 - 위치를 끝점으로 바로 놓고(S_MOVE) 날아가는 동안 넉백 CC. 클라는 KnockbackInfo 로 같은 끝점까지 밀려간다.

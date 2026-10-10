@@ -267,3 +267,67 @@ TEST(StatusSet, Clear_는_전부_지운다)
 	s.Clear();
 	EXPECT_TRUE(s.Empty());
 }
+
+// ── 모자 로스터 (2026-10-10) - 버프 param · 제거 · 지속 피해 연장/해제 ──
+
+TEST(StatusBuff, param_이_다르면_다른_버프다_같으면_갱신이다)
+{
+	StatusSet s;
+	BuffInstance fire = Buff(1100, SkillBuffStat::DamageMod, 0.2f, AtMs(5000));
+	fire.param = "elem:fire";
+	BuffInstance bow = Buff(1099, SkillBuffStat::DamageMod, 0.2f, AtMs(5000));
+	bow.param = "tag:bow";
+
+	EXPECT_TRUE(s.AddBuff(fire));
+	EXPECT_TRUE(s.AddBuff(bow));
+	EXPECT_FALSE(s.AddBuff(fire));
+
+	EXPECT_FLOAT_EQ(s.BuffSum(SkillBuffStat::DamageMod), 0.4f);
+	EXPECT_FLOAT_EQ(s.BuffSum(SkillBuffStat::DamageMod, "elem:fire"), 0.2f);
+	EXPECT_TRUE(s.HasBuff(SkillBuffStat::DamageMod, "tag:bow"));
+	EXPECT_FALSE(s.HasBuff(SkillBuffStat::DamageMod, "tag:sword"));
+}
+
+TEST(StatusBuff, 한_스킬의_버프를_전부_뺀다_배수진)
+{
+	StatusSet s;
+	s.AddBuff(Buff(1102, SkillBuffStat::AttackPower, 0.3f, AtMs(10000)));
+	s.AddBuff(Buff(1102, SkillBuffStat::AttackSpeed, 0.3f, AtMs(10000)));
+	s.AddBuff(Buff(1010, SkillBuffStat::AttackPower, 0.15f, AtMs(5000)));
+
+	EXPECT_EQ(s.RemoveBuffs(1102), 2u);
+	EXPECT_FLOAT_EQ(s.BuffSum(SkillBuffStat::AttackPower), 0.15f);
+	EXPECT_FLOAT_EQ(s.BuffSum(SkillBuffStat::AttackSpeed), 0.f);
+}
+
+TEST(StatusBuff, 음수_버프는_그대로_더해진다_광전사의_눈물)
+{
+	StatusSet s;
+	s.AddBuff(Buff(1080, SkillBuffStat::Armor, -0.3f, AtMs(5000)));
+	s.AddBuff(Buff(1079, SkillBuffStat::Armor, 0.3f, AtMs(5000)));
+	EXPECT_FLOAT_EQ(s.BuffSum(SkillBuffStat::Armor), 0.f);
+}
+
+TEST(StatusDot, 종류별_해제와_마법_연장_째깍째깍)
+{
+	StatusSet s;
+	DotInstance poison = Bleed(1, AtMs(0), 4000);
+	poison.kind = "poison";
+	poison.type = Protocol::DAMAGE_TYPE_MAGIC;
+	DotInstance bleed = Bleed(1, AtMs(0), 4000);
+	bleed.type = Protocol::DAMAGE_TYPE_PHYSICAL;
+	s.AddDot(poison, MAX_STACKS);
+	s.AddDot(poison, MAX_STACKS);
+	s.AddDot(bleed, MAX_STACKS);
+
+	EXPECT_EQ(s.ExtendDots(Protocol::DAMAGE_TYPE_MAGIC, 2000), 2u);
+	for (const DotInstance& d : s.Dots())
+		EXPECT_EQ(d.endUs, d.kind == "poison" ? AtMs(6000) : AtMs(4000));
+
+	EXPECT_EQ(s.RemoveDots("poison"), 2u);
+	EXPECT_EQ(s.DotStacks("poison"), 0u);
+	EXPECT_EQ(s.DotStacks("bleed"), 1u);
+
+	EXPECT_EQ(s.RemoveDots(""), 1u);
+	EXPECT_TRUE(s.Dots().empty());
+}

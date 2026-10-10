@@ -134,6 +134,11 @@ void Creature::ClearCombatState()
 	invulnUntilUs = 0;
 	leapUntilUs = 0;
 	leapSkillId = 0;
+	focusTargetId = 0;
+	focusUntilUs = 0;
+	focusBonus = 0.f;
+	doomUntilUs = 0;
+	doomSkillId = 0;
 
 	status.Clear();
 	OnBuffsChanged();

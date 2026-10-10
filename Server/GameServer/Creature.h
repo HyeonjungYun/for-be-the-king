@@ -176,6 +176,15 @@ public:
 	bool IsParrying(uint64 nowUs) const { return nowUs < parryUntilUs; }
 	bool IsHolding() const { return holdSkillId != 0; }
 
+	// ── 모자 로스터 (2026-10-10) ──
+	uint64				focusTargetId = 0;			// 일편단심 - 이 적에게만 피해, 그 대신 × (1 + focusBonus). 표식이 끝나면 풀린다
+	uint64				focusUntilUs = 0;
+	float				focusBonus = 0.f;
+	uint64				doomUntilUs = 0;			// 배수진 - 저주 중. 적 플레이어 처치로 해제, 아니면 끝에 죽는다
+	uint32				doomSkillId = 0;
+	bool IsFocusing(uint64 nowUs) const { return focusTargetId != 0 && nowUs < focusUntilUs; }
+	bool IsDoomed(uint64 nowUs) const { return doomSkillId != 0 && nowUs < doomUntilUs; }
+
 	// ── 4 단계 ──
 	uint64				invulnUntilUs = 0;			// 니힐 - 피해 · CC · 밀기 전부 무효
 	uint64				leapUntilUs = 0;			// 벽력일창 - 도약 중 (맞으면 추락 = 예고된 내리찍기 취소)

@@ -51,6 +51,7 @@ enum : uint16
 	PKT_S_STATUS = 1038,
 	PKT_S_PROJECTILE = 1039,
 	PKT_S_ZONE = 1040,
+	PKT_S_SKILL_REVEAL = 1041,
 };
 
 // Custom Handlers
@@ -126,6 +127,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_STATUS& pkt) { return MakeSendBuffer(pkt, PKT_S_STATUS); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_PROJECTILE& pkt) { return MakeSendBuffer(pkt, PKT_S_PROJECTILE); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_ZONE& pkt) { return MakeSendBuffer(pkt, PKT_S_ZONE); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_SKILL_REVEAL& pkt) { return MakeSendBuffer(pkt, PKT_S_SKILL_REVEAL); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

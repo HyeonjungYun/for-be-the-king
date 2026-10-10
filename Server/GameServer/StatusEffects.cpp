@@ -60,7 +60,7 @@ bool StatusSet::AddBuff(const BuffInstance& buff)
 {
 	for (BuffInstance& b : _buffs)
 	{
-		if (b.skillId == buff.skillId && b.stat == buff.stat)
+		if (b.skillId == buff.skillId && b.stat == buff.stat && b.param == buff.param)
 		{
 			b = buff;
 			return false;
@@ -80,6 +80,72 @@ float StatusSet::BuffSum(SkillBuffStat stat) const
 			sum += b.magnitude;
 	}
 	return sum;
+}
+
+float StatusSet::BuffSum(SkillBuffStat stat, const string& param) const
+{
+	float sum = 0.f;
+	for (const BuffInstance& b : _buffs)
+	{
+		if (b.stat == stat && b.param == param)
+			sum += b.magnitude;
+	}
+	return sum;
+}
+
+bool StatusSet::HasBuff(SkillBuffStat stat, const string& param) const
+{
+	for (const BuffInstance& b : _buffs)
+	{
+		if (b.stat == stat && b.param == param)
+			return true;
+	}
+	return false;
+}
+
+uint32 StatusSet::RemoveBuffs(uint32 skillId)
+{
+	uint32 removed = 0;
+	for (size_t i = 0; i < _buffs.size(); )
+	{
+		if (_buffs[i].skillId == skillId)
+		{
+			_buffs.erase(_buffs.begin() + i);
+			removed++;
+			continue;
+		}
+		i++;
+	}
+	return removed;
+}
+
+uint32 StatusSet::RemoveDots(const string& kind)
+{
+	uint32 removed = 0;
+	for (size_t i = 0; i < _dots.size(); )
+	{
+		if (kind.empty() || _dots[i].kind == kind)
+		{
+			_dots.erase(_dots.begin() + i);
+			removed++;
+			continue;
+		}
+		i++;
+	}
+	return removed;
+}
+
+uint32 StatusSet::ExtendDots(Protocol::DamageType type, uint32 extraMs)
+{
+	uint32 touched = 0;
+	for (DotInstance& d : _dots)
+	{
+		if (d.type != type)
+			continue;
+		d.endUs += static_cast<uint64>(extraMs) * 1000;
+		touched++;
+	}
+	return touched;
 }
 
 bool StatusSet::AddMark(const MarkInstance& mark)

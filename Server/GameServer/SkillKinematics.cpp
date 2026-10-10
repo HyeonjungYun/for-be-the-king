@@ -51,7 +51,7 @@ namespace SkillKinematics
 		return r;
 	}
 
-	PushResult PullToward(const WallMap& walls, float fromX, float fromY, float toX, float toY, float stopCm)
+	PushResult PullToward(const WallMap& walls, float fromX, float fromY, float toX, float toY, float stopCm, bool ignoreWalls)
 	{
 		PushResult r;
 		r.endX = fromX;
@@ -64,10 +64,21 @@ namespace SkillKinematics
 		if (d <= stopCm + 1.f)
 			return r;
 
-		// 사용자 결정 - 벽 너머로는 끌리지 않는다. 중심선이 벽에 걸리면 아예 움직이지 않는다
-		if (walls.SweepBlocked(fromX, fromY, toX, toY, 0.f))
+		// 사용자 결정 - 벽 너머로는 끌리지 않는다. 중심선이 벽에 걸리면 아예 움직이지 않는다 (유령 신부의 축복은 예외)
+		if (ignoreWalls == false && walls.SweepBlocked(fromX, fromY, toX, toY, 0.f))
 		{
 			r.hitWall = true;
+			return r;
+		}
+
+		if (ignoreWalls)
+		{
+			// 벽을 지나 끌려온다 - 끝점만 벽 밖이면 된다
+			const float len = d - stopCm;
+			r.endX = fromX + dx / d * len;
+			r.endY = fromY + dy / d * len;
+			r.distCm = len;
+			r.moved = true;
 			return r;
 		}
 

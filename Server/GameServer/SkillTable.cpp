@@ -68,6 +68,9 @@ namespace
 		{ "stance", SkillEffectType::Stance }, { "on_hit", SkillEffectType::OnHit }, { "lethal_save", SkillEffectType::LethalSave },
 		{ "reveal", SkillEffectType::Reveal }, { "trail", SkillEffectType::Trail }, { "self_cc", SkillEffectType::SelfCc },
 		{ "petrify_window", SkillEffectType::PetrifyWindow }, { "fall_on_hit", SkillEffectType::FallOnHit }, { "throw", SkillEffectType::Throw },
+		{ "immune", SkillEffectType::Immune }, { "damage_mod", SkillEffectType::DamageMod }, { "cleanse", SkillEffectType::Cleanse },
+		{ "heal", SkillEffectType::Heal }, { "extend_dot", SkillEffectType::ExtendDot }, { "doom", SkillEffectType::Doom },
+		{ "damage_reduce_once", SkillEffectType::DamageReduceOnce },
 	};
 
 	const vector<pair<const char*, SkillRequire>> REQUIRE_NAMES =
@@ -76,7 +79,25 @@ namespace
 		{ "mark:blood", SkillRequire::MarkBlood }, { "mark:heavy_bleed", SkillRequire::MarkHeavyBleed }, { "mark:rope", SkillRequire::MarkRope },
 		{ "stunned", SkillRequire::Stunned }, { "element", SkillRequire::Element }, { "no_element", SkillRequire::NoElement },
 		{ "hit", SkillRequire::Hit }, { "no_kill", SkillRequire::NoKill }, { "recast", SkillRequire::Recast }, { "wall", SkillRequire::Wall },
+		{ "on_dash", SkillRequire::OnDashAtMe }, { "alone", SkillRequire::Alone },
 	};
+
+	// requires 열의 접두사 형태 - on_dot:<kind> · on_skill:<id>. 맞으면 true 로 채우고, 접두사가 아니면 false (그때는 이름표로)
+	bool ParseRequirePrefix(const string& text, OUT SkillEffect& e)
+	{
+		if (text.rfind("on_dot:", 0) == 0)
+		{
+			e.condition = SkillRequire::OnDot;
+			e.conditionParam = text.substr(7);
+			return e.conditionParam.empty() == false;
+		}
+		if (text.rfind("on_skill:", 0) == 0)
+		{
+			e.condition = SkillRequire::OnSkill;
+			return Csv::ParseUInt(text.substr(9), OUT e.conditionId) && e.conditionId != 0;
+		}
+		return false;
+	}
 
 	const vector<pair<const char*, Protocol::CcType>> CC_NAMES =
 	{
@@ -90,6 +111,7 @@ namespace
 		{ "none", SkillBuffStat::None }, { "attack_power", SkillBuffStat::AttackPower }, { "magic_power", SkillBuffStat::MagicPower },
 		{ "crit_chance", SkillBuffStat::CritChance }, { "attack_speed", SkillBuffStat::AttackSpeed }, { "move_speed", SkillBuffStat::MoveSpeed },
 		{ "armor", SkillBuffStat::Armor }, { "magic_resist", SkillBuffStat::MagicResist }, { "damage_pct", SkillBuffStat::DamagePct },
+		{ "wall_pierce", SkillBuffStat::WallPierce }, { "immune", SkillBuffStat::Immune }, { "damage_mod", SkillBuffStat::DamageMod },
 	};
 
 	bool ParseBool(const string& s, OUT bool& out)
@@ -107,8 +129,9 @@ namespace
 	{
 		switch (e.type)
 		{
-		case SkillEffectType::Knockback:
 		case SkillEffectType::Pull:
+			return e.param != "monsters";		// 부름 - 몬스터만 끈다, 플레이어 CC 예산(AC-5)과 무관
+		case SkillEffectType::Knockback:
 		case SkillEffectType::PetrifyWindow:
 		case SkillEffectType::Throw:
 			return true;
@@ -295,23 +318,84 @@ namespace
 					error = ew + " must be who=self with dist_cm > 0";
 					return false;
 				}
-				// blink 는 즉시 (speed 0). 나머지는 dash_kinematics 지속 상한 안
-				if (e.param != "blink" && (e.speedCms <= 0.f || e.speedCms < e.distCm / DASH_DURATION_MAX_S))
+				// blink · to_mark:<표식> 는 즉시 (speed 0). 나머지는 dash_kinematics 지속 상한 안
 				{
-					error = ew + " speed_cms must be >= dist_cm / 0.4 (dash_duration cap)";
-					return false;
-				}
-				if (e.param != "dash" && e.param != "leap" && e.param != "back" && e.param != "forward" && e.param != "blink")
-				{
-					error = ew + " param must be dash / leap / back / forward / blink";
-					return false;
+					const bool instant = (e.param == "blink") || (e.param.rfind("to_mark:", 0) == 0);
+					if (instant == false && (e.speedCms <= 0.f || e.speedCms < e.distCm / DASH_DURATION_MAX_S))
+					{
+						error = ew + " speed_cms must be >= dist_cm / 0.4 (dash_duration cap)";
+						return false;
+					}
+					if (instant == false && e.param != "dash" && e.param != "leap" && e.param != "back" && e.param != "forward")
+					{
+						error = ew + " param must be dash / leap / back / forward / blink / to_mark:<mark>";
+						return false;
+					}
 				}
 				break;
 
 			case SkillEffectType::SelfBuff:
-				if (e.self == false || e.stat == SkillBuffStat::None || e.durationMs == 0 || e.magnitude <= 0.f)
+				// 크기는 음수도 된다 - 자기 디버프 (광전사의 눈물 방어력 -30 %). 0 은 뜻이 없다
+				if (e.self == false || e.stat == SkillBuffStat::None || e.durationMs == 0 || e.magnitude == 0.f)
 				{
-					error = ew + " needs who=self, stat, duration_ms and magnitude";
+					error = ew + " needs who=self, stat, duration_ms and magnitude (non-zero)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Immune:
+			case SkillEffectType::Cleanse:
+				if (e.self == false || e.param.empty())
+				{
+					error = ew + " needs who=self and param (fire / lightning / poison / burn / all)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::DamageMod:
+				if (e.self == false || e.magnitude <= 0.f || e.param.empty())
+				{
+					error = ew + " needs who=self, magnitude and param (tag:<tag> / elem:<element> / skill:<id> / range)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Heal:
+				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f)
+				{
+					error = ew + " needs who=self and magnitude (0, 1] = share of max hp";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::ExtendDot:
+				if (e.self || e.magnitude <= 0.f || e.param.empty())
+				{
+					error = ew + " needs who=target, magnitude (ms) and param (magic / physical)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Doom:
+				if (e.self == false || e.durationMs == 0)
+				{
+					error = ew + " needs who=self and duration_ms";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::DamageReduceOnce:
+				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f || e.durationMs == 0)
+				{
+					error = ew + " needs who=self, magnitude (0, 1] and duration_ms (cooldown)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Reveal:
+				if (e.param.empty())
+				{
+					error = ew + " needs param (nearest / skills)";
 					return false;
 				}
 				break;
@@ -455,6 +539,11 @@ const SkillEffect* SkillDef::FindEffect(SkillEffectType type) const
 	return nullptr;
 }
 
+bool SkillDef::HasTag(const string& tag) const
+{
+	return find(tags.begin(), tags.end(), tag) != tags.end();
+}
+
 const char* SkillTable::EffectName(SkillEffectType type)
 {
 	for (const auto& [name, value] : EFFECT_NAMES)
@@ -533,7 +622,8 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 			|| ReadRule(kv, "trail_buff_ms", OUT rules.trailBuffMs, OUT error) == false
 			|| ReadRule(kv, "trail_pickup_cm", OUT rules.trailPickupCm, OUT error) == false
 			|| ReadRule(kv, "taunt_speed_cms", OUT rules.tauntSpeedCms, OUT error) == false
-			|| ReadRule(kv, "taunt_stop_cm", OUT rules.tauntStopCm, OUT error) == false)
+			|| ReadRule(kv, "taunt_stop_cm", OUT rules.tauntStopCm, OUT error) == false
+			|| ReadRule(kv, "long_range_cm", OUT rules.longRangeCm, OUT error) == false)
 			return false;
 
 		uint32 decoyHp = 0;
@@ -560,6 +650,10 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 				"shape", "aim", "range_cm", "width_cm", "radius_cm", "angle_deg", "allowed_slot", "projectile_speed_cms", "pierce" }, OUT c, OUT error) == false)
 			return false;
 
+		// tags 열은 선택 (2026-10-10 모자 로스터 - damage_mod tag:<태그>). 없으면 태그 없음 (테스트 픽스처 호환)
+		auto tagsIt = table.columns.find("tags");
+		const int32 tagsCol = (tagsIt != table.columns.end()) ? tagsIt->second : -1;
+
 		for (size_t r = 0; r < table.rows.size(); r++)
 		{
 			const vector<string>& row = table.rows[r];
@@ -567,6 +661,23 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 
 			SkillDef def;
 			uint32 allowed = 0;
+
+			if (tagsCol >= 0 && tagsCol < static_cast<int32>(row.size()))
+			{
+				string tag;
+				for (char ch : row[tagsCol])
+				{
+					if (ch == ';')
+					{
+						if (tag.empty() == false) def.tags.push_back(tag);
+						tag.clear();
+					}
+					else
+						tag.push_back(ch);
+				}
+				if (tag.empty() == false)
+					def.tags.push_back(tag);
+			}
 
 			if (Csv::ParseUInt(row[c[0]], OUT def.skillId) == false || def.skillId == 0)
 			{
@@ -679,7 +790,7 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 			}
 
 			if (ParseEnum(row[c[2]], EFFECT_NAMES, OUT e.type) == false
-				|| ParseEnum(row[c[4]], REQUIRE_NAMES, OUT e.condition) == false
+				|| (ParseRequirePrefix(row[c[4]], OUT e) == false && ParseEnum(row[c[4]], REQUIRE_NAMES, OUT e.condition) == false)
 				|| ParseEnum(row[c[9]], CC_NAMES, OUT e.ccType) == false
 				|| ParseEnum(row[c[15]], STAT_NAMES, OUT e.stat) == false)
 			{
@@ -698,7 +809,9 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 				return false;
 			}
 
-			if (e.distCm < 0.f || e.speedCms < 0.f || e.radiusCm < 0.f || e.magnitude < 0.f || e.perLevel < 0.f)
+			// 크기(magnitude)는 자기 버프만 음수가 된다 (디버프)
+			if (e.distCm < 0.f || e.speedCms < 0.f || e.radiusCm < 0.f || e.perLevel < 0.f
+				|| (e.magnitude < 0.f && e.type != SkillEffectType::SelfBuff))
 			{
 				error = where + " values must be >= 0";
 				return false;
@@ -759,7 +872,7 @@ void SkillTable::Init()
 		"key,value\n"
 		"dot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
 		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
-		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\n";
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\n";
 
 	string error;
 	if (Parse(skills, effects, rules, OUT error) == false)

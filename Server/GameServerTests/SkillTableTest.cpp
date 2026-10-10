@@ -37,12 +37,36 @@ TEST(SkillRoster, 실제_데이터가_읽히고_76개_전부_있다)
 	ASSERT_TRUE(LoadRealData(OUT error)) << error;
 
 	// src/스킬_목록.csv 2 ~ 77 (1 채찍 제외) → 1002 ~ 1077. 9001 은 몬스터
-	for (uint32 n = 2; n <= 77; n++)
+	for (uint32 n = 2; n <= 104; n++)
 		EXPECT_NE(SkillTable::Find(1000 + n), nullptr) << "skill " << n << " is missing";
 
 	EXPECT_NE(SkillTable::Find(9001), nullptr);
 	EXPECT_EQ(SkillTable::Find(1001), nullptr) << "채찍(#1)은 구현하지 않는다";
-	EXPECT_EQ(SkillTable::All().size(), 77u);
+	EXPECT_EQ(SkillTable::All().size(), 104u);   // 76 + 몬스터 9001 + 모자 27 (#78 ~ #104, 2026-10-10)
+}
+
+// 🔴 유령 신랑의 저주(#2)만 벽을 지나는 이동이다 - ignores_walls 열은 2026-10-10 오후까지 읽기만 하고 쓰는 곳이 없었다
+//    (Room::ApplyMovement 가 창을 열고 HandleMove 벽 검사를 건너뛴다 · 클라 TickDash 는 스윕 없이). 다른 이동 스킬에 번지면 안 된다
+TEST(SkillRoster, 벽을_지나는_이동은_유령_신랑의_저주뿐이다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	const SkillDef* curse = SkillTable::Find(1002);
+	ASSERT_NE(curse, nullptr);
+	const SkillEffect* move = curse->FindEffect(SkillEffectType::Movement);
+	ASSERT_NE(move, nullptr);
+	EXPECT_TRUE(move->ignoresWalls) << "1002 move effect must carry ignores_walls=1";
+
+	// 블링크(1075)는 서버가 옮기는 이동이라 열이 1 이어도 C_MOVE 창을 열지 않는다 (BlinkCaster) - 여기서 제외
+	for (const auto& [id, def] : SkillTable::All())
+	{
+		for (const SkillEffect& e : def.effects)
+		{
+			if (e.ignoresWalls && e.param != "blink")
+				EXPECT_EQ(id, 1002u) << "skill " << id << " effect param=" << e.param << " has ignores_walls=1";
+		}
+	}
 }
 
 // 🔴 하드 CC 는 무기 부위 전용 - 캐릭터당 1개가 AC-5(4인 체인 CC ≤ 5초) 예산의 전제다 (ItemTable::Parse 가 부팅에서도 막는다)
@@ -211,7 +235,7 @@ TEST(SkillTable, 잘못된_데이터는_거부한다)
 	const string eheader = "skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,duration_ms,magnitude,dist_cm,speed_cms,ignores_walls,stat,per_level,radius_cm,param\n";
 	const string rules = "key,value\ndot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
 		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
-		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\n";
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\n";
 	string error;
 
 	// 기절 1300 > 1250
@@ -260,7 +284,12 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 		if (def.kind == SkillKind::Passive)
 		{
 			++passives;
-			const bool hasTrigger = def.FindEffect(SkillEffectType::OnHit) != nullptr || def.FindEffect(SkillEffectType::LethalSave) != nullptr;
+			// 패시브가 발동하는 길: 평타 적중 · 치명상 · 면역 · 피해 배율 · 첫 타 경감 · 트리거 조건(on_dot / on_dash / on_skill)
+			bool hasTrigger = def.FindEffect(SkillEffectType::OnHit) != nullptr || def.FindEffect(SkillEffectType::LethalSave) != nullptr
+				|| def.FindEffect(SkillEffectType::Immune) != nullptr || def.FindEffect(SkillEffectType::DamageMod) != nullptr
+				|| def.FindEffect(SkillEffectType::DamageReduceOnce) != nullptr;
+			for (const SkillEffect& e : def.effects)
+				hasTrigger |= (e.condition == SkillRequire::OnDot || e.condition == SkillRequire::OnDashAtMe || e.condition == SkillRequire::OnSkill);
 			EXPECT_TRUE(hasTrigger) << "passive skill " << skillId << " has no on_hit / lethal_save effect";
 			EXPECT_EQ(def.castMs, 0u) << "passive skill " << skillId;
 		}
@@ -282,7 +311,7 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 		}
 	}
 
-	EXPECT_EQ(passives, 3) << "#24 뇌신 · #34 맹수의 본능 · #67 화신";
+	EXPECT_EQ(passives, 10) << "#24 뇌신 · #34 맹수의 본능 · #67 화신 + 모자 #83 #88 #89 #90 #94 #96 #97";
 	EXPECT_EQ(recasts, 2) << "#38 피의 추적 · #45 올가미";
 }
 
@@ -292,8 +321,8 @@ TEST(SkillRoster, 버프_지속피해_표식_효과는_필수_열이_채워져_�
 	string error;
 	ASSERT_TRUE(LoadRealData(OUT error)) << error;
 
-	const set<string> dotKinds = { "bleed", "poison", "burn", "heavy_bleed" };
-	const set<string> markKinds = { "spear", "arrow", "blood", "heavy_bleed", "rope" };
+	const set<string> dotKinds = { "bleed", "poison", "burn", "heavy_bleed", "frost" };
+	const set<string> markKinds = { "spear", "arrow", "blood", "heavy_bleed", "rope", "devotion" };
 
 	for (const auto& [skillId, def] : SkillTable::All())
 	{
@@ -302,7 +331,7 @@ TEST(SkillRoster, 버프_지속피해_표식_효과는_필수_열이_채워져_�
 			switch (e.type)
 			{
 			case SkillEffectType::SelfBuff:
-				EXPECT_TRUE(e.self && e.stat != SkillBuffStat::None && e.durationMs > 0 && e.magnitude > 0.f) << "skill " << skillId << " buff";
+				EXPECT_TRUE(e.self && e.stat != SkillBuffStat::None && e.durationMs > 0 && e.magnitude != 0.f) << "skill " << skillId << " buff";
 				break;
 			case SkillEffectType::Dot:
 				EXPECT_TRUE(dotKinds.count(e.param) > 0 && e.durationMs > 0 && (e.adRatio > 0.f || e.apRatio > 0.f)) << "skill " << skillId << " dot";

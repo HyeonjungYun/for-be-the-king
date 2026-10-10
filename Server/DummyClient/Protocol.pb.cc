@@ -595,8 +595,23 @@ struct S_ZONEDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 S_ZONEDefaultTypeInternal _S_ZONE_default_instance_;
+PROTOBUF_CONSTEXPR S_SKILL_REVEAL::S_SKILL_REVEAL(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.skills_)*/{}
+  , /*decltype(_impl_.target_id_)*/uint64_t{0u}
+  , /*decltype(_impl_.duration_ms_)*/0u
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct S_SKILL_REVEALDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR S_SKILL_REVEALDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~S_SKILL_REVEALDefaultTypeInternal() {}
+  union {
+    S_SKILL_REVEAL _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 S_SKILL_REVEALDefaultTypeInternal _S_SKILL_REVEAL_default_instance_;
 }  // namespace Protocol
-static ::_pb::Metadata file_level_metadata_Protocol_2eproto[41];
+static ::_pb::Metadata file_level_metadata_Protocol_2eproto[42];
 static constexpr ::_pb::EnumDescriptor const** file_level_enum_descriptors_Protocol_2eproto = nullptr;
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Protocol_2eproto = nullptr;
 
@@ -926,6 +941,15 @@ const uint32_t TableStruct_Protocol_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE
   ~0u,  // no _inlined_string_donated_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ZONE, _impl_.spawned_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ZONE, _impl_.ended_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_SKILL_REVEAL, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_SKILL_REVEAL, _impl_.target_id_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_SKILL_REVEAL, _impl_.skills_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_SKILL_REVEAL, _impl_.duration_ms_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::Protocol::C_LOGIN)},
@@ -969,6 +993,7 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 301, -1, -1, sizeof(::Protocol::S_STATUS)},
   { 309, -1, -1, sizeof(::Protocol::S_PROJECTILE)},
   { 317, -1, -1, sizeof(::Protocol::S_ZONE)},
+  { 325, -1, -1, sizeof(::Protocol::S_SKILL_REVEAL)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -1013,6 +1038,7 @@ static const ::_pb::Message* const file_default_instances[] = {
   &::Protocol::_S_STATUS_default_instance_._instance,
   &::Protocol::_S_PROJECTILE_default_instance_._instance,
   &::Protocol::_S_ZONE_default_instance_._instance,
+  &::Protocol::_S_SKILL_REVEAL_default_instance_._instance,
 };
 
 const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -1083,7 +1109,9 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "rotocol.ProjectileInfo\022*\n\005ended\030\002 \003(\0132\033."
   "Protocol.ProjectileEndInfo\"<\n\006S_ZONE\022#\n\007"
   "spawned\030\001 \003(\0132\022.Protocol.ZoneInfo\022\r\n\005end"
-  "ed\030\002 \003(\004b\006proto3"
+  "ed\030\002 \003(\004\"]\n\016S_SKILL_REVEAL\022\021\n\ttarget_id\030"
+  "\001 \001(\004\022#\n\006skills\030\002 \003(\0132\023.Protocol.SkillIn"
+  "fo\022\023\n\013duration_ms\030\003 \001(\rb\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -1091,9 +1119,9 @@ static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_de
 };
 static ::_pbi::once_flag descriptor_table_Protocol_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Protocol_2eproto = {
-    false, false, 2696, descriptor_table_protodef_Protocol_2eproto,
+    false, false, 2791, descriptor_table_protodef_Protocol_2eproto,
     "Protocol.proto",
-    &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 41,
+    &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 42,
     schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
     file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto,
     file_level_service_descriptors_Protocol_2eproto,
@@ -9932,6 +9960,254 @@ void S_ZONE::InternalSwap(S_ZONE* other) {
       file_level_metadata_Protocol_2eproto[40]);
 }
 
+// ===================================================================
+
+class S_SKILL_REVEAL::_Internal {
+ public:
+};
+
+void S_SKILL_REVEAL::clear_skills() {
+  _impl_.skills_.Clear();
+}
+S_SKILL_REVEAL::S_SKILL_REVEAL(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:Protocol.S_SKILL_REVEAL)
+}
+S_SKILL_REVEAL::S_SKILL_REVEAL(const S_SKILL_REVEAL& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  S_SKILL_REVEAL* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.skills_){from._impl_.skills_}
+    , decltype(_impl_.target_id_){}
+    , decltype(_impl_.duration_ms_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&_impl_.target_id_, &from._impl_.target_id_,
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.duration_ms_) -
+    reinterpret_cast<char*>(&_impl_.target_id_)) + sizeof(_impl_.duration_ms_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.S_SKILL_REVEAL)
+}
+
+inline void S_SKILL_REVEAL::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.skills_){arena}
+    , decltype(_impl_.target_id_){uint64_t{0u}}
+    , decltype(_impl_.duration_ms_){0u}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+}
+
+S_SKILL_REVEAL::~S_SKILL_REVEAL() {
+  // @@protoc_insertion_point(destructor:Protocol.S_SKILL_REVEAL)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void S_SKILL_REVEAL::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.skills_.~RepeatedPtrField();
+}
+
+void S_SKILL_REVEAL::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void S_SKILL_REVEAL::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.S_SKILL_REVEAL)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.skills_.Clear();
+  ::memset(&_impl_.target_id_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&_impl_.duration_ms_) -
+      reinterpret_cast<char*>(&_impl_.target_id_)) + sizeof(_impl_.duration_ms_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* S_SKILL_REVEAL::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint64 target_id = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
+          _impl_.target_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated .Protocol.SkillInfo skills = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 18)) {
+          ptr -= 1;
+          do {
+            ptr += 1;
+            ptr = ctx->ParseMessage(_internal_add_skills(), ptr);
+            CHK_(ptr);
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<18>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // uint32 duration_ms = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 24)) {
+          _impl_.duration_ms_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* S_SKILL_REVEAL::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.S_SKILL_REVEAL)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // uint64 target_id = 1;
+  if (this->_internal_target_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(1, this->_internal_target_id(), target);
+  }
+
+  // repeated .Protocol.SkillInfo skills = 2;
+  for (unsigned i = 0,
+      n = static_cast<unsigned>(this->_internal_skills_size()); i < n; i++) {
+    const auto& repfield = this->_internal_skills(i);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::
+        InternalWriteMessage(2, repfield, repfield.GetCachedSize(), target, stream);
+  }
+
+  // uint32 duration_ms = 3;
+  if (this->_internal_duration_ms() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt32ToArray(3, this->_internal_duration_ms(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.S_SKILL_REVEAL)
+  return target;
+}
+
+size_t S_SKILL_REVEAL::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.S_SKILL_REVEAL)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // repeated .Protocol.SkillInfo skills = 2;
+  total_size += 1UL * this->_internal_skills_size();
+  for (const auto& msg : this->_impl_.skills_) {
+    total_size +=
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::MessageSize(msg);
+  }
+
+  // uint64 target_id = 1;
+  if (this->_internal_target_id() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_target_id());
+  }
+
+  // uint32 duration_ms = 3;
+  if (this->_internal_duration_ms() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(this->_internal_duration_ms());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData S_SKILL_REVEAL::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    S_SKILL_REVEAL::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*S_SKILL_REVEAL::GetClassData() const { return &_class_data_; }
+
+
+void S_SKILL_REVEAL::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<S_SKILL_REVEAL*>(&to_msg);
+  auto& from = static_cast<const S_SKILL_REVEAL&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.S_SKILL_REVEAL)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  _this->_impl_.skills_.MergeFrom(from._impl_.skills_);
+  if (from._internal_target_id() != 0) {
+    _this->_internal_set_target_id(from._internal_target_id());
+  }
+  if (from._internal_duration_ms() != 0) {
+    _this->_internal_set_duration_ms(from._internal_duration_ms());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void S_SKILL_REVEAL::CopyFrom(const S_SKILL_REVEAL& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.S_SKILL_REVEAL)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool S_SKILL_REVEAL::IsInitialized() const {
+  return true;
+}
+
+void S_SKILL_REVEAL::InternalSwap(S_SKILL_REVEAL* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.skills_.InternalSwap(&other->_impl_.skills_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(S_SKILL_REVEAL, _impl_.duration_ms_)
+      + sizeof(S_SKILL_REVEAL::_impl_.duration_ms_)
+      - PROTOBUF_FIELD_OFFSET(S_SKILL_REVEAL, _impl_.target_id_)>(
+          reinterpret_cast<char*>(&_impl_.target_id_),
+          reinterpret_cast<char*>(&other->_impl_.target_id_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata S_SKILL_REVEAL::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_Protocol_2eproto_getter, &descriptor_table_Protocol_2eproto_once,
+      file_level_metadata_Protocol_2eproto[41]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
@@ -10098,6 +10374,10 @@ Arena::CreateMaybeMessage< ::Protocol::S_PROJECTILE >(Arena* arena) {
 template<> PROTOBUF_NOINLINE ::Protocol::S_ZONE*
 Arena::CreateMaybeMessage< ::Protocol::S_ZONE >(Arena* arena) {
   return Arena::CreateMessageInternal< ::Protocol::S_ZONE >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::S_SKILL_REVEAL*
+Arena::CreateMaybeMessage< ::Protocol::S_SKILL_REVEAL >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::S_SKILL_REVEAL >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

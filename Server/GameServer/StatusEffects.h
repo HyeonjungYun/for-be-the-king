@@ -27,8 +27,9 @@ struct BuffInstance
 {
 	uint32					skillId = 0;
 	SkillBuffStat			stat = SkillBuffStat::None;
-	float					magnitude = 0.f;		// 강화 레벨 반영 뒤 값 (0.15 = +15 %)
+	float					magnitude = 0.f;		// 강화 레벨 반영 뒤 값 (0.15 = +15 %). 음수 = 자기 디버프 (광전사의 눈물 방어력)
 	uint64					endUs = 0;
+	string					param;					// Immune 의 속성 · DamageMod 의 선택자. 같은 skill + stat + param 이 갱신 단위
 };
 
 struct MarkInstance
@@ -64,9 +65,17 @@ public:
 		}
 	}
 
-	// 같은 skill + stat 은 갱신 (지속 · 크기 모두 새 값). true = 새로 생겼다
+	// 같은 skill + stat + param 은 갱신 (지속 · 크기 모두 새 값). true = 새로 생겼다
 	bool	AddBuff(const BuffInstance& buff);
 	float	BuffSum(SkillBuffStat stat) const;
+	float	BuffSum(SkillBuffStat stat, const string& param) const;		// param 이 같은 것만
+	bool	HasBuff(SkillBuffStat stat, const string& param) const;
+	// 한 스킬의 버프를 전부 뺀다 (배수진 해제). 돌려주는 값 = 뺀 수
+	uint32	RemoveBuffs(uint32 skillId);
+
+	// 모자 로스터 - 지속 피해 손보기
+	uint32	RemoveDots(const string& kind);									// 그 종류 전부 (빈 kind = 전부)
+	uint32	ExtendDots(Protocol::DamageType type, uint32 extraMs);				// 그 피해 종류의 남은 시간 연장. 돌려주는 값 = 손댄 수
 
 	// 같은 종류 + 같은 주인은 갱신. true = 새로 생겼다
 	bool	AddMark(const MarkInstance& mark);
@@ -103,7 +112,7 @@ public:
 			const BuffInstance gone = _buffs[i];
 			_buffs.erase(_buffs.begin() + i);
 			buffGone = true;
-			fn(Protocol::STATUS_BUFF, string(SkillTable::BuffStatName(gone.stat)), 0, 0);
+			fn(Protocol::STATUS_BUFF, gone.param.empty() ? string(SkillTable::BuffStatName(gone.stat)) : string(SkillTable::BuffStatName(gone.stat)) + ":" + gone.param, 0, 0);
 		}
 
 		for (size_t i = 0; i < _marks.size(); )

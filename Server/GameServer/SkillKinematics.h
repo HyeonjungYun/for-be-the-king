@@ -28,7 +28,7 @@ namespace SkillKinematics
 
 	// from 을 to 쪽으로 stopCm 앞까지 끈다. 둘 사이 중심선이 벽에 막히면 moved = false · hitWall = true (끌리지 않는다).
 	// 이미 stopCm 안이면 moved = false
-	PushResult	PullToward(const WallMap& walls, float fromX, float fromY, float toX, float toY, float stopCm);
+	PushResult	PullToward(const WallMap& walls, float fromX, float fromY, float toX, float toY, float stopCm, bool ignoreWalls = false);
 
 	// 날아가는 시간 (ms) - 넉백 CC 길이. 거리 0 이면 0
 	uint32		TravelMs(float distCm, float speedCms);

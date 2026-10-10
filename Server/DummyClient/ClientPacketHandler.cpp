@@ -430,6 +430,18 @@ bool Handle_S_SKILL_HIT(PacketSessionRef& session, Protocol::S_SKILL_HIT& pkt)
 	return true;
 }
 
+bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& pkt)
+{
+	// 총명 (#91) - 상대의 스킬 구성. 봇은 로그만
+	auto bot = static_pointer_cast<BotSession>(session);
+	LogLine out;
+	out << "[BOT REVEAL] me=" << bot->objectId.load() << " target=" << pkt.target_id() << " skills=";
+	for (const Protocol::SkillInfo& s : pkt.skills())
+		out << " [" << s.slot() << "]" << s.skill_id();
+	out << '\n';
+	return true;
+}
+
 bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt)
 {
 	// 장판 (3 단계) - 봇은 그리지 않는다. 처음 20건만 찍는다

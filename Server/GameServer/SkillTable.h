@@ -74,7 +74,16 @@ enum class SkillEffectType : uint8
 	SelfCc,			// 시전자에게 CC. requires=wall(회오리가 벽에 닿음) · no_element(속성 없이 끝남) param at_end
 	PetrifyWindow,	// duration 동안 단검에 맞은 적을 창이 끝날 때 magnitude ms 기절
 	FallOnHit,		// 도약 중 맞으면 추락
-	Throw			// 대상을 시전자 뒤로 dist 만큼 던지고 radius 안 적에게 ad_ratio
+	Throw,			// 대상을 시전자 뒤로 dist 만큼 던지고 radius 안 적에게 ad_ratio
+
+	// ── 모자 로스터 #78 ~ #104 (2026-10-10) ──
+	Immune,			// self - param 속성(fire · lightning · poison) 피해 · 상태 면역. duration 0 = 패시브(장착 중 내내), 아니면 버프
+	DamageMod,		// self - 피해 배율 +magnitude. param 선택자: tag:<태그> · elem:<속성> · skill:<id> · range (long_range_cm 밖). duration 0 = 패시브
+	Cleanse,		// self - param poison / burn / all(CC + 지속 피해) 해제
+	Heal,			// self - 최대 체력 × magnitude 회복 (치유 감소 적용). 패시브 트리거(requires on_dot:…)와 함께
+	ExtendDot,		// target - param 피해 종류(magic)의 지속 피해 남은 시간 +magnitude ms
+	Doom,			// self - 배수진: duration 동안 면역, 적 플레이어 처치면 해제 + 만피, 아니면 끝에 죽는다
+	DamageReduceOnce	// self 패시브 - 받는 첫 공격 × (1 - magnitude), duration = 재발동 쿨다운
 };
 
 enum class SkillRequire : uint8
@@ -91,7 +100,13 @@ enum class SkillRequire : uint8
 	Hit,			// 이 스킬이 하나라도 맞혔다
 	NoKill,			// 처치하지 못했다
 	Recast,			// 두 번째 입력
-	Wall			// 유지형이 벽에 닿았다
+	Wall,			// 유지형이 벽에 닿았다
+
+	// 패시브 트리거 · 사용 조건 (모자 로스터)
+	OnDot,			// on_dot:<kind> - 내가 그 종류 지속 피해를 걸었을 때 (bleed 는 heavy_bleed 포함, 그때 magnitude × 2)
+	OnDashAtMe,		// on_dash - 적이 나를 향해 질주해 왔을 때 (그 적이 대상)
+	OnSkill,		// on_skill:<id> - 내 그 스킬이 피해를 입혔을 때 (맞은 적이 대상)
+	Alone			// alone - 반경(radius_cm) 안에 아무도 없을 때만 사용 가능
 };
 
 enum class SkillBuffStat : uint8
@@ -104,7 +119,10 @@ enum class SkillBuffStat : uint8
 	MoveSpeed,
 	Armor,
 	MagicResist,
-	DamagePct
+	DamagePct,
+	WallPierce,		// 유령 신부의 축복 - 평타 · 스킬이 벽을 무시한다 (크기는 의미 없음)
+	Immune,			// 버프 형태의 면역 - BuffInstance.param 이 속성
+	DamageMod		// 버프 형태의 피해 배율 - BuffInstance.param 이 선택자
 };
 
 struct SkillEffect
@@ -112,6 +130,8 @@ struct SkillEffect
 	SkillEffectType			type = SkillEffectType::Damage;
 	bool					self = false;			// who = self (아니면 판정 대상)
 	SkillRequire			condition = SkillRequire::None;
+	uint32					conditionId = 0;		// on_skill:<id>
+	string					conditionParam;			// on_dot:<kind>
 
 	float					adRatio = 0.f;
 	float					apRatio = 0.f;
@@ -161,9 +181,11 @@ struct SkillDef
 	Protocol::EquipSlot		allowedSlot = Protocol::SLOT_NONE;
 
 	vector<SkillEffect>		effects;
+	vector<string>			tags;					// skills.csv tags 열 (세미콜론 구분) - damage_mod tag:<태그> 가 본다
 
 	bool HasHardCc() const;
 	bool HasMovement() const;
+	bool HasTag(const string& tag) const;
 	const SkillEffect* FindEffect(SkillEffectType type) const;
 };
 
@@ -192,6 +214,7 @@ struct SkillRules
 	float	trailPickupCm = 0.f;	// 핏자국을 "밟았다" 로 보는 거리
 	float	tauntSpeedCms = 0.f;	// 도발 - 시전자에게 끌려가는 속도 (느리게). 서버가 옮긴다
 	float	tauntStopCm = 0.f;		// 도발 - 시전자 앞 이만큼에서 멈춘다
+	float	longRangeCm = 0.f;		// 명사수 - 이 거리 밖의 적에게 damage_mod range 가 붙는다
 };
 
 class SkillTable

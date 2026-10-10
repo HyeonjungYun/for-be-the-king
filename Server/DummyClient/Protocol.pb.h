@@ -162,6 +162,9 @@ extern S_SKILL_CASTDefaultTypeInternal _S_SKILL_CAST_default_instance_;
 class S_SKILL_HIT;
 struct S_SKILL_HITDefaultTypeInternal;
 extern S_SKILL_HITDefaultTypeInternal _S_SKILL_HIT_default_instance_;
+class S_SKILL_REVEAL;
+struct S_SKILL_REVEALDefaultTypeInternal;
+extern S_SKILL_REVEALDefaultTypeInternal _S_SKILL_REVEAL_default_instance_;
 class S_SPAWN;
 struct S_SPAWNDefaultTypeInternal;
 extern S_SPAWNDefaultTypeInternal _S_SPAWN_default_instance_;
@@ -211,6 +214,7 @@ template<> ::Protocol::S_PROJECTILE* Arena::CreateMaybeMessage<::Protocol::S_PRO
 template<> ::Protocol::S_SKILL_CANCEL* Arena::CreateMaybeMessage<::Protocol::S_SKILL_CANCEL>(Arena*);
 template<> ::Protocol::S_SKILL_CAST* Arena::CreateMaybeMessage<::Protocol::S_SKILL_CAST>(Arena*);
 template<> ::Protocol::S_SKILL_HIT* Arena::CreateMaybeMessage<::Protocol::S_SKILL_HIT>(Arena*);
+template<> ::Protocol::S_SKILL_REVEAL* Arena::CreateMaybeMessage<::Protocol::S_SKILL_REVEAL>(Arena*);
 template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(Arena*);
 template<> ::Protocol::S_STATUS* Arena::CreateMaybeMessage<::Protocol::S_STATUS>(Arena*);
 template<> ::Protocol::S_ZONE* Arena::CreateMaybeMessage<::Protocol::S_ZONE>(Arena*);
@@ -7002,6 +7006,185 @@ class S_ZONE final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_SKILL_REVEAL final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_SKILL_REVEAL) */ {
+ public:
+  inline S_SKILL_REVEAL() : S_SKILL_REVEAL(nullptr) {}
+  ~S_SKILL_REVEAL() override;
+  explicit PROTOBUF_CONSTEXPR S_SKILL_REVEAL(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_SKILL_REVEAL(const S_SKILL_REVEAL& from);
+  S_SKILL_REVEAL(S_SKILL_REVEAL&& from) noexcept
+    : S_SKILL_REVEAL() {
+    *this = ::std::move(from);
+  }
+
+  inline S_SKILL_REVEAL& operator=(const S_SKILL_REVEAL& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_SKILL_REVEAL& operator=(S_SKILL_REVEAL&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_SKILL_REVEAL& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_SKILL_REVEAL* internal_default_instance() {
+    return reinterpret_cast<const S_SKILL_REVEAL*>(
+               &_S_SKILL_REVEAL_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    41;
+
+  friend void swap(S_SKILL_REVEAL& a, S_SKILL_REVEAL& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_SKILL_REVEAL* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_SKILL_REVEAL* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_SKILL_REVEAL* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_SKILL_REVEAL>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_SKILL_REVEAL& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_SKILL_REVEAL& from) {
+    S_SKILL_REVEAL::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_SKILL_REVEAL* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_SKILL_REVEAL";
+  }
+  protected:
+  explicit S_SKILL_REVEAL(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSkillsFieldNumber = 2,
+    kTargetIdFieldNumber = 1,
+    kDurationMsFieldNumber = 3,
+  };
+  // repeated .Protocol.SkillInfo skills = 2;
+  int skills_size() const;
+  private:
+  int _internal_skills_size() const;
+  public:
+  void clear_skills();
+  ::Protocol::SkillInfo* mutable_skills(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >*
+      mutable_skills();
+  private:
+  const ::Protocol::SkillInfo& _internal_skills(int index) const;
+  ::Protocol::SkillInfo* _internal_add_skills();
+  public:
+  const ::Protocol::SkillInfo& skills(int index) const;
+  ::Protocol::SkillInfo* add_skills();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >&
+      skills() const;
+
+  // uint64 target_id = 1;
+  void clear_target_id();
+  uint64_t target_id() const;
+  void set_target_id(uint64_t value);
+  private:
+  uint64_t _internal_target_id() const;
+  void _internal_set_target_id(uint64_t value);
+  public:
+
+  // uint32 duration_ms = 3;
+  void clear_duration_ms();
+  uint32_t duration_ms() const;
+  void set_duration_ms(uint32_t value);
+  private:
+  uint32_t _internal_duration_ms() const;
+  void _internal_set_duration_ms(uint32_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_SKILL_REVEAL)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo > skills_;
+    uint64_t target_id_;
+    uint32_t duration_ms_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -9735,9 +9918,92 @@ S_ZONE::mutable_ended() {
   return _internal_mutable_ended();
 }
 
+// -------------------------------------------------------------------
+
+// S_SKILL_REVEAL
+
+// uint64 target_id = 1;
+inline void S_SKILL_REVEAL::clear_target_id() {
+  _impl_.target_id_ = uint64_t{0u};
+}
+inline uint64_t S_SKILL_REVEAL::_internal_target_id() const {
+  return _impl_.target_id_;
+}
+inline uint64_t S_SKILL_REVEAL::target_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_SKILL_REVEAL.target_id)
+  return _internal_target_id();
+}
+inline void S_SKILL_REVEAL::_internal_set_target_id(uint64_t value) {
+  
+  _impl_.target_id_ = value;
+}
+inline void S_SKILL_REVEAL::set_target_id(uint64_t value) {
+  _internal_set_target_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_SKILL_REVEAL.target_id)
+}
+
+// repeated .Protocol.SkillInfo skills = 2;
+inline int S_SKILL_REVEAL::_internal_skills_size() const {
+  return _impl_.skills_.size();
+}
+inline int S_SKILL_REVEAL::skills_size() const {
+  return _internal_skills_size();
+}
+inline ::Protocol::SkillInfo* S_SKILL_REVEAL::mutable_skills(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_SKILL_REVEAL.skills)
+  return _impl_.skills_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >*
+S_SKILL_REVEAL::mutable_skills() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_SKILL_REVEAL.skills)
+  return &_impl_.skills_;
+}
+inline const ::Protocol::SkillInfo& S_SKILL_REVEAL::_internal_skills(int index) const {
+  return _impl_.skills_.Get(index);
+}
+inline const ::Protocol::SkillInfo& S_SKILL_REVEAL::skills(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_SKILL_REVEAL.skills)
+  return _internal_skills(index);
+}
+inline ::Protocol::SkillInfo* S_SKILL_REVEAL::_internal_add_skills() {
+  return _impl_.skills_.Add();
+}
+inline ::Protocol::SkillInfo* S_SKILL_REVEAL::add_skills() {
+  ::Protocol::SkillInfo* _add = _internal_add_skills();
+  // @@protoc_insertion_point(field_add:Protocol.S_SKILL_REVEAL.skills)
+  return _add;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >&
+S_SKILL_REVEAL::skills() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_SKILL_REVEAL.skills)
+  return _impl_.skills_;
+}
+
+// uint32 duration_ms = 3;
+inline void S_SKILL_REVEAL::clear_duration_ms() {
+  _impl_.duration_ms_ = 0u;
+}
+inline uint32_t S_SKILL_REVEAL::_internal_duration_ms() const {
+  return _impl_.duration_ms_;
+}
+inline uint32_t S_SKILL_REVEAL::duration_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_SKILL_REVEAL.duration_ms)
+  return _internal_duration_ms();
+}
+inline void S_SKILL_REVEAL::_internal_set_duration_ms(uint32_t value) {
+  
+  _impl_.duration_ms_ = value;
+}
+inline void S_SKILL_REVEAL::set_duration_ms(uint32_t value) {
+  _internal_set_duration_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_SKILL_REVEAL.duration_ms)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

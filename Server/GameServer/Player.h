@@ -63,6 +63,7 @@ public:
 	MoveClock				moveClock;		// 이동 검증 경과 시간 - C_MOVE.client_ms 기준 (MoveClock.h)
 	float					moveExceptionSpeed = 0.f;
 	uint64					moveExceptionEndUs = 0;
+	uint64					moveIgnoresWallsUntilUs = 0;	// 벽을 지나는 이동 스킬(effect.ignores_walls) 창 - 그동안 C_MOVE 벽 검사를 건너뛴다
 
 	uint64 lastSaveUs = 0;
 

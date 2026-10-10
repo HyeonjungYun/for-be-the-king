@@ -255,3 +255,11 @@ message S_ZONE
 	repeated ZoneInfo spawned = 1;
 	repeated uint64 ended = 2;
 }
+
+// Another character's skill loadout, revealed to one player only (helmet skill #91, 2026-10-10). Sent to the caster's session, never broadcast
+message S_SKILL_REVEAL
+{
+	uint64 target_id = 1;
+	repeated SkillInfo skills = 2;
+	uint32 duration_ms = 3;
+}
