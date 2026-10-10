@@ -26,6 +26,9 @@ namespace
 		return object->IsPlayer() || object->IsMonster() || object->IsDecoy();
 	}
 
+	// 테스트 모드 FoW 끔의 이벤트 필터 반경 - 층(280 m)보다 크면 된다
+	constexpr float TEST_SEE_ALL_RADIUS_CM = 1'000'000.f;
+
 	// S_VISION 이 바뀌었는지만 보는 요약. 따라가는 시야원은 위치를 넣지 않는다 - 클라가 그 생물을 따라 그린다
 	string VisionKey(float radiusCm, float cameraScale, const vector<VisionExtra>& extras)
 	{
@@ -152,7 +155,7 @@ void Room::UpdateVisibility(uint64 nowUs)
 		return;
 
 	const uint64 beginUs = Utils::NowMicroseconds();
-	const WallMap& walls = WallTable::Get(_floorId);
+	const WallMap& walls = Walls();
 	const uint64 graceUs = static_cast<uint64>(Vision::Rules().graceMs) * 1000;
 
 	_fowSubjects.clear();
@@ -187,7 +190,9 @@ void Room::UpdateVisibility(uint64 nowUs)
 		// ── 시야원 - 내 자리 + 추가 시야원(분신 · 종이매 · 탐지). 끝난 것 · 따라가던 생물이 사라진 것은 뺀다 ──
 		const float cameraScale = 1.f + VisionBonusOf(viewer);
 		const float radius = VisionRadiusOf(viewer, nowUs);
-		viewer->visionRadiusCm = radius;
+
+		// 테스트 모드 FoW 끔 (/t fow 0) - 이벤트 필터(NearViewer · 투사체)도 전부 통과하게 반경을 층보다 크게
+		viewer->visionRadiusCm = viewer->testSeeAll ? TEST_SEE_ALL_RADIUS_CM : radius;
 
 		_fowSources.clear();
 		{
@@ -244,7 +249,8 @@ void Room::UpdateVisibility(uint64 nowUs)
 				++it;
 		}
 
-		SendVisionIfChanged(viewer, radius, cameraScale, nowUs);
+		// 반경 0 = 클라가 안개를 그리지 않는다 (US1VisionSubsystem::IsActive) - FoW 끔
+		SendVisionIfChanged(viewer, viewer->testSeeAll ? 0.f : radius, cameraScale, nowUs);
 
 		// ── 생물마다 ──
 		Protocol::S_SPAWN spawnPkt;
@@ -268,6 +274,10 @@ void Room::UpdateVisibility(uint64 nowUs)
 			else if (viewer->fowRevealed.find(subjectId) != viewer->fowRevealed.end())
 			{
 				seen = true;		// 외로운 외침 · 종이매 - 시야와 상관없이
+			}
+			else if (viewer->testSeeAll && stealthed == false)
+			{
+				seen = true;		// 테스트 모드 FoW 끔 - 은신만 여전히 탐지가 있어야 보인다 (아래 시야원 판정)
 			}
 			else
 			{

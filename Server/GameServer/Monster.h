@@ -44,4 +44,10 @@ public:
 	BrainOutput				decision;			// 직전 판단 - 이동 스텝이 목표점으로 쓴다
 	uint64					lastStepUs = 0;
 	uint64					diedAtUs = 0;		// 0 = 살아 있음. 시체 유예 뒤 방에서 뺀다
+
+	// 테스트 모드 더미 (design/quick-specs/test-mode-2026-10-11.md) - /t spawn 으로 세운 몬스터. 자리(spawn)는 방이 따로 들고,
+	// 리스폰 · 드랍이 없다. aiFixed = 판단을 건너뛰어 그 자리에 서 있기만 한다 (맞고 밀리는 것은 그대로)
+	bool					isDummy = false;
+	bool					aiFixed = false;
+	uint64					dummyOwnerId = 0;
 };

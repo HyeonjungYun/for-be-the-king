@@ -161,6 +161,8 @@
     <ClCompile Include="WallMap.cpp" />
     <ClCompile Include="Vision.cpp" />
     <ClCompile Include="RoomVision.cpp" />
+    <ClCompile Include="RoomSkills2.cpp" />
+    <ClCompile Include="RoomTest.cpp" />
     <ClCompile Include="WallTable.cpp" />
     <ClCompile Include="TowerTable.cpp" />
     <ClCompile Include="MonsterTable.cpp" />

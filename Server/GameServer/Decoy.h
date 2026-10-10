@@ -27,4 +27,12 @@ public:
 
 	uint64	ownerId = 0;
 	uint64	expiresUs = 0;
+
+	// 그림자 분신 (그림자 보내기 1126, 2026-10-11) - 조준 방향으로 걷는다 (Room::StepClones). 걷기가 끝나거나 막히면 사라진다.
+	// 주인은 분신의 시야를 함께 본다 (FoW 추가 시야원). 0 이면 서 있는 미끼(떡밥)
+	float	walkDirX = 0.f;
+	float	walkDirY = 0.f;
+	float	walkSpeedCms = 0.f;
+	float	walkRemainingCm = 0.f;
+	bool	isClone = false;
 };

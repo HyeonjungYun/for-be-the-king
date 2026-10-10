@@ -23,6 +23,19 @@ struct EscapeTowerState
 	vector<uint64>				lastOccupants;		// 직전 틱 점유자 - 역행(REVERSAL) 텔레메트리
 };
 
+// 테스트 모드 /t gear 한 줄 (design/quick-specs/test-mode-2026-10-11.md). 종류 0 = 그 칸은 그대로 둔다.
+// 칸에 아이템이 있으면 그 아이템을 바꾸고(DB 행은 그대로 - 커밋은 종류 · 스킬을 쓰지 않는다), 없으면 isTest 아이템을 만든다
+struct TestGearRequest
+{
+	uint32	weaponType = 0;
+	uint32	weaponSkill1 = 0;		// Shift
+	uint32	weaponSkill2 = 0;		// Q
+	uint32	types[4] = {};			// 모자 · 갑옷 · 신발 · 장신구 (착용 칸 3 ~ 6)
+	uint32	skills[4] = {};
+	int32	grade = 0;				// 0 = 그대로, 1 ~ 4 일반 · 희귀 · 영웅 · 전설
+	uint32	level = 0;				// 강화 레벨 (스킬 per_level)
+};
+
 // 몬스터 자리 하나 (monster-ai.md § States - Alive(id) ↔ DeadWaiting(respawnAtUs))
 struct MonsterSlot
 {
@@ -83,6 +96,7 @@ struct SkillContext
 	bool recast = false;		// 재입력의 두 번째 입력 - requires=recast 효과만 나간다
 	bool targetsOnly = false;	// 투사체 적중 - 자기 효과는 발사 때 이미 나갔다, 대상 효과만
 	Protocol::EquipSlot slot = Protocol::SLOT_NONE;		// 시전 슬롯 - 유지형이 끝날 때 쿨다운을 건다
+	uint64 targetId = 0;		// 대상 지정 스킬의 대상 (그림자 밟기 - 등 뒤로)
 };
 
 // 장판 (3 단계) - 바닥 원. 틱마다 안에 있는 적에게 틱 피해 · 소프트 CC · (스킬의) 지속 피해 갱신. 겹치면 각각 틱 = 피해 중첩 (사용자 결정)
@@ -196,6 +210,17 @@ public:
 
 	// /gold N (FBTK_DEBUG_GOLD=1) - 런 골드를 더한다
 	void	DebugAddRunGold(uint64 playerId, uint64 amount);
+
+	// 테스트 모드 /t 명령 (FBTK_TEST_MODE=1 · design/quick-specs/test-mode-2026-10-11.md) - RoomTest.cpp
+	void	TestGear(uint64 playerId, TestGearRequest req);
+	void	TestSpawnDummies(uint64 playerId, uint32 monsterTypeId, int32 count, bool ai, float x, float y);
+	void	TestSetDummyMode(uint64 playerId, bool ai);
+	void	TestClearDummies(uint64 playerId);
+	void	TestHeal(uint64 playerId);
+	void	TestResetCooldowns(uint64 playerId);
+	void	TestGod(uint64 playerId, bool on);
+	void	TestFow(uint64 playerId, bool fowOn);			// 내 시야만 - 끄면 거리 · 벽과 상관없이 본다 (은신은 그대로)
+	void	DropOrphanDummies();							// 주인이 층을 떠난 더미를 치운다 (UpdateMonsters 앞)
 
 public:
 	void	UpdateTick();
@@ -391,6 +416,27 @@ private:
 	template <typename TPkt, typename TItem, typename AddFn, typename KeepFn>
 	void	SendListVisible(const vector<TItem>& items, AddFn&& add, KeepFn&& keep, uint16 statId = 0);
 
+	// ── 2차 로스터 (게임 ID 1115 ~ 1137 · FoW 의존 기존 스킬, 2026-10-11) - RoomSkills2.cpp ──
+	const WallMap&	Walls() const;																			// 층 벽 + 지각변동 같은 임시 벽 (있으면 합친 지도)
+	void	RaiseWall(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 지각변동
+	void	UpdateDynamicWalls(uint64 nowUs);
+	void	RebuildWalls();
+	void	SendDynamicWalls(const PlayerRef& player, uint64 nowUs);		// 입장 · 재접속 - 서 있는 임시 벽을 남은 시간으로 (지형이라 FoW 와 무관)
+	void	StartVolley(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 그림자 던지기 · 퍼붓기 · 천방지축
+	void	UpdateVolleys(uint64 nowUs);
+	void	LaunchVolleyShot(const CreatureRef& caster, const SkillDef& def, float dirX, float dirY, const SkillContext& ctx, uint64 nowUs);
+	void	SpawnClone(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 그림자 보내기
+	void	StepClones(uint64 nowUs);																// FlushMoves - 분신이 걷는다
+	void	CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 종이매
+	void	StartVisionArea(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 맹수의 탐색
+	void	MoveBehindTarget(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 그림자 밟기
+	void	ApplyShield(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 전사의 다짐
+	void	ApplyBasicProcs(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs);	// basic_proc 버프의 on_basic 효과 (혼원일체 · 여진)
+	void	ApplyBasicSpin(const CreatureRef& attacker, const CreatureRef& mainTarget, float radiusCm, uint64 nowUs);	// 난무 - 주위 적 전부
+	void	TryThorns(const CreatureRef& attacker, const CreatureRef& target, int32 damageTaken, uint64 nowUs);	// 고슴도치
+	void	UpdatePuddle(Zone& z, uint64 nowUs);														// 명경지수 - 주인이 안에 있으면 사거리 버프
+	void	PushVisualZone(uint64 casterId, uint32 effectId, float x, float y, float radiusCm, uint32 durationMs, const char* param);	// 연출만 (충격파 · 사방 베기)
+
 public:
 	uint32								_floorId = 0;
 
@@ -427,6 +473,7 @@ private:
 
 	unordered_map<uint64, MonsterRef>	_monsters;			// 시체 유예 중인 것 포함
 	vector<MonsterSlot>					_monsterSlots;
+	unordered_map<uint64, shared_ptr<MonsterSpawnDef>>	_dummySpawns;	// 테스트 모드 더미의 자리 - Monster::spawn 이 가리킨다. 몬스터를 지울 때 함께
 	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
 
 	vector<EscapeTowerState>			_towers;
@@ -465,6 +512,35 @@ private:
 	// FoW - 갱신마다 다시 채운다 (생물만). 매번 _objects 를 형변환하며 훑지 않게
 	vector<CreatureRef>					_fowSubjects;
 	vector<Vision::Source>				_fowSources;
+
+	// 2차 로스터 - 임시 벽 (지각변동) · 연사 (그림자 던지기 · 퍼붓기 · 천방지축) · 분신
+	struct DynamicWall
+	{
+		WallBox		box;
+		uint64		zoneId = 0;
+		uint64		endUs = 0;
+		uint64		casterId = 0;
+		uint32		effectId = 0;
+	};
+	struct PendingVolley
+	{
+		uint64		casterId = 0;
+		uint32		skillId = 0;
+		uint32		remaining = 0;		// 남은 발사 수 (한 번에 다 쏘면 1)
+		uint32		perShot = 1;		// 한 번에 나가는 발 수 (부채꼴)
+		float		spreadDeg = 0.f;
+		uint32		intervalMs = 0;		// 0 = 한 번에, 아니면 그 간격으로 한 발씩 (바라보는 방향)
+		uint64		nextAtUs = 0;
+		float		aimDirX = 1.f;		// 부채꼴의 가운데 방향 (발사 순간에 고정)
+		float		aimDirY = 0.f;
+		bool		followFacing = false;
+		SkillContext ctx;
+	};
+	vector<DynamicWall>					_dynWalls;
+	shared_ptr<WallMap>					_wallsWithDynamic;		// 임시 벽이 있을 때만 - 층 벽 + 임시 벽으로 다시 지은 지도
+	vector<shared_ptr<WallMap>>			_retiredWalls;			// 바뀌기 전 지도 - 같은 잡 안에서 Walls() 참조를 쥔 쪽이 있을 수 있어 다음 Flush 까지 살려 둔다
+	vector<PendingVolley>				_volleys;
+	unordered_set<uint64>				_clones;
 };
 
 constexpr int32 FLOOR_COUNT = 4;

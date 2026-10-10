@@ -69,6 +69,8 @@ public:
 	bool	AddBuff(const BuffInstance& buff);
 	float	BuffSum(SkillBuffStat stat) const;
 	float	BuffSum(SkillBuffStat stat, const string& param) const;		// param 이 같은 것만
+	float	BuffMax(SkillBuffStat stat) const;							// 가장 큰 크기 (없으면 0) - 평타 모드처럼 합치면 안 되는 것
+	const BuffInstance* FindBuff(SkillBuffStat stat) const;				// 그 스탯의 첫 버프 (없으면 nullptr)
 	bool	HasBuff(SkillBuffStat stat, const string& param) const;
 	// 한 스킬의 버프를 전부 뺀다 (배수진 해제). 돌려주는 값 = 뺀 수
 	uint32	RemoveBuffs(uint32 skillId);

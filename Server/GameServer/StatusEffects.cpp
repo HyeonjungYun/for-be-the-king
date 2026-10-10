@@ -93,6 +93,27 @@ float StatusSet::BuffSum(SkillBuffStat stat, const string& param) const
 	return sum;
 }
 
+float StatusSet::BuffMax(SkillBuffStat stat) const
+{
+	float best = 0.f;
+	for (const BuffInstance& b : _buffs)
+	{
+		if (b.stat == stat && b.magnitude > best)
+			best = b.magnitude;
+	}
+	return best;
+}
+
+const BuffInstance* StatusSet::FindBuff(SkillBuffStat stat) const
+{
+	for (const BuffInstance& b : _buffs)
+	{
+		if (b.stat == stat)
+			return &b;
+	}
+	return nullptr;
+}
+
 bool StatusSet::HasBuff(SkillBuffStat stat, const string& param) const
 {
 	for (const BuffInstance& b : _buffs)

@@ -36,13 +36,14 @@ TEST(SkillRoster, 실제_데이터가_읽히고_76개_전부_있다)
 	string error;
 	ASSERT_TRUE(LoadRealData(OUT error)) << error;
 
-	// src/스킬_목록.csv 2 ~ 114 (1 채찍 제외) → 1002 ~ 1114. 9001 은 몬스터
-	for (uint32 n = 2; n <= 114; n++)
+	// src/스킬_목록.csv 게임 ID 1002 ~ 1137 (1001 채찍 제외). 9001 은 몬스터
+	for (uint32 n = 2; n <= 137; n++)
 		EXPECT_NE(SkillTable::Find(1000 + n), nullptr) << "skill " << n << " is missing";
 
 	EXPECT_NE(SkillTable::Find(9001), nullptr);
 	EXPECT_EQ(SkillTable::Find(1001), nullptr) << "채찍(#1)은 구현하지 않는다";
-	EXPECT_EQ(SkillTable::All().size(), 114u);   // 76 + 몬스터 9001 + 모자 27 (#78 ~ #104) + 모자 1 · 갑옷 9 (#105 ~ #114, 2026-10-10 오후)
+	// 76 + 몬스터 9001 + 모자 27 (#78 ~ #104) + 모자 1 · 갑옷 9 (#105 ~ #114, 2026-10-10 오후) + 2차 로스터 23 (1115 ~ 1137, 2026-10-11)
+	EXPECT_EQ(SkillTable::All().size(), 137u);
 }
 
 // 🔴 갑옷 로스터 #106 ~ #114 - "망치 / 검을 들고 있을 때만" 은 skills.csv requires_weapon 열 (Room::MeetsWeaponRequirement 가 본다)
@@ -66,15 +67,36 @@ TEST(SkillRoster, 갑옷_스킬은_무기_조건을_가진다)
 	EXPECT_EQ(SkillTable::Find(1113)->requiresWeaponTag, "ghost") << "백귀야행은 원혼 스킬이 있는 검";
 	EXPECT_TRUE(SkillTable::Find(1113)->HasHardCc()) << "백귀야행 기절 - 무기 조건부라 갑옷 풀에서 허용";
 
-	// 무기 조건은 갑옷 로스터에만 - 다른 스킬에 번지면 안 된다 (조건 없는 스킬은 어느 무기로도 쓴다)
+	// 무기 조건은 갑옷 풀에만 - 다른 스킬에 번지면 안 된다 (조건 없는 스킬은 어느 무기로도 쓴다)
 	for (const auto& [id, def] : SkillTable::All())
 	{
 		if (def.requiresWeapon.empty() == false)
-			EXPECT_TRUE(id >= 1106 && id <= 1114) << "skill " << id << " has requires_weapon=" << def.requiresWeapon;
+			EXPECT_EQ(PoolsOf(id), vector<string>{ "armor" }) << "skill " << id << " has requires_weapon=" << def.requiresWeapon;
 	}
 
+	// 2차 로스터 (2026-10-11) - 갑옷 스킬은 전부 "○○을 들고 있을 때만", 바위 날리기(무기) · 천리안(모자)은 조건 없음
+	const unordered_map<string, vector<uint32>> byWeapon = {
+		{ "sword",	{ 1115, 1117, 1118, 1119 } },
+		{ "hammer",	{ 1116, 1122 } },
+		{ "dagger",	{ 1120, 1121, 1124, 1125, 1126, 1127, 1128, 1129 } },
+		{ "bow",	{ 1130, 1131, 1133, 1134, 1135, 1136, 1137 } },
+	};
+	for (const auto& [weapon, ids] : byWeapon)
+	{
+		for (uint32 id : ids)
+		{
+			ASSERT_NE(SkillTable::Find(id), nullptr) << id;
+			EXPECT_EQ(SkillTable::Find(id)->requiresWeapon, weapon) << id;
+			EXPECT_TRUE(SkillTable::Find(id)->HasTag(weapon)) << id;
+		}
+	}
+	EXPECT_TRUE(SkillTable::Find(1123)->requiresWeapon.empty());
+	EXPECT_TRUE(SkillTable::Find(1132)->requiresWeapon.empty());
+	EXPECT_EQ(PoolsOf(1123), vector<string>{ "hammer" });
+	EXPECT_EQ(PoolsOf(1132), vector<string>{ "helmet" });
+
 	// 건곤일척(damage_mod tag:hammer) 이 보는 태그 - 망치 풀 스킬 전부 + 갑옷 망치 스킬
-	for (uint32 id : { 1005u, 1006u, 1026u, 1028u, 1030u, 1031u, 1032u, 1033u, 1034u, 1106u, 1107u, 1108u, 1109u, 1110u })
+	for (uint32 id : { 1005u, 1006u, 1026u, 1028u, 1030u, 1031u, 1032u, 1033u, 1034u, 1106u, 1107u, 1108u, 1109u, 1110u, 1116u, 1122u, 1123u })
 		EXPECT_TRUE(SkillTable::Find(id)->HasTag("hammer")) << id;
 	EXPECT_FALSE(SkillTable::Find(1005)->HasTag("sword")) << "머리 부수기는 망치 스킬 (모자 단계에서 잘못 붙은 sword 태그)";
 	EXPECT_FALSE(SkillTable::Find(1006)->HasTag("sword")) << "흉갑 부수기는 망치 스킬";
@@ -222,11 +244,15 @@ TEST(SkillRoster, SK32_즉발기_계수_합은_10을_넘지_않는다)
 				if (def == nullptr || def->castMs != 0)
 					continue;
 
+				// 연사(volley)는 피해 효과가 한 발 몫이다 - 기본 발 수만큼 곱한다 (그림자 퍼붓기 6 발, 2026-10-11)
+				const SkillEffect* volley = def->FindEffect(SkillEffectType::Volley);
+				const uint32 shots = (volley != nullptr) ? max(1u, volley->hits) : 1u;
+
 				float ratio = 0.f;
 				for (const SkillEffect& fx : def->effects)
 				{
 					if (fx.type == SkillEffectType::Damage && fx.condition == SkillRequire::None)
-						ratio += (fx.adRatio + fx.apRatio) * max(1u, fx.hits);
+						ratio += (fx.adRatio + fx.apRatio) * max(1u, fx.hits) * shots;
 				}
 				best = max(best, ratio);
 			}
@@ -275,7 +301,7 @@ TEST(SkillTable, 잘못된_데이터는_거부한다)
 	const string eheader = "skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,duration_ms,magnitude,dist_cm,speed_cms,ignores_walls,stat,per_level,radius_cm,param\n";
 	const string rules = "key,value\ndot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
 		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
-		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\n";
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\nbasic_dash_speed_cms,1200\n";
 	string error;
 
 	// 기절 1300 > 1250
@@ -327,7 +353,7 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 			// 패시브가 발동하는 길: 평타 적중 · 치명상 · 면역 · 피해 배율 · 첫 타 경감 · 트리거 조건(on_dot / on_dash / on_skill)
 			bool hasTrigger = def.FindEffect(SkillEffectType::OnHit) != nullptr || def.FindEffect(SkillEffectType::LethalSave) != nullptr
 				|| def.FindEffect(SkillEffectType::Immune) != nullptr || def.FindEffect(SkillEffectType::DamageMod) != nullptr
-				|| def.FindEffect(SkillEffectType::DamageReduceOnce) != nullptr;
+				|| def.FindEffect(SkillEffectType::DamageReduceOnce) != nullptr || def.FindEffect(SkillEffectType::Vision) != nullptr;
 			for (const SkillEffect& e : def.effects)
 				hasTrigger |= (e.condition == SkillRequire::OnDot || e.condition == SkillRequire::OnDashAtMe || e.condition == SkillRequire::OnSkill);
 			EXPECT_TRUE(hasTrigger) << "passive skill " << skillId << " has no on_hit / lethal_save effect";
@@ -351,8 +377,63 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 		}
 	}
 
-	EXPECT_EQ(passives, 10) << "#24 뇌신 · #34 맹수의 본능 · #67 화신 + 모자 #83 #88 #89 #90 #94 #96 #97";
-	EXPECT_EQ(recasts, 2) << "#38 피의 추적 · #45 올가미";
+	EXPECT_EQ(passives, 11) << "#24 뇌신 · #34 맹수의 본능 · #67 화신 + 모자 #83 #88 #89 #90 #94 #96 #97 + 천리안 1132";
+	EXPECT_EQ(recasts, 3) << "#38 피의 추적 · #45 올가미 · 찌르고 베기 1118";
+}
+
+// 2차 로스터 (2026-10-11) - 새 효과가 서로 맞물리는가. 엔진은 짝이 없으면 조용히 아무 일도 하지 않는다 - 여기서 잡는다
+TEST(SkillRoster, 평타_모드와_연사_효과는_짝이_맞는다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	for (const auto& [skillId, def] : SkillTable::All())
+	{
+		bool hasProcBuff = false;
+		bool hasOnBasic = false;
+		bool basicOnly = false;
+		int32 otherBuffs = 0;
+
+		for (const SkillEffect& e : def.effects)
+		{
+			if (e.type == SkillEffectType::SelfBuff && e.stat == SkillBuffStat::BasicProc)
+				hasProcBuff = true;
+			if (e.condition == SkillRequire::OnBasic)
+			{
+				hasOnBasic = true;
+				EXPECT_FALSE(e.self) << "skill " << skillId << " on_basic effects hit the struck enemy (who=target)";
+			}
+			if (e.type == SkillEffectType::SelfBuff && e.stat == SkillBuffStat::BasicOnly)
+				basicOnly = true;
+			else if (e.type == SkillEffectType::SelfBuff)
+				otherBuffs++;
+
+			// 그림자 밟기 - 등 뒤로 가려면 고른 대상이 있어야 한다
+			if (e.type == SkillEffectType::Movement && e.param == "behind")
+				EXPECT_EQ(def.aimType, SkillAimType::Target) << "skill " << skillId << " move behind needs aim target";
+
+			// 연사 - 투사체 제원은 스킬 줄의 것. 한 발씩(interval) 은 바라보는 방향을 따른다
+			if (e.type == SkillEffectType::Volley)
+				EXPECT_EQ(def.shape, SkillShape::Projectile) << "skill " << skillId;
+		}
+
+		// on_basic 효과는 basic_proc 버프가 켜져야 나간다 - 둘은 한 스킬 안에 함께
+		EXPECT_EQ(hasProcBuff, hasOnBasic) << "skill " << skillId << " basic_proc buff and on_basic effects come together";
+
+		// basic_only 는 그동안 평타를 바꾸는 버프와 함께여야 뜻이 있다 (통아 · 육량전 · 은장도)
+		if (basicOnly)
+			EXPECT_GE(otherBuffs, 1) << "skill " << skillId << " basic_only without a basic-attack buff";
+	}
+
+	// 은신 · 시야 스킬이 FoW 효과를 실제로 가진다 (1 단계의 reveal 자리표시가 남아 있으면 안 된다)
+	EXPECT_NE(SkillTable::Find(1032)->FindEffect(SkillEffectType::VisionArea), nullptr) << "맹수의 탐색";
+	EXPECT_EQ(SkillTable::Find(1032)->FindEffect(SkillEffectType::Reveal), nullptr) << "맹수의 탐색";
+	EXPECT_NE(SkillTable::Find(1074)->FindEffect(SkillEffectType::Stealth), nullptr) << "니힐 - 기척을 지운다";
+	EXPECT_NE(SkillTable::Find(1124)->FindEffect(SkillEffectType::Stealth), nullptr) << "그림자 감추기";
+	EXPECT_EQ(SkillTable::Find(1124)->FindEffect(SkillEffectType::Stealth)->param, "break_on_damage");
+	EXPECT_NE(SkillTable::Find(1079)->FindEffect(SkillEffectType::Shield), nullptr) << "전사의 다짐 - 방어막";
+	EXPECT_GT(SkillTable::Find(1087)->FindEffect(SkillEffectType::Reveal)->durationMs, 0u) << "외로운 외침 - 공개 시간";
+	EXPECT_EQ(SkillTable::Find(1017)->FindEffect(SkillEffectType::Damage), nullptr) << "점지 - 표식만";
 }
 
 // 1 단계 - 버프 · 지속 피해 · 표식 · 처형 효과의 필수 열. 엔진이 읽는 열이 비어 있으면 조용히 아무 일도 없다 - 여기서 잡는다

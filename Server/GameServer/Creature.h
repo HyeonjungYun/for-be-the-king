@@ -209,6 +209,15 @@ public:
 	bool IsStealthed(uint64 nowUs) const { return nowUs < stealthUntilUs; }
 	bool IsScented(uint64 nowUs) const { return nowUs < scentUntilUs; }
 
+	// 보호막 (전사의 다짐) - 받는 피해를 먼저 막는다. 다 깎이거나 시간이 다 되면 사라진다
+	int32				shieldAmount = 0;
+	uint64				shieldUntilUs = 0;
+	uint32				shieldSkillId = 0;
+	bool HasShield(uint64 nowUs) const { return shieldAmount > 0 && nowUs < shieldUntilUs; }
+
+	// 테스트 모드 /t god - 체력이 1 아래로 내려가지 않는다 (피해 숫자는 그대로 나간다). 죽음 · 사망 커밋이 없다
+	bool				testGod = false;
+
 	vector<SlowSource>	slowSources;
 
 	float				activeSlow = 0.f;

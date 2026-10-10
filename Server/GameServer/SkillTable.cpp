@@ -72,6 +72,9 @@ namespace
 		{ "heal", SkillEffectType::Heal }, { "extend_dot", SkillEffectType::ExtendDot }, { "doom", SkillEffectType::Doom },
 		{ "damage_reduce_once", SkillEffectType::DamageReduceOnce },
 		{ "vision", SkillEffectType::Vision },
+		{ "stealth", SkillEffectType::Stealth }, { "vision_area", SkillEffectType::VisionArea }, { "hawk", SkillEffectType::Hawk },
+		{ "scent", SkillEffectType::Scent }, { "shield", SkillEffectType::Shield }, { "volley", SkillEffectType::Volley },
+		{ "clone", SkillEffectType::Clone }, { "raise_wall", SkillEffectType::RaiseWall },
 	};
 
 	const vector<pair<const char*, SkillRequire>> REQUIRE_NAMES =
@@ -80,7 +83,7 @@ namespace
 		{ "mark:blood", SkillRequire::MarkBlood }, { "mark:heavy_bleed", SkillRequire::MarkHeavyBleed }, { "mark:rope", SkillRequire::MarkRope },
 		{ "stunned", SkillRequire::Stunned }, { "element", SkillRequire::Element }, { "no_element", SkillRequire::NoElement },
 		{ "hit", SkillRequire::Hit }, { "no_kill", SkillRequire::NoKill }, { "recast", SkillRequire::Recast }, { "wall", SkillRequire::Wall },
-		{ "on_dash", SkillRequire::OnDashAtMe }, { "alone", SkillRequire::Alone },
+		{ "on_dash", SkillRequire::OnDashAtMe }, { "alone", SkillRequire::Alone }, { "on_basic", SkillRequire::OnBasic },
 	};
 
 	// requires 열의 접두사 형태 - on_dot:<kind> · on_skill:<id>. 맞으면 true 로 채우고, 접두사가 아니면 false (그때는 이름표로)
@@ -113,6 +116,9 @@ namespace
 		{ "crit_chance", SkillBuffStat::CritChance }, { "attack_speed", SkillBuffStat::AttackSpeed }, { "move_speed", SkillBuffStat::MoveSpeed },
 		{ "armor", SkillBuffStat::Armor }, { "magic_resist", SkillBuffStat::MagicResist }, { "damage_pct", SkillBuffStat::DamagePct },
 		{ "wall_pierce", SkillBuffStat::WallPierce }, { "immune", SkillBuffStat::Immune }, { "damage_mod", SkillBuffStat::DamageMod },
+		{ "attack_range", SkillBuffStat::AttackRange }, { "basic_only", SkillBuffStat::BasicOnly }, { "basic_proc", SkillBuffStat::BasicProc },
+		{ "basic_dash", SkillBuffStat::BasicDash }, { "basic_spin", SkillBuffStat::BasicSpin }, { "basic_melee", SkillBuffStat::BasicMelee },
+		{ "low_hp_bonus", SkillBuffStat::LowHpBonus }, { "thorns", SkillBuffStat::Thorns },
 	};
 
 	bool ParseBool(const string& s, OUT bool& out)
@@ -319,9 +325,9 @@ namespace
 					error = ew + " must be who=self with dist_cm > 0";
 					return false;
 				}
-				// blink · to_mark:<표식> 는 즉시 (speed 0). 나머지는 dash_kinematics 지속 상한 안
+				// blink · to_mark:<표식> · behind(대상 등 뒤, 그림자 밟기) 는 즉시 (speed 0). 나머지는 dash_kinematics 지속 상한 안
 				{
-					const bool instant = (e.param == "blink") || (e.param.rfind("to_mark:", 0) == 0);
+					const bool instant = (e.param == "blink") || (e.param == "behind") || (e.param.rfind("to_mark:", 0) == 0);
 					if (instant == false && (e.speedCms <= 0.f || e.speedCms < e.distCm / DASH_DURATION_MAX_S))
 					{
 						error = ew + " speed_cms must be >= dist_cm / 0.4 (dash_duration cap)";
@@ -406,6 +412,65 @@ namespace
 				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f)
 				{
 					error = ew + " needs who=self and magnitude (0, 1] (vision radius bonus)";
+					return false;
+				}
+				break;
+
+			// ── 2차 로스터 (2026-10-11) ──
+			case SkillEffectType::Stealth:
+			case SkillEffectType::Scent:
+				if (e.self == false || e.durationMs == 0)
+				{
+					error = ew + " needs who=self and duration_ms";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::VisionArea:
+				if (e.self == false || e.radiusCm <= 0.f || e.durationMs == 0)
+				{
+					error = ew + " needs who=self, radius_cm and duration_ms";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Hawk:
+				if (e.self == false || e.radiusCm <= 0.f || e.distCm <= 0.f || e.durationMs == 0 || e.intervalMs == 0)
+				{
+					error = ew + " needs who=self, radius_cm (sight), dist_cm (search), duration_ms (circle) and interval_ms (far reveal)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Shield:
+				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f || e.durationMs == 0)
+				{
+					error = ew + " needs who=self, magnitude (0, 1] of max hp and duration_ms";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Volley:
+				// 투사체 제원(속도 · 사거리)은 스킬 줄의 것 - projectile 모양이어야 한다
+				if (e.self == false || e.hits == 0 || e.magnitude < 0.f || e.magnitude > 360.f || def.shape != SkillShape::Projectile)
+				{
+					error = ew + " needs who=self, hits >= 1, magnitude (spread deg) in [0, 360] and a projectile skill";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Clone:
+				if (e.self == false || e.distCm <= 0.f || e.speedCms <= 0.f || e.radiusCm <= 0.f || e.durationMs == 0)
+				{
+					error = ew + " needs who=self, dist_cm (walk), speed_cms, radius_cm (sight) and duration_ms (max life)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::RaiseWall:
+				if (e.self == false || e.distCm <= 0.f || e.magnitude <= 0.f || e.durationMs == 0)
+				{
+					error = ew + " needs who=self, dist_cm (length), magnitude (thickness) and duration_ms";
 					return false;
 				}
 				break;
@@ -633,7 +698,8 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 			|| ReadRule(kv, "trail_pickup_cm", OUT rules.trailPickupCm, OUT error) == false
 			|| ReadRule(kv, "taunt_speed_cms", OUT rules.tauntSpeedCms, OUT error) == false
 			|| ReadRule(kv, "taunt_stop_cm", OUT rules.tauntStopCm, OUT error) == false
-			|| ReadRule(kv, "long_range_cm", OUT rules.longRangeCm, OUT error) == false)
+			|| ReadRule(kv, "long_range_cm", OUT rules.longRangeCm, OUT error) == false
+			|| ReadRule(kv, "basic_dash_speed_cms", OUT rules.basicDashSpeedCms, OUT error) == false)
 			return false;
 
 		uint32 decoyHp = 0;
@@ -895,7 +961,7 @@ void SkillTable::Init()
 		"key,value\n"
 		"dot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
 		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
-		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\n";
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\nbasic_dash_speed_cms,1200\n";
 
 	string error;
 	if (Parse(skills, effects, rules, OUT error) == false)

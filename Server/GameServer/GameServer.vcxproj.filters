@@ -102,6 +102,12 @@
     <ClCompile Include="RoomVision.cpp">
       <Filter>Game</Filter>
     </ClCompile>
+    <ClCompile Include="RoomSkills2.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="RoomTest.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
     <ClCompile Include="WallTable.cpp">
       <Filter>Data</Filter>
     </ClCompile>

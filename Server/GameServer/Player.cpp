@@ -88,6 +88,14 @@ void Player::RebuildCombatStats()
 	rangedAutoAttack = t.rangedAttack;
 	autoAttackType	= t.autoAttackType;
 	outgoingDamagePct = pct(SkillBuffStat::DamagePct);
+
+	// 평타 모드 (2026-10-11) - 근접(푸리아 · 은장도)은 투사체 대신 그 사거리로 벤다. 그다음 사거리 버프(명경지수 · 통아 · 육량전)를 더한다
+	if (const float melee = status.BuffMax(SkillBuffStat::BasicMelee); melee > 0.f)
+	{
+		attackRange = melee;
+		rangedAutoAttack = false;
+	}
+	attackRange = max(MIN_ATTACK_RANGE_CM, attackRange + pct(SkillBuffStat::AttackRange));
 }
 
 uint32 Player::ItemLevelOfSlot(Protocol::EquipSlot slot) const

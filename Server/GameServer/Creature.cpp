@@ -144,6 +144,9 @@ void Creature::ClearCombatState()
 	stealthSkillId = 0;
 	stealthBreaksOnDamage = false;
 	scentUntilUs = 0;
+	shieldAmount = 0;
+	shieldUntilUs = 0;
+	shieldSkillId = 0;
 
 	status.Clear();
 	OnBuffsChanged();

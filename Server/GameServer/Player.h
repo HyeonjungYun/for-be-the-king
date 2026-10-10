@@ -21,6 +21,9 @@ struct ItemEntry
 	// 커밋으로 행이 생기면 false 로 돌린다. 메모리 전용이라 클라로 보내지 않는다.
 	bool				isNew = false;
 
+	// 테스트 모드(/t gear)가 빈 칸에 만든 아이템 - 탈출 · 사망 커밋에서 빠진다 (DB 에 남지 않는다). isNew 도 true
+	bool				isTest = false;
+
 	Protocol::ItemInstance ToProto(Protocol::ItemState state, Protocol::EquipSlot slot = Protocol::SLOT_NONE) const;
 };
 
@@ -76,6 +79,7 @@ public:
 public:
 
 	static constexpr int32	INVENTORY_SLOT_COUNT = 25;
+	static constexpr float	MIN_ATTACK_RANGE_CM = 100.f;	// 사거리 버프가 음수여도(육량전) 이보다 줄지 않는다
 
 	vector<ItemEntry>		inventory;
 	ItemEntry				equipped[SKILL_SLOT_COUNT];
@@ -108,6 +112,7 @@ public:
 	vector<VisionExtra>				visionExtras;		// 추가 시야원 (그림자 분신 · 종이매 · 맹수의 탐색)
 	float							visionRadiusCm = 0.f;	// 이번 갱신의 내 시야 반경 (실명 · 천리안 반영) - 이벤트 필터가 거리로 쓴다
 	string							visionSent;			// 마지막으로 보낸 S_VISION 의 요약 - 바뀌면 다시 보낸다
+	bool							testSeeAll = false;	// 테스트 모드 /t fow 0 - 이 사람만 거리 · 벽과 상관없이 본다 (은신은 그대로 숨는다). 입장마다 끈다
 
 	void	ResetVision() { fowKnown.clear(); fowRevealed.clear(); visionExtras.clear(); visionSent.clear(); }
 

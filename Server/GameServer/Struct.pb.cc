@@ -290,6 +290,9 @@ PROTOBUF_CONSTEXPR ZoneInfo::ZoneInfo(
   , /*decltype(_impl_.y_)*/0
   , /*decltype(_impl_.radius_cm_)*/0
   , /*decltype(_impl_.duration_ms_)*/0u
+  , /*decltype(_impl_.yaw_)*/0
+  , /*decltype(_impl_.half_length_)*/0
+  , /*decltype(_impl_.half_thickness_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct ZoneInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR ZoneInfoDefaultTypeInternal()
@@ -545,6 +548,9 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.radius_cm_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.duration_ms_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.param_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.yaw_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.half_length_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.half_thickness_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -601,9 +607,9 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 141, -1, -1, sizeof(::Protocol::ProjectileInfo)},
   { 158, -1, -1, sizeof(::Protocol::ProjectileEndInfo)},
   { 169, -1, -1, sizeof(::Protocol::ZoneInfo)},
-  { 183, -1, -1, sizeof(::Protocol::CharacterInfo)},
-  { 194, -1, -1, sizeof(::Protocol::ItemInstance)},
-  { 207, -1, -1, sizeof(::Protocol::VisionSource)},
+  { 186, -1, -1, sizeof(::Protocol::CharacterInfo)},
+  { 197, -1, -1, sizeof(::Protocol::ItemInstance)},
+  { 210, -1, -1, sizeof(::Protocol::VisionSource)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -678,30 +684,32 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "_id\030\013 \001(\004\"|\n\021ProjectileEndInfo\022\025\n\rprojec"
   "tile_id\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\'\n\006r"
   "eason\030\004 \001(\0162\027.Protocol.ProjectileEnd\022\021\n\t"
-  "target_id\030\005 \001(\004\"\216\001\n\010ZoneInfo\022\017\n\007zone_id\030"
+  "target_id\030\005 \001(\004\"\310\001\n\010ZoneInfo\022\017\n\007zone_id\030"
   "\001 \001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030\003 "
   "\001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\021\n\tradius_cm\030\006"
   " \001(\002\022\023\n\013duration_ms\030\007 \001(\r\022\r\n\005param\030\010 \001(\t"
-  "\"v\n\rCharacterInfo\022)\n\013object_info\030\001 \001(\0132\024"
-  ".Protocol.ObjectInfo\022\014\n\004name\030\002 \001(\t\022\n\n\002hp"
-  "\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n\010floor_id\030\005 \001(\r"
-  "\"\330\001\n\014ItemInstance\022\023\n\013instance_id\030\001 \001(\004\022\024"
-  "\n\014item_type_id\030\002 \001(\r\022\"\n\005grade\030\003 \001(\0162\023.Pr"
-  "otocol.ItemGrade\022\r\n\005level\030\004 \001(\r\022\"\n\005state"
-  "\030\005 \001(\0162\023.Protocol.ItemState\022!\n\004slot\030\006 \001("
-  "\0162\023.Protocol.EquipSlot\022#\n\006skills\030\007 \003(\0132\023"
-  ".Protocol.SkillInfo\"\234\001\n\014VisionSource\022\021\n\t"
-  "source_id\030\001 \001(\004\022\021\n\tfollow_id\030\002 \001(\004\022\t\n\001x\030"
-  "\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tradius_cm\030\005 \001(\002\022\024\n\014r"
-  "emaining_ms\030\006 \001(\r\022\021\n\tneeds_los\030\007 \001(\010\022\024\n\014"
-  "sees_stealth\030\010 \001(\010b\006proto3"
+  "\022\013\n\003yaw\030\t \001(\002\022\023\n\013half_length\030\n \001(\002\022\026\n\016ha"
+  "lf_thickness\030\013 \001(\002\"v\n\rCharacterInfo\022)\n\013o"
+  "bject_info\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014"
+  "\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005"
+  "\022\020\n\010floor_id\030\005 \001(\r\"\330\001\n\014ItemInstance\022\023\n\013i"
+  "nstance_id\030\001 \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\""
+  "\n\005grade\030\003 \001(\0162\023.Protocol.ItemGrade\022\r\n\005le"
+  "vel\030\004 \001(\r\022\"\n\005state\030\005 \001(\0162\023.Protocol.Item"
+  "State\022!\n\004slot\030\006 \001(\0162\023.Protocol.EquipSlot"
+  "\022#\n\006skills\030\007 \003(\0132\023.Protocol.SkillInfo\"\234\001"
+  "\n\014VisionSource\022\021\n\tsource_id\030\001 \001(\004\022\021\n\tfol"
+  "low_id\030\002 \001(\004\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tra"
+  "dius_cm\030\005 \001(\002\022\024\n\014remaining_ms\030\006 \001(\r\022\021\n\tn"
+  "eeds_los\030\007 \001(\010\022\024\n\014sees_stealth\030\010 \001(\010b\006pr"
+  "oto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 2626, descriptor_table_protodef_Struct_2eproto,
+    false, false, 2684, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 19,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -5472,6 +5480,9 @@ ZoneInfo::ZoneInfo(const ZoneInfo& from)
     , decltype(_impl_.y_){}
     , decltype(_impl_.radius_cm_){}
     , decltype(_impl_.duration_ms_){}
+    , decltype(_impl_.yaw_){}
+    , decltype(_impl_.half_length_){}
+    , decltype(_impl_.half_thickness_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -5484,8 +5495,8 @@ ZoneInfo::ZoneInfo(const ZoneInfo& from)
       _this->GetArenaForAllocation());
   }
   ::memcpy(&_impl_.zone_id_, &from._impl_.zone_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.duration_ms_) -
-    reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.duration_ms_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.half_thickness_) -
+    reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.half_thickness_));
   // @@protoc_insertion_point(copy_constructor:Protocol.ZoneInfo)
 }
 
@@ -5502,6 +5513,9 @@ inline void ZoneInfo::SharedCtor(
     , decltype(_impl_.y_){0}
     , decltype(_impl_.radius_cm_){0}
     , decltype(_impl_.duration_ms_){0u}
+    , decltype(_impl_.yaw_){0}
+    , decltype(_impl_.half_length_){0}
+    , decltype(_impl_.half_thickness_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.param_.InitDefault();
@@ -5536,8 +5550,8 @@ void ZoneInfo::Clear() {
 
   _impl_.param_.ClearToEmpty();
   ::memset(&_impl_.zone_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.duration_ms_) -
-      reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.duration_ms_));
+      reinterpret_cast<char*>(&_impl_.half_thickness_) -
+      reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.half_thickness_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -5610,6 +5624,30 @@ const char* ZoneInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx)
           ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
           CHK_(ptr);
           CHK_(::_pbi::VerifyUTF8(str, "Protocol.ZoneInfo.param"));
+        } else
+          goto handle_unusual;
+        continue;
+      // float yaw = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 77)) {
+          _impl_.yaw_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float half_length = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 85)) {
+          _impl_.half_length_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float half_thickness = 11;
+      case 11:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 93)) {
+          _impl_.half_thickness_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
         } else
           goto handle_unusual;
         continue;
@@ -5706,6 +5744,36 @@ uint8_t* ZoneInfo::_InternalSerialize(
         8, this->_internal_param(), target);
   }
 
+  // float yaw = 9;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_yaw = this->_internal_yaw();
+  uint32_t raw_yaw;
+  memcpy(&raw_yaw, &tmp_yaw, sizeof(tmp_yaw));
+  if (raw_yaw != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(9, this->_internal_yaw(), target);
+  }
+
+  // float half_length = 10;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_half_length = this->_internal_half_length();
+  uint32_t raw_half_length;
+  memcpy(&raw_half_length, &tmp_half_length, sizeof(tmp_half_length));
+  if (raw_half_length != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(10, this->_internal_half_length(), target);
+  }
+
+  // float half_thickness = 11;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_half_thickness = this->_internal_half_thickness();
+  uint32_t raw_half_thickness;
+  memcpy(&raw_half_thickness, &tmp_half_thickness, sizeof(tmp_half_thickness));
+  if (raw_half_thickness != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(11, this->_internal_half_thickness(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -5776,6 +5844,33 @@ size_t ZoneInfo::ByteSizeLong() const {
     total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(this->_internal_duration_ms());
   }
 
+  // float yaw = 9;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_yaw = this->_internal_yaw();
+  uint32_t raw_yaw;
+  memcpy(&raw_yaw, &tmp_yaw, sizeof(tmp_yaw));
+  if (raw_yaw != 0) {
+    total_size += 1 + 4;
+  }
+
+  // float half_length = 10;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_half_length = this->_internal_half_length();
+  uint32_t raw_half_length;
+  memcpy(&raw_half_length, &tmp_half_length, sizeof(tmp_half_length));
+  if (raw_half_length != 0) {
+    total_size += 1 + 4;
+  }
+
+  // float half_thickness = 11;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_half_thickness = this->_internal_half_thickness();
+  uint32_t raw_half_thickness;
+  memcpy(&raw_half_thickness, &tmp_half_thickness, sizeof(tmp_half_thickness));
+  if (raw_half_thickness != 0) {
+    total_size += 1 + 4;
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -5830,6 +5925,27 @@ void ZoneInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTO
   if (from._internal_duration_ms() != 0) {
     _this->_internal_set_duration_ms(from._internal_duration_ms());
   }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_yaw = from._internal_yaw();
+  uint32_t raw_yaw;
+  memcpy(&raw_yaw, &tmp_yaw, sizeof(tmp_yaw));
+  if (raw_yaw != 0) {
+    _this->_internal_set_yaw(from._internal_yaw());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_half_length = from._internal_half_length();
+  uint32_t raw_half_length;
+  memcpy(&raw_half_length, &tmp_half_length, sizeof(tmp_half_length));
+  if (raw_half_length != 0) {
+    _this->_internal_set_half_length(from._internal_half_length());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_half_thickness = from._internal_half_thickness();
+  uint32_t raw_half_thickness;
+  memcpy(&raw_half_thickness, &tmp_half_thickness, sizeof(tmp_half_thickness));
+  if (raw_half_thickness != 0) {
+    _this->_internal_set_half_thickness(from._internal_half_thickness());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -5854,8 +5970,8 @@ void ZoneInfo::InternalSwap(ZoneInfo* other) {
       &other->_impl_.param_, rhs_arena
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(ZoneInfo, _impl_.duration_ms_)
-      + sizeof(ZoneInfo::_impl_.duration_ms_)
+      PROTOBUF_FIELD_OFFSET(ZoneInfo, _impl_.half_thickness_)
+      + sizeof(ZoneInfo::_impl_.half_thickness_)
       - PROTOBUF_FIELD_OFFSET(ZoneInfo, _impl_.zone_id_)>(
           reinterpret_cast<char*>(&_impl_.zone_id_),
           reinterpret_cast<char*>(&other->_impl_.zone_id_));

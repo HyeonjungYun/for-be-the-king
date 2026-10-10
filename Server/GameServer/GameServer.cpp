@@ -250,6 +250,19 @@ int main()
 				GDebugCommands.store(raw[0] == '1');
 				::free(raw);
 			}
+
+			// 테스트 모드 (design/quick-specs/test-mode-2026-10-11.md) - /t 명령: 장비 · 스킬 바꿔 끼우기 · 더미 적 · 무적. 디버그 명령도 켠다
+			if (_dupenv_s(&raw, &length, "FBTK_TEST_MODE") == 0 && raw != nullptr)
+			{
+				GTestMode.store(raw[0] == '1');
+				::free(raw);
+			}
+			if (GTestMode.load())
+			{
+				GDebugCommands.store(true);
+				LOG_LINE << "[BOOT] TEST MODE ON - FBTK_TEST_MODE=1: /t gear spawn mode clear heal cd god fow (TEST ONLY)\n";
+			}
+
 			LOG_LINE << "[BOOT] debug chat commands (/bag /unbag /die /stun /root /silence /slow) "
 				<< (GDebugCommands.load() ? "ON - FBTK_DEBUG_COMMANDS=1 (TEST ONLY)" : "off") << '\n';
 

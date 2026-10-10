@@ -9,6 +9,7 @@
 #include "ItemTable.h"
 #include "EntryPointTable.h"
 #include "EscapeLogic.h"
+#include <sstream>
 #include <thread>
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -757,6 +758,65 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt)
 	return true;
 }
 
+// /t <명령> ... - 테스트 모드 (RoomTest.cpp). 숫자를 못 읽으면 아무 일도 없다 (로그만)
+//   /t gear <무기> <Shift> <Q> <모자> <모자스킬> <갑옷> <갑옷스킬> <신발> <신발스킬> <장신구> <장신구스킬> <등급> <레벨>
+//   /t spawn <몬스터 종류> <수> <ai 0|1> <x> <y>    /t mode <ai 0|1>    /t clear    /t heal    /t cd    /t god <0|1>    /t fow <0|1>
+static void HandleTestCommand(const RoomRef& room, uint64 playerId, const string& msg)
+{
+	istringstream in(msg.substr(2));
+	string command;
+	in >> command;
+
+	if (command == "gear")
+	{
+		TestGearRequest req;
+		in >> req.weaponType >> req.weaponSkill1 >> req.weaponSkill2;
+		for (int32 k = 0; k < 4; k++)
+			in >> req.types[k] >> req.skills[k];
+		in >> req.grade >> req.level;
+		if (in.fail())
+		{
+			LOG_LINE << "[TEST] /t gear needs 13 numbers. char=" << playerId << '\n';
+			return;
+		}
+		room->DoAsync(&Room::TestGear, playerId, req);
+		return;
+	}
+
+	if (command == "spawn")
+	{
+		uint32 typeId = 0;
+		int32 count = 1;
+		int32 ai = 0;
+		float x = 0.f;
+		float y = 0.f;
+		in >> typeId >> count >> ai >> x >> y;
+		if (in.fail())
+		{
+			LOG_LINE << "[TEST] /t spawn needs <type> <count> <ai> <x> <y>. char=" << playerId << '\n';
+			return;
+		}
+		room->DoAsync(&Room::TestSpawnDummies, playerId, typeId, count, ai != 0, x, y);
+		return;
+	}
+
+	int32 flag = 0;
+	if (command == "mode" && (in >> flag))
+		room->DoAsync(&Room::TestSetDummyMode, playerId, flag != 0);
+	else if (command == "god" && (in >> flag))
+		room->DoAsync(&Room::TestGod, playerId, flag != 0);
+	else if (command == "fow" && (in >> flag))
+		room->DoAsync(&Room::TestFow, playerId, flag != 0);
+	else if (command == "clear")
+		room->DoAsync(&Room::TestClearDummies, playerId);
+	else if (command == "heal")
+		room->DoAsync(&Room::TestHeal, playerId);
+	else if (command == "cd")
+		room->DoAsync(&Room::TestResetCooldowns, playerId);
+	else
+		LOG_LINE << "[TEST] unknown /t command '" << command << "' char=" << playerId << '\n';
+}
+
 bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 {
 	auto gameSession = static_pointer_cast<GameSession>(session);
@@ -781,6 +841,18 @@ bool Handle_C_CHAT(PacketSessionRef& session, Protocol::C_CHAT& pkt)
 	{
 		LOG_LINE << "[CHAT] debug command ignored - FBTK_DEBUG_COMMANDS is off. char=" << player->objectInfo->object_id()
 			<< " cmd=" << msg.substr(0, min<size_t>(msg.find(' '), 32)) << '\n';
+		return true;
+	}
+
+	// 테스트 모드 (FBTK_TEST_MODE=1, design/quick-specs/test-mode-2026-10-11.md) - 장비를 바꾸고 몬스터를 세우니 디버그 명령보다 한 단계 더 막는다
+	if (msg == "/t" || msg.rfind("/t ", 0) == 0)
+	{
+		if (GTestMode.load() == false)
+		{
+			LOG_LINE << "[TEST] /t ignored - FBTK_TEST_MODE is off. char=" << player->objectInfo->object_id() << '\n';
+			return true;
+		}
+		HandleTestCommand(room, player->objectInfo->object_id(), msg);
 		return true;
 	}
 

@@ -136,6 +136,9 @@ extern atomic<bool> GDebugGold;
 // 예전에는 접속한 누구나 남에게 CC 를 걸고 가방을 지울 수 있었다 (ADR-0007 · 2026-10-07)
 extern atomic<bool> GDebugCommands;
 
+// /t gear · spawn · mode · clear · heal · cd · god - 테스트 모드 (FBTK_TEST_MODE=1, 2026-10-11). 켜면 디버그 명령도 켜진다. 기본 꺼짐
+extern atomic<bool> GTestMode;
+
 
 /*------------------
 	DetachedBodies

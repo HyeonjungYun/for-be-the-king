@@ -89,7 +89,17 @@ enum class SkillEffectType : uint8
 	Reflect,		// self - duration 동안 날아오는 스킬 투사체를 쏜 쪽으로 되돌려 보낸다 (자업자득). 평타 투사체는 못 받아친다
 
 	// ── FoW (2026-10-11) ──
-	Vision			// self 패시브 - 시야 반경 × (1 + magnitude), 카메라도 같은 배율 (천리안 1132)
+	Vision,			// self 패시브 - 시야 반경 × (1 + magnitude), 카메라도 같은 배율 (천리안 1132)
+
+	// ── 2차 로스터 (게임 ID 1115 ~ 1137 · FoW 의존 기존 스킬, 2026-10-11) ──
+	Stealth,		// self - duration 동안 은신 (FoW). param break_on_damage 면 피해로도 풀린다 (그림자 감추기 · 니힐)
+	VisionArea,		// self - 시전 지점 둘레 radius 를 duration 동안 본다. param walls(벽 너머) · stealth(은신까지) (맹수의 탐색)
+	Hawk,			// self - dist 안 가장 가까운 적 둘레 radius 를 duration 동안 본다(벽 너머). 없으면 층에서 가장 가까운 적을 interval_ms 동안 공개 (종이매)
+	Scent,			// self - duration 동안 몬스터가 표적으로 삼지 않는다 (야생의 체취)
+	Shield,			// self - 최대 체력 × magnitude 만큼 피해를 먼저 막는 보호막, duration 동안 (전사의 다짐)
+	Volley,			// self - 이 스킬의 투사체를 hits(+ per_level × 강화) 발. magnitude = 퍼짐 각(°), interval_ms > 0 이면 한 발씩 바라보는 방향으로, duration_ms = 첫 발까지 지연
+	Clone,			// self - 시전자 모습의 분신이 조준 방향으로 dist 를 speed 로 걷는다. radius = 분신 시야(주인과 공유), duration = 최대 수명. 맞으면 사라진다 (그림자 보내기)
+	RaiseWall		// self - 조준 방향으로 길이 dist · 두께 magnitude 의 벽을 duration 동안 세운다 (시작은 radius_cm 앞). 이동 · 공격 · 시선을 막는다 (지각변동)
 };
 
 enum class SkillRequire : uint8
@@ -112,7 +122,8 @@ enum class SkillRequire : uint8
 	OnDot,			// on_dot:<kind> - 내가 그 종류 지속 피해를 걸었을 때 (bleed 는 heavy_bleed 포함, 그때 magnitude × 2)
 	OnDashAtMe,		// on_dash - 적이 나를 향해 질주해 왔을 때 (그 적이 대상)
 	OnSkill,		// on_skill:<id> - 내 그 스킬이 피해를 입혔을 때 (맞은 적이 대상)
-	Alone			// alone - 반경(radius_cm) 안에 아무도 없을 때만 사용 가능
+	Alone,			// alone - 반경(radius_cm) 안에 아무도 없을 때만 사용 가능
+	OnBasic			// on_basic - 이 스킬의 basic_proc 버프가 켜진 동안 내 평타가 맞을 때마다 (맞은 적이 대상, radius_cm > 0 이면 그 둘레 적 전부)
 };
 
 enum class SkillBuffStat : uint8
@@ -128,7 +139,17 @@ enum class SkillBuffStat : uint8
 	DamagePct,
 	WallPierce,		// 유령 신부의 축복 - 평타 · 스킬이 벽을 무시한다 (크기는 의미 없음)
 	Immune,			// 버프 형태의 면역 - BuffInstance.param 이 속성
-	DamageMod		// 버프 형태의 피해 배율 - BuffInstance.param 이 선택자
+	DamageMod,		// 버프 형태의 피해 배율 - BuffInstance.param 이 선택자
+
+	// ── 평타 모드 · 2차 로스터 (2026-10-11) ── 크기의 뜻이 스탯마다 다르다
+	AttackRange,	// 평타 사거리 + magnitude cm (음수 = 줄어든다). 명경지수 · 통아 · 육량전
+	BasicOnly,		// 그동안 스킬을 쓸 수 없다 - 평타만 (통아 · 육량전 · 은장도)
+	BasicProc,		// 그 버프 스킬의 on_basic 효과가 평타 적중마다 (혼원일체 · 여진)
+	BasicDash,		// 평타 = 이동 베기 - 사거리 밖 magnitude cm 안의 대상에게 질주해 벤다 (일보일검)
+	BasicSpin,		// 평타 = 사방 베기 - 적중 때 나를 중심으로 magnitude cm 안의 적 전부 (난무)
+	BasicMelee,		// 평타 = 근접 - 투사체 대신 magnitude cm 사거리로 벤다 (푸리아 · 은장도)
+	LowHpBonus,		// 평타 피해 × (1 + magnitude × 잃은 체력 비율) (은장도)
+	Thorns			// 나를 근접 평타로 때린 적에게 받은 피해 × magnitude 를 마법 피해로 되돌린다 (고슴도치)
 };
 
 struct SkillEffect
@@ -223,6 +244,7 @@ struct SkillRules
 	float	tauntSpeedCms = 0.f;	// 도발 - 시전자에게 끌려가는 속도 (느리게). 서버가 옮긴다
 	float	tauntStopCm = 0.f;		// 도발 - 시전자 앞 이만큼에서 멈춘다
 	float	longRangeCm = 0.f;		// 명사수 - 이 거리 밖의 적에게 damage_mod range 가 붙는다
+	float	basicDashSpeedCms = 0.f;	// 일보일검 - 이동 베기 질주 속도
 };
 
 class SkillTable
