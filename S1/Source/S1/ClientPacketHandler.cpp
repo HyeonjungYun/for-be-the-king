@@ -224,6 +224,8 @@ namespace
 		case Protocol::CC_TYPE_ROOT:			return TEXT("ROOT");
 		case Protocol::CC_TYPE_KNOCKBACK:		return TEXT("KNOCKBACK");
 		case Protocol::CC_TYPE_LAUNCH:			return TEXT("LAUNCH");
+		case Protocol::CC_TYPE_BLIND:			return TEXT("BLIND");
+		case Protocol::CC_TYPE_TAUNT:			return TEXT("TAUNT");
 		case Protocol::CC_TYPE_SLOW:			return TEXT("SLOW");
 		case Protocol::CC_TYPE_HEAL_REDUCTION:	return TEXT("HEAL_REDUC");
 		case Protocol::CC_TYPE_SILENCE:			return TEXT("SILENCE");

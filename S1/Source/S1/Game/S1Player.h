@@ -260,6 +260,9 @@ protected:
 	float KnockbackUntil = 0.f;
 	float LaunchUntil = 0.f;
 
+	/** Taunt (2026-10-10): the server walks us toward the taunter and sends corrections; we only stop input, attacks and facing. */
+	float TauntUntil = 0.f;
+
 	/** [0, soft_cc_slow_cap]. 0 means unslowed. */
 	float ActiveSlow = 0.f;
 

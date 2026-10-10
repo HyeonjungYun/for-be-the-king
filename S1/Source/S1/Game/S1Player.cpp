@@ -382,6 +382,7 @@ void AS1Player::DrawCombatDebug()
 	Mark(Now < LaunchUntil, FColor::Purple);
 	Mark(ActiveSlow > 0.f, FColor::Cyan);
 	Mark(Now < BlindUntil, FColor::Black);
+	Mark(Now < TauntUntil, FColor(255, 120, 0));
 
 	DrawStatusDebug();
 
@@ -422,6 +423,7 @@ void AS1Player::ApplyCcEvent(const Protocol::CcEventInfo& Info, bool bApplied)
 	case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
 	case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
 	case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
+	case Protocol::CC_TYPE_TAUNT:		TauntUntil = Until;		break;
 
 	case Protocol::CC_TYPE_SLOW:
 		// Individual slow sources expire independently on the server, which recomputes the
@@ -601,6 +603,7 @@ void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
 	KnockbackUntil = 0.f;
 	LaunchUntil = 0.f;
 	BlindUntil = 0.f;
+	TauntUntil = 0.f;
 
 	for (const Protocol::CcSlot& Slot : State.slots())
 	{
@@ -612,6 +615,7 @@ void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
 		case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
 		case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
 		case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
+		case Protocol::CC_TYPE_TAUNT:		TauntUntil = Until;		break;
 		case Protocol::CC_TYPE_BLIND:
 			BlindUntil = Until;
 			if (Slot.magnitude() > 0.f)
@@ -639,16 +643,17 @@ bool AS1Player::CanMove() const
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
-	return Now >= StunUntil && Now >= RootUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
+	return Now >= StunUntil && Now >= RootUntil && Now >= KnockbackUntil && Now >= LaunchUntil && Now >= TauntUntil;
 }
 
 bool AS1Player::CanTurn() const
 {
 	// Root is the exception — it pins you but lets you keep aiming. That distinction is the
 	// whole reason root and stun are separate CC types (combat-system.md Rule 5 table).
+	// Taunt turns you toward the taunter server-side, so the cursor must not fight it.
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
-	return Now >= StunUntil && Now >= KnockbackUntil && Now >= LaunchUntil;
+	return Now >= StunUntil && Now >= KnockbackUntil && Now >= LaunchUntil && Now >= TauntUntil;
 }
 
 void AS1Player::OnSkillCastStarted(bool bStationary)
