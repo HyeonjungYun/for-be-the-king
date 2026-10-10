@@ -40,6 +40,14 @@ public:
 	// 같은 전투 Flush 에서 서로를 죽인 쌍 (TR-combat-022 - 예전엔 늘 0 이었다)
 	void			AddMutualKill() { _mutualKills.fetch_add(1); }
 
+	// FoW (design/gdd/fog-of-war.md, 2026-10-11) - 시야 갱신 비용과 효과. 정보용 줄 하나
+	//   pairs = 거리 검사한 (보는 사람, 생물) 쌍 · los = 그중 시선 검사까지 간 수 · spawn / despawn = 시야로 생긴 · 사라진 수
+	//   shared / custom = 필터 방송에서 공유 버퍼를 받은 / 자기 몫을 따로 받은 세션 수 (custom 이 곧 직렬화 추가 비용)
+	void			AddFowWork(uint64 pairs, uint64 los) { _fowPairs.fetch_add(pairs); _fowLos.fetch_add(los); }
+	void			AddFowChurn(uint64 spawned, uint64 despawned) { _fowSpawns.fetch_add(spawned); _fowDespawns.fetch_add(despawned); }
+	void			AddFowSends(uint64 shared, uint64 custom) { _fowShared.fetch_add(shared); _fowCustom.fetch_add(custom); }
+	void			AddFowUpdateUs(uint64 us) { _fowUpdateUs.fetch_add(us); uint64 m = _fowUpdateMaxUs.load(); while (us > m && _fowUpdateMaxUs.compare_exchange_weak(m, us) == false) {} }
+
 	void			Dump(int32 sessionCount);
 
 	static uint64	PercentileUpperUs(const uint64* buckets, uint64 total, double p);
@@ -64,6 +72,15 @@ private:
 	atomic<uint64>	_moveWallRejects = 0;
 	atomic<uint64>	_attackWallBlocked = 0;
 	atomic<uint64>	_mutualKills = 0;
+
+	atomic<uint64>	_fowPairs = 0;
+	atomic<uint64>	_fowLos = 0;
+	atomic<uint64>	_fowSpawns = 0;
+	atomic<uint64>	_fowDespawns = 0;
+	atomic<uint64>	_fowShared = 0;
+	atomic<uint64>	_fowCustom = 0;
+	atomic<uint64>	_fowUpdateUs = 0;
+	atomic<uint64>	_fowUpdateMaxUs = 0;
 
 	atomic<uint64>	_sentByPacket[PACKET_ID_LIMIT];
 	PacketNameFn	_packetName = nullptr;

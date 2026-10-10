@@ -171,6 +171,9 @@ extern S_SPAWNDefaultTypeInternal _S_SPAWN_default_instance_;
 class S_STATUS;
 struct S_STATUSDefaultTypeInternal;
 extern S_STATUSDefaultTypeInternal _S_STATUS_default_instance_;
+class S_VISION;
+struct S_VISIONDefaultTypeInternal;
+extern S_VISIONDefaultTypeInternal _S_VISION_default_instance_;
 class S_ZONE;
 struct S_ZONEDefaultTypeInternal;
 extern S_ZONEDefaultTypeInternal _S_ZONE_default_instance_;
@@ -217,6 +220,7 @@ template<> ::Protocol::S_SKILL_HIT* Arena::CreateMaybeMessage<::Protocol::S_SKIL
 template<> ::Protocol::S_SKILL_REVEAL* Arena::CreateMaybeMessage<::Protocol::S_SKILL_REVEAL>(Arena*);
 template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(Arena*);
 template<> ::Protocol::S_STATUS* Arena::CreateMaybeMessage<::Protocol::S_STATUS>(Arena*);
+template<> ::Protocol::S_VISION* Arena::CreateMaybeMessage<::Protocol::S_VISION>(Arena*);
 template<> ::Protocol::S_ZONE* Arena::CreateMaybeMessage<::Protocol::S_ZONE>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
@@ -7185,6 +7189,185 @@ class S_SKILL_REVEAL final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_VISION final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_VISION) */ {
+ public:
+  inline S_VISION() : S_VISION(nullptr) {}
+  ~S_VISION() override;
+  explicit PROTOBUF_CONSTEXPR S_VISION(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_VISION(const S_VISION& from);
+  S_VISION(S_VISION&& from) noexcept
+    : S_VISION() {
+    *this = ::std::move(from);
+  }
+
+  inline S_VISION& operator=(const S_VISION& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_VISION& operator=(S_VISION&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_VISION& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_VISION* internal_default_instance() {
+    return reinterpret_cast<const S_VISION*>(
+               &_S_VISION_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    42;
+
+  friend void swap(S_VISION& a, S_VISION& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_VISION* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_VISION* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_VISION* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_VISION>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_VISION& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_VISION& from) {
+    S_VISION::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_VISION* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_VISION";
+  }
+  protected:
+  explicit S_VISION(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSourcesFieldNumber = 2,
+    kRadiusCmFieldNumber = 1,
+    kCameraScaleFieldNumber = 3,
+  };
+  // repeated .Protocol.VisionSource sources = 2;
+  int sources_size() const;
+  private:
+  int _internal_sources_size() const;
+  public:
+  void clear_sources();
+  ::Protocol::VisionSource* mutable_sources(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::VisionSource >*
+      mutable_sources();
+  private:
+  const ::Protocol::VisionSource& _internal_sources(int index) const;
+  ::Protocol::VisionSource* _internal_add_sources();
+  public:
+  const ::Protocol::VisionSource& sources(int index) const;
+  ::Protocol::VisionSource* add_sources();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::VisionSource >&
+      sources() const;
+
+  // float radius_cm = 1;
+  void clear_radius_cm();
+  float radius_cm() const;
+  void set_radius_cm(float value);
+  private:
+  float _internal_radius_cm() const;
+  void _internal_set_radius_cm(float value);
+  public:
+
+  // float camera_scale = 3;
+  void clear_camera_scale();
+  float camera_scale() const;
+  void set_camera_scale(float value);
+  private:
+  float _internal_camera_scale() const;
+  void _internal_set_camera_scale(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_VISION)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::VisionSource > sources_;
+    float radius_cm_;
+    float camera_scale_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -9999,9 +10182,92 @@ inline void S_SKILL_REVEAL::set_duration_ms(uint32_t value) {
   // @@protoc_insertion_point(field_set:Protocol.S_SKILL_REVEAL.duration_ms)
 }
 
+// -------------------------------------------------------------------
+
+// S_VISION
+
+// float radius_cm = 1;
+inline void S_VISION::clear_radius_cm() {
+  _impl_.radius_cm_ = 0;
+}
+inline float S_VISION::_internal_radius_cm() const {
+  return _impl_.radius_cm_;
+}
+inline float S_VISION::radius_cm() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_VISION.radius_cm)
+  return _internal_radius_cm();
+}
+inline void S_VISION::_internal_set_radius_cm(float value) {
+  
+  _impl_.radius_cm_ = value;
+}
+inline void S_VISION::set_radius_cm(float value) {
+  _internal_set_radius_cm(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_VISION.radius_cm)
+}
+
+// repeated .Protocol.VisionSource sources = 2;
+inline int S_VISION::_internal_sources_size() const {
+  return _impl_.sources_.size();
+}
+inline int S_VISION::sources_size() const {
+  return _internal_sources_size();
+}
+inline ::Protocol::VisionSource* S_VISION::mutable_sources(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_VISION.sources)
+  return _impl_.sources_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::VisionSource >*
+S_VISION::mutable_sources() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_VISION.sources)
+  return &_impl_.sources_;
+}
+inline const ::Protocol::VisionSource& S_VISION::_internal_sources(int index) const {
+  return _impl_.sources_.Get(index);
+}
+inline const ::Protocol::VisionSource& S_VISION::sources(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_VISION.sources)
+  return _internal_sources(index);
+}
+inline ::Protocol::VisionSource* S_VISION::_internal_add_sources() {
+  return _impl_.sources_.Add();
+}
+inline ::Protocol::VisionSource* S_VISION::add_sources() {
+  ::Protocol::VisionSource* _add = _internal_add_sources();
+  // @@protoc_insertion_point(field_add:Protocol.S_VISION.sources)
+  return _add;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::VisionSource >&
+S_VISION::sources() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_VISION.sources)
+  return _impl_.sources_;
+}
+
+// float camera_scale = 3;
+inline void S_VISION::clear_camera_scale() {
+  _impl_.camera_scale_ = 0;
+}
+inline float S_VISION::_internal_camera_scale() const {
+  return _impl_.camera_scale_;
+}
+inline float S_VISION::camera_scale() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_VISION.camera_scale)
+  return _internal_camera_scale();
+}
+inline void S_VISION::_internal_set_camera_scale(float value) {
+  
+  _impl_.camera_scale_ = value;
+}
+inline void S_VISION::set_camera_scale(float value) {
+  _internal_set_camera_scale(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_VISION.camera_scale)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -91,6 +91,7 @@
     <ClCompile Include="MoveClockTest.cpp" />
     <ClCompile Include="LevelRulesTest.cpp" />
     <ClCompile Include="WallMapTest.cpp" />
+    <ClCompile Include="VisionTest.cpp" />
     <ClCompile Include="MonsterTest.cpp" />
     <ClCompile Include="EscapeLogicTest.cpp" />
     <ClCompile Include="EquipStatsTest.cpp" />
@@ -129,6 +130,7 @@
     <ClCompile Include="..\GameServer\EntryPointTable.cpp" />
     <ClCompile Include="..\GameServer\StarterKitTable.cpp" />
     <ClCompile Include="..\GameServer\WallMap.cpp" />
+    <ClCompile Include="..\GameServer\Vision.cpp" />
     <ClCompile Include="..\GameServer\WallTable.cpp" />
     <ClCompile Include="..\GameServer\TowerTable.cpp" />
     <ClCompile Include="..\GameServer\MonsterTable.cpp" />

@@ -159,6 +159,8 @@
     <ClCompile Include="EntryPointTable.cpp" />
     <ClCompile Include="StarterKitTable.cpp" />
     <ClCompile Include="WallMap.cpp" />
+    <ClCompile Include="Vision.cpp" />
+    <ClCompile Include="RoomVision.cpp" />
     <ClCompile Include="WallTable.cpp" />
     <ClCompile Include="TowerTable.cpp" />
     <ClCompile Include="MonsterTable.cpp" />
@@ -238,6 +240,7 @@
     <ClInclude Include="ServerPacketHandler.h" />
     <ClInclude Include="SkillTable.h" />
     <ClInclude Include="StatusEffects.h" />
+    <ClInclude Include="Vision.h" />
     <ClInclude Include="Decoy.h" />
     <ClInclude Include="SkillKinematics.h" />
     <ClInclude Include="Struct.pb.h" />

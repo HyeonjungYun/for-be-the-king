@@ -18,7 +18,8 @@ void BotSession::OnConnected()
 			GFreeBotIndices.pop_back();
 		}
 
-		floorId = (botIndex == 0) ? 0 : (botIndex - 1) % 4;
+		// -floor N: 전원 한 층 (FoW · 테스트 모드 실기동 - 봇끼리 · 사람과 한 방에 모은다, 2026-10-11)
+		floorId = (GForceFloor.load() >= 0) ? static_cast<uint32>(GForceFloor.load()) : ((botIndex == 0) ? 0 : (botIndex - 1) % 4);
 	}
 
 	if (botIndex == 0)

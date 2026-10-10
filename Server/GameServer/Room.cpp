@@ -158,6 +158,27 @@ namespace
 	}
 }
 
+// FoW 필터 방송 (Room.h) - 항목 목록 하나짜리 패킷. 이 파일에서만 쓰므로 정의도 여기
+template <typename TPkt, typename TItem, typename AddFn, typename KeepFn>
+void Room::SendListVisible(const vector<TItem>& items, AddFn&& add, KeepFn&& keep, uint16 statId)
+{
+	if (items.empty())
+		return;
+
+	auto finish = [statId](TPkt& pkt)
+		{
+			SendBufferRef buffer = ServerPacketHandler::MakeSendBuffer(pkt);
+			if (statId != 0)
+				buffer->SetStatId(statId);
+			return buffer;
+		};
+
+	SendVisible(static_cast<int32>(items.size()),
+		[&](const PlayerRef& v) { int32 n = 0; for (const TItem& item : items) n += keep(v, item) ? 1 : 0; return n; },
+		[&]() { TPkt pkt; for (const TItem& item : items) add(pkt, item); return finish(pkt); },
+		[&](const PlayerRef& v) { TPkt pkt; for (const TItem& item : items) if (keep(v, item)) add(pkt, item); return finish(pkt); });
+}
+
 static RoomRef MakeFloorRoom(uint32 floorId)
 {
 	RoomRef room = make_shared<Room>();
@@ -244,8 +265,9 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->moveClock.Reset();
 		player->lastSaveUs = enterUs;
 
-		// 지난 런의 CC · 상태 효과 · 재입력이 따라오지 않는다
+		// 지난 런의 CC · 상태 효과 · 재입력이 따라오지 않는다. 시야도 처음부터 (FoW - 이 클라는 아무것도 모른다)
 		player->ClearCombatState();
+		player->ResetVision();
 
 		// 장비 스탯 - 입장 체력은 새 최대치로 가득. S_ENTER_GAME · 스폰 스냅샷이 이 체력을 싣는다 (TR-combat-026)
 		player->ApplyEquipmentStats(true);
@@ -695,9 +717,17 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId)
 		return;
 	}
 
-	// 공격하면 내 무적이 풀린다 (AC-10)
+	// FoW - 은신 · 이 클라가 모르는 대상은 지정할 수 없다 (fog-of-war.md AC-FOW-06, 안티치트)
+	if (CanTarget(attacker, target, nowUs) == false)
+	{
+		LOG_LINE << "[FOW] attack rejected - target not visible. attacker=" << attackerId << " target=" << targetId << '\n';
+		return;
+	}
+
+	// 공격하면 내 무적이 풀린다 (AC-10). 은신도 (그림자 감추기 · 니힐)
 	if (attacker->IsPlayer())
 		ClearSpawnInvulnerability(static_pointer_cast<Player>(attacker), "attack");
+	BreakStealth(attacker, "attack", nowUs);
 
 	const uint32 windupMs = attacker->GetAttackWindupMs();
 
@@ -807,7 +837,17 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 
 		if (IsInSkillRange(caster, target, def->rangeCm) == false)
 			return;
+
+		// FoW - 은신 · 이 클라가 모르는 대상은 지정할 수 없다 (범위 · 투사체 스킬엔 맞는다)
+		if (CanTarget(caster, target, nowUs) == false)
+		{
+			LOG_LINE << "[FOW] skill rejected - target not visible. caster=" << casterId << " skill=" << def->skillId << " target=" << pkt.target_id() << '\n';
+			return;
+		}
 	}
+
+	// 스킬을 쓰면 은신이 풀린다 (그림자 감추기 · 니힐) - 은신 스킬 자신은 발동 때 새로 건다
+	BreakStealth(caster, "skill", nowUs);
 
 	if (caster->attackHitAtUs != 0)
 	{
@@ -1394,44 +1434,27 @@ void Room::FlushCcState(uint64 nowUs)
 		if (target == nullptr)
 			continue;
 
-		Protocol::CcStateInfo* state = pkt.add_states();
-		state->set_target_id(targetId);
-		state->set_active_slow(target->activeSlow);
+		AppendCcState(target, nowUs, pkt);
+	}
 
-		auto addSlot = [&](uint64 endUs, Protocol::CcType type, float magnitude)
-			{
-				if (endUs == 0 || nowUs >= endUs)
-					return;
+	if (pkt.states_size() == 0)
+		return;
 
-				Protocol::CcSlot* slot = state->add_slots();
-				slot->set_cc_type(type);
-				slot->set_remaining_ms(static_cast<uint32>((endUs - nowUs) / 1000));
-				slot->set_magnitude(magnitude);
-			};
+	// FoW - 아는 생물의 CC 만 (보이게 되는 순간의 CC 는 SendSnapshots 가 따로 준다)
+	const int32 total = pkt.states_size();
+	auto keep = [&](const PlayerRef& v, const Protocol::CcStateInfo& s) { return CanSee(v, s.target_id()); };
 
-		addSlot(target->stunEndUs,			Protocol::CC_TYPE_STUN,				0.f);
-		addSlot(target->rootEndUs,			Protocol::CC_TYPE_ROOT,				0.f);
-		addSlot(target->knockbackEndUs,		Protocol::CC_TYPE_KNOCKBACK,		0.f);
-		addSlot(target->launchEndUs,		Protocol::CC_TYPE_LAUNCH,			0.f);
-		addSlot(target->silenceEndUs,		Protocol::CC_TYPE_SILENCE,			0.f);
-		addSlot(target->healReductionEndUs,	Protocol::CC_TYPE_HEAL_REDUCTION,	target->healReductionMagnitude);
-		addSlot(target->blindEndUs,			Protocol::CC_TYPE_BLIND,			SkillTable::Rules().blindViewScale);
-		addSlot(target->tauntEndUs,			Protocol::CC_TYPE_TAUNT,			0.f);
-
-		uint64 slowEndUs = 0;
-		for (const SlowSource& src : target->slowSources)
+	SendVisible(total,
+		[&](const PlayerRef& v) { int32 n = 0; for (const Protocol::CcStateInfo& s : pkt.states()) n += keep(v, s) ? 1 : 0; return n; },
+		[&]() { return ServerPacketHandler::MakeSendBuffer(pkt); },
+		[&](const PlayerRef& v)
 		{
-			if (src.endUs > slowEndUs)
-				slowEndUs = src.endUs;
-		}
-
-		addSlot(slowEndUs, Protocol::CC_TYPE_SLOW, target->activeSlow);
-	}
-
-	if (pkt.states_size() > 0)
-	{
-		SEND_PACKET_BROADCAST(pkt);
-	}
+			Protocol::S_CC_STATE mine;
+			for (const Protocol::CcStateInfo& s : pkt.states())
+				if (keep(v, s))
+					mine.add_states()->CopyFrom(s);
+			return ServerPacketHandler::MakeSendBuffer(mine);
+		});
 }
 
 void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instanceId, Protocol::EquipSlot slot)
@@ -2104,6 +2127,8 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	memset(body->gaugeAudience, 0, sizeof(body->gaugeAudience));
 
 	// 방 전체 스냅샷을 다시 받게 한다. 다른 클라에는 이미 있는 몸이라 S_SPAWN 은 무시한다.
+	// FoW - 새 접속은 아무것도 모른다. 아는 집합을 비우면 다음 시야 갱신이 보이는 생물을 전부 다시 보낸다 (S_VISION 도)
+	body->ResetVision();
 	_pendingSpawns.push_back(playerId);
 
 	LOG_LINE << "[REATTACH] char=" << playerId << " inv=" << body->inventory.size() << " dropped=" << body->droppedIds.size() << '\n';
@@ -2140,9 +2165,13 @@ void Room::FlushMoves()
 	// 도발당한 쪽은 서버가 시전자 쪽으로 옮긴다 - 같은 S_MOVE 에 실린다
 	StepTaunts(Utils::NowMicroseconds());
 
+	// FoW - 이번 위치로 시야를 갱신한다. 보이게 된 생물의 S_SPAWN 이 아래 S_MOVE 보다 먼저 나가야 한다
+	UpdateVisibility(Utils::NowMicroseconds());
+
 	if (_dirtyMovers.empty() == false)
 	{
-		Protocol::S_MOVE movePkt;
+		vector<const Protocol::PosInfo*> infos;
+		infos.reserve(_dirtyMovers.size());
 
 		for (uint64 objectId : _dirtyMovers)
 		{
@@ -2150,16 +2179,15 @@ void Room::FlushMoves()
 			if (findIt == _objects.end())
 				continue;
 
-			movePkt.add_infos()->CopyFrom(*findIt->second->posInfo);
+			infos.push_back(findIt->second->posInfo);
 		}
 
 		_dirtyMovers.clear();
 
-		if (movePkt.infos_size() > 0)
-		{
-			SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(movePkt);
-			Broadcast(sendBuffer);
-		}
+		// 받는 사람마다 아는 생물의 이동만 (FoW). 내 것도 실린다 - 클라는 보정이 아닌 내 이동을 무시한다
+		SendListVisible<Protocol::S_MOVE>(infos,
+			[](Protocol::S_MOVE& pkt, const Protocol::PosInfo* info) { pkt.add_infos()->CopyFrom(*info); },
+			[this](const PlayerRef& viewer, const Protocol::PosInfo* info) { return CanSee(viewer, info->object_id()); });
 	}
 
 	DoTimer(MOVE_FLUSH_MS, &Room::FlushMoves);
@@ -2198,137 +2226,173 @@ void Room::FlushCombat()
 		OnCreatureKilled(kill.victim, kill.instigator, kill.instigatorId, nowUs);
 	}
 
+	// ── 방송 - 받는 사람마다 아는 생물의 사건만 (FoW, fog-of-war.md § Detailed Rules 13). 전부 보이는 사람은 버퍼 하나를 함께 쓴다 ──
+	auto selfId = [](const PlayerRef& v) { return v->objectInfo->object_id(); };
+
 	if (_pendingAttacks.empty() == false)
 	{
-		Protocol::S_ATTACK pkt;
-		for (const Protocol::AttackInfo& info : _pendingAttacks)
-			pkt.add_attacks()->CopyFrom(info);
+		SendListVisible<Protocol::S_ATTACK>(_pendingAttacks,
+			[](Protocol::S_ATTACK& pkt, const Protocol::AttackInfo& info) { pkt.add_attacks()->CopyFrom(info); },
+			[&](const PlayerRef& v, const Protocol::AttackInfo& info) { return CanSee(v, info.attacker_id()) || info.target_id() == selfId(v); });
 		_pendingAttacks.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingAttackCancels.empty() == false)
 	{
-		Protocol::S_ATTACK_CANCEL pkt;
-		for (uint64 id : _pendingAttackCancels)
-			pkt.add_attacker_ids(id);
+		SendListVisible<Protocol::S_ATTACK_CANCEL>(_pendingAttackCancels,
+			[](Protocol::S_ATTACK_CANCEL& pkt, uint64 id) { pkt.add_attacker_ids(id); },
+			[&](const PlayerRef& v, uint64 id) { return CanSee(v, id); });
 		_pendingAttackCancels.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingCasts.empty() == false)
 	{
-		Protocol::S_SKILL_CAST pkt;
-		for (const Protocol::SkillCastInfo& info : _pendingCasts)
-			pkt.add_casts()->CopyFrom(info);
+		SendListVisible<Protocol::S_SKILL_CAST>(_pendingCasts,
+			[](Protocol::S_SKILL_CAST& pkt, const Protocol::SkillCastInfo& info) { pkt.add_casts()->CopyFrom(info); },
+			[&](const PlayerRef& v, const Protocol::SkillCastInfo& info) { return CanSee(v, info.caster_id()); });
 		_pendingCasts.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingCastCancels.empty() == false)
 	{
-		Protocol::S_SKILL_CANCEL pkt;
-		for (uint64 id : _pendingCastCancels)
-			pkt.add_caster_ids(id);
+		SendListVisible<Protocol::S_SKILL_CANCEL>(_pendingCastCancels,
+			[](Protocol::S_SKILL_CANCEL& pkt, uint64 id) { pkt.add_caster_ids(id); },
+			[&](const PlayerRef& v, uint64 id) { return CanSee(v, id); });
 		_pendingCastCancels.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingSkillHits.empty() == false)
 	{
-		Protocol::S_SKILL_HIT pkt;
-		for (const Protocol::SkillHitInfo& info : _pendingSkillHits)
-			pkt.add_hits()->CopyFrom(info);
+		// 시전자를 모르더라도 맞은 대상을 알거나 연출 지점이 내 시야 안이면 받는다 - 안 보이는 적의 범위기에 맞았을 때 무엇이 왔는지는 보인다
+		SendListVisible<Protocol::S_SKILL_HIT>(_pendingSkillHits,
+			[](Protocol::S_SKILL_HIT& pkt, const Protocol::SkillHitInfo& info) { pkt.add_hits()->CopyFrom(info); },
+			[&](const PlayerRef& v, const Protocol::SkillHitInfo& info)
+			{
+				return CanSee(v, info.caster_id()) || CanSee(v, info.target_id()) || NearViewer(v, info.impact_x(), info.impact_y(), 300.f);
+			});
 		_pendingSkillHits.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingCcApplied.empty() == false || _pendingCcExpired.empty() == false || _pendingKnockbacks.empty() == false)
 	{
-		Protocol::S_CC pkt;
+		auto build = [&](const PlayerRef* v, Protocol::S_CC* out)
+			{
+				int32 n = 0;
+				for (const Protocol::CcEventInfo& info : _pendingCcApplied)
+					if (v == nullptr || CanSee(*v, info.target_id())) { n++; if (out) out->add_applied()->CopyFrom(info); }
+				for (const Protocol::CcEventInfo& info : _pendingCcExpired)
+					if (v == nullptr || CanSee(*v, info.target_id())) { n++; if (out) out->add_expired()->CopyFrom(info); }
+				for (const Protocol::KnockbackInfo& info : _pendingKnockbacks)
+					if (v == nullptr || CanSee(*v, info.target_id())) { n++; if (out) out->add_knockbacks()->CopyFrom(info); }
+				return n;
+			};
 
-		for (const Protocol::CcEventInfo& info : _pendingCcApplied)
-			pkt.add_applied()->CopyFrom(info);
-		for (const Protocol::CcEventInfo& info : _pendingCcExpired)
-			pkt.add_expired()->CopyFrom(info);
-		for (const Protocol::KnockbackInfo& info : _pendingKnockbacks)
-			pkt.add_knockbacks()->CopyFrom(info);
+		SendVisible(static_cast<int32>(_pendingCcApplied.size() + _pendingCcExpired.size() + _pendingKnockbacks.size()),
+			[&](const PlayerRef& v) { return build(&v, nullptr); },
+			[&]() { Protocol::S_CC pkt; build(nullptr, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); },
+			[&](const PlayerRef& v) { Protocol::S_CC pkt; build(&v, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); });
 
 		_pendingCcApplied.clear();
 		_pendingCcExpired.clear();
 		_pendingKnockbacks.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingStatusApplied.empty() == false || _pendingStatusExpired.empty() == false)
 	{
-		Protocol::S_STATUS pkt;
+		auto build = [&](const PlayerRef* v, Protocol::S_STATUS* out)
+			{
+				int32 n = 0;
+				for (const Protocol::StatusInfo& info : _pendingStatusApplied)
+					if (v == nullptr || CanSee(*v, info.target_id())) { n++; if (out) out->add_applied()->CopyFrom(info); }
+				for (const Protocol::StatusInfo& info : _pendingStatusExpired)
+					if (v == nullptr || CanSee(*v, info.target_id())) { n++; if (out) out->add_expired()->CopyFrom(info); }
+				return n;
+			};
 
-		for (const Protocol::StatusInfo& info : _pendingStatusApplied)
-			pkt.add_applied()->CopyFrom(info);
-		for (const Protocol::StatusInfo& info : _pendingStatusExpired)
-			pkt.add_expired()->CopyFrom(info);
+		SendVisible(static_cast<int32>(_pendingStatusApplied.size() + _pendingStatusExpired.size()),
+			[&](const PlayerRef& v) { return build(&v, nullptr); },
+			[&]() { Protocol::S_STATUS pkt; build(nullptr, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); },
+			[&](const PlayerRef& v) { Protocol::S_STATUS pkt; build(&v, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); });
 
 		_pendingStatusApplied.clear();
 		_pendingStatusExpired.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingProjectileSpawns.empty() == false || _pendingProjectileEnds.empty() == false)
 	{
-		Protocol::S_PROJECTILE pkt;
+		// 발사 - 시전자를 알거나, 나를 쫓거나, 날아갈 길이 내 시야 안을 지나면. 끝 - 전원 (클라는 모르는 id 를 버린다)
+		auto keepSpawn = [&](const PlayerRef& v, const Protocol::ProjectileInfo& info)
+			{
+				if (CanSee(v, info.caster_id()) || CanSee(v, info.target_id()))
+					return true;
+				const float r = (v->visionRadiusCm > 0.f ? v->visionRadiusCm : Vision::Rules().radiusCm) + info.radius_cm();
+				return Vision::SegmentNearCircle(info.x(), info.y(), info.x() + info.dir_x() * info.range_cm(), info.y() + info.dir_y() * info.range_cm(),
+					v->posInfo->x(), v->posInfo->y(), r);
+			};
 
-		for (const Protocol::ProjectileInfo& info : _pendingProjectileSpawns)
-			pkt.add_spawned()->CopyFrom(info);
-		for (const Protocol::ProjectileEndInfo& info : _pendingProjectileEnds)
-			pkt.add_ended()->CopyFrom(info);
+		auto build = [&](const PlayerRef* v, Protocol::S_PROJECTILE* out)
+			{
+				int32 n = 0;
+				for (const Protocol::ProjectileInfo& info : _pendingProjectileSpawns)
+					if (v == nullptr || keepSpawn(*v, info)) { n++; if (out) out->add_spawned()->CopyFrom(info); }
+				for (const Protocol::ProjectileEndInfo& info : _pendingProjectileEnds)
+				{
+					n++;
+					if (out) out->add_ended()->CopyFrom(info);
+				}
+				return n;
+			};
+
+		SendVisible(static_cast<int32>(_pendingProjectileSpawns.size() + _pendingProjectileEnds.size()),
+			[&](const PlayerRef& v) { return build(&v, nullptr); },
+			[&]() { Protocol::S_PROJECTILE pkt; build(nullptr, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); },
+			[&](const PlayerRef& v) { Protocol::S_PROJECTILE pkt; build(&v, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); });
 
 		_pendingProjectileSpawns.clear();
 		_pendingProjectileEnds.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingZoneSpawns.empty() == false || _pendingZoneEnds.empty() == false)
 	{
-		Protocol::S_ZONE pkt;
+		// 장판 - 시전자를 알거나 장판이 내 시야와 겹치면. 끝 - 전원
+		auto build = [&](const PlayerRef* v, Protocol::S_ZONE* out)
+			{
+				int32 n = 0;
+				for (const Protocol::ZoneInfo& info : _pendingZoneSpawns)
+					if (v == nullptr || CanSee(*v, info.caster_id()) || NearViewer(*v, info.x(), info.y(), info.radius_cm())) { n++; if (out) out->add_spawned()->CopyFrom(info); }
+				for (uint64 id : _pendingZoneEnds)
+				{
+					n++;
+					if (out) out->add_ended(id);
+				}
+				return n;
+			};
 
-		for (const Protocol::ZoneInfo& info : _pendingZoneSpawns)
-			pkt.add_spawned()->CopyFrom(info);
-		for (uint64 id : _pendingZoneEnds)
-			pkt.add_ended(id);
+		SendVisible(static_cast<int32>(_pendingZoneSpawns.size() + _pendingZoneEnds.size()),
+			[&](const PlayerRef& v) { return build(&v, nullptr); },
+			[&]() { Protocol::S_ZONE pkt; build(nullptr, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); },
+			[&](const PlayerRef& v) { Protocol::S_ZONE pkt; build(&v, &pkt); return ServerPacketHandler::MakeSendBuffer(pkt); });
 
 		_pendingZoneSpawns.clear();
 		_pendingZoneEnds.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingDamages.empty() == false)
 	{
-		Protocol::S_DAMAGE pkt;
-		for (const Protocol::DamageInfo& info : _pendingDamages)
-			pkt.add_damages()->CopyFrom(info);
+		// 맞은 쪽을 알 때만 - 안 보이는 적을 범위기로 맞혀도 숫자가 뜨지 않는다 (위치가 새지 않게)
+		SendListVisible<Protocol::S_DAMAGE>(_pendingDamages,
+			[](Protocol::S_DAMAGE& pkt, const Protocol::DamageInfo& info) { pkt.add_damages()->CopyFrom(info); },
+			[&](const PlayerRef& v, const Protocol::DamageInfo& info) { return CanSee(v, info.target_id()); });
 		_pendingDamages.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (_pendingDeaths.empty() == false)
 	{
-		Protocol::S_DIED pkt;
-		for (const Protocol::DiedInfo& info : _pendingDeaths)
-			pkt.add_deaths()->CopyFrom(info);
+		// 죽은 쪽을 알거나 내가 죽였을 때
+		SendListVisible<Protocol::S_DIED>(_pendingDeaths,
+			[](Protocol::S_DIED& pkt, const Protocol::DiedInfo& info) { pkt.add_deaths()->CopyFrom(info); },
+			[&](const PlayerRef& v, const Protocol::DiedInfo& info) { return CanSee(v, info.victim_id()) || info.instigator_id() == selfId(v); });
 		_pendingDeaths.clear();
-
-		SEND_PACKET_BROADCAST(pkt);
 	}
 
 	if (++_ccStateTickCounter >= CC_STATE_TICKS)
@@ -2352,6 +2416,10 @@ void Room::FlushSpawns()
 		unordered_set<uint64> newIds;
 		bool newPlayer = false;
 
+		// FoW 가 켜져 있으면 생물(플레이어 · 몬스터 · 미끼)은 여기서 보내지 않는다 - 시야 갱신(UpdateVisibility)이 보이는 사람에게만 보낸다.
+		// 가방 · 상자는 숨기지 않으므로 그대로 (fog-of-war.md § Detailed Rules 9)
+		const bool fow = Vision::Enabled();
+
 		for (uint64 id : _pendingSpawns)
 		{
 			auto findIt = _objects.find(id);
@@ -2370,7 +2438,8 @@ void Room::FlushSpawns()
 			}
 			else
 			{
-				newPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
+				if (fow == false)
+					newPkt.add_players()->CopyFrom(*findIt->second->objectInfo);
 				newPlayer = newPlayer || findIt->second->IsPlayer();
 			}
 
@@ -2404,7 +2473,7 @@ void Room::FlushSpawns()
 
 				for (auto& item : _objects)
 				{
-					if (item.second->IsPlayer() || item.second->IsMonster())
+					if (fow == false && (item.second->IsPlayer() || item.second->IsMonster()))
 					{
 						// 체력은 스냅샷 순간 값 - 이후는 S_DAMAGE. 시체 유예 중인 몬스터는 보내지 않는다(곧 사라진다)
 						CreatureRef creature = static_pointer_cast<Creature>(item.second);
@@ -2479,6 +2548,7 @@ bool Room::RemoveObject(uint64 objectId)
 	object->room.store(weak_ptr<Room>());
 
 	_objects.erase(objectId);
+	ForgetObject(objectId);
 	_dirtyMovers.erase(objectId);
 	_attackers.erase(objectId);
 	_casters.erase(objectId);
@@ -3513,6 +3583,10 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 
 	const uint64 targetId = target->objectInfo->object_id();
 	const int32 remainingHp = target->TakeDamage(damage);
+
+	// 그림자 감추기 - 피해를 받으면 모습이 드러난다 (사용자 결정 2026-10-11). 니힐은 무적이라 여기까지 오지 않는다
+	if (damage > 0 && target->stealthBreaksOnDamage && target->IsStealthed(nowUs))
+		BreakStealth(target, "damaged", nowUs);
 
 	Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
 	dmg.set_attacker_id(attackerId);
@@ -4972,7 +5046,17 @@ void Room::UpdateWindows(uint64 nowUs)
 		if (owner->doomSkillId != 0 && nowUs >= owner->doomUntilUs)
 			LiftDoom(owner, false, nowUs);
 
-		if (owner->petrifyEndUs == 0 && owner->doomSkillId == 0)
+		// 은신이 시간이 다 돼 끝났다 - 보이는 것은 다음 시야 갱신이 알아서 (FoW)
+		if (owner->stealthSkillId != 0 && nowUs >= owner->stealthUntilUs)
+		{
+			LOG_LINE << "[STEALTH] end char=" << id << " skill=" << owner->stealthSkillId << " why=expired" << '\n';
+			owner->stealthSkillId = 0;
+			owner->stealthUntilUs = 0;
+			owner->stealthBreaksOnDamage = false;
+			PushStatus(false, id, Protocol::STATUS_STEALTH, "stealth", 0, 0, 0.f, id);
+		}
+
+		if (owner->petrifyEndUs == 0 && owner->doomSkillId == 0 && owner->stealthSkillId == 0)
 			_windowOwners.erase(id);
 	}
 }
@@ -6279,9 +6363,9 @@ void Room::UpdateMonsters(uint64 nowUs)
 		if (object->IsPlayer() == false)
 			continue;
 
-		// 진입 무적 중인 플레이어는 감지 · 목표가 아니다 (monster-ai.md Core Rule 12)
+		// 진입 무적 중인 플레이어는 감지 · 목표가 아니다 (monster-ai.md Core Rule 12). 은신 · 야생의 체취도 (FoW, 2026-10-11)
 		const Player* player = static_cast<const Player*>(object.get());
-		if (player->IsAlive() && player->IsSpawnInvulnerable(nowUs) == false)
+		if (player->IsAlive() && player->IsSpawnInvulnerable(nowUs) == false && player->IsStealthed(nowUs) == false && player->IsScented(nowUs) == false)
 			_brainPlayers.push_back({ id, player->posInfo->x(), player->posInfo->y() });
 	}
 
@@ -6490,6 +6574,11 @@ void Room::OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 
 	{
 		ax = findIt->second->posInfo->x();
 		ay = findIt->second->posInfo->y();
+
+		// 야생의 체취 · 은신 - 맞아도 그 사람을 표적으로 삼지 않는다 (FoW · 갑옷 단검 1129, 2026-10-11)
+		if (CreatureRef attacker = dynamic_pointer_cast<Creature>(findIt->second); attacker != nullptr
+			&& (attacker->IsScented(nowUs) || attacker->IsStealthed(nowUs)))
+			return;
 	}
 
 	MonsterBrain::OnDamaged(monster->brain, attackerId, damage, ax, ay, nowUs);

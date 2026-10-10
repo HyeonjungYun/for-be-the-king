@@ -65,6 +65,10 @@ public:
 	float	SweepFirstHit(float ax, float ay, float bx, float by, float r, OUT WallKind* hitKind = nullptr) const;
 	bool	SweepBlocked(float ax, float ay, float bx, float by, float r, OUT WallKind* hitKind = nullptr) const;
 
+	// 시선 (FoW, design/gdd/fog-of-war.md) - a 에서 b 가 보이는가의 반대. 벽 · 문틀 · 기둥 · 타워가 막고
+	// 엄폐물(cover)은 낮아서 막지 않는다. 점 대 점 (반지름 0). NaN · 무한대는 막힘
+	bool	SightBlocked(float ax, float ay, float bx, float by) const;
+
 	// 점이 벽 안이면 가장 깊이 들어간 벽의 침투 깊이 (cm), 아니면 0. 테스트 · 로그용
 	float	PenetrationDepth(float x, float y) const;
 

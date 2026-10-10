@@ -17,6 +17,7 @@
 #include "EntryPointTable.h"
 #include "StarterKitTable.h"
 #include "WallTable.h"
+#include "Vision.h"
 #include "TowerTable.h"
 #include "MonsterTable.h"
 #include "Monster.h"
@@ -170,6 +171,35 @@ int main()
 				LOG_LINE << "[LEVEL] floor=" << floor << " walls=" << WallTable::Get(floor).Count()
 					<< " version=" << (version.empty() ? "none" : version) << '\n';
 		}
+
+		// FoW 시야 규칙 (design/gdd/fog-of-war.md, 2026-10-11) - 벽 다음. 시선 판정이 벽을 읽는다
+		if (Vision::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] vision rules invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		{
+			char* raw = nullptr;
+			size_t length = 0;
+			if (_dupenv_s(&raw, &length, "FBTK_FOW") == 0 && raw != nullptr)
+			{
+				Vision::SetEnabled(raw[0] != '0');
+				::free(raw);
+			}
+
+			raw = nullptr;
+			if (_dupenv_s(&raw, &length, "FBTK_FOW_LOG") == 0 && raw != nullptr)
+			{
+				extern atomic<uint64> GFowLogViewer;
+				GFowLogViewer.store(::strtoull(raw, nullptr, 10));
+				::free(raw);
+				LOG_LINE << "[BOOT] FBTK_FOW_LOG=" << GFowLogViewer.load() << " - that character's FoW spawns / despawns are logged (TEST ONLY)\n";
+			}
+		}
+
+		LOG_LINE << "[BOOT] fow " << (Vision::Enabled() ? "ON" : "OFF - FBTK_FOW=0, everyone sees everything (A/B COMPARISON ONLY)")
+			<< " radius=" << Vision::Rules().radiusCm << "cm grace=" << Vision::Rules().graceMs << "ms\n";
 
 		// 탈출 타워 - 몬스터 자리 검증(35 m)과 탈출 게이지가 읽는다. 파일이 없으면 0개
 		if (TowerTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)

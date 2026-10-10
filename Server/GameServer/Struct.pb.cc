@@ -336,8 +336,28 @@ struct ItemInstanceDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 ItemInstanceDefaultTypeInternal _ItemInstance_default_instance_;
+PROTOBUF_CONSTEXPR VisionSource::VisionSource(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.source_id_)*/uint64_t{0u}
+  , /*decltype(_impl_.follow_id_)*/uint64_t{0u}
+  , /*decltype(_impl_.x_)*/0
+  , /*decltype(_impl_.y_)*/0
+  , /*decltype(_impl_.radius_cm_)*/0
+  , /*decltype(_impl_.remaining_ms_)*/0u
+  , /*decltype(_impl_.needs_los_)*/false
+  , /*decltype(_impl_.sees_stealth_)*/false
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct VisionSourceDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR VisionSourceDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~VisionSourceDefaultTypeInternal() {}
+  union {
+    VisionSource _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 VisionSourceDefaultTypeInternal _VisionSource_default_instance_;
 }  // namespace Protocol
-static ::_pb::Metadata file_level_metadata_Struct_2eproto[18];
+static ::_pb::Metadata file_level_metadata_Struct_2eproto[19];
 static constexpr ::_pb::EnumDescriptor const** file_level_enum_descriptors_Struct_2eproto = nullptr;
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Struct_2eproto = nullptr;
 
@@ -549,6 +569,20 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.state_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.slot_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.skills_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.source_id_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.follow_id_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.x_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.y_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.radius_cm_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.remaining_ms_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.needs_los_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.sees_stealth_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::Protocol::PosInfo)},
@@ -569,6 +603,7 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 169, -1, -1, sizeof(::Protocol::ZoneInfo)},
   { 183, -1, -1, sizeof(::Protocol::CharacterInfo)},
   { 194, -1, -1, sizeof(::Protocol::ItemInstance)},
+  { 207, -1, -1, sizeof(::Protocol::VisionSource)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -590,6 +625,7 @@ static const ::_pb::Message* const file_default_instances[] = {
   &::Protocol::_ZoneInfo_default_instance_._instance,
   &::Protocol::_CharacterInfo_default_instance_._instance,
   &::Protocol::_ItemInstance_default_instance_._instance,
+  &::Protocol::_VisionSource_default_instance_._instance,
 };
 
 const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -654,16 +690,20 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "otocol.ItemGrade\022\r\n\005level\030\004 \001(\r\022\"\n\005state"
   "\030\005 \001(\0162\023.Protocol.ItemState\022!\n\004slot\030\006 \001("
   "\0162\023.Protocol.EquipSlot\022#\n\006skills\030\007 \003(\0132\023"
-  ".Protocol.SkillInfob\006proto3"
+  ".Protocol.SkillInfo\"\234\001\n\014VisionSource\022\021\n\t"
+  "source_id\030\001 \001(\004\022\021\n\tfollow_id\030\002 \001(\004\022\t\n\001x\030"
+  "\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tradius_cm\030\005 \001(\002\022\024\n\014r"
+  "emaining_ms\030\006 \001(\r\022\021\n\tneeds_los\030\007 \001(\010\022\024\n\014"
+  "sees_stealth\030\010 \001(\010b\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 2467, descriptor_table_protodef_Struct_2eproto,
+    false, false, 2626, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
-    &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 18,
+    &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 19,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
     file_level_metadata_Struct_2eproto, file_level_enum_descriptors_Struct_2eproto,
     file_level_service_descriptors_Struct_2eproto,
@@ -6505,6 +6545,397 @@ void ItemInstance::InternalSwap(ItemInstance* other) {
       file_level_metadata_Struct_2eproto[17]);
 }
 
+// ===================================================================
+
+class VisionSource::_Internal {
+ public:
+};
+
+VisionSource::VisionSource(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:Protocol.VisionSource)
+}
+VisionSource::VisionSource(const VisionSource& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  VisionSource* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.source_id_){}
+    , decltype(_impl_.follow_id_){}
+    , decltype(_impl_.x_){}
+    , decltype(_impl_.y_){}
+    , decltype(_impl_.radius_cm_){}
+    , decltype(_impl_.remaining_ms_){}
+    , decltype(_impl_.needs_los_){}
+    , decltype(_impl_.sees_stealth_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&_impl_.source_id_, &from._impl_.source_id_,
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.sees_stealth_) -
+    reinterpret_cast<char*>(&_impl_.source_id_)) + sizeof(_impl_.sees_stealth_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.VisionSource)
+}
+
+inline void VisionSource::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.source_id_){uint64_t{0u}}
+    , decltype(_impl_.follow_id_){uint64_t{0u}}
+    , decltype(_impl_.x_){0}
+    , decltype(_impl_.y_){0}
+    , decltype(_impl_.radius_cm_){0}
+    , decltype(_impl_.remaining_ms_){0u}
+    , decltype(_impl_.needs_los_){false}
+    , decltype(_impl_.sees_stealth_){false}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+}
+
+VisionSource::~VisionSource() {
+  // @@protoc_insertion_point(destructor:Protocol.VisionSource)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void VisionSource::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+}
+
+void VisionSource::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void VisionSource::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.VisionSource)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&_impl_.source_id_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&_impl_.sees_stealth_) -
+      reinterpret_cast<char*>(&_impl_.source_id_)) + sizeof(_impl_.sees_stealth_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* VisionSource::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint64 source_id = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
+          _impl_.source_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 follow_id = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
+          _impl_.follow_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // float x = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 29)) {
+          _impl_.x_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float y = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 37)) {
+          _impl_.y_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float radius_cm = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 45)) {
+          _impl_.radius_cm_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint32 remaining_ms = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 48)) {
+          _impl_.remaining_ms_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool needs_los = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 56)) {
+          _impl_.needs_los_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool sees_stealth = 8;
+      case 8:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 64)) {
+          _impl_.sees_stealth_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* VisionSource::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.VisionSource)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // uint64 source_id = 1;
+  if (this->_internal_source_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(1, this->_internal_source_id(), target);
+  }
+
+  // uint64 follow_id = 2;
+  if (this->_internal_follow_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(2, this->_internal_follow_id(), target);
+  }
+
+  // float x = 3;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_x = this->_internal_x();
+  uint32_t raw_x;
+  memcpy(&raw_x, &tmp_x, sizeof(tmp_x));
+  if (raw_x != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(3, this->_internal_x(), target);
+  }
+
+  // float y = 4;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_y = this->_internal_y();
+  uint32_t raw_y;
+  memcpy(&raw_y, &tmp_y, sizeof(tmp_y));
+  if (raw_y != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(4, this->_internal_y(), target);
+  }
+
+  // float radius_cm = 5;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_radius_cm = this->_internal_radius_cm();
+  uint32_t raw_radius_cm;
+  memcpy(&raw_radius_cm, &tmp_radius_cm, sizeof(tmp_radius_cm));
+  if (raw_radius_cm != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(5, this->_internal_radius_cm(), target);
+  }
+
+  // uint32 remaining_ms = 6;
+  if (this->_internal_remaining_ms() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt32ToArray(6, this->_internal_remaining_ms(), target);
+  }
+
+  // bool needs_los = 7;
+  if (this->_internal_needs_los() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(7, this->_internal_needs_los(), target);
+  }
+
+  // bool sees_stealth = 8;
+  if (this->_internal_sees_stealth() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(8, this->_internal_sees_stealth(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.VisionSource)
+  return target;
+}
+
+size_t VisionSource::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.VisionSource)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // uint64 source_id = 1;
+  if (this->_internal_source_id() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_source_id());
+  }
+
+  // uint64 follow_id = 2;
+  if (this->_internal_follow_id() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_follow_id());
+  }
+
+  // float x = 3;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_x = this->_internal_x();
+  uint32_t raw_x;
+  memcpy(&raw_x, &tmp_x, sizeof(tmp_x));
+  if (raw_x != 0) {
+    total_size += 1 + 4;
+  }
+
+  // float y = 4;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_y = this->_internal_y();
+  uint32_t raw_y;
+  memcpy(&raw_y, &tmp_y, sizeof(tmp_y));
+  if (raw_y != 0) {
+    total_size += 1 + 4;
+  }
+
+  // float radius_cm = 5;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_radius_cm = this->_internal_radius_cm();
+  uint32_t raw_radius_cm;
+  memcpy(&raw_radius_cm, &tmp_radius_cm, sizeof(tmp_radius_cm));
+  if (raw_radius_cm != 0) {
+    total_size += 1 + 4;
+  }
+
+  // uint32 remaining_ms = 6;
+  if (this->_internal_remaining_ms() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(this->_internal_remaining_ms());
+  }
+
+  // bool needs_los = 7;
+  if (this->_internal_needs_los() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // bool sees_stealth = 8;
+  if (this->_internal_sees_stealth() != 0) {
+    total_size += 1 + 1;
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData VisionSource::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    VisionSource::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*VisionSource::GetClassData() const { return &_class_data_; }
+
+
+void VisionSource::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<VisionSource*>(&to_msg);
+  auto& from = static_cast<const VisionSource&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.VisionSource)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from._internal_source_id() != 0) {
+    _this->_internal_set_source_id(from._internal_source_id());
+  }
+  if (from._internal_follow_id() != 0) {
+    _this->_internal_set_follow_id(from._internal_follow_id());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_x = from._internal_x();
+  uint32_t raw_x;
+  memcpy(&raw_x, &tmp_x, sizeof(tmp_x));
+  if (raw_x != 0) {
+    _this->_internal_set_x(from._internal_x());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_y = from._internal_y();
+  uint32_t raw_y;
+  memcpy(&raw_y, &tmp_y, sizeof(tmp_y));
+  if (raw_y != 0) {
+    _this->_internal_set_y(from._internal_y());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_radius_cm = from._internal_radius_cm();
+  uint32_t raw_radius_cm;
+  memcpy(&raw_radius_cm, &tmp_radius_cm, sizeof(tmp_radius_cm));
+  if (raw_radius_cm != 0) {
+    _this->_internal_set_radius_cm(from._internal_radius_cm());
+  }
+  if (from._internal_remaining_ms() != 0) {
+    _this->_internal_set_remaining_ms(from._internal_remaining_ms());
+  }
+  if (from._internal_needs_los() != 0) {
+    _this->_internal_set_needs_los(from._internal_needs_los());
+  }
+  if (from._internal_sees_stealth() != 0) {
+    _this->_internal_set_sees_stealth(from._internal_sees_stealth());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void VisionSource::CopyFrom(const VisionSource& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.VisionSource)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool VisionSource::IsInitialized() const {
+  return true;
+}
+
+void VisionSource::InternalSwap(VisionSource* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(VisionSource, _impl_.sees_stealth_)
+      + sizeof(VisionSource::_impl_.sees_stealth_)
+      - PROTOBUF_FIELD_OFFSET(VisionSource, _impl_.source_id_)>(
+          reinterpret_cast<char*>(&_impl_.source_id_),
+          reinterpret_cast<char*>(&other->_impl_.source_id_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata VisionSource::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_Struct_2eproto_getter, &descriptor_table_Struct_2eproto_once,
+      file_level_metadata_Struct_2eproto[18]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
@@ -6579,6 +7010,10 @@ Arena::CreateMaybeMessage< ::Protocol::CharacterInfo >(Arena* arena) {
 template<> PROTOBUF_NOINLINE ::Protocol::ItemInstance*
 Arena::CreateMaybeMessage< ::Protocol::ItemInstance >(Arena* arena) {
   return Arena::CreateMessageInternal< ::Protocol::ItemInstance >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::VisionSource*
+Arena::CreateMaybeMessage< ::Protocol::VisionSource >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::VisionSource >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

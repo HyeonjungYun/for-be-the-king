@@ -3,6 +3,7 @@
 #include "SkillTable.h"
 #include "StatusEffects.h"
 #include "WallMap.h"
+#include "Vision.h"
 #include "MonsterBrain.h"
 #include "EscapeLogic.h"
 #include "KillBatch.h"
@@ -361,6 +362,35 @@ private:
 	// 런 하나가 끝났다 - runs.csv 한 줄 (§ G). reason: ESCAPED · EXPIRED · DIED · DISCONNECT_DEATH
 	void	WriteRunTelemetry(const PlayerRef& player, const char* reason, uint64 killerId, uint64 goldKept, uint64 nowUs);
 
+	// ── FoW (design/gdd/fog-of-war.md, 2026-10-11) - RoomVision.cpp ──
+	// 서버 권위 시야. 플레이어마다 "이 클라가 아는 생물" 집합(Player::fowKnown)을 들고, 보이게 된 생물은 S_SPAWN + CC · 상태 스냅샷,
+	// 안 보이게 된 생물(유예 뒤)은 S_DESPAWN 을 그 사람에게만 보낸다. 이동 · 전투 이벤트는 SendVisible 이 받는 사람별로 거른다.
+	// 가방 · 상자 · 타워는 숨기지 않는다. Vision::Enabled() == false 면 전부 예전처럼 (전원에게 전부)
+	void	UpdateVisibility(uint64 nowUs);															// FlushMoves 앞 (30 Hz)
+	bool	CanSee(const PlayerRef& viewer, uint64 objectId) const;									// 그 생물을 이 클라가 아는가. 자기 · 생물이 아닌 것은 참, 0 · 없는 id 는 거짓
+	bool	NearViewer(const PlayerRef& viewer, float x, float y, float extraCm) const;				// 내 시야 반경(+여유) 안의 지점 - 투사체 · 장판 · 범위 연출 (시선은 보지 않는다)
+	float	VisionRadiusOf(const PlayerRef& player, uint64 nowUs) const;								// 기본 × (1 + 천리안) × (실명이면 blind_view_scale)
+	float	VisionBonusOf(const CreatureRef& creature) const;											// 패시브 vision 효과 합 (천리안 1132)
+	void	SendVisionIfChanged(const PlayerRef& viewer, float radiusCm, float cameraScale, uint64 nowUs);
+	void	SendSnapshots(const PlayerRef& viewer, const vector<CreatureRef>& fresh, uint64 nowUs);	// 막 보이게 된 생물의 CC · 상태를 그 사람에게
+	void	AppendCcState(const CreatureRef& target, uint64 nowUs, OUT Protocol::S_CC_STATE& pkt) const;
+	void	AppendStatusSnapshot(const CreatureRef& target, uint64 nowUs, OUT Protocol::S_STATUS& pkt) const;
+	void	ForgetObject(uint64 objectId);																// RemoveObject - 모든 플레이어의 아는 집합 · 추가 시야원에서 뺀다
+	bool	CanTarget(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs) const;	// 은신 · 이 클라가 모르는 대상은 지정 불가 (안티치트)
+	void	StartStealth(const CreatureRef& creature, uint32 skillId, uint32 durationMs, bool breaksOnDamage, uint64 nowUs);
+	void	BreakStealth(const CreatureRef& creature, const char* why, uint64 nowUs);
+	void	AddVisionExtra(const PlayerRef& owner, const VisionExtra& extra);							// 같은 sourceId 는 갱신
+	void	RevealTo(const PlayerRef& viewer, uint64 subjectId, uint64 untilUs);						// 시야와 상관없이 보이게 (외로운 외침 · 종이매)
+
+	// 받는 사람마다 볼 수 있는 항목만 보낸다. count(viewer) == fullCount 인 사람은 makeFull 버퍼를 함께 쓴다 (직렬화 1회),
+	// 일부만 보이는 사람은 makeMine 으로 자기 몫을 따로 만든다. 0 이면 안 보낸다. FoW 를 끄면 count 가 늘 fullCount 라 예전 Broadcast 와 같다
+	void	SendVisible(int32 fullCount, const function<int32(const PlayerRef&)>& count,
+				const function<SendBufferRef()>& makeFull, const function<SendBufferRef(const PlayerRef&)>& makeMine);
+
+	// 항목 목록 하나짜리 패킷용 - add(pkt, item) 으로 담고 keep(viewer, item) 으로 거른다. 정의는 Room.cpp (거기서만 쓴다)
+	template <typename TPkt, typename TItem, typename AddFn, typename KeepFn>
+	void	SendListVisible(const vector<TItem>& items, AddFn&& add, KeepFn&& keep, uint16 statId = 0);
+
 public:
 	uint32								_floorId = 0;
 
@@ -431,6 +461,10 @@ private:
 	// 4 단계 - 미끼 · 핏자국
 	unordered_set<uint64>				_decoys;
 	vector<TrailPoint>					_trails;
+
+	// FoW - 갱신마다 다시 채운다 (생물만). 매번 _objects 를 형변환하며 훑지 않게
+	vector<CreatureRef>					_fowSubjects;
+	vector<Vision::Source>				_fowSources;
 };
 
 constexpr int32 FLOOR_COUNT = 4;

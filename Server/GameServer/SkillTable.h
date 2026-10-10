@@ -86,7 +86,10 @@ enum class SkillEffectType : uint8
 	DamageReduceOnce,	// self 패시브 - 받는 첫 공격 × (1 - magnitude), duration = 재발동 쿨다운
 
 	// ── 갑옷 로스터 #106 ~ #114 (2026-10-10 오후) ──
-	Reflect			// self - duration 동안 날아오는 스킬 투사체를 쏜 쪽으로 되돌려 보낸다 (자업자득). 평타 투사체는 못 받아친다
+	Reflect,		// self - duration 동안 날아오는 스킬 투사체를 쏜 쪽으로 되돌려 보낸다 (자업자득). 평타 투사체는 못 받아친다
+
+	// ── FoW (2026-10-11) ──
+	Vision			// self 패시브 - 시야 반경 × (1 + magnitude), 카메라도 같은 배율 (천리안 1132)
 };
 
 enum class SkillRequire : uint8

@@ -96,6 +96,12 @@
     <ClCompile Include="WallMap.cpp">
       <Filter>Game</Filter>
     </ClCompile>
+    <ClCompile Include="Vision.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="RoomVision.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
     <ClCompile Include="WallTable.cpp">
       <Filter>Data</Filter>
     </ClCompile>
@@ -201,6 +207,9 @@
       <Filter>Game</Filter>
     </ClInclude>
     <ClInclude Include="WallMap.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Vision.h">
       <Filter>Game</Filter>
     </ClInclude>
     <ClInclude Include="WallTable.h">

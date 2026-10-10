@@ -97,6 +97,9 @@ extern SkillInfoDefaultTypeInternal _SkillInfo_default_instance_;
 class StatusInfo;
 struct StatusInfoDefaultTypeInternal;
 extern StatusInfoDefaultTypeInternal _StatusInfo_default_instance_;
+class VisionSource;
+struct VisionSourceDefaultTypeInternal;
+extern VisionSourceDefaultTypeInternal _VisionSource_default_instance_;
 class ZoneInfo;
 struct ZoneInfoDefaultTypeInternal;
 extern ZoneInfoDefaultTypeInternal _ZoneInfo_default_instance_;
@@ -119,6 +122,7 @@ template<> ::Protocol::SkillCastInfo* Arena::CreateMaybeMessage<::Protocol::Skil
 template<> ::Protocol::SkillHitInfo* Arena::CreateMaybeMessage<::Protocol::SkillHitInfo>(Arena*);
 template<> ::Protocol::SkillInfo* Arena::CreateMaybeMessage<::Protocol::SkillInfo>(Arena*);
 template<> ::Protocol::StatusInfo* Arena::CreateMaybeMessage<::Protocol::StatusInfo>(Arena*);
+template<> ::Protocol::VisionSource* Arena::CreateMaybeMessage<::Protocol::VisionSource>(Arena*);
 template<> ::Protocol::ZoneInfo* Arena::CreateMaybeMessage<::Protocol::ZoneInfo>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
@@ -3729,6 +3733,231 @@ class ItemInstance final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Struct_2eproto;
 };
+// -------------------------------------------------------------------
+
+class VisionSource final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.VisionSource) */ {
+ public:
+  inline VisionSource() : VisionSource(nullptr) {}
+  ~VisionSource() override;
+  explicit PROTOBUF_CONSTEXPR VisionSource(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  VisionSource(const VisionSource& from);
+  VisionSource(VisionSource&& from) noexcept
+    : VisionSource() {
+    *this = ::std::move(from);
+  }
+
+  inline VisionSource& operator=(const VisionSource& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline VisionSource& operator=(VisionSource&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const VisionSource& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const VisionSource* internal_default_instance() {
+    return reinterpret_cast<const VisionSource*>(
+               &_VisionSource_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    18;
+
+  friend void swap(VisionSource& a, VisionSource& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(VisionSource* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(VisionSource* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  VisionSource* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<VisionSource>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const VisionSource& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const VisionSource& from) {
+    VisionSource::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(VisionSource* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.VisionSource";
+  }
+  protected:
+  explicit VisionSource(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kSourceIdFieldNumber = 1,
+    kFollowIdFieldNumber = 2,
+    kXFieldNumber = 3,
+    kYFieldNumber = 4,
+    kRadiusCmFieldNumber = 5,
+    kRemainingMsFieldNumber = 6,
+    kNeedsLosFieldNumber = 7,
+    kSeesStealthFieldNumber = 8,
+  };
+  // uint64 source_id = 1;
+  void clear_source_id();
+  uint64_t source_id() const;
+  void set_source_id(uint64_t value);
+  private:
+  uint64_t _internal_source_id() const;
+  void _internal_set_source_id(uint64_t value);
+  public:
+
+  // uint64 follow_id = 2;
+  void clear_follow_id();
+  uint64_t follow_id() const;
+  void set_follow_id(uint64_t value);
+  private:
+  uint64_t _internal_follow_id() const;
+  void _internal_set_follow_id(uint64_t value);
+  public:
+
+  // float x = 3;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 4;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float radius_cm = 5;
+  void clear_radius_cm();
+  float radius_cm() const;
+  void set_radius_cm(float value);
+  private:
+  float _internal_radius_cm() const;
+  void _internal_set_radius_cm(float value);
+  public:
+
+  // uint32 remaining_ms = 6;
+  void clear_remaining_ms();
+  uint32_t remaining_ms() const;
+  void set_remaining_ms(uint32_t value);
+  private:
+  uint32_t _internal_remaining_ms() const;
+  void _internal_set_remaining_ms(uint32_t value);
+  public:
+
+  // bool needs_los = 7;
+  void clear_needs_los();
+  bool needs_los() const;
+  void set_needs_los(bool value);
+  private:
+  bool _internal_needs_los() const;
+  void _internal_set_needs_los(bool value);
+  public:
+
+  // bool sees_stealth = 8;
+  void clear_sees_stealth();
+  bool sees_stealth() const;
+  void set_sees_stealth(bool value);
+  private:
+  bool _internal_sees_stealth() const;
+  void _internal_set_sees_stealth(bool value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.VisionSource)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t source_id_;
+    uint64_t follow_id_;
+    float x_;
+    float y_;
+    float radius_cm_;
+    uint32_t remaining_ms_;
+    bool needs_los_;
+    bool sees_stealth_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Struct_2eproto;
+};
 // ===================================================================
 
 
@@ -6058,9 +6287,175 @@ ItemInstance::skills() const {
   return _impl_.skills_;
 }
 
+// -------------------------------------------------------------------
+
+// VisionSource
+
+// uint64 source_id = 1;
+inline void VisionSource::clear_source_id() {
+  _impl_.source_id_ = uint64_t{0u};
+}
+inline uint64_t VisionSource::_internal_source_id() const {
+  return _impl_.source_id_;
+}
+inline uint64_t VisionSource::source_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.source_id)
+  return _internal_source_id();
+}
+inline void VisionSource::_internal_set_source_id(uint64_t value) {
+  
+  _impl_.source_id_ = value;
+}
+inline void VisionSource::set_source_id(uint64_t value) {
+  _internal_set_source_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.source_id)
+}
+
+// uint64 follow_id = 2;
+inline void VisionSource::clear_follow_id() {
+  _impl_.follow_id_ = uint64_t{0u};
+}
+inline uint64_t VisionSource::_internal_follow_id() const {
+  return _impl_.follow_id_;
+}
+inline uint64_t VisionSource::follow_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.follow_id)
+  return _internal_follow_id();
+}
+inline void VisionSource::_internal_set_follow_id(uint64_t value) {
+  
+  _impl_.follow_id_ = value;
+}
+inline void VisionSource::set_follow_id(uint64_t value) {
+  _internal_set_follow_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.follow_id)
+}
+
+// float x = 3;
+inline void VisionSource::clear_x() {
+  _impl_.x_ = 0;
+}
+inline float VisionSource::_internal_x() const {
+  return _impl_.x_;
+}
+inline float VisionSource::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.x)
+  return _internal_x();
+}
+inline void VisionSource::_internal_set_x(float value) {
+  
+  _impl_.x_ = value;
+}
+inline void VisionSource::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.x)
+}
+
+// float y = 4;
+inline void VisionSource::clear_y() {
+  _impl_.y_ = 0;
+}
+inline float VisionSource::_internal_y() const {
+  return _impl_.y_;
+}
+inline float VisionSource::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.y)
+  return _internal_y();
+}
+inline void VisionSource::_internal_set_y(float value) {
+  
+  _impl_.y_ = value;
+}
+inline void VisionSource::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.y)
+}
+
+// float radius_cm = 5;
+inline void VisionSource::clear_radius_cm() {
+  _impl_.radius_cm_ = 0;
+}
+inline float VisionSource::_internal_radius_cm() const {
+  return _impl_.radius_cm_;
+}
+inline float VisionSource::radius_cm() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.radius_cm)
+  return _internal_radius_cm();
+}
+inline void VisionSource::_internal_set_radius_cm(float value) {
+  
+  _impl_.radius_cm_ = value;
+}
+inline void VisionSource::set_radius_cm(float value) {
+  _internal_set_radius_cm(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.radius_cm)
+}
+
+// uint32 remaining_ms = 6;
+inline void VisionSource::clear_remaining_ms() {
+  _impl_.remaining_ms_ = 0u;
+}
+inline uint32_t VisionSource::_internal_remaining_ms() const {
+  return _impl_.remaining_ms_;
+}
+inline uint32_t VisionSource::remaining_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.remaining_ms)
+  return _internal_remaining_ms();
+}
+inline void VisionSource::_internal_set_remaining_ms(uint32_t value) {
+  
+  _impl_.remaining_ms_ = value;
+}
+inline void VisionSource::set_remaining_ms(uint32_t value) {
+  _internal_set_remaining_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.remaining_ms)
+}
+
+// bool needs_los = 7;
+inline void VisionSource::clear_needs_los() {
+  _impl_.needs_los_ = false;
+}
+inline bool VisionSource::_internal_needs_los() const {
+  return _impl_.needs_los_;
+}
+inline bool VisionSource::needs_los() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.needs_los)
+  return _internal_needs_los();
+}
+inline void VisionSource::_internal_set_needs_los(bool value) {
+  
+  _impl_.needs_los_ = value;
+}
+inline void VisionSource::set_needs_los(bool value) {
+  _internal_set_needs_los(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.needs_los)
+}
+
+// bool sees_stealth = 8;
+inline void VisionSource::clear_sees_stealth() {
+  _impl_.sees_stealth_ = false;
+}
+inline bool VisionSource::_internal_sees_stealth() const {
+  return _impl_.sees_stealth_;
+}
+inline bool VisionSource::sees_stealth() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.sees_stealth)
+  return _internal_sees_stealth();
+}
+inline void VisionSource::_internal_set_sees_stealth(bool value) {
+  
+  _impl_.sees_stealth_ = value;
+}
+inline void VisionSource::set_sees_stealth(bool value) {
+  _internal_set_sees_stealth(value);
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.sees_stealth)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -71,6 +71,7 @@ namespace
 		{ "immune", SkillEffectType::Immune }, { "damage_mod", SkillEffectType::DamageMod }, { "cleanse", SkillEffectType::Cleanse },
 		{ "heal", SkillEffectType::Heal }, { "extend_dot", SkillEffectType::ExtendDot }, { "doom", SkillEffectType::Doom },
 		{ "damage_reduce_once", SkillEffectType::DamageReduceOnce },
+		{ "vision", SkillEffectType::Vision },
 	};
 
 	const vector<pair<const char*, SkillRequire>> REQUIRE_NAMES =
@@ -396,6 +397,15 @@ namespace
 				if (e.param.empty())
 				{
 					error = ew + " needs param (nearest / skills)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Vision:
+				// 천리안 - 패시브 시야 반경 × (1 + magnitude). 카메라도 같은 배율로 멀어진다 (사용자 결정 2026-10-11)
+				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f)
+				{
+					error = ew + " needs who=self and magnitude (0, 1] (vision radius bonus)";
 					return false;
 				}
 				break;

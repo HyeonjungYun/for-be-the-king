@@ -197,6 +197,18 @@ public:
 	bool IsInvulnerable(uint64 nowUs) const { return nowUs < invulnUntilUs; }
 	bool IsLeaping(uint64 nowUs) const { return nowUs < leapUntilUs; }
 
+	// ── FoW (2026-10-11) ──
+	// 은신 (그림자 감추기 · 니힐) - 다른 플레이어에게 보내지 않는다 (탐지 시야원만 본다). 대상으로 지정할 수 없고 몬스터가 놓친다.
+	// 공격 · 스킬을 쓰면 풀린다. stealthBreaksOnDamage 면 피해를 받아도 풀린다 (그림자 감추기 - 사용자 결정)
+	uint64				stealthUntilUs = 0;
+	uint32				stealthSkillId = 0;
+	bool				stealthBreaksOnDamage = false;
+	// 야생의 체취 - 몬스터가 표적으로 삼지 않는다 (공격해도)
+	uint64				scentUntilUs = 0;
+
+	bool IsStealthed(uint64 nowUs) const { return nowUs < stealthUntilUs; }
+	bool IsScented(uint64 nowUs) const { return nowUs < scentUntilUs; }
+
 	vector<SlowSource>	slowSources;
 
 	float				activeSlow = 0.f;

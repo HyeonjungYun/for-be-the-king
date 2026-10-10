@@ -442,6 +442,17 @@ bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& 
 	return true;
 }
 
+bool Handle_S_VISION(PacketSessionRef& session, Protocol::S_VISION& pkt)
+{
+	// FoW 시야 (2026-10-11) - 봇은 그리지 않는다. 추가 시야원이 생길 때만 로그 (분신 · 종이매 · 탐지 확인용)
+	if (pkt.sources_size() > 0)
+	{
+		auto bot = static_pointer_cast<BotSession>(session);
+		LOG_LINE << "[BOT VISION] me=" << bot->objectId.load() << " radius=" << pkt.radius_cm() << " sources=" << pkt.sources_size() << '\n';
+	}
+	return true;
+}
+
 bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt)
 {
 	// 장판 (3 단계) - 봇은 그리지 않는다. 처음 20건만 찍는다

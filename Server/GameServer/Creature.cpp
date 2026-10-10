@@ -140,6 +140,10 @@ void Creature::ClearCombatState()
 	focusBonus = 0.f;
 	doomUntilUs = 0;
 	doomSkillId = 0;
+	stealthUntilUs = 0;
+	stealthSkillId = 0;
+	stealthBreaksOnDamage = false;
+	scentUntilUs = 0;
 
 	status.Clear();
 	OnBuffsChanged();

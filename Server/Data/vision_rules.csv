@@ -1,0 +1,5 @@
+key,value
+vision_radius_cm,1500
+vision_grace_ms,300
+vision_min_radius_cm,150
+fog_alpha,0.72

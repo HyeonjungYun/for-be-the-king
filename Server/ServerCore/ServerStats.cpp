@@ -100,6 +100,15 @@ void ServerStats::Dump(int32 sessionCount)
 	const uint64 attackWallBlocked = _attackWallBlocked.exchange(0);
 	const uint64 mutualKills = _mutualKills.exchange(0);
 
+	const uint64 fowPairs = _fowPairs.exchange(0);
+	const uint64 fowLos = _fowLos.exchange(0);
+	const uint64 fowSpawns = _fowSpawns.exchange(0);
+	const uint64 fowDespawns = _fowDespawns.exchange(0);
+	const uint64 fowShared = _fowShared.exchange(0);
+	const uint64 fowCustom = _fowCustom.exchange(0);
+	const uint64 fowUpdateUs = _fowUpdateUs.exchange(0);
+	const uint64 fowUpdateMaxUs = _fowUpdateMaxUs.exchange(0);
+
 	uint64 buckets[BUCKET_COUNT];
 	for (int32 i = 0; i < BUCKET_COUNT; i++)
 		buckets[i] = _flushBuckets[i].exchange(0);
@@ -205,6 +214,14 @@ void ServerStats::Dump(int32 sessionCount)
 
 	out << " combat       attack_wall=" << attackWallBlocked << " (line of attack blocked, informational)"
 		<< "  mutual_kills=" << mutualKills << '\n';
+
+	// FoW - 시야 갱신이 쓴 시간(합 · 최대 1회)과 판정 수, 스폰 변동, 필터 방송의 공유 / 개별 세션 수 (informational)
+	if (fowPairs > 0 || fowShared > 0 || fowCustom > 0)
+	{
+		out << " fow          update_us=" << fowUpdateUs << " max=" << fowUpdateMaxUs << "us  pairs=" << fowPairs << " los=" << fowLos
+			<< "  spawn=" << fowSpawns << " despawn=" << fowDespawns
+			<< "  sends shared=" << fowShared << " custom=" << fowCustom << " (informational)\n";
+	}
 
 	out << " SV-5 band    recv=" << recvMbps << " Mbps"
 		<< "  sent=" << sentMbps << " Mbps " << Verdict(sentMbps <= SENT_LIMIT_MBPS)

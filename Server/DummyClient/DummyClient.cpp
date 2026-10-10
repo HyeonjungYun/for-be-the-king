@@ -24,6 +24,8 @@ atomic<uint64> GMonsterKills = 0;
 atomic<uint64> GMonsterAttacksSent = 0;
 atomic<bool> GTowerMode = false;
 atomic<bool> GIdleOne = false;
+atomic<bool> GIdleAll = false;
+atomic<int32> GForceFloor = -1;
 float GTowerX = 0.f;
 float GTowerY = 0.f;
 atomic<uint64> GRunGold = 0;
@@ -455,8 +457,8 @@ static void TickBots(float deltaTime)
 		if (nowUs < bot->hardCcUntilUs.load())
 			continue;
 
-		// -idleone: 1 번 봇은 같은 자리를 보내기만 한다 - 서버에는 "움직이지 않음"으로 보인다
-		if (GIdleOne.load() && bot->botIndex == 1)
+		// -idleone: 1 번 봇은 같은 자리를 보내기만 한다 - 서버에는 "움직이지 않음"으로 보인다. -idleall: 전원 (FoW 실기동 - 자리가 정해져야 한다)
+		if ((GIdleOne.load() && bot->botIndex == 1) || GIdleAll.load())
 		{
 			Protocol::C_MOVE pkt;
 			Protocol::PosInfo* info = pkt.mutable_info();
@@ -770,6 +772,8 @@ int main(int argc, char* argv[])
 			GChatAfterMs.store(static_cast<uint32>(::atoi(argv[i + 1])));
 		else if (::strcmp(argv[i], "-towercount") == 0)
 			GTowerCount.store(::atoi(argv[i + 1]));
+		else if (::strcmp(argv[i], "-floor") == 0)
+			GForceFloor.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-tower") == 0 && i + 2 < argc)
 		{
 			GTowerMode.store(true);
@@ -793,6 +797,8 @@ int main(int argc, char* argv[])
 			GMonsterPull.store(true);
 		else if (::strcmp(argv[i], "-idleone") == 0)
 			GIdleOne.store(true);
+		else if (::strcmp(argv[i], "-idleall") == 0)
+			GIdleAll.store(true);
 		else if (::strcmp(argv[i], "-swap") == 0)
 			GSwapArmor.store(true);
 		else if (::strcmp(argv[i], "-staydead") == 0)

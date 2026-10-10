@@ -147,6 +147,7 @@ enum StatusKind
 	STATUS_PARRY = 7;		// 유수 (3 단계)
 	STATUS_HOLD = 8;		// 유지형 진행 중 (3 단계)
 	STATUS_DECOY = 9;		// 미끼 (4 단계)
+	STATUS_STEALTH = 10;		// 은신 - 그림자 감추기 · 니힐 (FoW, 2026-10-11). 다른 사람에겐 안 보이므로 본인만 받는다
 }
 
 // 투사체가 끝난 이유 - S_PROJECTILE.ended (skill-roster 2 단계, 2026-10-10)

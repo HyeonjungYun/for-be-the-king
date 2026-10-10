@@ -2,6 +2,7 @@
 #include "Creature.h"
 #include "MoveClock.h"
 #include "EquipStats.h"
+#include "Vision.h"
 
 class GameSession;
 class Room;
@@ -100,6 +101,15 @@ public:
 	int32					zoneTower = -1;			// 점유 중인 타워 순번, -1 = 없음 (이력 판정용)
 	uint8					gaugeAudience[MAX_TOWERS] = {};		// EscapeLogic::Audience - 집합에 새로 들어왔는지 본다
 	uint64					lastGaugeSentUs[MAX_TOWERS] = {};
+
+	// ── FoW (design/gdd/fog-of-war.md, 2026-10-11) ── Room JobQueue 안에서만. 입장 · 재접속 · 끊김에 비운다 (ResetVision)
+	unordered_map<uint64, uint64>	fowKnown;			// 이 클라에 스폰돼 있는 생물 id → 마지막으로 보인 시각(us)
+	unordered_map<uint64, uint64>	fowRevealed;		// 시야와 상관없이 보이는 생물 id → 끝 시각 (외로운 외침 · 종이매)
+	vector<VisionExtra>				visionExtras;		// 추가 시야원 (그림자 분신 · 종이매 · 맹수의 탐색)
+	float							visionRadiusCm = 0.f;	// 이번 갱신의 내 시야 반경 (실명 · 천리안 반영) - 이벤트 필터가 거리로 쓴다
+	string							visionSent;			// 마지막으로 보낸 S_VISION 의 요약 - 바뀌면 다시 보낸다
+
+	void	ResetVision() { fowKnown.clear(); fowRevealed.clear(); visionExtras.clear(); visionSent.clear(); }
 
 	// 텔레메트리 (§ G) - 런 시작에 0
 	uint32					statBroughtInSum = 0;

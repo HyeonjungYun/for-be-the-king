@@ -331,6 +331,23 @@ bool WallMap::SweepBlocked(float ax, float ay, float bx, float by, float r, OUT 
 	return SweepFirstHit(ax, ay, bx, by, r, hitKind) < 1.f;
 }
 
+bool WallMap::SightBlocked(float ax, float ay, float bx, float by) const
+{
+	if (std::isfinite(ax) == false || std::isfinite(ay) == false || std::isfinite(bx) == false || std::isfinite(by) == false)
+		return true;
+
+	bool blocked = false;
+	ForEachCandidate((std::min)(ax, bx), (std::min)(ay, by), (std::max)(ax, bx), (std::max)(ay, by), [&](const WallBox& w)
+		{
+			if (blocked || w.kind == WallKind::Cover)
+				return;
+			if (WallGeom::Sweep(w, ax, ay, bx, by, 0.f) < 1.f)
+				blocked = true;
+		});
+
+	return blocked;
+}
+
 bool WallMap::FindNearestFree(float x, float y, float r, float maxSearch, OUT float& outX, OUT float& outY) const
 {
 	if (std::isfinite(x) == false || std::isfinite(y) == false || std::isfinite(r) == false || std::isfinite(maxSearch) == false)

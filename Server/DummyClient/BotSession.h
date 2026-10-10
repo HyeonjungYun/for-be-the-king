@@ -114,6 +114,8 @@ extern atomic<uint64> GMonsterAttacksSent;
 // -tower <x> <y>: 그 지점으로 걸어가 서 있는다 (탈출 게이지 시험, escape-timer.md AC-ET-26 · 30) · -gold <N>: 입장하자마자 /gold N
 // -idleone: 1 번 봇은 제자리에 서 있기만 한다(이동 · 공격 · 스킬 없음) - 진입 무적 시험 (AC-10)
 extern atomic<bool> GIdleOne;
+extern atomic<bool> GIdleAll;			// -idleall - 모든 봇이 제자리 (FoW · 테스트 모드 실기동)
+extern atomic<int32> GForceFloor;		// -floor N - 모든 봇을 그 층으로 (기본 -1 = 봇 번호로 나눈다)
 extern atomic<bool> GTowerMode;
 extern float GTowerX;
 extern float GTowerY;

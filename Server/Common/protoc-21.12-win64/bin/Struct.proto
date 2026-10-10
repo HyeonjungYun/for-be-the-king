@@ -176,3 +176,16 @@ message ItemInstance
 	EquipSlot slot = 6;
 	repeated SkillInfo skills = 7;
 }
+
+// FoW 추가 시야원 하나 (design/gdd/fog-of-war.md, 2026-10-11) - 그림자 분신 · 종이매 · 맹수의 탐색. 주인에게만 S_VISION 으로
+message VisionSource
+{
+	uint64 source_id = 1;
+	uint64 follow_id = 2;		// 0 = 고정 지점 (x, y). 아니면 그 생물을 따라간다 - 클라에 스폰돼 있다 (시야원이 자기 중심을 보므로)
+	float x = 3;
+	float y = 4;
+	float radius_cm = 5;
+	uint32 remaining_ms = 6;		// 0 = 따라가는 생물이 있는 동안
+	bool needs_los = 7;			// false = 벽 너머도 본다
+	bool sees_stealth = 8;
+}
