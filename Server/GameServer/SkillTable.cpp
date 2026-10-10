@@ -64,7 +64,7 @@ namespace
 		{ "buff", SkillEffectType::SelfBuff }, { "dot", SkillEffectType::Dot }, { "mark", SkillEffectType::Mark },
 		{ "execute", SkillEffectType::Execute }, { "zone", SkillEffectType::Zone }, { "chain", SkillEffectType::Chain },
 		{ "delayed", SkillEffectType::Delayed }, { "decoy", SkillEffectType::Decoy }, { "invuln", SkillEffectType::Invuln },
-		{ "counter", SkillEffectType::Counter }, { "parry", SkillEffectType::Parry }, { "hold", SkillEffectType::Hold },
+		{ "counter", SkillEffectType::Counter }, { "parry", SkillEffectType::Parry }, { "reflect", SkillEffectType::Reflect }, { "hold", SkillEffectType::Hold },
 		{ "stance", SkillEffectType::Stance }, { "on_hit", SkillEffectType::OnHit }, { "lethal_save", SkillEffectType::LethalSave },
 		{ "reveal", SkillEffectType::Reveal }, { "trail", SkillEffectType::Trail }, { "self_cc", SkillEffectType::SelfCc },
 		{ "petrify_window", SkillEffectType::PetrifyWindow }, { "fall_on_hit", SkillEffectType::FallOnHit }, { "throw", SkillEffectType::Throw },
@@ -654,6 +654,10 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 		auto tagsIt = table.columns.find("tags");
 		const int32 tagsCol = (tagsIt != table.columns.end()) ? tagsIt->second : -1;
 
+		// requires_weapon 열도 선택 (2026-10-10 갑옷 로스터 #106 ~ #114) - "hammer" 또는 "sword:ghost" (그 무기 + 무기 칸 스킬 중 그 태그)
+		auto reqIt = table.columns.find("requires_weapon");
+		const int32 reqCol = (reqIt != table.columns.end()) ? reqIt->second : -1;
+
 		for (size_t r = 0; r < table.rows.size(); r++)
 		{
 			const vector<string>& row = table.rows[r];
@@ -677,6 +681,15 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 				}
 				if (tag.empty() == false)
 					def.tags.push_back(tag);
+			}
+
+			if (reqCol >= 0 && reqCol < static_cast<int32>(row.size()) && row[reqCol].empty() == false)
+			{
+				const string& req = row[reqCol];
+				const size_t colon = req.find(':');
+				def.requiresWeapon = req.substr(0, colon);
+				if (colon != string::npos)
+					def.requiresWeaponTag = req.substr(colon + 1);
 			}
 
 			if (Csv::ParseUInt(row[c[0]], OUT def.skillId) == false || def.skillId == 0)

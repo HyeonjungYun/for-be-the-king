@@ -83,7 +83,10 @@ enum class SkillEffectType : uint8
 	Heal,			// self - 최대 체력 × magnitude 회복 (치유 감소 적용). 패시브 트리거(requires on_dot:…)와 함께
 	ExtendDot,		// target - param 피해 종류(magic)의 지속 피해 남은 시간 +magnitude ms
 	Doom,			// self - 배수진: duration 동안 면역, 적 플레이어 처치면 해제 + 만피, 아니면 끝에 죽는다
-	DamageReduceOnce	// self 패시브 - 받는 첫 공격 × (1 - magnitude), duration = 재발동 쿨다운
+	DamageReduceOnce,	// self 패시브 - 받는 첫 공격 × (1 - magnitude), duration = 재발동 쿨다운
+
+	// ── 갑옷 로스터 #106 ~ #114 (2026-10-10 오후) ──
+	Reflect			// self - duration 동안 날아오는 스킬 투사체를 쏜 쪽으로 되돌려 보낸다 (자업자득). 평타 투사체는 못 받아친다
 };
 
 enum class SkillRequire : uint8
@@ -182,6 +185,8 @@ struct SkillDef
 
 	vector<SkillEffect>		effects;
 	vector<string>			tags;					// skills.csv tags 열 (세미콜론 구분) - damage_mod tag:<태그> 가 본다
+	string					requiresWeapon;			// skills.csv requires_weapon 열 - "hammer" 등 무기 풀 id. 비면 조건 없음 (갑옷 #106 ~ #114)
+	string					requiresWeaponTag;		// "sword:ghost" 의 ghost - 무기 칸 스킬 중 하나가 그 태그를 가져야 한다 (#113)
 
 	bool HasHardCc() const;
 	bool HasMovement() const;

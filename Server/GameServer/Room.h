@@ -290,6 +290,9 @@ private:
 	void	HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillEffect& hold, uint64 nowUs);
 	bool	TryCounter(const CreatureRef& target, const CreatureRef& attacker, uint64 attackerId, uint64 nowUs);	// true = 막고 반격했다
 	bool	TryParry(const CreatureRef& target, float fromX, float fromY, uint64 nowUs);							// true = 받아넘겼다
+	bool	TryReflect(Projectile& p, const CreatureRef& caster, const CreatureRef& target, uint64 nowUs);			// 자업자득 - true = 되돌려 보냈다 (새 투사체 발사)
+	bool	MeetsWeaponRequirement(const CreatureRef& caster, const SkillDef& def) const;							// skills.csv requires_weapon (갑옷 #106 ~ #114)
+	void	ApplyWallEffects(const CreatureRef& caster, const SkillDef& def, uint64 nowUs);							// requires=wall 효과 (회오리 · 질풍노도)
 	void	ApplyChain(const CreatureRef& caster, const CreatureRef& first, const SkillEffect& e, uint32 effectId, uint64 nowUs);
 	void	ResolveBursts(uint64 nowUs);
 	void	UpdateWindows(uint64 nowUs);		// 경독 창 닫힘 · 반격 끝

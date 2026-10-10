@@ -737,6 +737,14 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	if (def->kind == SkillKind::Passive)
 		return;
 
+	// 갑옷 스킬 #106 ~ #114 - "망치를 들고 있을 때만" (skills.csv requires_weapon). 무기가 다르면 아무 일 없다
+	if (MeetsWeaponRequirement(caster, *def) == false)
+	{
+		LOG_LINE << "[SKILL REJECT] caster=" << casterId << " skill=" << def->skillId << " reason=weapon requires=" << def->requiresWeapon
+			<< (def->requiresWeaponTag.empty() ? "" : ":" + def->requiresWeaponTag) << '\n';
+		return;
+	}
+
 	const uint64 nowUs = Utils::NowMicroseconds();
 
 	// 유지형 - 같은 키를 다시 누르면 끝 (사용자 결정). 유지 중엔 다른 스킬을 쓸 수 없다
@@ -3045,6 +3053,28 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 			// 간파 - 나를 향해 질주해 오는 적에게 확신의 표식 (상대의 패시브)
 			if (e.param == "dash" || e.param == "leap" || e.param == "forward")
 				TriggerDashMarks(caster, ctx.aimX - ctx.originX, ctx.aimY - ctx.originY, nowUs);
+
+			// 질풍노도 (#108) - 날아가는 경로가 벽에 닿으면 requires=wall 효과 (자기 기절 · 주위 감속). 클라는 벽 앞에서 멈춘다
+			bool hasWallEffect = false;
+			for (const SkillEffect& w : def.effects)
+				hasWallEffect |= (w.condition == SkillRequire::Wall);
+			if (hasWallEffect && e.distCm > 0.f)
+			{
+				float dirX = ctx.aimX - ctx.originX;
+				float dirY = ctx.aimY - ctx.originY;
+				const float len = ::sqrtf(dirX * dirX + dirY * dirY);
+				if (len > 0.001f)
+				{
+					dirX /= len;
+					dirY /= len;
+					const WallMap& walls = WallTable::Get(_floorId);
+					if (walls.SweepBlocked(ctx.originX, ctx.originY, ctx.originX + dirX * e.distCm, ctx.originY + dirY * e.distCm, SkillKinematics::CAPSULE_RADIUS_CM))
+					{
+						LOG_LINE << "[DASH] wall char=" << ctx.casterId << " skill=" << def.skillId << '\n';
+						ApplyWallEffects(caster, def, nowUs);
+					}
+				}
+			}
 		}
 		break;
 
@@ -3157,6 +3187,13 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 		caster->parryUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
 		PushStatus(true, ctx.casterId, Protocol::STATUS_PARRY, "parry", 1, e.durationMs, 0.f, ctx.casterId);
 		LOG_LINE << "[PARRY] start char=" << ctx.casterId << " for=" << e.durationMs << "ms" << '\n';
+		break;
+
+	case SkillEffectType::Reflect:
+		// 자업자득 (#107) - 창 동안 날아오는 스킬 투사체를 쏜 쪽으로 되돌린다 (TryReflect). 클라 표시는 받아넘기기와 같은 종류에 param reflect
+		caster->reflectUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
+		PushStatus(true, ctx.casterId, Protocol::STATUS_PARRY, "reflect", 1, e.durationMs, 0.f, ctx.casterId);
+		LOG_LINE << "[REFLECT] start char=" << ctx.casterId << " for=" << e.durationMs << "ms" << '\n';
 		break;
 
 	case SkillEffectType::Stance:
@@ -3304,6 +3341,17 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 		{
 			dx = ctx.aimX - ctx.originX;
 			dy = ctx.aimY - ctx.originY;
+		}
+
+		// param side (질풍노도 #108) - 날아가는 경로의 옆으로. 대상이 경로의 어느 쪽에 있는지(외적 부호)로 방향을 고른다
+		if (e.param == "side")
+		{
+			const float ax = ctx.aimX - ctx.originX;
+			const float ay = ctx.aimY - ctx.originY;
+			const float cross = ax * dy - ay * dx;
+			const float sign = (cross >= 0.f) ? 1.f : -1.f;
+			dx = -ay * sign;
+			dy = ax * sign;
 		}
 
 		// 저항은 거리를 줄인다 (공식 C6). CC 길이는 실제 날아가는 시간이라 클라와 끝점 · 시간이 맞는다
@@ -4150,6 +4198,10 @@ void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const Creat
 	const uint64 targetId = target->objectInfo->object_id();
 	p.hitIds.push_back(targetId);
 
+	// 받아치기(자업자득) - 스킬 투사체를 쏜 쪽으로 되돌려 보낸다. 받아넘기기보다 먼저 (둘 다 켜져 있으면 되돌리는 쪽이 이긴다)
+	if (TryReflect(p, caster, target, nowUs))
+		return;
+
 	// 받아넘기기(유수) - 전방에서 오는 투사체는 무효 (평타 · 스킬 모두)
 	if (TryParry(target, p.x - p.dirX * 10.f, p.y - p.dirY * 10.f, nowUs))
 		return;
@@ -4655,6 +4707,81 @@ bool Room::TryParry(const CreatureRef& target, float fromX, float fromY, uint64 
 
 	LOG_LINE << "[PARRY] char=" << target->objectInfo->object_id() << " deflected" << '\n';
 	return true;
+}
+
+bool Room::TryReflect(Projectile& p, const CreatureRef& caster, const CreatureRef& target, uint64 nowUs)
+{
+	// 자업자득 (#107) - 스킬 투사체만, 쏜 쪽이 살아 있을 때만. 원래 투사체는 여기서 끝나고(호출자가 HIT 로 닫는다)
+	// 받아친 쪽이 같은 스킬의 투사체를 쏜 쪽을 향해 새로 쏜다 - 피해는 받아친 쪽의 계수로 (새 투사체의 ctx.casterId)
+	if (target == nullptr || target->IsReflecting(nowUs) == false || p.skillId == 0)
+		return false;
+	if (caster == nullptr || caster->IsAlive() == false || caster == target)
+		return false;
+
+	const SkillDef* def = SkillTable::Find(p.skillId);
+	if (def == nullptr)
+		return false;
+
+	SkillContext ctx;
+	ctx.casterId = target->objectInfo->object_id();
+	ctx.originX = target->posInfo->x();
+	ctx.originY = target->posInfo->y();
+	ctx.aimX = caster->posInfo->x();
+	ctx.aimY = caster->posInfo->y();
+	ctx.itemLevel = p.ctx.itemLevel;
+
+	Projectile back;
+	back.casterId = ctx.casterId;
+	back.skillId = def->skillId;
+	back.effectId = def->effectId;
+	back.x = ctx.originX;
+	back.y = ctx.originY;
+	back.dirX = ctx.aimX - ctx.originX;
+	back.dirY = ctx.aimY - ctx.originY;
+	back.speedCms = p.speedCms;
+	back.radiusCm = p.radiusCm;
+	back.remainingCm = def->rangeCm;
+	back.homingTargetId = (p.homingTargetId != 0) ? p.casterId : 0;
+	back.pierce = p.pierce;
+	back.ctx = ctx;
+	back.ctx.targetsOnly = true;
+	back.lastStepUs = nowUs;
+	back.hitIds.push_back(ctx.casterId);		// 되돌린 투사체가 받아친 본인을 다시 맞히지 않게
+
+	LOG_LINE << "[REFLECT] char=" << ctx.casterId << " sent skill=" << p.skillId << " back to " << p.casterId << '\n';
+	LaunchProjectile(move(back));
+	return true;
+}
+
+bool Room::MeetsWeaponRequirement(const CreatureRef& caster, const SkillDef& def) const
+{
+	if (def.requiresWeapon.empty())
+		return true;
+
+	// 갑옷 스킬 "망치를 들고 있을 때만" - 플레이어의 무기 칸 아이템 종류의 풀 id 로 본다 (item_types.csv skill_pool_id). 몬스터는 못 쓴다
+	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	if (player == nullptr)
+		return false;
+
+	const ItemEntry& weapon = player->equipped[Protocol::SLOT_WEAPON_PRIMARY - 1];
+	if (weapon.instanceId == 0)
+		return false;
+
+	const ItemTypeDef* type = ItemTable::Find(weapon.itemTypeId);
+	if (type == nullptr || type->skillPoolId != def.requiresWeapon)
+		return false;
+
+	if (def.requiresWeaponTag.empty())
+		return true;
+
+	// "sword:ghost" - 그 무기의 결속 스킬 중 하나가 태그를 가져야 한다 (백귀야행은 원혼 스킬이 있는 검)
+	for (uint32 skillId : { weapon.skillIdPrimary, weapon.skillIdSecondary })
+	{
+		const SkillDef* s = (skillId != 0) ? SkillTable::Find(skillId) : nullptr;
+		if (s != nullptr && s->HasTag(def.requiresWeaponTag))
+			return true;
+	}
+	return false;
 }
 
 void Room::ApplyChain(const CreatureRef& caster, const CreatureRef& first, const SkillEffect& e, uint32 effectId, uint64 nowUs)
@@ -5755,8 +5882,16 @@ void Room::OnSpinTouchedWall(const CreatureRef& caster, const SkillDef& def, uin
 
 	LOG_LINE << "[HOLD] wall char=" << casterId << " skill=" << def.skillId << '\n';
 	StopHold(caster, nowUs, "wall");
+	ApplyWallEffects(caster, def, nowUs);
+}
 
-	// requires=wall 효과 - 자기 기절(self_cc) · 주위 감속(soft_cc, radius_cm)
+void Room::ApplyWallEffects(const CreatureRef& caster, const SkillDef& def, uint64 nowUs)
+{
+	const uint64 casterId = caster->objectInfo->object_id();
+	const float cx = caster->posInfo->x();
+	const float cy = caster->posInfo->y();
+
+	// requires=wall 효과 - 자기 기절(self_cc) · 주위 감속(soft_cc, radius_cm). 회오리(유지 중 벽) · 질풍노도(대시 경로가 벽에 닿음)
 	for (const SkillEffect& e : def.effects)
 	{
 		if (e.condition != SkillRequire::Wall)
@@ -6036,6 +6171,7 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 	victim->recastSkillId = 0;
 	victim->counterUntilUs = 0;
 	victim->parryUntilUs = 0;
+	victim->reflectUntilUs = 0;
 	victim->petrifyEndUs = 0;
 	victim->petrifyTargets.clear();
 	_statusTargets.erase(victimId);

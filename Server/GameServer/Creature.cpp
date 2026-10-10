@@ -126,6 +126,7 @@ void Creature::ClearCombatState()
 	counterRatio = 0.f;
 	counterSkillId = 0;
 	parryUntilUs = 0;
+	reflectUntilUs = 0;
 	petrifyEndUs = 0;
 	petrifyStunMs = 0;
 	petrifyTargets.clear();

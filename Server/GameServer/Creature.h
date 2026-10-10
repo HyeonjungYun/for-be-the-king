@@ -163,6 +163,9 @@ public:
 	// 받아넘기기 (유수) - 전방에서 오는 평타 · 투사체 무효
 	uint64				parryUntilUs = 0;
 
+	// 받아치기 (자업자득 #107) - 날아오는 스킬 투사체를 쏜 쪽으로 되돌려 보낸다. 평타 투사체는 못 받아친다
+	uint64				reflectUntilUs = 0;
+
 	// 경독 - 창이 열린 동안 내 단검 평타에 맞은 적을 모았다가 창이 닫힐 때 기절
 	uint64				petrifyEndUs = 0;
 	uint32				petrifyStunMs = 0;
@@ -174,6 +177,7 @@ public:
 
 	bool IsCountering(uint64 nowUs) const { return nowUs < counterUntilUs; }
 	bool IsParrying(uint64 nowUs) const { return nowUs < parryUntilUs; }
+	bool IsReflecting(uint64 nowUs) const { return nowUs < reflectUntilUs; }
 	bool IsHolding() const { return holdSkillId != 0; }
 
 	// ── 모자 로스터 (2026-10-10) ──

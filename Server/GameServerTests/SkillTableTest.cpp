@@ -36,13 +36,48 @@ TEST(SkillRoster, 실제_데이터가_읽히고_76개_전부_있다)
 	string error;
 	ASSERT_TRUE(LoadRealData(OUT error)) << error;
 
-	// src/스킬_목록.csv 2 ~ 77 (1 채찍 제외) → 1002 ~ 1077. 9001 은 몬스터
-	for (uint32 n = 2; n <= 104; n++)
+	// src/스킬_목록.csv 2 ~ 114 (1 채찍 제외) → 1002 ~ 1114. 9001 은 몬스터
+	for (uint32 n = 2; n <= 114; n++)
 		EXPECT_NE(SkillTable::Find(1000 + n), nullptr) << "skill " << n << " is missing";
 
 	EXPECT_NE(SkillTable::Find(9001), nullptr);
 	EXPECT_EQ(SkillTable::Find(1001), nullptr) << "채찍(#1)은 구현하지 않는다";
-	EXPECT_EQ(SkillTable::All().size(), 104u);   // 76 + 몬스터 9001 + 모자 27 (#78 ~ #104, 2026-10-10)
+	EXPECT_EQ(SkillTable::All().size(), 114u);   // 76 + 몬스터 9001 + 모자 27 (#78 ~ #104) + 모자 1 · 갑옷 9 (#105 ~ #114, 2026-10-10 오후)
+}
+
+// 🔴 갑옷 로스터 #106 ~ #114 - "망치 / 검을 들고 있을 때만" 은 skills.csv requires_weapon 열 (Room::MeetsWeaponRequirement 가 본다)
+TEST(SkillRoster, 갑옷_스킬은_무기_조건을_가진다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	for (uint32 id = 1106; id <= 1111; id++)
+	{
+		const SkillDef* def = SkillTable::Find(id);
+		ASSERT_NE(def, nullptr) << id;
+		EXPECT_EQ(def->requiresWeapon, "hammer") << id;
+	}
+	for (uint32 id = 1112; id <= 1114; id++)
+	{
+		const SkillDef* def = SkillTable::Find(id);
+		ASSERT_NE(def, nullptr) << id;
+		EXPECT_EQ(def->requiresWeapon, "sword") << id;
+	}
+	EXPECT_EQ(SkillTable::Find(1113)->requiresWeaponTag, "ghost") << "백귀야행은 원혼 스킬이 있는 검";
+	EXPECT_TRUE(SkillTable::Find(1113)->HasHardCc()) << "백귀야행 기절 - 무기 조건부라 갑옷 풀에서 허용";
+
+	// 무기 조건은 갑옷 로스터에만 - 다른 스킬에 번지면 안 된다 (조건 없는 스킬은 어느 무기로도 쓴다)
+	for (const auto& [id, def] : SkillTable::All())
+	{
+		if (def.requiresWeapon.empty() == false)
+			EXPECT_TRUE(id >= 1106 && id <= 1114) << "skill " << id << " has requires_weapon=" << def.requiresWeapon;
+	}
+
+	// 건곤일척(damage_mod tag:hammer) 이 보는 태그 - 망치 풀 스킬 전부 + 갑옷 망치 스킬
+	for (uint32 id : { 1005u, 1006u, 1026u, 1028u, 1030u, 1031u, 1032u, 1033u, 1034u, 1106u, 1107u, 1108u, 1109u, 1110u })
+		EXPECT_TRUE(SkillTable::Find(id)->HasTag("hammer")) << id;
+	EXPECT_FALSE(SkillTable::Find(1005)->HasTag("sword")) << "머리 부수기는 망치 스킬 (모자 단계에서 잘못 붙은 sword 태그)";
+	EXPECT_FALSE(SkillTable::Find(1006)->HasTag("sword")) << "흉갑 부수기는 망치 스킬";
 }
 
 // 🔴 유령 신랑의 저주(#2)만 벽을 지나는 이동이다 - ignores_walls 열은 2026-10-10 오후까지 읽기만 하고 쓰는 곳이 없었다
@@ -83,6 +118,11 @@ TEST(SkillRoster, 하드CC_스킬은_무기_풀에만_있다)
 		if (def.HasHardCc() == false)
 			continue;
 		++hardCcCount;
+
+		// 🔴 2026-10-10 갑옷 로스터 - requires_weapon 이 있는 스킬(백귀야행 #113)은 무기에 묶인 셈이라 갑옷 풀에도 허용 (ItemTable::Parse 와 같은 규칙).
+		//    AC-5 예산은 "무기 1 + 무기 조건부 갑옷 1" 까지로 넓어졌다 - quick-spec § 갑옷 로스터
+		if (def.requiresWeapon.empty() == false)
+			continue;
 
 		for (const string& pool : PoolsOf(skillId))
 			EXPECT_TRUE(weaponPools.count(pool) > 0) << "skill " << skillId << " (hard CC) is in non-weapon pool " << pool;

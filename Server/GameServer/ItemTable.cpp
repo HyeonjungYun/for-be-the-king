@@ -284,8 +284,10 @@ bool ItemTable::Parse(const string& itemTypesCsv, const string& skillPoolsCsv, O
 			const SkillDef* skill = SkillTable::Find(e.skillId);
 			const bool weaponKey = (skill->allowedSlot == Protocol::SLOT_WEAPON_PRIMARY || skill->allowedSlot == Protocol::SLOT_WEAPON_SECONDARY);
 
-			// 하드 CC · 무기 키 전용 스킬은 무기 풀에만 (AC-5 예산의 전제 - SkillTableTest 와 같은 규칙)
-			if ((skill->HasHardCc() || weaponKey) && weaponOnly == false)
+			// 하드 CC · 무기 키 전용 스킬은 무기 풀에만 (AC-5 예산의 전제 - SkillTableTest 와 같은 규칙).
+			// 🔴 2026-10-10 갑옷 로스터 - requires_weapon 이 있는 스킬(#113 백귀야행)은 무기에 묶인 셈이라 갑옷 풀에서도 하드 CC 를 허용
+			const bool weaponBoundHardCc = skill->HasHardCc() && skill->requiresWeapon.empty() == false;
+			if (((skill->HasHardCc() && weaponBoundHardCc == false) || weaponKey) && weaponOnly == false)
 			{
 				error = "skill_pools.csv skill " + to_string(e.skillId) + " is weapon-only (hard CC or weapon key) but pool '"
 					+ poolId + "' is used by non-weapon items";
