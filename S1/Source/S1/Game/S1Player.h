@@ -179,7 +179,7 @@ public:
 	/** Sum of active move_speed buffs — goes into MaxWalkSpeed the same way the server adds it to its ceiling. */
 	float GetMoveSpeedBuff() const { return MoveSpeedBuff; }
 
-	/** Blind (soft CC) — the view shrink itself is stage 4; the deadline is kept now so the debug readout shows it. */
+	/** Blind (soft CC) — US1BlindOverlayWidget blacks out all but GetBlindViewScale() of the view around the local player. */
 	bool IsBlinded() const;
 	float GetBlindViewScale() const { return BlindViewScale; }
 

@@ -399,14 +399,10 @@ protected:
 	float RecastUntil = 0.f;
 	uint64 RecastTargetId = 0;
 
-	/**
-	 * Blind (stage 4): the view shrinks to skill_rules blind_view_scale of the normal camera distance while the
-	 * server says we are blinded (S_CC blind), and eases back afterwards. The user's choice for "눈을 멀게 한다" (2026-10-10).
-	 */
+	/** Camera distance (the boom never zooms). Blind is drawn by US1BlindOverlayWidget, not by moving the camera (2026-10-11). */
 	float DefaultArmLength = 2600.f;
-	void TickBlindCamera(float DeltaTime);
 
-	/** Console: DebugBlind <seconds> - pretend the server blinded us, to look at the camera shrink without a bot (TEMP). */
+	/** Console: DebugBlind <seconds> - pretend the server blinded us, to look at the blind darkness without a bot (TEMP). */
 	UFUNCTION(Exec)
 	void DebugBlind(float Seconds = 2.f);
 

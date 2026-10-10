@@ -435,7 +435,7 @@ void AS1Player::ApplyCcEvent(const Protocol::CcEventInfo& Info, bool bApplied)
 		break;
 
 	case Protocol::CC_TYPE_BLIND:
-		// magnitude = skill_rules blind_view_scale. The camera shrink is stage 4; the deadline is kept now
+		// magnitude = skill_rules blind_view_scale - the share of the view US1BlindOverlayWidget leaves uncovered
 		BlindUntil = Until;
 		if (bApplied && Info.magnitude() > 0.f)
 			BlindViewScale = Info.magnitude();

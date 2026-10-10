@@ -4,7 +4,7 @@ dot_max_stacks,5
 wall_stun_ms,750
 recast_window_ms,2000
 execute_hp_pct,15
-blind_view_scale,0.5
+blind_view_scale,0.15
 pull_stop_cm,100
 pull_speed_cms,1600
 decoy_hp,1

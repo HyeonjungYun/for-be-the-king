@@ -6,6 +6,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
+#include "Game/UI/S1BlindOverlayWidget.h"
 #include "Game/UI/S1RunHudWidget.h"
 #include "Game/UI/S1RadarWidget.h"
 #include "Game/UI/S1WorldLabelWidget.h"
@@ -21,6 +22,11 @@ namespace
 	TWeakObjectPtr<US1EscapeSubsystem> GEscape;
 
 	constexpr int32 RunHudZOrder = 25;			// above S3 (20) so the result banner shows over base camp
+
+	// Blind darkness (2026-10-11) covers the world and the monster names but not the player's own panels (item UI 10),
+	// radar or run HUD — a blinded player loses the surroundings, not their UI
+	constexpr int32 BlindOverlayZOrder = 9;
+	constexpr int32 WorldLabelsZOrder = 8;
 	constexpr double WarningSeconds = 3.0;
 	constexpr double ResultSeconds = 6.0;
 
@@ -175,7 +181,12 @@ void US1EscapeSubsystem::EnsureHud()
 	// Monster names over heads — painted in screen space because the world text font has no Hangul
 	WorldLabels = CreateWidget<US1WorldLabelWidget>(PC, US1WorldLabelWidget::StaticClass());
 	if (WorldLabels != nullptr)
-		WorldLabels->AddToViewport(RunHudZOrder - 2);
+		WorldLabels->AddToViewport(WorldLabelsZOrder);
+
+	// Paints nothing until the server blinds the local player
+	BlindOverlay = CreateWidget<US1BlindOverlayWidget>(PC, US1BlindOverlayWidget::StaticClass());
+	if (BlindOverlay != nullptr)
+		BlindOverlay->AddToViewport(BlindOverlayZOrder);
 }
 
 void US1EscapeSubsystem::UpdateHud(double Now)

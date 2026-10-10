@@ -17,6 +17,7 @@ namespace Protocol
 class US1RunHudWidget;
 class US1RadarWidget;
 class US1WorldLabelWidget;
+class US1BlindOverlayWidget;
 
 /**
  * The client half of design/gdd/escape-timer.md — time left, tower gauges, the alarm, the run result.
@@ -82,4 +83,5 @@ private:
 	UPROPERTY() TObjectPtr<US1RunHudWidget> Hud;
 	UPROPERTY() TObjectPtr<US1RadarWidget> Radar;
 	UPROPERTY() TObjectPtr<US1WorldLabelWidget> WorldLabels;
+	UPROPERTY() TObjectPtr<US1BlindOverlayWidget> BlindOverlay;
 };
