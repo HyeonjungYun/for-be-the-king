@@ -571,6 +571,27 @@ void AS1Player::DrawStatusDebug()
 				Piece = Entry.Param;
 			else if (Entry.Param.StartsWith(TEXT("damage_mod:")))
 				Piece = FString::Printf(TEXT("dmg+%d%% %s"), FMath::RoundToInt(Entry.Magnitude * 100.f), *Entry.Param.Mid(11));
+			// 2차 로스터 (2026-10-11) - 크기가 % 가 아닌 버프: 보호막(체력) · 사거리(cm) · 평타 모드(켜짐/꺼짐)
+			else if (Entry.Param == TEXT("shield"))
+				Piece = FString::Printf(TEXT("SHIELD %d"), FMath::RoundToInt(Entry.Magnitude));
+			else if (Entry.Param == TEXT("scent"))
+				Piece = TEXT("SCENT");
+			else if (Entry.Param == TEXT("attack_range"))
+				Piece = FString::Printf(TEXT("range %+dcm"), FMath::RoundToInt(Entry.Magnitude));
+			else if (Entry.Param == TEXT("basic_only"))
+				Piece = TEXT("BASIC ONLY");
+			else if (Entry.Param == TEXT("basic_proc"))
+				Piece = TEXT("ON-HIT+");
+			else if (Entry.Param == TEXT("basic_dash"))
+				Piece = TEXT("DASH SLASH");
+			else if (Entry.Param == TEXT("basic_spin"))
+				Piece = TEXT("SPIN SLASH");
+			else if (Entry.Param == TEXT("basic_melee"))
+				Piece = FString::Printf(TEXT("MELEE %dcm"), FMath::RoundToInt(Entry.Magnitude));
+			else if (Entry.Param == TEXT("low_hp_bonus"))
+				Piece = TEXT("LAST STAND");
+			else if (Entry.Param == TEXT("thorns"))
+				Piece = FString::Printf(TEXT("thorns %d%%"), FMath::RoundToInt(Entry.Magnitude * 100.f));
 			else
 				Piece = FString::Printf(TEXT("%s %+d%%"), *Entry.Param, FMath::RoundToInt(Entry.Magnitude * 100.f));
 			break;
@@ -594,7 +615,8 @@ void AS1Player::DrawStatusDebug()
 			Piece = TEXT("INVULN");
 			break;
 		case Protocol::STATUS_DECOY:
-			Piece = TEXT("decoy out");
+			// 그림자 보내기(1126)의 분신은 param "clone" - 걸어가며 시야를 나눠 준다
+			Piece = (Entry.Param == TEXT("clone")) ? TEXT("clone out") : TEXT("decoy out");
 			break;
 		case Protocol::STATUS_STEALTH:
 			// 은신 (그림자 감추기 · 니힐, FoW) - 다른 사람에겐 이 캐릭터가 아예 오지 않으므로 나만 본다

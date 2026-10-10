@@ -71,6 +71,14 @@ public:
 
 	int32 NumWalls() const { return Walls.Num(); }
 
+	/**
+	 * A wall raised mid-fight (지각변동, S_ZONE param "wall") — the server adds the same box to its WallMap, so it
+	 * blocks sight there too. Removed when the zone ends or we leave the dungeon.
+	 */
+	void AddDynamicWall(uint64 Id, const FVector2D& Centre, float YawDeg, float HalfLength, float HalfThickness);
+	void RemoveDynamicWall(uint64 Id);
+	int32 NumDynamicWalls() const { return DynamicWalls.Num(); }
+
 private:
 	struct FWall
 	{
@@ -85,6 +93,7 @@ private:
 	static float RayDistanceIn(TArrayView<const FWall> Set, const FVector2D& Origin, const FVector2D& Dir, float MaxCm);
 
 	TArray<FWall> Walls;
+	TMap<uint64, FWall> DynamicWalls;
 	int32 LoadedFloor = -1;
 
 	float RadiusCm = 0.f;

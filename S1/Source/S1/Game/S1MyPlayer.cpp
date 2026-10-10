@@ -17,8 +17,10 @@
 #include "S1GameInstance.h"
 #include "Game/S1SkillTable.h"
 #include "Game/UI/S1ItemUIComponent.h"
+#include "Game/UI/S1TestModeComponent.h"
 #include "Game/UI/S1RadarWidget.h"
 #include "Game/Escape/S1EscapeSubsystem.h"
+#include "Game/Item/S1ItemSubsystem.h"
 #include "Game/Radar/S1RadarLogic.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
@@ -80,6 +82,7 @@ AS1MyPlayer::AS1MyPlayer()
 	FollowCamera->FieldOfView = 60.0f;
 
 	ItemUI = CreateDefaultSubobject<US1ItemUIComponent>(TEXT("ItemUI"));
+	TestMode = CreateDefaultSubobject<US1TestModeComponent>(TEXT("TestMode"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
@@ -104,6 +107,8 @@ void AS1MyPlayer::NotifyControllerChanged()
 
 	if (ItemUI != nullptr)
 		ItemUI->InitForLocalController();
+	if (TestMode != nullptr)
+		TestMode->InitForLocalController();
 }
 
 void AS1MyPlayer::SetupLocalController()
@@ -202,6 +207,10 @@ void AS1MyPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		// Tab / Esc for the item panels.
 		if (ItemUI != nullptr)
 			ItemUI->SetupInput(EnhancedInputComponent);
+
+		// F7 / F6 for the test mode panel.
+		if (TestMode != nullptr)
+			TestMode->SetupInput(EnhancedInputComponent);
 	}
 	else
 	{
@@ -448,6 +457,13 @@ void AS1MyPlayer::StartSlotCooldown(int32 EquipSlotValue, uint32 CooldownMs)
 		return;
 
 	SlotCooldownEndsAt[Index] = World->GetTimeSeconds() + (CooldownMs / 1000.f);
+}
+
+void AS1MyPlayer::ResetAllSlotCooldowns()
+{
+	for (float& EndsAt : SlotCooldownEndsAt)
+		EndsAt = 0.f;
+	UE_LOG(LogTemp, Log, TEXT("[TESTMODE] predicted cooldowns cleared"));
 }
 
 void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
@@ -922,6 +938,7 @@ AS1Player* AS1MyPlayer::FindEnemyNearCursorInRange() const
 		return nullptr;
 
 	const FVector MyLocation = GetActorLocation();
+	const float RangeCm = GetBasicAttackRangeCm();
 
 	AS1Player* Best = nullptr;
 	double BestCursorDistSq = TNumericLimits<double>::Max();
@@ -938,7 +955,7 @@ AS1Player* AS1MyPlayer::FindEnemyNearCursorInRange() const
 		// the player into fights they never walked up to — it never chases.
 		FVector ToTarget = OtherLocation - MyLocation;
 		ToTarget.Z = 0.0;
-		if (ToTarget.SizeSquared() > FMath::Square(ATTACK_RANGE_CM))
+		if (ToTarget.SizeSquared() > FMath::Square(RangeCm))
 			continue;
 
 		FVector ToCursor = OtherLocation - CursorLocation;
@@ -953,6 +970,37 @@ AS1Player* AS1MyPlayer::FindEnemyNearCursorInRange() const
 	}
 
 	return Best;
+}
+
+float AS1MyPlayer::GetBasicAttackRangeCm() const
+{
+	float RangeCm = ATTACK_RANGE_CM;
+
+	// equip_slot 1 = weapon (item_types.csv)
+	if (const US1ItemSubsystem* Items = US1ItemSubsystem::Get())
+	{
+		const FS1ItemView* Weapon = Items->GetEquipped(1);
+		const FS1ItemTypeDef* Type = Weapon != nullptr ? Items->GetCatalog().Find(Weapon->ItemTypeId) : nullptr;
+		if (Type != nullptr)
+			RangeCm = FMath::Max(ATTACK_RANGE_CM, Type->AttackRangeCm);		// EquipStats: max(base range, weapon range)
+	}
+
+	// Same order as the server's Player::RebuildCombatStats - melee replaces, then the range buffs add, floor 100 cm
+	float MeleeCm = 0.f;
+	float BonusCm = 0.f;
+	for (const FS1StatusEntry& Entry : Statuses)
+	{
+		if (Entry.Kind != Protocol::STATUS_BUFF)
+			continue;
+		if (Entry.Param == TEXT("basic_melee"))
+			MeleeCm = FMath::Max(MeleeCm, Entry.Magnitude);
+		else if (Entry.Param == TEXT("attack_range"))
+			BonusCm += Entry.Magnitude;
+	}
+	if (MeleeCm > 0.f)
+		RangeCm = MeleeCm;
+
+	return FMath::Max(100.f, RangeCm + BonusCm);
 }
 
 void AS1MyPlayer::TickSustainedAttack()
@@ -1125,7 +1173,7 @@ void AS1MyPlayer::DrawAimIndicator()
 	// The basic attack aims like a Target skill; it just has no table entry.
 	// combat-system.md Rule 1 puts it on the same flow on purpose — one thing to learn.
 	ES1SkillAimType AimType = ES1SkillAimType::Target;
-	float Radius = ATTACK_RANGE_CM;
+	float Radius = GetBasicAttackRangeCm();
 
 	if (AimingSlot != AIMING_BASIC_ATTACK)
 	{
@@ -1249,6 +1297,18 @@ void AS1MyPlayer::DebugDashNoNotice()
 
 	UE_LOG(LogTemp, Warning, TEXT("[DEBUG] dash without C_SKILL - expect [MOVE REJECT] on the server"));
 	RequestDash(GetActorForwardVector(), Dash->MoveDistCm, Dash->MoveSpeedCms);
+}
+
+void AS1MyPlayer::TestCmd(const FString& Args)
+{
+	// The server checks everything (FBTK_TEST_MODE=1) - this only forwards
+	Protocol::C_CHAT Pkt;
+	Pkt.set_msg(TCHAR_TO_UTF8(*(TEXT("/t ") + Args)));
+	SEND_PACKET(Pkt);
+	UE_LOG(LogTemp, Log, TEXT("[TESTMODE] console /t %s"), *Args);
+
+	if (Args.StartsWith(TEXT("cd")) || Args.StartsWith(TEXT("gear")))
+		ResetAllSlotCooldowns();
 }
 
 void AS1MyPlayer::DebugRadar()

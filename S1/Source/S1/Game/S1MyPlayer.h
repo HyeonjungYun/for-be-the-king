@@ -85,6 +85,13 @@ protected:
 	/** Living enemy inside attack range, nearest to the cursor. Null when there is none. */
 	class AS1Player* FindEnemyNearCursorInRange() const;
 
+	/**
+	 * Basic attack reach as the server will judge it: the worn weapon's attack_range_cm (item_types.csv), then the
+	 * buffs the server told us about — basic_melee replaces it (푸리아 · 은장도), attack_range adds to it (명경지수 ·
+	 * 통아 · 육량전). ATTACK_RANGE_CM before the first inventory sync. Display and the RMB range gate only.
+	 */
+	float GetBasicAttackRangeCm() const;
+
 	/** object_id under the cursor, or 0 when there is no valid target. */
 	uint64 AcquireTargetUnderCursor();
 
@@ -233,6 +240,13 @@ public:
 	UFUNCTION(Exec)
 	void DebugRadar();
 
+	/**
+	 * Test mode from the console — "TestCmd spawn 1 2 1 0 0" sends "/t spawn 1 2 1 0 0" (design/quick-specs/test-mode-2026-10-11.md).
+	 * The F7 panel sends the same commands; this is for automation and for anything the panel has no row for.
+	 */
+	UFUNCTION(Exec)
+	void TestCmd(const FString& Args);
+
 public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -242,6 +256,12 @@ public:
 	 * back with the wider sight (user decision 2026-10-11). Blind never moves the camera (US1BlindOverlayWidget draws it).
 	 */
 	void SetCameraScale(float Scale);
+
+	/** Where the cursor meets the ground — the test panel's F6 places dummies there (GetCursorWorldLocation, read-only). */
+	bool GetCursorGroundPoint(FVector& OutLocation) const { return GetCursorWorldLocation(OutLocation); }
+
+	/** Drops every predicted cooldown — the test panel's "쿨다운 초기화" and new test gear (the server zeroes its side too). */
+	void ResetAllSlotCooldowns();
 
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
@@ -256,6 +276,10 @@ protected:
 	/** Item UI — inventory panel and its keys (design/ux/item-ui.md). */
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<US1ItemUIComponent> ItemUI;
+
+	/** Test mode panel — F7 / F6 (design/quick-specs/test-mode-2026-10-11.md). The server must run FBTK_TEST_MODE=1. */
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<class US1TestModeComponent> TestMode;
 
 protected:
 

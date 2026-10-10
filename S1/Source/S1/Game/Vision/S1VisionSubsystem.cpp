@@ -74,6 +74,7 @@ void US1VisionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void US1VisionSubsystem::Deinitialize()
 {
 	Walls.Reset();
+	DynamicWalls.Reset();
 	Sources.Reset();
 	if (GVision.Get() == this)
 		GVision = nullptr;
@@ -120,6 +121,8 @@ void US1VisionSubsystem::HandleVision(const Protocol::S_VISION& Pkt)
 
 void US1VisionSubsystem::Clear()
 {
+	DynamicWalls.Reset();
+
 	if (RadiusCm <= 0.f && Sources.Num() == 0 && CameraScale == 1.f)
 		return;
 
@@ -185,9 +188,37 @@ bool US1VisionSubsystem::EnsureWalls(uint32 FloorId)
 	return Walls.Num() > 0;
 }
 
+void US1VisionSubsystem::AddDynamicWall(uint64 Id, const FVector2D& Centre, float YawDeg, float HalfLength, float HalfThickness)
+{
+	FWall Wall;
+	Wall.Centre = Centre;
+	Wall.HalfLength = HalfLength;
+	Wall.HalfThickness = HalfThickness;
+	const float YawRad = FMath::DegreesToRadians(YawDeg);
+	Wall.Axis = FVector2D(FMath::Cos(YawRad), FMath::Sin(YawRad));
+	Wall.BoundRadius = FMath::Sqrt(HalfLength * HalfLength + HalfThickness * HalfThickness);
+	DynamicWalls.Add(Id, Wall);
+
+	UE_LOG(LogTemp, Log, TEXT("[FOW] dynamic wall +%llu at=(%.0f,%.0f) len=%.0f"), Id, Centre.X, Centre.Y, HalfLength * 2.f);
+}
+
+void US1VisionSubsystem::RemoveDynamicWall(uint64 Id)
+{
+	if (DynamicWalls.Remove(Id) > 0)
+		UE_LOG(LogTemp, Log, TEXT("[FOW] dynamic wall -%llu"), Id);
+}
+
 float US1VisionSubsystem::RayDistance(const FVector2D& Origin, const FVector2D& Dir, float MaxCm) const
 {
-	return RayDistanceIn(Walls, Origin, Dir, MaxCm);
+	float Best = RayDistanceIn(Walls, Origin, Dir, MaxCm);
+	if (DynamicWalls.Num() > 0)
+	{
+		TArray<FWall, TInlineAllocator<8>> Extra;
+		for (const TPair<uint64, FWall>& Pair : DynamicWalls)
+			Extra.Add(Pair.Value);
+		Best = RayDistanceIn(Extra, Origin, Dir, Best);
+	}
+	return Best;
 }
 
 float US1VisionSubsystem::RayDistanceIn(TArrayView<const FWall> Set, const FVector2D& Origin, const FVector2D& Dir, float MaxCm)
@@ -247,6 +278,11 @@ void US1VisionSubsystem::CastRays(const FVector2D& Origin, float MaxCm, int32 Nu
 	{
 		if (FVector2D::Distance(Origin, Wall.Centre) - Wall.BoundRadius <= MaxCm)
 			Near.Add(Wall);
+	}
+	for (const TPair<uint64, FWall>& Pair : DynamicWalls)
+	{
+		if (FVector2D::Distance(Origin, Pair.Value.Centre) - Pair.Value.BoundRadius <= MaxCm)
+			Near.Add(Pair.Value);
 	}
 
 	for (int32 i = 0; i < NumRays; i++)

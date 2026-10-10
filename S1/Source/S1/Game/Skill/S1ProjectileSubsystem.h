@@ -22,9 +22,11 @@ struct FS1ClientZone
 	uint64 Id = 0;
 	FVector Pos = FVector::ZeroVector;
 	float RadiusCm = 0.f;
+	float Start = 0.f;
 	float Until = 0.f;
 	FColor Colour = FColor::White;
 	FString Param;
+	bool bFlash = false;		// shock · spin (2026-10-11) - a ring that grows once; the server sends no end packet for these
 };
 
 /** One projectile in flight on this client. Flown locally from the launch packet; the server decides what it hits. */
@@ -86,6 +88,14 @@ private:
 	/** Ground height for drawing - the caster's feet if we can see them, else the floor plane. */
 	float GroundZ(uint64 ActorId) const;
 
+	/**
+	 * 지각변동 (S_ZONE param "wall", 2026-10-11) - a box that blocks our own movement (the server's WallMap has the same
+	 * box, so C_MOVE through it is rejected anyway) and the fog's sight lines. Gone when the zone ends.
+	 */
+	void SpawnWallActor(const Protocol::ZoneInfo& Info);
+	void DestroyWallActor(uint64 ZoneId);
+	void DestroyAllWallActors();
+
 	struct FImpact
 	{
 		FVector Pos;
@@ -97,8 +107,10 @@ private:
 	TArray<FS1ClientProjectile> Flying;
 	TArray<FImpact> Impacts;
 	TArray<FS1ClientZone> Zones;
+	TMap<uint64, TWeakObjectPtr<AActor>> WallActors;
 	bool bInitialized = false;
 
 	static constexpr float ImpactSeconds = 0.35f;
 	static constexpr float TrailCm = 70.f;
+	static constexpr float WallHeightCm = 250.f;		// taller than a character, lower than the house walls
 };

@@ -3205,6 +3205,9 @@ class ZoneInfo final :
     kYFieldNumber = 5,
     kRadiusCmFieldNumber = 6,
     kDurationMsFieldNumber = 7,
+    kYawFieldNumber = 9,
+    kHalfLengthFieldNumber = 10,
+    kHalfThicknessFieldNumber = 11,
   };
   // string param = 8;
   void clear_param();
@@ -3283,6 +3286,33 @@ class ZoneInfo final :
   void _internal_set_duration_ms(uint32_t value);
   public:
 
+  // float yaw = 9;
+  void clear_yaw();
+  float yaw() const;
+  void set_yaw(float value);
+  private:
+  float _internal_yaw() const;
+  void _internal_set_yaw(float value);
+  public:
+
+  // float half_length = 10;
+  void clear_half_length();
+  float half_length() const;
+  void set_half_length(float value);
+  private:
+  float _internal_half_length() const;
+  void _internal_set_half_length(float value);
+  public:
+
+  // float half_thickness = 11;
+  void clear_half_thickness();
+  float half_thickness() const;
+  void set_half_thickness(float value);
+  private:
+  float _internal_half_thickness() const;
+  void _internal_set_half_thickness(float value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ZoneInfo)
  private:
   class _Internal;
@@ -3299,6 +3329,9 @@ class ZoneInfo final :
     float y_;
     float radius_cm_;
     uint32_t duration_ms_;
+    float yaw_;
+    float half_length_;
+    float half_thickness_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -5917,6 +5950,66 @@ inline void ZoneInfo::set_allocated_param(std::string* param) {
   }
 #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
   // @@protoc_insertion_point(field_set_allocated:Protocol.ZoneInfo.param)
+}
+
+// float yaw = 9;
+inline void ZoneInfo::clear_yaw() {
+  _impl_.yaw_ = 0;
+}
+inline float ZoneInfo::_internal_yaw() const {
+  return _impl_.yaw_;
+}
+inline float ZoneInfo::yaw() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.yaw)
+  return _internal_yaw();
+}
+inline void ZoneInfo::_internal_set_yaw(float value) {
+  
+  _impl_.yaw_ = value;
+}
+inline void ZoneInfo::set_yaw(float value) {
+  _internal_set_yaw(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.yaw)
+}
+
+// float half_length = 10;
+inline void ZoneInfo::clear_half_length() {
+  _impl_.half_length_ = 0;
+}
+inline float ZoneInfo::_internal_half_length() const {
+  return _impl_.half_length_;
+}
+inline float ZoneInfo::half_length() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.half_length)
+  return _internal_half_length();
+}
+inline void ZoneInfo::_internal_set_half_length(float value) {
+  
+  _impl_.half_length_ = value;
+}
+inline void ZoneInfo::set_half_length(float value) {
+  _internal_set_half_length(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.half_length)
+}
+
+// float half_thickness = 11;
+inline void ZoneInfo::clear_half_thickness() {
+  _impl_.half_thickness_ = 0;
+}
+inline float ZoneInfo::_internal_half_thickness() const {
+  return _impl_.half_thickness_;
+}
+inline float ZoneInfo::half_thickness() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.half_thickness)
+  return _internal_half_thickness();
+}
+inline void ZoneInfo::_internal_set_half_thickness(float value) {
+  
+  _impl_.half_thickness_ = value;
+}
+inline void ZoneInfo::set_half_thickness(float value) {
+  _internal_set_half_thickness(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.half_thickness)
 }
 
 // -------------------------------------------------------------------

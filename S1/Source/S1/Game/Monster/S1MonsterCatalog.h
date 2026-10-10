@@ -28,6 +28,7 @@ public:
 	bool LoadFromDirectory(const FString& Directory, FString& OutError);
 
 	const FS1MonsterTypeDef* Find(uint32 TypeId) const { return Types.Find(TypeId); }
+	const TMap<uint32, FS1MonsterTypeDef>& GetTypes() const { return Types; }
 	int32 Num() const { return Types.Num(); }
 
 	/** Loaded once from the item data directory (DefaultGame.ini ItemDataDirectory). Empty if the file is missing. */
