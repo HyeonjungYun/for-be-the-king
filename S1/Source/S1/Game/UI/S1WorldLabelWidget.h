@@ -29,6 +29,7 @@ private:
 	{
 		FText		Text;
 		FVector2D	Anchor = FVector2D::ZeroVector;		// widget space — bottom centre of the text
+		FLinearColor Colour = FLinearColor::White;		// monster name teal · CC amber · notice white (2026-10-11)
 	};
 
 	TArray<FLabel>	Labels;

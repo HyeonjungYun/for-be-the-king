@@ -75,6 +75,7 @@ namespace
 		if (S == TEXT("target"))		{ Out = ES1SkillAimType::Target; return true; }
 		if (S == TEXT("direction"))		{ Out = ES1SkillAimType::Direction; return true; }
 		if (S == TEXT("point"))			{ Out = ES1SkillAimType::Point; return true; }
+		if (S == TEXT("facing"))		{ Out = ES1SkillAimType::Facing; return true; }
 		return false;
 	}
 
@@ -205,6 +206,8 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 		const int32 ColAngle	= Csv.Column(TEXT("angle_deg"));
 		const int32 ColProjSpd	= Csv.Column(TEXT("projectile_speed_cms"));
 		const int32 ColPierce	= Csv.Column(TEXT("pierce"));
+		const int32 ColTags		= Csv.Column(TEXT("tags"));				// optional - older test fixtures have no such column
+		const int32 ColReqWeapon = Csv.Column(TEXT("requires_weapon"));		// optional
 
 		for (int32 Col : { ColId, ColPower, ColKind, ColCast, ColCooldown, ColCanMove, ColShape, ColAim, ColRange, ColWidth, ColRadius, ColAngle, ColProjSpd, ColPierce })
 		{
@@ -262,6 +265,19 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 			Def.CooldownMs = static_cast<uint32>(Cooldown);
 			Def.bCanMoveWhileCasting = (CanMove != 0);
 			Def.bPierce = (Pierce != 0);
+
+			// Weapon requirement (armor skills #106~) and tags - the client checks them before casting so a key that
+			// cannot fire says why instead of casting into a silent server refusal (백귀야행, 2026-10-11)
+			if (ColTags != INDEX_NONE && Cells.IsValidIndex(ColTags) && Cells[ColTags].IsEmpty() == false)
+				Cells[ColTags].ParseIntoArray(Def.Tags, TEXT(";"), true);
+			if (ColReqWeapon != INDEX_NONE && Cells.IsValidIndex(ColReqWeapon) && Cells[ColReqWeapon].IsEmpty() == false)
+			{
+				FString Weapon = Cells[ColReqWeapon];
+				FString Tag;
+				if (Weapon.Split(TEXT(":"), &Weapon, &Tag))
+					Def.RequiresWeaponTag = Tag;
+				Def.RequiresWeapon = Weapon;
+			}
 
 			Parsed.Add(Def.SkillId, MoveTemp(Def));
 		}

@@ -20,15 +20,24 @@ namespace
 	const TCHAR* MonsterTypesHeader = TEXT("monster_type_id,name_key,tier,max_hp,attack_power,attack_speed,attack_range_cm,armor,magic_resist,resistance,move_speed_cms,radius_cm,aggro_radius_cm,leash_radius_cm,search_s,give_up_s,assist_radius_cm,displace_immune,skill_id,drop_tier,drop_chance_pct,drop_rolls\n");
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1MonsterCatalogLiveTest, "S1.Monster.Catalog.ServerFile_ThreeTypes_SizesMatchTheGdd", GS1MonsterTestFlags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1MonsterCatalogLiveTest, "S1.Monster.Catalog.ServerFile_SevenTypes_SizesMatchTheGdd", GS1MonsterTestFlags)
 bool FS1MonsterCatalogLiveTest::RunTest(const FString& Parameters)
 {
-	// The same file the server reads — ../Server/Data next to the project
+	// The same file the server reads — ../Server/Data next to the project. 2026-10-11 packs: + wolf / wolf_alpha / boar / boar_chief
 	FS1MonsterCatalog Catalog;
 	FString Error;
 	const FString Directory = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../Server/Data")));
 	TestTrue(*FString::Printf(TEXT("load %s: %s"), *Directory, *Error), Catalog.LoadFromDirectory(Directory, Error));
-	TestEqual(TEXT("types"), Catalog.Num(), 3);
+	TestEqual(TEXT("types"), Catalog.Num(), 7);
+
+	// A pack leader reads bigger than its followers on screen (radius → scale)
+	const FS1MonsterTypeDef* Alpha = Catalog.Find(5);
+	const FS1MonsterTypeDef* Wolf = Catalog.Find(4);
+	if (TestNotNull(TEXT("wolf alpha"), Alpha) && TestNotNull(TEXT("wolf"), Wolf))
+	{
+		TestEqual(TEXT("alpha tier"), Alpha->Tier, FName(TEXT("leader")));
+		TestTrue(TEXT("leader is larger"), Alpha->RadiusCm > Wolf->RadiusCm);
+	}
 
 	const FS1MonsterTypeDef* Hound = Catalog.Find(1);
 	const FS1MonsterTypeDef* Boss = Catalog.Find(3);

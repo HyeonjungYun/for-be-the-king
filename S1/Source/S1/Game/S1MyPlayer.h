@@ -9,6 +9,7 @@
 class UInputMappingContext;
 class UInputAction;
 class US1ItemUIComponent;
+struct FS1SkillDef;
 
 /**
  * Binds one Input Action to one equipment slot.
@@ -84,6 +85,18 @@ protected:
 
 	/** Living enemy inside attack range, nearest to the cursor. Null when there is none. */
 	class AS1Player* FindEnemyNearCursorInRange() const;
+
+	/**
+	 * A basic attack that needs no target is active (일보일검 basic_dash · 난무 basic_spin, 2026-10-11) — the swing goes
+	 * toward the cursor whether or not anything stands there. The server decides what it hits.
+	 */
+	bool HasTargetlessBasic() const;
+
+	/** C_ATTACK { target 0, aim = cursor } on the same gate as SendAttack. */
+	void SendTargetlessAttack();
+
+	/** The armor skill's weapon condition (skills.csv requires_weapon) — false names the reason in OutWhy. */
+	bool MeetsWeaponRequirement(const FS1SkillDef& Def, FText& OutWhy) const;
 
 	/**
 	 * Basic attack reach as the server will judge it: the worn weapon's attack_range_cm (item_types.csv), then the
@@ -263,6 +276,19 @@ public:
 	/** Drops every predicted cooldown — the test panel's "쿨다운 초기화" and new test gear (the server zeroes its side too). */
 	void ResetAllSlotCooldowns();
 
+	/**
+	 * A passive fired server-side (염두 1090 · 맹수의 본능 1034, S_STATUS STATUS_COOLDOWN) — the slot holding that skill
+	 * starts its cooldown readout. Passives never go through the key, so this is the only way the client learns (2026-10-11).
+	 */
+	void StartCooldownForSkill(uint32 SkillId, uint32 CooldownMs);
+
+	/**
+	 * S_ATTACK for one of my own swings — the server's windup and attack interval (attack speed applied). The sustained
+	 * attack sends on that beat instead of a fixed 1 s, which left fast weapons idling and slow ones refused (2026-10-11
+	 * "우클릭을 꾹 누르고 있을 때는 본인 공격속도에 맞춰서").
+	 */
+	void OnMyAttackAccepted(uint32 WindupMs, uint32 IntervalMs);
+
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 	/**
@@ -338,6 +364,22 @@ protected:
 	 * already forgave.
 	 */
 	float LocalReadyAt = 0.f;
+
+	/**
+	 * The server's attack interval for us (S_ATTACK interval_ms) — attack speed from gear and buffs applied. Starts at
+	 * ATTACK_INTERVAL_SECONDS until the first swing is acknowledged.
+	 */
+	float AttackIntervalSec = 1.0f;
+
+	/** When the last C_ATTACK left, 0 once the server acknowledged it. No ack in ATTACK_ACK_TIMEOUT = refused, try again. */
+	float AttackSentAt = 0.f;
+	static constexpr float ATTACK_ACK_TIMEOUT = 0.3f;
+
+	/** Arrival slack so the next swing does not land a hair before the server's ready time and get dropped. */
+	static constexpr float ATTACK_SEND_SLACK = 0.04f;
+
+	/** The windup arc's length — the server's real windup once a swing is acknowledged. */
+	float LocalWindupSeconds = 0.3f;
 
 	/**
 	 * Mirrors the server's Formula C3 (windup_ratio 0.3 x attack_interval 1000ms).
@@ -417,6 +459,7 @@ protected:
 	float PendingDashDistCm = 0.f;
 	float PendingDashSpeedCms = 0.f;
 	bool bPendingDashIgnoresWalls = false;		// skill_effects.csv ignores_walls (유령 신랑의 저주)
+	bool bPendingDashThroughPawns = false;		// move param dash_through (그림자 베기 - characters do not stop it)
 
 	/**
 	 * Recast (kind recast — 피의 추적 · 올가미): after the first press lands, the same key within

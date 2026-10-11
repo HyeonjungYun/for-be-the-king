@@ -13,6 +13,7 @@
 #include "Game/S1Player.h"
 #include "Game/S1SkillTable.h"
 #include "Game/Vision/S1VisionSubsystem.h"
+#include "HAL/PlatformTime.h"
 #include "Protocol.pb.h"
 #include "S1GameInstance.h"
 
@@ -77,7 +78,111 @@ void US1ProjectileSubsystem::Clear()
 	Flying.Reset();
 	Impacts.Reset();
 	Zones.Reset();
+	HawkFlights.Reset();
 	DestroyAllWallActors();
+}
+
+void US1ProjectileSubsystem::AddHawkFlight(const FVector& From, const FVector& To, uint64 TargetId)
+{
+	const UWorld* World = GetWorld();
+	FS1HawkFlight Flight;
+	Flight.From = From;
+	Flight.To = To;
+	Flight.TargetId = TargetId;
+	Flight.Start = World ? World->GetTimeSeconds() : 0.f;
+	// About 25 m/s, never shorter than half a second - long enough to follow with the eye
+	Flight.Duration = FMath::Clamp(static_cast<float>(FVector::Dist2D(From, To)) / 2500.f, 0.5f, 1.6f);
+	HawkFlights.Add(Flight);
+	UE_LOG(LogTemp, Log, TEXT("[HAWK] fly to (%.0f, %.0f) target=%llu in %.2fs"), To.X, To.Y, TargetId, Flight.Duration);
+}
+
+void US1ProjectileSubsystem::DrawCone(UWorld* World, const FVector& Apex, const FVector& Dir, float RadiusCm, float AngleDeg, const FColor& Colour, float Thickness)
+{
+	const float Half = AngleDeg * 0.5f;
+	const FVector Left = Dir.RotateAngleAxis(-Half, FVector::UpVector);
+	const FVector Right = Dir.RotateAngleAxis(Half, FVector::UpVector);
+	DrawDebugLine(World, Apex, Apex + Left * RadiusCm, Colour, false, -1.f, 0, Thickness);
+	DrawDebugLine(World, Apex, Apex + Right * RadiusCm, Colour, false, -1.f, 0, Thickness);
+
+	const int32 Segments = FMath::Max(6, FMath::RoundToInt(AngleDeg / 8.f));
+	FVector Prev = Apex + Left * RadiusCm;
+	for (int32 i = 1; i <= Segments; i++)
+	{
+		const FVector Next = Apex + Dir.RotateAngleAxis(-Half + AngleDeg * i / Segments, FVector::UpVector) * RadiusCm;
+		DrawDebugLine(World, Prev, Next, Colour, false, -1.f, 0, Thickness);
+		Prev = Next;
+	}
+}
+
+void US1ProjectileSubsystem::TickHawks(UWorld* World, float Now)
+{
+	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
+	if (GameInstance == nullptr)
+		return;
+
+	// A small paper bird: two wings in a V around a body dot, banking with its heading
+	auto DrawHawk = [World](const FVector& At, const FVector& Heading)
+	{
+		const FColor Paper(245, 240, 225);
+		const FVector Fwd = Heading.GetSafeNormal2D();
+		const FVector Side(-Fwd.Y, Fwd.X, 0.f);
+		DrawDebugLine(World, At, At - Fwd * 35.f + Side * 55.f, Paper, false, -1.f, 0, 5.f);
+		DrawDebugLine(World, At, At - Fwd * 35.f - Side * 55.f, Paper, false, -1.f, 0, 5.f);
+		DrawDebugSphere(World, At, 12.f, 6, Paper, false, -1.f, 0, 3.f);
+	};
+
+	// Circling (S_VISION source kind hawk - follows the enemy it found)
+	if (const US1VisionSubsystem* Vision = US1VisionSubsystem::Get())
+	{
+		const double Wall = FPlatformTime::Seconds();
+		for (const FS1VisionSource& Source : Vision->GetSources())
+		{
+			if (Source.Kind != TEXT("hawk") || Source.FollowId == 0 || (Source.Until > 0.0 && Wall >= Source.Until))
+				continue;
+
+			const TWeakObjectPtr<AS1Player>* Found = GameInstance->Players.Find(Source.FollowId);
+			const AS1Player* Prey = Found != nullptr ? Found->Get() : nullptr;
+			if (Prey == nullptr)
+				continue;
+
+			constexpr float OrbitCm = 160.f;
+			const float Angle = Now * 2.4f;
+			const FVector Centre = Prey->GetActorLocation() + FVector(0.f, 0.f, 230.f);
+			const FVector At = Centre + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * OrbitCm;
+			const FVector Heading(-FMath::Sin(Angle), FMath::Cos(Angle), 0.f);
+			DrawHawk(At, Heading);
+		}
+	}
+
+	// Flights to a far enemy - vanish over its head with a small flash
+	for (int32 i = HawkFlights.Num() - 1; i >= 0; i--)
+	{
+		const FS1HawkFlight& F = HawkFlights[i];
+		const float T = (Now - F.Start) / F.Duration;
+		if (T >= 1.25f)
+		{
+			HawkFlights.RemoveAtSwap(i);
+			continue;
+		}
+
+		FVector To = F.To;
+		if (const TWeakObjectPtr<AS1Player>* Found = GameInstance->Players.Find(F.TargetId))
+		{
+			if (const AS1Player* Prey = Found->Get())
+				To = Prey->GetActorLocation();
+		}
+
+		const FVector From = F.From + FVector(0.f, 0.f, 200.f);
+		const FVector Above = To + FVector(0.f, 0.f, 230.f);
+		if (T < 1.f)
+		{
+			DrawHawk(FMath::Lerp(From, Above, T), Above - From);
+		}
+		else
+		{
+			DrawDebugCircle(World, Above, 60.f + 200.f * (T - 1.f), 20, FColor(245, 240, 225), false, -1.f, 0, 3.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		}
+	}
 }
 
 void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
@@ -103,7 +208,11 @@ void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
 		Z.Start = Now;
 		Z.Until = Now + Info.duration_ms() / 1000.f;
 		Z.Param = Param;
-		Z.bFlash = (Param == TEXT("shock") || Param == TEXT("spin"));
+		Z.bFlash = (Param == TEXT("shock") || Param == TEXT("spin") || Param == TEXT("slash"));
+		Z.bExpires = (Param == TEXT("ping"));
+		Z.AngleDeg = Info.angle_deg();
+		Z.Dir = FVector(1.f, 0.f, 0.f).RotateAngleAxis(Info.yaw(), FVector::UpVector);
+		Z.FollowId = Info.follow_id();
 
 		// Colour by what it does - poison green, fire orange, lightning blue, mist grey, arrows tan, water blue
 		if (Z.Param == TEXT("poison"))				Z.Colour = FColor(110, 200, 60);
@@ -115,6 +224,8 @@ void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
 		else if (Z.Param == TEXT("puddle"))			Z.Colour = FColor(70, 150, 255);
 		else if (Z.Param == TEXT("shock"))			Z.Colour = FColor(230, 170, 90);
 		else if (Z.Param == TEXT("spin"))			Z.Colour = FColor(225, 225, 255);
+		else if (Z.Param == TEXT("slash"))			Z.Colour = FColor(225, 225, 255);
+		else if (Z.Param == TEXT("ping"))			Z.Colour = FColor(255, 70, 60);
 		else										Z.Colour = ColourFor(Info.effect_id());
 
 		Zones.Add(Z);
@@ -260,18 +371,23 @@ void US1ProjectileSubsystem::OnEnded(const Protocol::ProjectileEndInfo& Info)
 void US1ProjectileSubsystem::Tick(float DeltaTime)
 {
 	UWorld* World = GetWorld();
-	if (World == nullptr || (Flying.Num() == 0 && Impacts.Num() == 0 && Zones.Num() == 0))
+	if (World == nullptr)
 		return;
 
 	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
 	const float Now = World->GetTimeSeconds();
 
+	TickHawks(World, Now);
+
+	if (Flying.Num() == 0 && Impacts.Num() == 0 && Zones.Num() == 0)
+		return;
+
 	// Zones - the outline plus a slow inner pulse so a 5 s circle does not read as a static decal
 	for (int32 i = Zones.Num() - 1; i >= 0; i--)
 	{
-		const FS1ClientZone& Z = Zones[i];
+		FS1ClientZone& Z = Zones[i];
 
-		// Shockwave · spin slash - one growing ring, gone at its own deadline (no end packet comes)
+		// Shockwave · spin slash · dash slash - one growing ring (or cone), gone at its own deadline (no end packet comes)
 		if (Z.bFlash)
 		{
 			if (Now > Z.Until)
@@ -281,7 +397,33 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 			}
 			const float Span = FMath::Max(Z.Until - Z.Start, 0.05f);
 			const float Grow = FMath::Clamp((Now - Z.Start) / Span, 0.f, 1.f);
-			DrawDebugCircle(World, Z.Pos, Z.RadiusCm * (0.35f + 0.65f * Grow), 32, Z.Colour, false, -1.f, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			if (Z.AngleDeg > 0.f)
+				DrawCone(World, Z.Pos, Z.Dir, Z.RadiusCm * (0.5f + 0.5f * Grow), Z.AngleDeg, Z.Colour, 6.f);
+			else
+				DrawDebugCircle(World, Z.Pos, Z.RadiusCm * (0.35f + 0.65f * Grow), 32, Z.Colour, false, -1.f, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			continue;
+		}
+
+		// 맹수의 탐색 ping - a pulsing red mark on the enemy, riding on it while this client knows it (2026-10-11)
+		if (Z.bExpires)
+		{
+			if (Now > Z.Until)
+			{
+				Zones.RemoveAtSwap(i);
+				continue;
+			}
+			if (Z.FollowId != 0 && GameInstance != nullptr)
+			{
+				if (const TWeakObjectPtr<AS1Player>* Found = GameInstance->Players.Find(Z.FollowId))
+				{
+					if (const AS1Player* Actor = Found->Get())
+						Z.Pos = Actor->GetActorLocation() - FVector(0.f, 0.f, 90.f);
+				}
+			}
+			const float Beat = FMath::Fmod((Now - Z.Start) * 1.5f, 1.f);
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 24, Z.Colour, false, -1.f, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm * (1.f + 1.5f * Beat), 24, Z.Colour, false, -1.f, 0, 2.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugLine(World, Z.Pos, Z.Pos + FVector(0.f, 0.f, 260.f), Z.Colour, false, -1.f, 0, 3.f);
 			continue;
 		}
 
@@ -291,8 +433,16 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 			continue;
 		}
 
-		DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 32, Z.Colour, false, -1.f, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		const float Pulse = FMath::Fmod(Now * 0.8f, 1.f);
+		if (Z.AngleDeg > 0.f)
+		{
+			// Cone zone (네불라 아르카나) - the outline plus an arc sweeping outward
+			DrawCone(World, Z.Pos, Z.Dir, Z.RadiusCm, Z.AngleDeg, Z.Colour, 4.f);
+			DrawCone(World, Z.Pos, Z.Dir, Z.RadiusCm * FMath::Max(Pulse, 0.05f), Z.AngleDeg, Z.Colour, 1.5f);
+			continue;
+		}
+
+		DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 32, Z.Colour, false, -1.f, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		DrawDebugCircle(World, Z.Pos, Z.RadiusCm * Pulse, 24, Z.Colour, false, -1.f, 0, 1.5f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 	}
 
@@ -321,6 +471,22 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 			P.RemainingCm -= Step;
 		}
 		P.Pos += P.Dir * Step;
+
+		// A wide projectile is a blade of force, not a bolt - a crescent across its path (검의 함성 1112 반원 검기, 2026-10-11)
+		if (P.RadiusCm >= 90.f)
+		{
+			constexpr int32 Segments = 10;
+			constexpr float SweepDeg = 150.f;
+			const FVector Centre = P.Pos - P.Dir * (P.RadiusCm * 0.6f);
+			FVector Prev = Centre + P.Dir.RotateAngleAxis(-SweepDeg * 0.5f, FVector::UpVector) * P.RadiusCm;
+			for (int32 s = 1; s <= Segments; s++)
+			{
+				const FVector Next = Centre + P.Dir.RotateAngleAxis(-SweepDeg * 0.5f + SweepDeg * s / Segments, FVector::UpVector) * P.RadiusCm;
+				DrawDebugLine(World, Prev, Next, P.Colour, false, -1.f, 0, 7.f);
+				Prev = Next;
+			}
+			continue;
+		}
 
 		DrawDebugSphere(World, P.Pos, P.RadiusCm * 0.5f, 8, P.Colour, false, -1.f, 0, 2.f);
 		DrawDebugLine(World, P.Pos - P.Dir * TrailCm, P.Pos, P.Colour, false, -1.f, 0, 3.f);

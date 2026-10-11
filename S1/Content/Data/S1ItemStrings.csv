@@ -11,6 +11,17 @@ notice.retry_later,잠시 후 다시 시도해 주세요,ITEM_DB_ERROR
 notice.loot_partial,{0}개를 가져오지 못했습니다(인벤토리 가득 참),take-all partial - {0} count
 notice.vault_equip,반입으로 옮겨야 착용할 수 있습니다,S3 right-click on a vault item
 notice.enter_rejected,지금은 입장할 수 없습니다,S3 - S_ENTER_GAME refused (one message for every reason - 2026-10-04)
+notice.skill_needs_target,적을 클릭해야 합니다,skill polish 2026-10-11 - target skill fired at empty ground
+notice.skill_out_of_range,너무 멉니다,skill polish 2026-10-11 - target skill out of range
+notice.skill_needs_weapon,지금 무기로는 쓸 수 없습니다,skill polish 2026-10-11 - armor skill requires_weapon
+notice.skill_needs_ghost,원혼 스킬이 있는 검이 필요합니다,skill polish 2026-10-11 - requires_weapon sword:ghost (백귀야행)
+cc.stun,기절,skill polish 2026-10-11 - CC words over a creature
+cc.launch,에어본,CC words
+cc.root,속박,CC words
+cc.taunt,도발,CC words
+cc.blind,실명,CC words
+cc.silence,침묵,CC words
+cc.slow,둔화,CC words
 bag.title_bag,가방,S2 header
 bag.title_chest,상자,S2 header
 bag.opening,여는 중,shown after 300 ms
@@ -101,6 +112,10 @@ item.601,노리개,TEMP name
 monster.hound,떠돌이 들개,monster-ai.md roster 1 (임시 이름 - narrative 확정 전)
 monster.husk,허깨비 병사,monster-ai.md roster 2 (임시)
 monster.house_boss,집 보스,monster-ai.md roster 3 (임시)
+monster.wolf,들개,monster-ai.md § J 무리 - 탐지형 기본 (2026-10-11 임시 이름)
+monster.wolf_alpha,우두머리 들개,monster-ai.md § J 무리 - 탐지형 우두머리 (임시)
+monster.boar,멧돼지,monster-ai.md § J 무리 - 반응형 기본 (임시)
+monster.boar_chief,우두머리 멧돼지,monster-ai.md § J 무리 - 반응형 우두머리 (임시)
 run.timer,남은 시간 {0},escape-timer.md run HUD
 run.warning,{0} 남았다 - 타워로 가라,run_warning_s 단계
 run.gauge,탈출 {0}%,타워 게이지
@@ -271,7 +286,7 @@ skill.1044,전염,#44 무기(단검) AP
 skill.1044.desc,"마력이 깃든 독을 적에게 주입한다. 독은 몸속에 잠복해 있다가 잠시 뒤 터져 나와 대상에게 큰 피해를 입히고, 주위의 적들에게 퍼진다. 독이 퍼진 적들은 중독 상태가 되어 지속 피해를 입는다.",
 skill.1044.family,단검 계열,
 skill.1045,낚아채기,#45 무기(단검) AP
-skill.1045.desc,밧줄을 매단 단검을 던져 적을 포박한다. 밧줄을 당기면 포박한 적을 순간적으로 자신 쪽으로 끌어당길 수 있다.,
+skill.1045.desc,밧줄을 매단 단검을 던진다. 단검에 맞은 적은 포박되어 그 즉시 자신 쪽으로 끌려온다. 던지는 동안에도 움직일 수 있다.,
 skill.1045.family,단검 계열,
 skill.1046,저격,#46 무기(활) AD
 skill.1046.desc,먼 거리의 적에게 화살을 쏘아 피해를 입힌다.,
@@ -479,8 +494,8 @@ skill.1107.family,갑옷 계열,
 skill.1108,질풍노도,#108 갑옷 AD
 skill.1108.desc,"망치를 들고 있을 때만 사용할 수 있다. 망치를 계속 휘두르다가 그 원심력을 이용해 앞으로 날아간다. 날아가는 경로에 부딪힌 적들은 피해를 입고 옆으로 밀려난다. 휘두르는 도중 망치가 벽에 닿으면 그 충격파로 주위의 적들은 잠시 동안 이동 속도가 느려지고, 시전자도 잠시 동안 기절한다.",
 skill.1108.family,갑옷 계열,
-skill.1109,좌충우돌,#109 갑옷 AD
-skill.1109.desc,망치를 들고 있을 때만 사용할 수 있다. 망치를 크게 두 번 휘둘러 맞은 적들에게 피해를 입히고 뒤로 밀어낸다.,
+skill.1109,저 멀리,#109 갑옷 AD
+skill.1109.desc,망치를 들고 있을 때만 사용할 수 있다. 망치를 크게 휘둘러 한 명의 적을 저 멀리로 날려보낸다. 날아가던 적이 벽에 부딪히면 날아간 거리에 비례하여 피해를 입는다.,
 skill.1109.family,갑옷 계열,
 skill.1110,철각,#110 갑옷 AD
 skill.1110.desc,망치를 들고 있을 때만 사용할 수 있다. 망치를 버팀목 삼아 앞으로 발차기를 날려 적에게 피해를 입히고 뒤로 밀어낸다.,

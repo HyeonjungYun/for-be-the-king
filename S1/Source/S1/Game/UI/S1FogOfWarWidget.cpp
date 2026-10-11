@@ -28,6 +28,7 @@ namespace
 	constexpr int32 OwnRays = 240;			// 1.5 degrees - 39 cm apart at 15 m, under the feather
 	constexpr int32 ExtraRays = 120;
 	constexpr float FeatherCm = 90.f;		// inside the sight edge by this much = fully seen
+	constexpr float RevealHoleCm = 150.f;	// a known creature outside my sight shows through a hole this size (feather included)
 }
 
 void US1FogOfWarWidget::NativeOnInitialized()
@@ -127,6 +128,25 @@ void US1FogOfWarWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 		View.RadiusCm = Source.RadiusCm;
 		if (Source.bNeedsLos)
 			Vision->CastRays(View.Pos, View.RadiusCm, ExtraRays, View.Rays);
+	}
+
+	// Creatures this client knows but my sight does not cover - revealed by a hit, 외로운 외침, the hawk's far flight. Only
+	// the creature shows through the dark, not the ground around it (2026-10-11 "암흑 시야에서 적만 잠깐 보였으면"). The
+	// server decides who is known (S_SPAWN per viewer); a small hole per actor is all the client adds
+	const float OwnRadiusSq = FMath::Square(Vision->GetRadiusCm() - FeatherCm);
+	for (const TPair<uint64, TWeakObjectPtr<AS1Player>>& Pair : GameInstance->Players)
+	{
+		const AS1Player* Other = Pair.Value.Get();
+		if (Other == nullptr || Other == Me)
+			continue;
+
+		const FVector2D At(Other->GetActorLocation().X, Other->GetActorLocation().Y);
+		if (FVector2D::DistSquared(At, Views[0].Pos) < OwnRadiusSq && Vision->RayDistance(Views[0].Pos, (At - Views[0].Pos).GetSafeNormal(), Vision->GetRadiusCm()) >= FVector2D::Distance(At, Views[0].Pos))
+			continue;		// plainly in my own sight already
+
+		FSourceView& Hole = Views.AddDefaulted_GetRef();
+		Hole.Pos = At;
+		Hole.RadiusCm = RevealHoleCm;
 	}
 
 	// ── Screen grid -> ground plane under my feet ──

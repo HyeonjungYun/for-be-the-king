@@ -19,6 +19,9 @@ namespace
 	constexpr float LiftPerScalePx = 12.f;
 
 	const FLinearColor MonsterTeal(FColor(25, 158, 112));		// art bible ⑩ — #199E70
+	const FLinearColor CcAmber(FColor(255, 176, 64));			// CC words - warm, apart from the teal names and the white numbers
+	const FLinearColor NoticeWhite(FColor(240, 240, 240));
+	constexpr float LineStepPx = 19.f;							// one label line higher per extra line (16 overlapped the name - 2026-10-11 screenshot)
 
 	FSlateFontInfo LabelFont()
 	{
@@ -53,16 +56,43 @@ void US1WorldLabelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 	for (const TPair<uint64, TWeakObjectPtr<AS1Player>>& Pair : GameInstance->Players)
 	{
 		const AS1Player* Creature = Pair.Value.Get();
-		if (Creature == nullptr || Creature->IsMonster() == false || Creature->IsDown() || Creature->GetMonsterName().IsEmpty())
+		if (Creature == nullptr || Creature->IsDown())
 			continue;
 
 		FVector2D Position;
 		if (UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, Creature->GetActorLocation(), Position, /*bPlayerViewportRelative*/ true) == false)
 			continue;
 
-		FLabel& Label = Labels.AddDefaulted_GetRef();
-		Label.Text = Creature->GetMonsterName();
-		Label.Anchor = Position - FVector2D(0.f, LiftPx + LiftPerScalePx * Creature->GetActorScale3D().X);
+		float Lift = LiftPx + LiftPerScalePx * Creature->GetActorScale3D().X;
+
+		if (Creature->IsMonster() && Creature->GetMonsterName().IsEmpty() == false)
+		{
+			FLabel& Label = Labels.AddDefaulted_GetRef();
+			Label.Text = Creature->GetMonsterName();
+			Label.Anchor = Position - FVector2D(0.f, Lift);
+			Label.Colour = MonsterTeal;
+			Lift += LineStepPx;
+		}
+
+		// Active CC in words over every creature - stun · slow · blind on a fixed dummy show nothing else (2026-10-11)
+		const FText Cc = Creature->GetCcLabel();
+		if (Cc.IsEmpty() == false)
+		{
+			FLabel& Label = Labels.AddDefaulted_GetRef();
+			Label.Text = Cc;
+			Label.Anchor = Position - FVector2D(0.f, Lift);
+			Label.Colour = CcAmber;
+			Lift += LineStepPx;
+		}
+
+		// Why a key did nothing - "대상을 클릭하세요" (owner only: only our own pawn ever sets one)
+		if (const FText* Notice = Creature->GetFloatingNotice())
+		{
+			FLabel& Label = Labels.AddDefaulted_GetRef();
+			Label.Text = *Notice;
+			Label.Anchor = Position - FVector2D(0.f, Lift + 6.f);
+			Label.Colour = NoticeWhite;
+		}
 	}
 }
 
@@ -83,7 +113,7 @@ int32 US1WorldLabelWidget::NativePaint(const FPaintArgs& Args, const FGeometry& 
 
 		FSlateDrawElement::MakeText(OutDrawElements, Layer + 1,
 			AllottedGeometry.ToPaintGeometry(Size, FSlateLayoutTransform(TopLeft)),
-			Label.Text, Font, ESlateDrawEffect::None, MonsterTeal);
+			Label.Text, Font, ESlateDrawEffect::None, Label.Colour);
 	}
 
 	return Layer + 1;

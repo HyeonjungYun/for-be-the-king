@@ -110,6 +110,7 @@ void AS1Player::Tick(float DeltaTime)
 	TickDash(DeltaTime);
 
 	TickCc();
+	TickAirborne();
 	DrawCombatDebug();
 	TickDamagePopups();
 
@@ -139,7 +140,7 @@ void AS1Player::TickRemotePlayer(float DeltaTime)
 	}
 
 	const FVector CurLocation = GetActorLocation();
-	const FVector DestLocation = ToVector(*DestInfo);
+	const FVector DestLocation = ToVector(*DestInfo) + FVector(0.f, 0.f, GroundLiftCm);
 
 	if (FVector::Dist(CurLocation, DestLocation) > TELEPORT_THERESHOLD)
 	{
@@ -198,7 +199,7 @@ void AS1Player::TickCc()
 		Movement->StopMovementImmediately();
 }
 
-void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 NewMaxHp)
+void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 NewMaxHp, bool bMagic)
 {
 	if (NewMaxHp > 0)
 	{
@@ -268,7 +269,8 @@ void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 N
 	}
 
 	Popup.Text->SetText(FText::AsNumber(Damage));
-	Popup.Text->SetTextRenderColor(bIsCrit ? FColor::Yellow : FColor::White);
+	// Crit yellow, magic violet, physical white - a magic proc riding a physical swing (혼원일체 · 점화) reads as its own number
+	Popup.Text->SetTextRenderColor(bIsCrit ? FColor::Yellow : (bMagic ? FColor(200, 150, 255) : FColor::White));
 	Popup.Text->SetWorldSize(DAMAGE_POPUP_TEXT_SIZE * (bIsCrit ? 1.6f : 1.f));
 	Popup.Text->SetVisibility(true);
 
@@ -422,8 +424,22 @@ void AS1Player::ApplyCcEvent(const Protocol::CcEventInfo& Info, bool bApplied)
 	case Protocol::CC_TYPE_STUN:		StunUntil = Until;		break;
 	case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
 	case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
-	case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
 	case Protocol::CC_TYPE_TAUNT:		TauntUntil = Until;		break;
+	case Protocol::CC_TYPE_SILENCE:		SilenceUntil = Until;	break;
+
+	case Protocol::CC_TYPE_LAUNCH:
+		// The lift arc starts here and spans the CC (TickAirborne). An expiry lands it now
+		LaunchUntil = Until;
+		if (bApplied)
+		{
+			LaunchStart = Now;
+			LaunchDuration = Info.duration_ms() / 1000.f;
+		}
+		else
+		{
+			LaunchDuration = 0.f;
+		}
+		break;
 
 	case Protocol::CC_TYPE_SLOW:
 		// Individual slow sources expire independently on the server, which recomputes the
@@ -452,6 +468,71 @@ bool AS1Player::IsBlinded() const
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	return Now < BlindUntil;
+}
+
+FText AS1Player::GetCcLabel() const
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	// String Table keys (S1ItemStrings.csv cc.*) - Hangul, so it is painted by the UI font, never DrawDebugString
+	TArray<FText> Parts;
+	auto Add = [&Parts](bool bActive, const TCHAR* Key)
+	{
+		if (bActive)
+			Parts.Add(FText::FromStringTable(TEXT("S1Items"), Key));
+	};
+
+	Add(Now < StunUntil, TEXT("cc.stun"));
+	Add(Now < LaunchUntil, TEXT("cc.launch"));
+	Add(Now < RootUntil, TEXT("cc.root"));
+	Add(Now < TauntUntil, TEXT("cc.taunt"));
+	Add(Now < BlindUntil, TEXT("cc.blind"));
+	Add(Now < SilenceUntil, TEXT("cc.silence"));
+	Add(ActiveSlow > 0.f, TEXT("cc.slow"));
+
+	if (Parts.Num() == 0)
+		return FText::GetEmpty();
+	return FText::Join(FText::FromString(TEXT(" · ")), Parts);
+}
+
+void AS1Player::ShowFloatingNotice(const FText& Text, float Seconds)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	FloatingNotice = Text;
+	FloatingNoticeUntil = Now + Seconds;
+}
+
+const FText* AS1Player::GetFloatingNotice() const
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	return (Now < FloatingNoticeUntil && FloatingNotice.IsEmpty() == false) ? &FloatingNotice : nullptr;
+}
+
+void AS1Player::TickAirborne()
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (MeshComp == nullptr)
+		return;
+
+	if (bMeshBaseCaptured == false)
+	{
+		MeshBaseOffset = MeshComp->GetRelativeLocation();
+		bMeshBaseCaptured = true;
+	}
+
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	float Lift = 0.f;
+	if (LaunchDuration > 0.f && Now < LaunchStart + LaunchDuration)
+	{
+		// Up and back down over the CC - peak at the middle (4h·t·(1-t))
+		constexpr float PeakCm = 140.f;
+		const float T = FMath::Clamp((Now - LaunchStart) / LaunchDuration, 0.f, 1.f);
+		Lift = 4.f * PeakCm * T * (1.f - T);
+	}
+
+	const FVector Want = MeshBaseOffset + FVector(0.f, 0.f, Lift);
+	if (MeshComp->GetRelativeLocation().Equals(Want, 0.5f) == false)
+		MeshComp->SetRelativeLocation(Want);
 }
 
 void AS1Player::ApplyKnockback(const FVector& Direction, float DistCm, float SpeedCms)
@@ -647,12 +728,15 @@ void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
 	// A snapshot is the whole truth, so start from cleared deadlines. Anything the server
 	// did not list has already expired — merging instead of overwriting would let a single
 	// missed expiry event pin the character in a CC forever.
+	const bool bWasAirborne = Now < LaunchUntil;
+
 	StunUntil = 0.f;
 	RootUntil = 0.f;
 	KnockbackUntil = 0.f;
 	LaunchUntil = 0.f;
 	BlindUntil = 0.f;
 	TauntUntil = 0.f;
+	SilenceUntil = 0.f;
 
 	for (const Protocol::CcSlot& Slot : State.slots())
 	{
@@ -663,8 +747,17 @@ void AS1Player::ApplyCcState(const Protocol::CcStateInfo& State)
 		case Protocol::CC_TYPE_STUN:		StunUntil = Until;		break;
 		case Protocol::CC_TYPE_ROOT:		RootUntil = Until;		break;
 		case Protocol::CC_TYPE_KNOCKBACK:	KnockbackUntil = Until;	break;
-		case Protocol::CC_TYPE_LAUNCH:		LaunchUntil = Until;	break;
 		case Protocol::CC_TYPE_TAUNT:		TauntUntil = Until;		break;
+		case Protocol::CC_TYPE_SILENCE:		SilenceUntil = Until;	break;
+		case Protocol::CC_TYPE_LAUNCH:
+			LaunchUntil = Until;
+			if (bWasAirborne == false)
+			{
+				// Seen for the first time mid-air (FoW snapshot) - fly the rest of the arc from here
+				LaunchStart = Now;
+				LaunchDuration = Slot.remaining_ms() / 1000.f;
+			}
+			break;
 		case Protocol::CC_TYPE_BLIND:
 			BlindUntil = Until;
 			if (Slot.magnitude() > 0.f)
@@ -857,7 +950,58 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 	}
 }
 
-void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedCms, bool bIgnoresWalls)
+void AS1Player::PlayTargetStrike(UWorld* World, uint32 EffectId, AS1Player* Target)
+{
+	if (World == nullptr || Target == nullptr)
+		return;
+
+	const FVector At = Target->GetActorLocation();
+	const FVector Feet = At - FVector(0.f, 0.f, 90.f);
+	const FS1SkillDef* Def = FS1SkillTable::Find(EffectId);
+	constexpr float Life = 0.6f;
+
+	UE_LOG(LogTemp, Log, TEXT("[SKILL FX] strike effect=%u on=%llu"), EffectId, Target->GetPlayerInfo() != nullptr ? Target->GetPlayerInfo()->object_id() : 0);
+
+	// Ghost tag (혼원일체 원혼) - violet rings rising off the target
+	if (Def != nullptr && Def->HasTag(TEXT("ghost")))
+	{
+		const FColor Violet(190, 120, 255);
+		for (int32 i = 0; i < 3; i++)
+			DrawDebugCircle(World, Feet + FVector(0.f, 0.f, 40.f + 45.f * i), 55.f - 10.f * i, 20, Violet, false, Life, 0, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		DrawDebugLine(World, Feet, Feet + FVector(0.f, 0.f, 170.f), Violet, false, Life, 0, 3.f);
+		return;
+	}
+
+	// Lightning (낙뢰 · AP skills that strike a mark) - a jagged bolt from above onto the target
+	if (Def != nullptr && Def->Power == ES1SkillPower::Ap)
+	{
+		const FColor Bolt(150, 190, 255);
+		FVector Prev = At + FVector(0.f, 0.f, 700.f);
+		const int32 Kinks = 5;
+		for (int32 i = 1; i <= Kinks; i++)
+		{
+			const float T = static_cast<float>(i) / Kinks;
+			FVector Next = FMath::Lerp(At + FVector(0.f, 0.f, 700.f), Feet, T);
+			if (i < Kinks)
+				Next += FVector(((i % 2) ? 1.f : -1.f) * 35.f, ((i % 3) ? -1.f : 1.f) * 25.f, 0.f);
+			DrawDebugLine(World, Prev, Next, Bolt, false, Life, 0, 6.f);
+			Prev = Next;
+		}
+		DrawDebugCircle(World, Feet, 90.f, 24, Bolt, false, Life, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		return;
+	}
+
+	// Anything else - an impact star on the target (저 멀리 wall slam)
+	const FColor Star(255, 200, 90);
+	for (int32 i = 0; i < 4; i++)
+	{
+		const FVector Dir = FVector(1.f, 0.f, 0.f).RotateAngleAxis(45.f * i, FVector::UpVector);
+		DrawDebugLine(World, At - Dir * 90.f, At + Dir * 90.f, Star, false, Life, 0, 6.f);
+	}
+	DrawDebugCircle(World, Feet, 110.f, 24, Star, false, Life, 0, 5.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+}
+
+void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedCms, bool bIgnoresWalls, bool bThroughPawns)
 {
 	if (DistCm <= 0.f || SpeedCms <= 0.f)
 		return;
@@ -868,11 +1012,35 @@ void AS1Player::RequestDash(const FVector& Direction, float DistCm, float SpeedC
 	if (Flat.Normalize() == false)
 		return;
 
+	// A push that lands mid-dash replaces it - give the capsule its Pawn response back first
+	if (IsDashing())
+		FinishDash();
+
 	DashDirection = Flat;
 	DashRemainingCm = DistCm;
 	DashSpeedCms = SpeedCms;
 	bDashIgnoresWalls = bIgnoresWalls;
+	bDashThroughPawns = bThroughPawns;
 	DashStartLocation = GetActorLocation();
+
+	// 그림자 베기 - characters and monsters do not stop this dash; walls (WorldStatic) still do
+	if (bDashThroughPawns)
+	{
+		if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+			Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
+}
+
+void AS1Player::FinishDash()
+{
+	DashRemainingCm = 0.f;
+
+	if (bDashThroughPawns)
+	{
+		bDashThroughPawns = false;
+		if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+			Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	}
 }
 
 void AS1Player::TickDash(float DeltaTime)
@@ -891,7 +1059,7 @@ void AS1Player::TickDash(float DeltaTime)
 
 		if (DashRemainingCm <= 0.f)
 		{
-			DashRemainingCm = 0.f;
+			FinishDash();
 			ResolveDashEndOutOfWalls();
 		}
 		return;
@@ -908,11 +1076,13 @@ void AS1Player::TickDash(float DeltaTime)
 		// Ends the moment it hits something (movement-camera.md § Dashing exit conditions).
 		// The server is not told: it validated a speed window, not a distance, so stopping
 		// short is always within what it already allows.
-		DashRemainingCm = 0.f;
+		FinishDash();
 		return;
 	}
 
 	DashRemainingCm -= Step;
+	if (DashRemainingCm <= 0.f)
+		FinishDash();
 }
 
 void AS1Player::ResolveDashEndOutOfWalls()
@@ -1000,7 +1170,7 @@ void AS1Player::SetPlayerInfo(const Protocol::PosInfo& Info)
 	// TODO
 	PlayerInfo->CopyFrom(Info);
 
-	FVector Location(Info.x(), Info.y(), Info.z());
+	FVector Location(Info.x(), Info.y(), Info.z() + GroundLiftCm);
 	SetActorLocation(Location);
 
 	DestInfo->CopyFrom(Info);
@@ -1026,7 +1196,15 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 
 	// Size from the server's own radius — the boss (110 cm) is the largest silhouette on the floor (art bible ⑩)
 	if (Def != nullptr)
-		SetActorScale3D(FVector(FS1MonsterCatalog::ScaleForRadius(Def->RadiusCm)));
+	{
+		const float Scale = FS1MonsterCatalog::ScaleForRadius(Def->RadiusCm);
+		SetActorScale3D(FVector(Scale));
+
+		// Feet on the floor at any size (GroundLiftCm). SetPlayerInfo already placed the actor at the server Z
+		GroundLiftCm = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() * (Scale - 1.f);
+		AddActorWorldOffset(FVector(0.f, 0.f, GroundLiftCm));
+		InterpStartLocation = GetActorLocation();
+	}
 
 	// A teal disc under the feet. From the top-down camera this is what separates a monster from a player before
 	// any mesh does — monsters share the player mesh until their art exists (monster-ai.md OQ-5)
@@ -1037,7 +1215,8 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 		MonsterDisc->SetupAttachment(RootComponent);
 		MonsterDisc->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		MonsterDisc->SetCastShadow(false);
-		MonsterDisc->SetRelativeLocation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() + 2.f));
+		// 8 cm, not 2: a husk standing on the raised path strip lost its disc under it (2026-10-11 screenshot)
+		MonsterDisc->SetRelativeLocation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() + 8.f));
 		MonsterDisc->SetRelativeScale3D(FVector(1.0f, 1.0f, 0.02f));		// 100 cm cylinder → 1 m disc at player scale
 
 		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))

@@ -52,6 +52,7 @@ enum class ES1SkillAimType : uint8
 	Target,			// Lock whatever is under the cursor
 	Direction,		// Cursor direction
 	Point,			// Cursor position
+	Facing,			// No aiming step - fires the moment the key goes down, toward the cursor (찌르고 베기 1118, 2026-10-11)
 };
 
 enum class ES1SkillPower : uint8
@@ -101,10 +102,17 @@ struct FS1SkillDef
 
 	bool				bHasHardCc = false;	// For the detail pane — "this key stuns" is part of how a key is used
 
+	/** skills.csv tags (semicolon list - sword · ghost · hammer · homing:arrow …) and requires_weapon ("sword", "sword:ghost"). */
+	TArray<FString>		Tags;
+	FString				RequiresWeapon;		// weapon skill pool the armor skill needs (item_types.csv skill_pool) - empty = none
+	FString				RequiresWeaponTag;	// "sword:ghost" → ghost: one of the weapon's two skills must carry it (백귀야행)
+
 	bool HasMovement() const { return MoveDistCm > 0.f && (MoveSpeedCms > 0.f || MoveKind == TEXT("blink")); }
 
-	/** True when pressing the key should open the aiming mode rather than fire immediately. */
-	bool NeedsAiming() const { return AimType != ES1SkillAimType::None; }
+	bool HasTag(const FString& Tag) const { return Tags.Contains(Tag); }
+
+	/** True when pressing the key should open the aiming mode rather than fire immediately. Facing fires on the key. */
+	bool NeedsAiming() const { return AimType != ES1SkillAimType::None && AimType != ES1SkillAimType::Facing; }
 };
 
 class FS1SkillTable

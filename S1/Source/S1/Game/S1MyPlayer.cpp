@@ -252,7 +252,7 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		// The displacement lands with the rest of the effect, not at cast start. The server
 		// opened its speed window at the same moment, so the two line up.
 		if (PendingDashDistCm > 0.f)
-			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls);
+			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls, bPendingDashThroughPawns);
 
 		// A recast's first press landed - the window for the second press starts now
 		if (bPendingRecast)
@@ -466,6 +466,101 @@ void AS1MyPlayer::ResetAllSlotCooldowns()
 	UE_LOG(LogTemp, Log, TEXT("[TESTMODE] predicted cooldowns cleared"));
 }
 
+void AS1MyPlayer::StartCooldownForSkill(uint32 SkillId, uint32 CooldownMs)
+{
+	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
+	if (GameInstance == nullptr || SkillId == 0)
+		return;
+
+	for (const Protocol::SkillInfo& Info : GameInstance->SkillSlots)
+	{
+		if (Info.skill_id() != SkillId || Info.bind_state() != Protocol::BIND_BOUND)
+			continue;
+
+		StartSlotCooldown(static_cast<int32>(Info.slot()), CooldownMs);
+		UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] passive %u fired - slot %d cooldown %ums"), SkillId, static_cast<int32>(Info.slot()), CooldownMs);
+	}
+}
+
+void AS1MyPlayer::OnMyAttackAccepted(uint32 WindupMs, uint32 IntervalMs)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+
+	if (IntervalMs > 0)
+		AttackIntervalSec = IntervalMs / 1000.f;
+	LocalWindupSeconds = WindupMs / 1000.f;
+
+	// Re-anchor the beat on when this swing left, now that the real interval is known
+	const float SentAt = (AttackSentAt > 0.f) ? AttackSentAt : Now;
+	LocalReadyAt = SentAt + AttackIntervalSec + ATTACK_SEND_SLACK;
+	AttackSentAt = 0.f;
+}
+
+bool AS1MyPlayer::MeetsWeaponRequirement(const FS1SkillDef& Def, FText& OutWhy) const
+{
+	if (Def.RequiresWeapon.IsEmpty())
+		return true;
+
+	// The weapon slot's item type and its skill pool (item_types.csv) - the server checks the same thing (Room::MeetsWeaponRequirement)
+	const US1ItemSubsystem* Items = US1ItemSubsystem::Get();
+	const FS1ItemView* Weapon = Items != nullptr ? Items->GetEquipped(1) : nullptr;
+	const FS1ItemTypeDef* Type = (Weapon != nullptr && Items != nullptr) ? Items->GetCatalog().Find(Weapon->ItemTypeId) : nullptr;
+	if (Type == nullptr || Type->SkillPoolId.ToString() != Def.RequiresWeapon)
+	{
+		OutWhy = FText::FromStringTable(TEXT("S1Items"), TEXT("notice.skill_needs_weapon"));
+		return false;
+	}
+
+	if (Def.RequiresWeaponTag.IsEmpty())
+		return true;
+
+	// "sword:ghost" - one of the weapon's two skills must carry the tag (백귀야행 needs a ghost skill on the sword)
+	if (const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+	{
+		for (const Protocol::SkillInfo& Info : GameInstance->SkillSlots)
+		{
+			if (Info.slot() != Protocol::SLOT_WEAPON_PRIMARY && Info.slot() != Protocol::SLOT_WEAPON_SECONDARY)
+				continue;
+			const FS1SkillDef* WeaponSkill = FS1SkillTable::Find(Info.skill_id());
+			if (WeaponSkill != nullptr && WeaponSkill->HasTag(Def.RequiresWeaponTag))
+				return true;
+		}
+	}
+
+	OutWhy = FText::FromStringTable(TEXT("S1Items"), FString::Printf(TEXT("notice.skill_needs_%s"), *Def.RequiresWeaponTag));
+	return false;
+}
+
+bool AS1MyPlayer::HasTargetlessBasic() const
+{
+	for (const FS1StatusEntry& Entry : Statuses)
+	{
+		if (Entry.Kind == Protocol::STATUS_BUFF && (Entry.Param == TEXT("basic_dash") || Entry.Param == TEXT("basic_spin")))
+			return true;
+	}
+	return false;
+}
+
+void AS1MyPlayer::SendTargetlessAttack()
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (Now < LocalReadyAt)
+		return;
+
+	FVector Cursor = GetActorLocation() + GetActorForwardVector() * 100.f;
+	GetCursorWorldLocation(Cursor);
+
+	Protocol::C_ATTACK AttackPkt;
+	AttackPkt.set_target_id(0);
+	AttackPkt.set_aim_x(static_cast<float>(Cursor.X));
+	AttackPkt.set_aim_y(static_cast<float>(Cursor.Y));
+	SEND_PACKET(AttackPkt);
+
+	LocalWindupEndsAt = Now + LocalWindupSeconds;
+	LocalReadyAt = Now + AttackIntervalSec + ATTACK_SEND_SLACK;
+	AttackSentAt = Now;
+}
+
 void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
 {
 	// Pressing the key that is already being aimed cancels it. One key, two directions —
@@ -514,6 +609,17 @@ void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
 	// the confusion this whole session ran into.
 	if (GetSlotCooldownRemaining(EquipSlotValue) > 0.f)
 		return;
+
+	// The armor skill's weapon condition - say why instead of casting into a silent server refusal
+	// (2026-10-11 "백귀야행이 캐스팅만 되고 기술이 안 나간다": the sword had no ghost skill)
+	FText Why;
+	if (MeetsWeaponRequirement(*Def, Why) == false)
+	{
+		ShowFloatingNotice(Why);
+		UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] slot=%d skill=%u refused locally - weapon requirement %s%s%s"), EquipSlotValue, Def->SkillId,
+			*Def->RequiresWeapon, Def->RequiresWeaponTag.IsEmpty() ? TEXT("") : TEXT(":"), *Def->RequiresWeaponTag);
+		return;
+	}
 
 	// Nothing to point at — the key fires it outright. This is what keeps instant skills
 	// instant now that everything else costs an extra click (R4, R12b).
@@ -621,7 +727,10 @@ void AS1MyPlayer::OnConfirmPressed()
 		AS1Player* Target = AcquireTargetActorUnderCursor();
 		AimingSlot = 0;
 
-		if (Target != nullptr)
+		// 일보일검 · 난무 - the swing needs no target (2026-10-11)
+		if (HasTargetlessBasic())
+			SendTargetlessAttack();
+		else if (Target != nullptr)
 			SendAttack(Target->GetPlayerInfo()->object_id());
 
 		return;
@@ -679,13 +788,30 @@ void AS1MyPlayer::FireAimedSkill()
 
 	const FS1SkillDef* Def = FS1SkillTable::Find(Slot->skill_id());
 
+	// A target skill fires only on a click on an enemy in range - empty ground keeps the aim open
+	// (2026-10-11 "기습(단검)은 타겟팅이라서 마우스로 적을 클릭했을 때만 발동되도록"). The server re-checks range and walls
+	AS1Player* ClickedTarget = AcquireTargetActorUnderCursor();
+	if (Def != nullptr && Def->AimType == ES1SkillAimType::Target)
+	{
+		if (ClickedTarget == nullptr)
+		{
+			ShowFloatingNotice(FText::FromStringTable(TEXT("S1Items"), TEXT("notice.skill_needs_target")), 1.0f);
+			return;
+		}
+		if (FVector::Dist2D(ClickedTarget->GetActorLocation(), GetActorLocation()) > Def->RangeCm + 20.f)
+		{
+			ShowFloatingNotice(FText::FromStringTable(TEXT("S1Items"), TEXT("notice.skill_out_of_range")), 1.0f);
+			return;
+		}
+	}
+
 	Protocol::C_SKILL SkillPkt;
 	SkillPkt.set_slot(static_cast<Protocol::EquipSlot>(AimingSlot));
 
 	// Target and aim always travel together. Which one matters is decided server-side from
 	// the skill's shape, so the client never needs to know what shape it just fired — and
 	// forging either is pointless because the server revalidates both.
-	SkillPkt.set_target_id(AcquireTargetUnderCursor());
+	SkillPkt.set_target_id(ClickedTarget != nullptr ? ClickedTarget->GetPlayerInfo()->object_id() : 0);
 
 	FVector CursorLocation;
 	if (GetCursorWorldLocation(CursorLocation))
@@ -711,16 +837,27 @@ void AS1MyPlayer::FireAimedSkill()
 	if (Def != nullptr && Def->HasMovement() && Def->MoveKind != TEXT("blink"))
 	{
 		FVector DashDir = FVector(SkillPkt.aim_x(), SkillPkt.aim_y(), 0.f) - GetActorLocation();
+		float DashDistCm = Def->MoveDistCm;
+
+		// to_target (기습 단검 · 일도양단, 2026-10-11) - straight at the clicked enemy, stopping just in front of it
+		if (Def->MoveKind == TEXT("to_target") && ClickedTarget != nullptr)
+		{
+			constexpr float StopShortCm = 90.f;		// two capsule radii plus a little - land beside it, not inside it
+			DashDir = ClickedTarget->GetActorLocation() - GetActorLocation();
+			DashDistCm = FMath::Clamp(static_cast<float>(FVector(DashDir.X, DashDir.Y, 0.f).Size()) - StopShortCm, 0.f, Def->MoveDistCm);
+		}
+
 		DashDir.Z = 0.0;
 		if (Def->MoveKind == TEXT("back"))
 			DashDir = -DashDir;
 
-		if (DashDir.Normalize())
+		if (DashDistCm > 0.f && DashDir.Normalize())
 		{
 			PendingDashDirection = DashDir;
-			PendingDashDistCm = Def->MoveDistCm;
+			PendingDashDistCm = DashDistCm;
 			PendingDashSpeedCms = Def->MoveSpeedCms;
 			bPendingDashIgnoresWalls = Def->bMoveIgnoresWalls;		// 유령 신랑의 저주 - through walls (server skips its wall check for the window)
+			bPendingDashThroughPawns = (Def->MoveKind == TEXT("dash_through"));		// 그림자 베기 - characters do not stop it
 		}
 	}
 
@@ -764,7 +901,7 @@ void AS1MyPlayer::FireAimedSkill()
 
 		if (PendingDashDistCm > 0.f)
 		{
-			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls);
+			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls, bPendingDashThroughPawns);
 			PendingDashDistCm = 0.f;
 		}
 
@@ -920,11 +1057,13 @@ void AS1MyPlayer::SendAttack(uint64 TargetId)
 	// Predict the windup visual only. If the server rejects the attack — out of range, or
 	// we were stunned in the meantime — the arc still completes and no damage number
 	// follows. That mismatch is acceptable; predicting the *result* would not be.
-	LocalWindupEndsAt = Now + PREDICTED_WINDUP_SECONDS;
+	LocalWindupEndsAt = Now + LocalWindupSeconds;
 
 	// Gated on the full interval, not just the windup: the sustained attack would otherwise
 	// fire again the moment the arc closes and flood the server with requests it drops.
-	LocalReadyAt = Now + ATTACK_INTERVAL_SECONDS;
+	// The interval is the server's (S_ATTACK interval_ms, attack speed applied - OnMyAttackAccepted, 2026-10-11)
+	LocalReadyAt = Now + AttackIntervalSec + ATTACK_SEND_SLACK;
+	AttackSentAt = Now;
 }
 
 AS1Player* AS1MyPlayer::FindEnemyNearCursorInRange() const
@@ -1015,6 +1154,22 @@ void AS1MyPlayer::TickSustainedAttack()
 	if (CanAttack() == false)
 		return;
 
+	// A swing the server never acknowledged was refused (sent a hair early, mid-CC, out of range) - free the gate so
+	// the hold keeps swinging instead of waiting out a whole interval for nothing
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (AttackSentAt > 0.f && Now - AttackSentAt > ATTACK_ACK_TIMEOUT)
+	{
+		AttackSentAt = 0.f;
+		LocalReadyAt = Now;
+	}
+
+	// 일보일검 · 난무 - the swing goes toward the cursor even with nobody in range (2026-10-11)
+	if (HasTargetlessBasic())
+	{
+		SendTargetlessAttack();
+		return;
+	}
+
 	AS1Player* Target = FindEnemyNearCursorInRange();
 	if (Target == nullptr)
 		return;
@@ -1029,11 +1184,11 @@ void AS1MyPlayer::DrawWindupDebug()
 		return;
 
 	const float Now = World->GetTimeSeconds();
-	if (Now >= LocalWindupEndsAt)
+	if (Now >= LocalWindupEndsAt || LocalWindupSeconds <= 0.f)
 		return;
 
-	const float Elapsed = PREDICTED_WINDUP_SECONDS - (LocalWindupEndsAt - Now);
-	const float Alpha = FMath::Clamp(Elapsed / PREDICTED_WINDUP_SECONDS, 0.f, 1.f);
+	const float Elapsed = LocalWindupSeconds - (LocalWindupEndsAt - Now);
+	const float Alpha = FMath::Clamp(Elapsed / LocalWindupSeconds, 0.f, 1.f);
 
 	// An arc at the feet rather than a bar overhead — from a fixed top-down camera the
 	// ground plane is the one place nothing else competes for, and it never covers the

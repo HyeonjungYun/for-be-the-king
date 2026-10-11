@@ -112,6 +112,7 @@ void US1VisionSubsystem::HandleVision(const Protocol::S_VISION& Pkt)
 		Source.Until = S.remaining_ms() > 0 ? Now + S.remaining_ms() / 1000.0 : 0.0;
 		Source.bNeedsLos = S.needs_los();
 		Source.bSeesStealth = S.sees_stealth();
+		Source.Kind = UTF8_TO_TCHAR(S.kind().c_str());
 	}
 
 	ApplyCamera(GetGameInstance(), CameraScale);

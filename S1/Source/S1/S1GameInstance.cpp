@@ -10,6 +10,7 @@
 #include "Protocol.pb.h"
 #include "ClientPacketHandler.h"
 #include "Game/Item/S1ItemSubsystem.h"
+#include "Game/Skill/S1ProjectileSubsystem.h"
 #include "S1MyPlayer.h"
 
 
@@ -401,8 +402,22 @@ void US1GameInstance::HandleStatus(const Protocol::S_STATUS& StatusPkt)
 			if (FindActor == nullptr)
 				return;
 
-			if (AS1Player* Player = FindActor->Get())
-				Player->ApplyStatus(Info, bApplied);
+			AS1Player* Player = FindActor->Get();
+			if (Player == nullptr)
+				return;
+
+			// 패시브 쿨다운 (염두 · 맹수의 본능, 2026-10-11) - 슬롯에 쿨다운을 돌린다. 상태 줄이 아니다
+			if (Info.kind() == Protocol::STATUS_COOLDOWN)
+			{
+				if (bApplied)
+				{
+					if (AS1MyPlayer* Me = Cast<AS1MyPlayer>(Player))
+						Me->StartCooldownForSkill(static_cast<uint32>(FCString::Atoi64(UTF8_TO_TCHAR(Info.param().c_str()))), Info.remaining_ms());
+				}
+				return;
+			}
+
+			Player->ApplyStatus(Info, bApplied);
 		};
 
 	for (const Protocol::StatusInfo& Info : StatusPkt.applied())
@@ -440,7 +455,7 @@ void US1GameInstance::HandleDamage(const Protocol::S_DAMAGE& DamagePkt)
 			continue;
 
 		if (AS1Player* Player = FindActor->Get())
-			Player->OnDamaged(Info.damage(), Info.remaining_hp(), Info.is_crit(), Info.max_hp());
+			Player->OnDamaged(Info.damage(), Info.remaining_hp(), Info.is_crit(), Info.max_hp(), Info.damage_type() == Protocol::DAMAGE_TYPE_MAGIC);
 	}
 }
 
@@ -494,6 +509,28 @@ void US1GameInstance::HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt)
 		{
 			if (TWeakObjectPtr<AS1Player>* FoundTarget = Players.Find(Info.target_id()))
 				Target = FoundTarget->Get();
+		}
+
+		const AS1Player* Caster = nullptr;
+		if (TWeakObjectPtr<AS1Player>* FoundCaster = Players.Find(Info.caster_id()))
+			Caster = FoundCaster->Get();
+
+		// 종이매 (1135) - no enemy close: the hawk flies to the nearest one and vanishes over its head. The server sends the
+		// owner a second hit whose impact is that enemy (Room::CastHawk) - fly a hawk there (2026-10-11 "종이매가 안 보여")
+		if (Info.effect_id() == 1135 && Caster != nullptr && FVector::Dist2D(Caster->GetActorLocation(), Impact) > 300.f)
+		{
+			if (US1ProjectileSubsystem* Projectiles = US1ProjectileSubsystem::Get())
+				Projectiles->AddHawkFlight(Caster->GetActorLocation(), Impact, Info.target_id());
+			continue;
+		}
+
+		// A hit drawn on each struck target (낙뢰 bolts · 혼원일체 ghosts · 저 멀리 wall slam, 2026-10-11): the impact is the
+		// target itself, away from the caster. Drawing the skill's own shape there would put a 7 m circle on every target
+		if (Target != nullptr && FVector::Dist2D(Target->GetActorLocation(), Impact) < 80.f
+			&& (Caster == nullptr || FVector::Dist2D(Caster->GetActorLocation(), Impact) > 80.f))
+		{
+			AS1Player::PlayTargetStrike(GetWorld(), Info.effect_id(), Target);
+			continue;
 		}
 
 		AS1Player::PlaySkillEffect(GetWorld(), Info.effect_id(), Impact, Aim, Target);

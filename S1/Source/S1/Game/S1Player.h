@@ -154,8 +154,10 @@ public:
 	 * @param SpeedCms   Must satisfy DistCm / SpeedCms <= 0.4s (skill-system.md S2).
 	 * @param bIgnoresWalls  skill_effects.csv ignores_walls (유령 신랑의 저주): moves unswept, and the end
 	 *                       point is pushed out of any wall it lands in (forward first, then back the way it came).
+	 * @param bThroughPawns  move param dash_through (그림자 베기, 2026-10-11): characters and monsters do not stop the
+	 *                       dash - walls still do. The capsule ignores the Pawn channel for the dash only.
 	 */
-	void RequestDash(const FVector& Direction, float DistCm, float SpeedCms, bool bIgnoresWalls = false);
+	void RequestDash(const FVector& Direction, float DistCm, float SpeedCms, bool bIgnoresWalls = false, bool bThroughPawns = false);
 
 	/** True while a dash is travelling. Walk input is ignored throughout. */
 	bool IsDashing() const { return DashRemainingCm > 0.f; }
@@ -183,6 +185,16 @@ public:
 	bool IsBlinded() const;
 	float GetBlindViewScale() const { return BlindViewScale; }
 
+	/**
+	 * Active CC as words over the head — "기절 · 둔화" (2026-10-11 "뇌섬 실명이 적용 안 됨" · "슬로우가 안 걸림": the effects
+	 * landed but a fixed dummy shows none of them). Empty when nothing is active. US1WorldLabelWidget paints it (Hangul font).
+	 */
+	FText GetCcLabel() const;
+
+	/** A short line over this character for Seconds — "대상을 클릭하세요" and other reasons a key did nothing. Owner only. */
+	void ShowFloatingNotice(const FText& Text, float Seconds = 1.6f);
+	const FText* GetFloatingNotice() const;
+
 	/** The server ended a hold skill on this character (S_STATUS hold expired). The local player starts its cooldown here. */
 	virtual void OnHoldEnded() {}
 
@@ -195,8 +207,9 @@ public:
 	 *
 	 * @param NewMaxHp  DamageInfo.max_hp — 0 means unchanged. The server fills it on the damage-0 resync it
 	 *                  sends after an equip change inside the dungeon, so every client's bar uses the new max.
+	 * @param bMagic    Magic damage draws violet — a proc landing with the swing (혼원일체) reads as its own number (2026-10-11).
 	 */
-	void OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 NewMaxHp = 0);
+	void OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 NewMaxHp = 0, bool bMagic = false);
 
 	/**
 	 * Someone started casting. Everyone sees this, including enemies.
@@ -226,6 +239,12 @@ public:
 	 */
 	static void PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& Impact, const FVector& Aim, AS1Player* Target);
 
+	/**
+	 * A hit drawn on one struck target (2026-10-11): a bolt from the sky for lightning (낙뢰), violet ghost rings for the
+	 * ghost proc (혼원일체), an impact star for anything else (저 멀리 wall slam). Same effect_id rule as PlaySkillEffect.
+	 */
+	static void PlayTargetStrike(UWorld* World, uint32 EffectId, AS1Player* Target);
+
 protected:
 	class Protocol::PosInfo* PlayerInfo; // 현재 위치
 	class Protocol::PosInfo* DestInfo; // 목적치
@@ -248,7 +267,11 @@ protected:
 	float DashRemainingCm = 0.f;
 	float DashSpeedCms = 0.f;
 	bool bDashIgnoresWalls = false;		// 유령 신랑의 저주 - unswept, end point resolved out of walls
+	bool bDashThroughPawns = false;		// 그림자 베기 - Pawn channel ignored while dashing, restored at the end
 	FVector DashStartLocation = FVector::ZeroVector;
+
+	/** Ends a dash and gives the capsule its Pawn response back if the dash had dropped it. */
+	void FinishDash();
 
 	/** Wall-passing dash just ended: if the capsule sits inside blocking geometry, step forward (then back) to the first free spot. */
 	void ResolveDashEndOutOfWalls();
@@ -272,6 +295,22 @@ protected:
 
 	/** Taunt (2026-10-10): the server walks us toward the taunter and sends corrections; we only stop input, attacks and facing. */
 	float TauntUntil = 0.f;
+
+	/** Silence - read for the CC label only (the server refuses the skill itself). */
+	float SilenceUntil = 0.f;
+
+	/**
+	 * Airborne (launch) - the mesh rises and falls on a parabola for the CC's length (2026-10-11 "에어본이 되었다는 효과 -
+	 * 캐릭터를 실제로 위로 띄우기"). The capsule stays on the ground: the server's position is 2D and nothing else moves.
+	 */
+	float LaunchStart = 0.f;
+	float LaunchDuration = 0.f;
+	FVector MeshBaseOffset = FVector::ZeroVector;
+	bool bMeshBaseCaptured = false;
+	void TickAirborne();
+
+	FText FloatingNotice;
+	float FloatingNoticeUntil = 0.f;
 
 	/** [0, soft_cc_slow_cap]. 0 means unslowed. */
 	float ActiveSlow = 0.f;
@@ -312,6 +351,14 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> MonsterDisc = nullptr;
+
+	/**
+	 * Added to the server Z for a scaled monster. Scaling grows the capsule around its centre, so at the server's
+	 * standing height (z 100) a 1.31x pack leader sank 26 cm into the floor and its disc vanished under it — the boss
+	 * at 2.62x sank more than a metre (2026-10-11 screenshot). Lifting by HalfHeight x (scale - 1) puts every size's
+	 * feet where a player's are.
+	 */
+	float GroundLiftCm = 0.f;
 
 	/**
 	 * Not a UTextRenderComponent: its default font (RobotoDistanceField) has no Hangul and every name

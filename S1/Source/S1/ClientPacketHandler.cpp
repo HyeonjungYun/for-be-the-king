@@ -7,6 +7,7 @@
 #include "Game/Login/S1LoginSubsystem.h"
 #include "Game/Skill/S1ProjectileSubsystem.h"
 #include "Game/Vision/S1VisionSubsystem.h"
+#include "Game/S1MyPlayer.h"
 #include "S1GameInstance.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -136,10 +137,17 @@ bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
 
 bool Handle_S_ATTACK(PacketSessionRef& session, Protocol::S_ATTACK& pkt)
 {
+	auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance());
+	AS1MyPlayer* Me = GameInstance != nullptr ? Cast<AS1MyPlayer>(GameInstance->MyPlayer.Get()) : nullptr;
+
 	for (const Protocol::AttackInfo& Info : pkt.attacks())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ATTACK] %llu -> %llu windup=%ums"),
-			Info.attacker_id(), Info.target_id(), Info.windup_ms());
+		UE_LOG(LogTemp, Warning, TEXT("[ATTACK] %llu -> %llu windup=%ums interval=%ums"),
+			Info.attacker_id(), Info.target_id(), Info.windup_ms(), Info.interval_ms());
+
+		// 내 공격 - 서버의 평타 간격(공속 반영)으로 우클릭 지속 공격 박자를 맞춘다 (2026-10-11)
+		if (Me != nullptr && Me->GetPlayerInfo() != nullptr && Info.attacker_id() == Me->GetPlayerInfo()->object_id())
+			Me->OnMyAttackAccepted(static_cast<uint32>(Info.windup_ms()), Info.interval_ms());
 	}
 	return true;
 }

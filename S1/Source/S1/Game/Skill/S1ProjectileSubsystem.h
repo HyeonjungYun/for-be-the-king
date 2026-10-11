@@ -26,7 +26,21 @@ struct FS1ClientZone
 	float Until = 0.f;
 	FColor Colour = FColor::White;
 	FString Param;
-	bool bFlash = false;		// shock · spin (2026-10-11) - a ring that grows once; the server sends no end packet for these
+	bool bFlash = false;		// shock · spin · slash (2026-10-11) - grows once; the server sends no end packet for these
+	bool bExpires = false;		// ping - no end packet either, gone at Until (2026-10-11)
+	float AngleDeg = 0.f;		// cone zone / slash - full angle, 0 = circle (네불라 아르카나 · 일보일검)
+	FVector Dir = FVector::ForwardVector;
+	uint64 FollowId = 0;		// ping - rides on this actor while this client knows it (맹수의 탐색)
+};
+
+/** 종이매 (1135) flying to the nearest enemy and vanishing over its head - display only (2026-10-11). */
+struct FS1HawkFlight
+{
+	FVector From = FVector::ZeroVector;
+	FVector To = FVector::ZeroVector;
+	uint64 TargetId = 0;
+	float Start = 0.f;
+	float Duration = 0.9f;
 };
 
 /** One projectile in flight on this client. Flown locally from the launch packet; the server decides what it hits. */
@@ -72,6 +86,9 @@ public:
 	/** Everything in flight is dropped - leaving the dungeon, or a resync. */
 	void Clear();
 
+	/** 종이매 - a hawk flies from the caster to the nearest enemy (S_SKILL_HIT 1135 aimed far away, owner only). */
+	void AddHawkFlight(const FVector& From, const FVector& To, uint64 TargetId);
+
 	int32 NumFlying() const { return Flying.Num(); }
 	int32 NumZones() const { return Zones.Num(); }
 
@@ -95,6 +112,13 @@ private:
 	void SpawnWallActor(const Protocol::ZoneInfo& Info);
 	void DestroyWallActor(uint64 ZoneId);
 	void DestroyAllWallActors();
+
+	/** Cone outline (two edges + arc) on the ground - zones, slash flashes. */
+	static void DrawCone(UWorld* World, const FVector& Apex, const FVector& Dir, float RadiusCm, float AngleDeg, const FColor& Colour, float Thickness);
+
+	/** Hawks: circling a followed enemy (S_VISION source kind "hawk") and flights to a far one. */
+	void TickHawks(UWorld* World, float Now);
+	TArray<FS1HawkFlight> HawkFlights;
 
 	struct FImpact
 	{

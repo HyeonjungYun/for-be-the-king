@@ -21,6 +21,7 @@ struct FS1VisionSource
 	double Until = 0.0;			// FPlatformTime seconds, 0 = while the followed actor exists
 	bool bNeedsLos = true;
 	bool bSeesStealth = false;
+	FString Kind;				// hawk · clone · detect - the hawk is drawn circling its prey (US1ProjectileSubsystem, 2026-10-11)
 };
 
 /**
