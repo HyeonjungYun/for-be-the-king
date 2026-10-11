@@ -6,6 +6,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
 #include "Game/BaseCamp/S1EntryPoints.h"
+#include "Game/Party/S1PartySubsystem.h"
 #include "S1BaseCampSubsystem.generated.h"
 
 namespace Protocol
@@ -81,8 +82,24 @@ public:
 	 */
 	void RequestEnter(uint32 EntryPointId);
 
-	/** [입장] may open S4 and S4 may send — base camp, inventory arrived, nothing in flight. */
+	/** [입장] may open S4 and S4 may send — base camp, inventory arrived, nothing in flight, and the mode fits the party. */
 	bool CanEnter() const;
+
+	// ── Run mode (PVE, ADR-0014) ─────────────────────────────────────────
+
+	/** PVP · PVE 솔로 · PVE 협동 — chosen on S3, remembered between sessions. */
+	void SetRunMode(ES1RunMode Mode);
+	ES1RunMode GetRunMode() const { return static_cast<ES1RunMode>(FMath::Clamp(RunModeIndex, 0, 2)); }
+
+	/** Why the chosen mode cannot enter now (the server refuses the same) — S1PartyLogic::EnterBlock with my party. */
+	S1PartyLogic::EEnterBlock GetEnterBlock() const;
+
+	/** What [입장] says: 입장 · 입장 중 · 함께 입장 (co-op leader) · 합류 (party run alive) · 파티장 대기 (member). */
+	const TCHAR* GetEnterLabelKey() const;
+
+	/** The mode of the run we are in or last entered (S_ENTER_GAME.mode). */
+	ES1RunMode GetCurrentRunMode() const { return CurrentRunMode; }
+	void SetCurrentRunMode(ES1RunMode Mode) { CurrentRunMode = Mode; }
 
 	/** The floor S4 shows and C_ENTER_GAME asks for. One floor for now. */
 	uint32 GetFloorId() const { return FloorId; }
@@ -126,6 +143,12 @@ private:
 
 	UPROPERTY(Config)
 	float MapHalfExtentCm = 3000.f;
+
+	/** S3 mode row (ES1RunMode) — saved to the user's config when changed. */
+	UPROPERTY(Config)
+	int32 RunModeIndex = 0;
+
+	ES1RunMode			CurrentRunMode = ES1RunMode::Pvp;
 
 	UPROPERTY() TObjectPtr<US1BaseCampWidget>	Widget;
 

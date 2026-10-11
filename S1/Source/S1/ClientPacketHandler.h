@@ -53,6 +53,11 @@ enum : uint16
 	PKT_S_ZONE = 1040,
 	PKT_S_SKILL_REVEAL = 1041,
 	PKT_S_VISION = 1042,
+	PKT_C_PARTY_INVITE = 1043,
+	PKT_S_PARTY_INVITED = 1044,
+	PKT_C_PARTY_RESPONSE = 1045,
+	PKT_C_PARTY_LEAVE = 1046,
+	PKT_S_PARTY_STATE = 1047,
 };
 
 // Custom Handlers
@@ -85,6 +90,8 @@ bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt)
 bool Handle_S_ZONE(PacketSessionRef& session, Protocol::S_ZONE& pkt);
 bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& pkt);
 bool Handle_S_VISION(PacketSessionRef& session, Protocol::S_VISION& pkt);
+bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED& pkt);
+bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pkt);
 
 class ClientPacketHandler
 {
@@ -121,6 +128,8 @@ public:
 		GPacketHandler[PKT_S_ZONE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ZONE>(Handle_S_ZONE, session, buffer, len); };
 		GPacketHandler[PKT_S_SKILL_REVEAL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_SKILL_REVEAL>(Handle_S_SKILL_REVEAL, session, buffer, len); };
 		GPacketHandler[PKT_S_VISION] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_VISION>(Handle_S_VISION, session, buffer, len); };
+		GPacketHandler[PKT_S_PARTY_INVITED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PARTY_INVITED>(Handle_S_PARTY_INVITED, session, buffer, len); };
+		GPacketHandler[PKT_S_PARTY_STATE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PARTY_STATE>(Handle_S_PARTY_STATE, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -143,6 +152,9 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_DROP& pkt) { return MakeSendBuffer(pkt, PKT_C_DROP); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_STASH& pkt) { return MakeSendBuffer(pkt, PKT_C_STASH); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_BAG_OPEN& pkt) { return MakeSendBuffer(pkt, PKT_C_BAG_OPEN); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_PARTY_INVITE& pkt) { return MakeSendBuffer(pkt, PKT_C_PARTY_INVITE); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_PARTY_RESPONSE& pkt) { return MakeSendBuffer(pkt, PKT_C_PARTY_RESPONSE); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_PARTY_LEAVE& pkt) { return MakeSendBuffer(pkt, PKT_C_PARTY_LEAVE); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

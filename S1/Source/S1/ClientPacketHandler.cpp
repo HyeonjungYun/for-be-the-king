@@ -5,6 +5,7 @@
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/Escape/S1EscapeSubsystem.h"
 #include "Game/Login/S1LoginSubsystem.h"
+#include "Game/Party/S1PartySubsystem.h"
 #include "Game/Skill/S1ProjectileSubsystem.h"
 #include "Game/Vision/S1VisionSubsystem.h"
 #include "Game/S1MyPlayer.h"
@@ -29,10 +30,32 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 		return true;
 	}
 
+	// 파티 (PVE 협동, ADR-0014) - 내 캐릭터 id. 파티 상태는 서버가 따로 보낸다 (런 중 끊겼던 파티원이면)
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->HandleLogin(pkt.characters(0).object_info().object_id());
+
 	// H7 (UI 4단계) - 자동 입장하지 않는다. 베이스캠프 화면(S3)이 뜨고, [입장]이 C_ENTER_GAME 을 보낸다.
 	// 이전: 여기서 C_ENTER_GAME { playerIndex 0, floor 0 } 을 바로 보냈다 - US1BaseCampSubsystem::RequestEnter 로 옮김
 	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
 		BaseCamp->HandleLogin(pkt);
+
+	return true;
+}
+
+bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED& pkt)
+{
+	// PVE 협동 초대 (ADR-0014, 2026-10-11 에이전트 - YOLO 세션 위임) - 수락 · 거절 팝업
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->HandleInvited(pkt);
+
+	return true;
+}
+
+bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pkt)
+{
+	// PVE 협동 파티 전체 + 내 마지막 요청의 결과 (ADR-0014, 2026-10-11 에이전트 - YOLO 세션 위임)
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->HandleState(pkt);
 
 	return true;
 }
@@ -50,9 +73,17 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 		return true;
 	}
 
+	// 방 모드 (PVE, ADR-0014) - 협동이면 이 런의 아군을 정한다. 스폰보다 먼저 (HandleSpawn 이 아군 표시를 단다)
+	const ES1RunMode RunMode = static_cast<ES1RunMode>(FMath::Clamp(static_cast<int32>(pkt.mode()), 0, 2));
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->HandleEnterGame(RunMode);
+
 	// H8 - HandleSpawn 보다 먼저. 지난 런에서 내 폰이 지워졌으면 여기서 새로 만들어 빙의시킨다
 	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+	{
+		BaseCamp->SetCurrentRunMode(RunMode);
 		BaseCamp->HandleEnterAccepted(pkt.player());
+	}
 
 	// 체류 타이머 (escape-timer.md Core Rule 15, 2026-10-07 에이전트 - YOLO 세션 위임)
 	if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
@@ -76,6 +107,9 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 
 	if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
 		BaseCamp->HandleLeftGame();
+
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->HandleLeftGame();
 
 	// 결과 안내 - 탈출 성공 / 시간 초과 (escape-timer.md § Packets, 2026-10-07 에이전트)
 	if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())

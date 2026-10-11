@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[17];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[20];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -82,11 +82,22 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "OWN\020\013*u\n\rProjectileEnd\022\032\n\026PROJECTILE_END"
   "_EXPIRED\020\000\022\026\n\022PROJECTILE_END_HIT\020\001\022\027\n\023PR"
   "OJECTILE_END_WALL\020\002\022\027\n\023PROJECTILE_END_LO"
-  "ST\020\003b\006proto3"
+  "ST\020\003*I\n\007RunMode\022\020\n\014RUN_MODE_PVP\020\000\022\025\n\021RUN"
+  "_MODE_PVE_SOLO\020\001\022\025\n\021RUN_MODE_PVE_COOP\020\002*"
+  "\200\002\n\013PartyResult\022\014\n\010PARTY_OK\020\000\022\023\n\017PARTY_N"
+  "OT_FOUND\020\001\022\016\n\nPARTY_FULL\020\002\022\032\n\026PARTY_ALRE"
+  "ADY_IN_PARTY\020\003\022\022\n\016PARTY_DECLINED\020\004\022\021\n\rPA"
+  "RTY_EXPIRED\020\005\022\024\n\020PARTY_NOT_LEADER\020\006\022\016\n\nP"
+  "ARTY_BUSY\020\007\022\016\n\nPARTY_SELF\020\010\022\025\n\021PARTY_NO_"
+  "INSTANCE\020\t\022\031\n\025PARTY_ALREADY_ENTERED\020\n\022\023\n"
+  "\017PARTY_COOP_ONLY\020\013*`\n\020PartyMemberState\022\031"
+  "\n\025PARTY_MEMBER_BASECAMP\020\000\022\027\n\023PARTY_MEMBE"
+  "R_IN_RUN\020\001\022\030\n\024PARTY_MEMBER_OFFLINE\020\002b\006pr"
+  "oto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 2132, descriptor_table_protodef_Enum_2eproto,
+    false, false, 2564, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -385,6 +396,60 @@ bool ProjectileEnd_IsValid(int value) {
     case 1:
     case 2:
     case 3:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunMode_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[17];
+}
+bool RunMode_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyResult_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[18];
+}
+bool PartyResult_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 10:
+    case 11:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyMemberState_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[19];
+}
+bool PartyMemberState_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
       return true;
     default:
       return false;

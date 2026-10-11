@@ -1249,6 +1249,41 @@ void AS1Player::SetPlayerInfo(const Protocol::PosInfo& Info)
 	ResetInterpolation(Info.state());
 }
 
+void AS1Player::SetAlly(bool bAlly, const FString& Name)
+{
+	bIsAlly = bAlly;
+	AllyName = Name;
+
+	if (bAlly && AllyDisc == nullptr && bIsMonster == false)
+	{
+		UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+		if (Cylinder != nullptr)
+		{
+			// The monster disc's recipe in party blue - a plain mesh component, so the dynamic tint works (an HISM's would not)
+			AllyDisc = NewObject<UStaticMeshComponent>(this);
+			AllyDisc->SetStaticMesh(Cylinder);
+			AllyDisc->SetupAttachment(RootComponent);
+			AllyDisc->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			AllyDisc->SetCastShadow(false);
+			AllyDisc->SetRelativeLocation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() + 8.f));
+			AllyDisc->SetRelativeScale3D(FVector(1.1f, 1.1f, 0.02f));
+			if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+			{
+				UMaterialInstanceDynamic* Tint = UMaterialInstanceDynamic::Create(Base, this);
+				Tint->SetVectorParameterValue(TEXT("Color"), FLinearColor(FColor(0x39, 0x87, 0xE5)));
+				AllyDisc->SetMaterial(0, Tint);
+			}
+			AllyDisc->RegisterComponent();
+		}
+	}
+
+	if (AllyDisc != nullptr)
+		AllyDisc->SetVisibility(bAlly);
+
+	UE_LOG(LogTemp, Log, TEXT("[PARTY] ally %s id=%llu name=%s"), bAlly ? TEXT("on") : TEXT("off"),
+		PlayerInfo != nullptr ? PlayerInfo->object_id() : 0ull, *Name);
+}
+
 void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 {
 	// 0 = an older server that did not send it — keep the naked baseline

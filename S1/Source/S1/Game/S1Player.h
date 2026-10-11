@@ -108,6 +108,14 @@ public:
 	const FText& GetMonsterName() const { return MonsterName; }
 	bool IsDown() const { return CurrentHp <= 0; }
 
+	/**
+	 * PVE co-op ally (ADR-0014) — a party-blue ground disc (#3987E5, art-bible party colour) and "★ name" over the head
+	 * (US1WorldLabelWidget — never colour alone). Not a target: AS1MyPlayer skips allies under the cursor.
+	 */
+	void SetAlly(bool bAlly, const FString& Name);
+	bool IsAlly() const { return bIsAlly; }
+	const FString& GetAllyName() const { return AllyName; }
+
 public:
 	/**
 	 * Mirrors a server CC event locally. The client never decides duration or whether the
@@ -354,6 +362,13 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> MonsterDisc = nullptr;
+
+	/** PVE co-op ally marker (SetAlly). */
+	bool bIsAlly = false;
+	FString AllyName;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> AllyDisc = nullptr;
 
 	/**
 	 * Added to the server Z for a scaled monster. Scaling grows the capsule around its centre, so at the server's

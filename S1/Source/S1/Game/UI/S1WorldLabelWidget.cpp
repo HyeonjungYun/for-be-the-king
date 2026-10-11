@@ -21,6 +21,7 @@ namespace
 	const FLinearColor MonsterTeal(FColor(25, 158, 112));		// art bible ⑩ — #199E70
 	const FLinearColor CcAmber(FColor(255, 176, 64));			// CC words - warm, apart from the teal names and the white numbers
 	const FLinearColor NoticeWhite(FColor(240, 240, 240));
+	const FLinearColor AllyBlue(FColor(0x39, 0x87, 0xE5));		// art bible party colour - PVE co-op ally (ADR-0014)
 	constexpr float LineStepPx = 19.f;							// one label line higher per extra line (16 overlapped the name - 2026-10-11 screenshot)
 
 	FSlateFontInfo LabelFont()
@@ -71,6 +72,16 @@ void US1WorldLabelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 			Label.Text = Creature->GetMonsterName();
 			Label.Anchor = Position - FVector2D(0.f, Lift);
 			Label.Colour = MonsterTeal;
+			Lift += LineStepPx;
+		}
+
+		// PVE co-op ally - "★ name" in party blue: the star is the cue, not the colour alone (art bible ⑩)
+		if (Creature->IsAlly())
+		{
+			FLabel& Label = Labels.AddDefaulted_GetRef();
+			Label.Text = FText::FromString(FString(TEXT("★ ")) + Creature->GetAllyName());
+			Label.Anchor = Position - FVector2D(0.f, Lift);
+			Label.Colour = AllyBlue;
 			Lift += LineStepPx;
 		}
 

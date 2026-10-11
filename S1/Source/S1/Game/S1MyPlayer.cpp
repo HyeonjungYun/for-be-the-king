@@ -1086,6 +1086,10 @@ AS1Player* AS1MyPlayer::AcquireTargetActorUnderCursor() const
 	if (Target == nullptr || Target->IsMyPlayer())
 		return nullptr;
 
+	// PVE 협동 아군은 대상이 아니다 - 서버도 막지만 헛 C_ATTACK · C_SKILL 을 보내지 않는다 (ADR-0014)
+	if (Target->IsAlly())
+		return nullptr;
+
 	return Target;
 }
 

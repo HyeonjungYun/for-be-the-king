@@ -525,6 +525,93 @@ inline bool ProjectileEnd_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ProjectileEnd>(
     ProjectileEnd_descriptor(), name, value);
 }
+enum RunMode : int {
+  RUN_MODE_PVP = 0,
+  RUN_MODE_PVE_SOLO = 1,
+  RUN_MODE_PVE_COOP = 2,
+  RunMode_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  RunMode_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool RunMode_IsValid(int value);
+constexpr RunMode RunMode_MIN = RUN_MODE_PVP;
+constexpr RunMode RunMode_MAX = RUN_MODE_PVE_COOP;
+constexpr int RunMode_ARRAYSIZE = RunMode_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunMode_descriptor();
+template<typename T>
+inline const std::string& RunMode_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, RunMode>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function RunMode_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    RunMode_descriptor(), enum_t_value);
+}
+inline bool RunMode_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, RunMode* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<RunMode>(
+    RunMode_descriptor(), name, value);
+}
+enum PartyResult : int {
+  PARTY_OK = 0,
+  PARTY_NOT_FOUND = 1,
+  PARTY_FULL = 2,
+  PARTY_ALREADY_IN_PARTY = 3,
+  PARTY_DECLINED = 4,
+  PARTY_EXPIRED = 5,
+  PARTY_NOT_LEADER = 6,
+  PARTY_BUSY = 7,
+  PARTY_SELF = 8,
+  PARTY_NO_INSTANCE = 9,
+  PARTY_ALREADY_ENTERED = 10,
+  PARTY_COOP_ONLY = 11,
+  PartyResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  PartyResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool PartyResult_IsValid(int value);
+constexpr PartyResult PartyResult_MIN = PARTY_OK;
+constexpr PartyResult PartyResult_MAX = PARTY_COOP_ONLY;
+constexpr int PartyResult_ARRAYSIZE = PartyResult_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyResult_descriptor();
+template<typename T>
+inline const std::string& PartyResult_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, PartyResult>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function PartyResult_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    PartyResult_descriptor(), enum_t_value);
+}
+inline bool PartyResult_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, PartyResult* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<PartyResult>(
+    PartyResult_descriptor(), name, value);
+}
+enum PartyMemberState : int {
+  PARTY_MEMBER_BASECAMP = 0,
+  PARTY_MEMBER_IN_RUN = 1,
+  PARTY_MEMBER_OFFLINE = 2,
+  PartyMemberState_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  PartyMemberState_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool PartyMemberState_IsValid(int value);
+constexpr PartyMemberState PartyMemberState_MIN = PARTY_MEMBER_BASECAMP;
+constexpr PartyMemberState PartyMemberState_MAX = PARTY_MEMBER_OFFLINE;
+constexpr int PartyMemberState_ARRAYSIZE = PartyMemberState_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyMemberState_descriptor();
+template<typename T>
+inline const std::string& PartyMemberState_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, PartyMemberState>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function PartyMemberState_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    PartyMemberState_descriptor(), enum_t_value);
+}
+inline bool PartyMemberState_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, PartyMemberState* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<PartyMemberState>(
+    PartyMemberState_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -631,6 +718,21 @@ template <> struct is_proto_enum< ::Protocol::ProjectileEnd> : ::std::true_type 
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ProjectileEnd>() {
   return ::Protocol::ProjectileEnd_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::RunMode> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::RunMode>() {
+  return ::Protocol::RunMode_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::PartyResult> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::PartyResult>() {
+  return ::Protocol::PartyResult_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::PartyMemberState> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::PartyMemberState>() {
+  return ::Protocol::PartyMemberState_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE

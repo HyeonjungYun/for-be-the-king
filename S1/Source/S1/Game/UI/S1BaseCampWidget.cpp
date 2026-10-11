@@ -6,7 +6,9 @@
 #include "Game/UI/S1ItemSlotWidget.h"
 #include "Game/UI/S1ItemUIComponent.h"
 #include "Game/UI/S1ItemUIStyle.h"
+#include "Game/UI/S1PartyWidgets.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
+#include "Game/Party/S1PartySubsystem.h"
 #include "Game/Item/S1ItemLogic.h"
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/S1SkillTable.h"
@@ -361,6 +363,39 @@ void US1BaseCampWidget::NativeOnInitialized()
 	const US1ItemSubsystem* Items = GetItems();
 	MakeGrid(Column[2], Items != nullptr ? Items->GetCarriedCapacity() : 25, CarriedSlots);
 
+	// Mode row (PVE, ADR-0014) - which room [입장] goes to, and the co-op party window. Small buttons, one line,
+	// so the 720p height budget of the column (§ Layout Zones) is not broken
+	{
+		UHorizontalBox* ModeRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		const TCHAR* ModeKeys[] = { TEXT("mode.pvp"), TEXT("mode.pve_solo"), TEXT("mode.pve_coop") };
+		for (const TCHAR* Key : ModeKeys)
+		{
+			UBorder* Button = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+			Button->SetPadding(FMargin(8.f, 4.f));
+			UTextBlock* Label = MakeText(FontSmall, TextPrimary());
+			Label->SetText(Text(Key));
+			Button->SetContent(Label);
+			if (UHorizontalBoxSlot* ButtonSlot = ModeRow->AddChildToHorizontalBox(Button))
+				ButtonSlot->SetPadding(FMargin(0.f, 0.f, 4.f, 0.f));
+			ModeButtons.Add(Button);
+			ModeTexts.Add(Label);
+		}
+
+		UTextBlock* Spacer = MakeText(FontSmall, TextSecondary());
+		if (UHorizontalBoxSlot* SpacerSlot = ModeRow->AddChildToHorizontalBox(Spacer))
+			SpacerSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+		PartyButton = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		PartyButton->SetPadding(FMargin(8.f, 4.f));
+		PartyButton->SetBrushColor(CellHover());
+		PartyText = MakeText(FontSmall, TextPrimary());
+		PartyButton->SetContent(PartyText);
+		ModeRow->AddChildToHorizontalBox(PartyButton);
+
+		if (UVerticalBoxSlot* RowSlot = Column[2]->AddChildToVerticalBox(ModeRow))
+			RowSlot->SetPadding(FMargin(0.f, 4.f, 0.f, 4.f));
+	}
+
 	// The server dresses a character with nothing at all - worn, carried and vault empty - in the starter kit
 	// on entry (account-login-mvp Core Rule 8). Said here so entering empty-handed is not a surprise either way
 	StarterNotice = MakeText(FontSmall, TextSecondary());
@@ -398,6 +433,9 @@ void US1BaseCampWidget::NativeConstruct()
 		RejectedHandle = BaseCamp->OnEnterRejected.AddUObject(this, &US1BaseCampWidget::HandleEnterRejected);
 	}
 
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		PartyChangedHandle = Party->OnPartyChanged.AddUObject(this, &US1BaseCampWidget::RefreshEnter);
+
 	// S3 opens fresh — at login and after every run. A filter is a search, not a setting: left in
 	// place it would hide what came back from the run. The sort order is a preference and stays.
 	VaultFilterText.Reset();
@@ -426,6 +464,12 @@ void US1BaseCampWidget::NativeDestruct()
 		BaseCamp->OnInventoryReady.Remove(ReadyHandle);
 		BaseCamp->OnEnterRejected.Remove(RejectedHandle);
 	}
+
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->OnPartyChanged.Remove(PartyChangedHandle);
+
+	// A co-op member pulled into the run by the leader leaves base camp from under the party window too
+	ClosePartyPanel();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -702,13 +746,15 @@ void US1BaseCampWidget::RefreshTotals()
 void US1BaseCampWidget::RefreshEnter()
 {
 	const US1BaseCampSubsystem* BaseCamp = GetBaseCamp();
-	const bool bEntering = BaseCamp != nullptr && BaseCamp->GetPlace() == ES1Place::Entering;
-	const bool bCanEnter = IsLocked() == false;
+	const bool bCanEnter = IsLocked() == false && BaseCamp != nullptr && BaseCamp->CanEnter();
 
-	// Empty-handed entry is normal (GC:644-646) — only "not loaded yet" and "already going" disable it.
-	EnterText->SetText(Text(bEntering ? TEXT("label.entering") : TEXT("label.enter")));
+	// Empty-handed entry is normal (GC:644-646) — "not loaded yet", "already going" and a mode that does not fit the
+	// party (PVE 협동 only for a party of 2+, a member waits for the leader) disable it. The label says which (ADR-0014)
+	EnterText->SetText(Text(BaseCamp != nullptr ? BaseCamp->GetEnterLabelKey() : TEXT("label.enter")));
 	EnterText->SetColorAndOpacity(FSlateColor(bCanEnter ? TextPrimary() : TextShadowed()));
 	EnterButton->SetBrushColor(bCanEnter ? CellHover() : CellBackground());
+
+	RefreshMode();
 
 	// Same condition the server checks (ServerPacketHandler LoadPlayerItems ownedRows == 0) - only once the
 	// base-camp sync is in, so a half-loaded S3 never promises a kit the server will not give
@@ -755,15 +801,42 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 	const FVector2D At = InMouseEvent.GetScreenSpacePosition();
 	auto IsUnder = [&At](const UWidget* Widget) { return Widget != nullptr && Widget->GetCachedGeometry().IsUnderLocation(At); };
 
+	// Mode row and party window (PVE, ADR-0014) - changing the mode is a base-camp action like the others
+	for (int32 i = 0; i < ModeButtons.Num(); i++)
+	{
+		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(ModeButtons[i]))
+		{
+			if (US1BaseCampSubsystem* BaseCamp = GetBaseCamp(); BaseCamp != nullptr && IsLocked() == false)
+			{
+				BaseCamp->SetRunMode(static_cast<ES1RunMode>(i));
+				RefreshEnter();
+			}
+			return FReply::Handled();
+		}
+	}
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(PartyButton))
+	{
+		OpenPartyPanel();
+		return FReply::Handled();
+	}
+
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnterButton))
 	{
 		// [입장] — no shortcut on purpose (§ Interaction Map: 실수 방지). It opens S4, the entry-point map;
 		// C_ENTER_GAME goes out from there once a point or [무작위] is picked (design/ux/entry-point.md)
-		if (IsLocked() == false)
+		const US1BaseCampSubsystem* BaseCamp = GetBaseCamp();
+		if (IsLocked() == false && BaseCamp != nullptr && BaseCamp->CanEnter())
 		{
 			CancelConfirm();
 			ClearNotices();
 			OpenEntryMap();
+		}
+		else if (IsLocked() == false && BaseCamp != nullptr)
+		{
+			// Why not - the same rule the server would refuse with
+			const S1PartyLogic::EEnterBlock Block = BaseCamp->GetEnterBlock();
+			ShowNotice(EColumn::Carried, Text(Block == S1PartyLogic::EEnterBlock::CoopOnly ? TEXT("notice.party_coop_only")
+				: Block == S1PartyLogic::EEnterBlock::WaitForParty ? TEXT("notice.party_wait_back") : TEXT("notice.party_wait_leader")), 0);
 		}
 	}
 	else if (IsUnder(VaultSort))
@@ -995,6 +1068,45 @@ void US1BaseCampWidget::CloseEntryMap()
 {
 	if (EntryMap != nullptr && EntryMap->IsInViewport())
 		EntryMap->Close();
+}
+
+void US1BaseCampWidget::RefreshMode()
+{
+	const US1BaseCampSubsystem* BaseCamp = GetBaseCamp();
+	const ES1RunMode Mode = BaseCamp != nullptr ? BaseCamp->GetRunMode() : ES1RunMode::Pvp;
+	for (int32 i = 0; i < ModeButtons.Num(); i++)
+	{
+		const bool bOn = static_cast<int32>(Mode) == i;
+		ModeButtons[i]->SetBrushColor(bOn ? FLinearColor(FColor(0x39, 0x87, 0xE5)) : CellBackground());
+		ModeTexts[i]->SetColorAndOpacity(FSlateColor(bOn ? TextPrimary() : TextSecondary()));
+	}
+
+	if (PartyText != nullptr)
+	{
+		const US1PartySubsystem* Party = US1PartySubsystem::Get();
+		const int32 Size = Party != nullptr ? Party->Size() : 0;
+		PartyText->SetText(Size > 0 ? FText::Format(Text(TEXT("party.open_n")), FText::AsNumber(Size)) : Text(TEXT("party.open")));
+	}
+}
+
+void US1BaseCampWidget::OpenPartyPanel()
+{
+	if (PartyPanel == nullptr)
+		PartyPanel = CreateWidget<US1PartyPanelWidget>(GetOwningPlayer(), US1PartyPanelWidget::StaticClass());
+	if (PartyPanel == nullptr)
+		return;
+
+	// Over S3 like S4 (30); the invite popup (40) stays above both
+	constexpr int32 PartyPanelZOrder = 30;
+	if (PartyPanel->IsInViewport() == false)
+		PartyPanel->AddToViewport(PartyPanelZOrder);
+	PartyPanel->SetKeyboardFocus();
+}
+
+void US1BaseCampWidget::ClosePartyPanel()
+{
+	if (PartyPanel != nullptr && PartyPanel->IsInViewport())
+		PartyPanel->Close();
 }
 
 void US1BaseCampWidget::ShowNotice(EColumn Column, const FText& InText, uint64 InstanceId)

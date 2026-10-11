@@ -34,6 +34,45 @@ label.carry_in,반입,S3 right column
 label.take_all,전체 획득,S2 button
 label.enter,입장,S3 button
 label.entering,입장 중…,S3 button pending
+label.enter_coop_leader,함께 입장,S3 button - PVE co-op leader opens the run and takes the party (ADR-0014)
+label.enter_coop_join,합류,S3 button - the party run is alive
+label.enter_coop_wait,파티장 대기,S3 button - a co-op member waits for the leader
+label.enter_coop_back,파티 귀환 대기,S3 button - I already went into the party's live run (one entry per run)
+mode.pvp,PVP,S3 mode row - the shared floor
+mode.pve_solo,PVE 솔로,S3 mode row - a private copy for one
+mode.pve_coop,PVE 협동,S3 mode row - the party's private copy (up to 3)
+notice.party_coop_only,파티 중에는 PVE 협동으로만 입장할 수 있습니다,S3 notice - party of 2+ chose PVP or solo
+notice.party_wait_leader,파티장이 입장하면 함께 들어갑니다,S3 notice - co-op member pressed enter before the leader
+notice.party_wait_back,파티가 돌아오면 다음 판에 함께 들어갑니다,S3 notice - already entered the party's live run
+party.open,파티,S3 party button (no party)
+party.open_n,파티 {0}/3,S3 party button - {0} members
+party.title,협동 파티 ({0}/{1}),party window title
+party.empty,파티가 없습니다 - 이름으로 초대하면 내가 파티장이 됩니다,party window - no party
+party.name_hint,초대할 캐릭터 이름 (Enter),party window - name box
+party.invite,초대,party window button
+party.leave,파티 나가기,party window button
+party.kick,내보내기,party window - leader removes a member
+party.close,닫기 (Esc),party window button
+party.state.basecamp,베이스캠프,party member place
+party.state.in_run,던전,party member place
+party.state.offline,접속 끊김,party member place - disconnected in a run (body kept 180 s)
+party.invited,{0} 님이 협동 파티에 초대했습니다 ({1}초),invite popup - {0} inviter · {1} seconds left
+party.accept,수락,invite popup
+party.decline,거절,invite popup
+party.result.ok,{0},party request done - replaced by .invited_sent / .joined in code
+party.result.invited_sent,{0} 님에게 초대를 보냈습니다,party request done - invite went out
+party.result.joined,파티에 들어왔습니다,party request done - I accepted an invite
+party.result.not_found,베이스캠프에서 '{0}' 캐릭터를 찾을 수 없습니다,party result
+party.result.full,파티가 가득 찼습니다 (최대 3명),party result
+party.result.already,{0} 님은 이미 다른 파티에 있습니다,party result
+party.result.declined,{0} 님이 초대를 거절했습니다,party result
+party.result.expired,초대가 만료되었습니다,party result
+party.result.not_leader,파티장만 할 수 있습니다,party result
+party.result.busy,지금은 할 수 없습니다 (입장 중 · 던전 · 정산 중),party result
+party.result.self,자기 자신은 초대할 수 없습니다,party result
+party.result.no_instance,파티장이 아직 입장하지 않았습니다,party result
+party.result.already_entered,이번 던전에는 다시 들어갈 수 없습니다 - 다음 판에 함께,party result - one entry per character per instance
+party.result.coop_only,파티 중에는 PVE 협동으로만 입장할 수 있습니다,party result
 label.loading,불러오는 중,before inventory sync
 label.no_skill,스킬 없음,detail pane first line for skill_id 0
 label.sort_name,이름순,sort toggle

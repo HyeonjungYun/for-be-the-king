@@ -118,6 +118,18 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock>						EnterText;
 	UPROPERTY() TObjectPtr<US1EntryMapWidget>				EntryMap;
 
+	// PVE (ADR-0014) - mode row above [입장]: [PVP] [PVE 솔로] [PVE 협동] … [파티 n/3]
+	UPROPERTY() TArray<TObjectPtr<UBorder>>					ModeButtons;	// ES1RunMode order
+	UPROPERTY() TArray<TObjectPtr<UTextBlock>>				ModeTexts;
+	UPROPERTY() TObjectPtr<UBorder>							PartyButton;
+	UPROPERTY() TObjectPtr<UTextBlock>						PartyText;
+	UPROPERTY() TObjectPtr<class US1PartyPanelWidget>		PartyPanel;
+	FDelegateHandle											PartyChangedHandle;
+
+	void	RefreshMode();
+	void	OpenPartyPanel();
+	void	ClosePartyPanel();
+
 	bool			bVaultBySkill = false;
 	bool			bCarriedBySkill = false;
 	FString			VaultFilterText;

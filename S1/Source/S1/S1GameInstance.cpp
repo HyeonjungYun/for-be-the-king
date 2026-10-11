@@ -11,6 +11,7 @@
 #include "ClientPacketHandler.h"
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/Skill/S1ProjectileSubsystem.h"
+#include "Game/Party/S1PartySubsystem.h"
 #include "S1MyPlayer.h"
 
 
@@ -204,6 +205,10 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 		Player->SetPlayerInfo(objectInfo.pos_info());
 		Player->SetCreatureInfo(objectInfo);		// 체력 · 몬스터 외형 (monster-ai.md § H, 2026-10-07 에이전트 - YOLO 세션 위임)
 		Players.Add(objectInfo.object_id(), Player);
+
+		// PVE 협동 아군 - 파란 원판 · ★ 이름 (ADR-0014, 2026-10-11 에이전트 - YOLO 세션 위임)
+		if (const US1PartySubsystem* Party = GetSubsystem<US1PartySubsystem>(); Party != nullptr && Party->IsAlly(objectInfo.object_id()))
+			Player->SetAlly(true, Party->NameOf(objectInfo.object_id()));
 	}
 }
 

@@ -143,7 +143,33 @@ void US1BaseCampSubsystem::HandleDied(uint64 VictimId)
 
 bool US1BaseCampSubsystem::CanEnter() const
 {
-	return Place == ES1Place::BaseCamp && bInventoryReady;
+	return Place == ES1Place::BaseCamp && bInventoryReady && GetEnterBlock() == S1PartyLogic::EEnterBlock::None;
+}
+
+void US1BaseCampSubsystem::SetRunMode(ES1RunMode Mode)
+{
+	if (static_cast<int32>(Mode) == RunModeIndex)
+		return;
+
+	RunModeIndex = static_cast<int32>(Mode);
+	SaveConfig();
+	UE_LOG(LogTemp, Log, TEXT("[BASECAMP] run mode %d"), RunModeIndex);
+}
+
+S1PartyLogic::EEnterBlock US1BaseCampSubsystem::GetEnterBlock() const
+{
+	const UGameInstance* GameInstance = GetGameInstance();
+	const US1PartySubsystem* Party = GameInstance != nullptr ? GameInstance->GetSubsystem<US1PartySubsystem>() : nullptr;
+	return S1PartyLogic::EnterBlock(GetRunMode(), Party != nullptr ? Party->Size() : 0, Party != nullptr && Party->IsLeader(),
+		Party != nullptr && Party->IsInRun(), Party != nullptr && Party->HasEnteredThisRun());
+}
+
+const TCHAR* US1BaseCampSubsystem::GetEnterLabelKey() const
+{
+	const UGameInstance* GameInstance = GetGameInstance();
+	const US1PartySubsystem* Party = GameInstance != nullptr ? GameInstance->GetSubsystem<US1PartySubsystem>() : nullptr;
+	return S1PartyLogic::EnterLabelKey(GetRunMode(), Party != nullptr ? Party->Size() : 0, Party != nullptr && Party->IsLeader(),
+		Party != nullptr && Party->IsInRun(), Place == ES1Place::Entering, Party != nullptr && Party->HasEnteredThisRun());
 }
 
 void US1BaseCampSubsystem::RequestEnter(uint32 EntryPointId)
@@ -153,13 +179,16 @@ void US1BaseCampSubsystem::RequestEnter(uint32 EntryPointId)
 
 	// One character per account, one floor for now. entry_point_id 0 = the server picks one of the
 	// floor's points (S4 [무작위]); an id it does not know on this floor is treated the same way.
+	// The mode picks the room: PVP = the shared floor, PVE = a private copy of it (ADR-0014)
 	Protocol::C_ENTER_GAME Pkt;
 	Pkt.set_playerindex(0);
 	Pkt.set_floor_id(FloorId);
 	Pkt.set_entry_point_id(EntryPointId);
+	Pkt.set_mode(static_cast<Protocol::RunMode>(static_cast<int32>(GetRunMode())));
 	SEND_PACKET(Pkt);
 
-	UE_LOG(LogTemp, Log, TEXT("[BASECAMP] enter requested - entry point %u%s"), EntryPointId, EntryPointId == 0 ? TEXT(" (random)") : TEXT(""));
+	UE_LOG(LogTemp, Log, TEXT("[BASECAMP] enter requested - entry point %u%s mode=%d"), EntryPointId, EntryPointId == 0 ? TEXT(" (random)") : TEXT(""),
+		static_cast<int32>(GetRunMode()));
 	SetPlace(ES1Place::Entering);
 }
 
