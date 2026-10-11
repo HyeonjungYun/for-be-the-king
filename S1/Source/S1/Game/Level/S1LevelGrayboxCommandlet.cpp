@@ -206,6 +206,25 @@ namespace S1LevelParity
 			}
 		}
 
+		// Where to sample: the houses' bounding box (dense walls) and the floor's — read from the level, so the island and
+		// the old square both work (2026-10-11)
+		FS1LevelLayout Layout;
+		FString LayoutError;
+		if (!Builder->CollectLayout(Layout, LayoutError))
+		{
+			UE_LOG(LogS1LevelGraybox, Error, TEXT("[LEVEL] parity: %s"), *LayoutError);
+			return false;
+		}
+		FBox2D HouseBox(ForceInit);
+		for (const FS1LevelHouse& House : Layout.Houses)
+		{
+			HouseBox += FVector2D(House.X0, House.Y0) * 100.0;
+			HouseBox += FVector2D(House.X1, House.Y1) * 100.0;
+		}
+		HouseBox = HouseBox.ExpandBy(400.0);
+		double FX0, FX1, FY0, FY1;
+		Layout.FloorBounds(FX0, FX1, FY0, FY1);
+
 		FRandomStream Rng(Seed);
 		auto Range = [&Rng](double Lo, double Hi) { return Lo + (Hi - Lo) * Rng.GetFraction(); };
 
@@ -216,9 +235,34 @@ namespace S1LevelParity
 
 		for (int32 i = 0; i < Samples; i++)
 		{
-			// 70 % in the band of houses (dense walls), the rest anywhere — cover, towers, open field
-			const bool bHouses = Rng.GetFraction() < 0.7f;
-			const FVector2D Start = bHouses ? FVector2D(Range(-4000.0, 2400.0), Range(-11600.0, 11600.0)) : FVector2D(Range(-13900.0, 13900.0), Range(-13900.0, 13900.0));
+			// 60 % among the houses (dense walls), 25 % anywhere on the floor — cover, towers, open field — and 15 % within
+			// 6 m of the coast, so its walls are compared too
+			const double Pick = Rng.GetFraction();
+			FVector2D Start;
+			if (Pick < 0.6)
+			{
+				Start = FVector2D(Range(HouseBox.Min.X, HouseBox.Max.X), Range(HouseBox.Min.Y, HouseBox.Max.Y));
+			}
+			else if (Pick < 0.85 || !Layout.HasOutline())
+			{
+				// The square: up to its boundary walls (1 m in). The island: its bounding box 10 m in — the corners are sea with
+				// no walls, and a segment (≤ 8 m) must not reach the server's outer safety square, which has no wall in UE
+				const double In = Layout.HasOutline() ? 10.0 : 1.0;
+				Start = FVector2D(Range((FX0 + In) * 100.0, (FX1 - In) * 100.0), Range((FY0 + In) * 100.0, (FY1 - In) * 100.0));
+			}
+			else
+			{
+				const int32 Edge = Rng.RandRange(0, Layout.Outline.Num() - 1);
+				const FVector2D EA = Layout.Outline[Edge];
+				const FVector2D EB = Layout.Outline[(Edge + 1) % Layout.Outline.Num()];
+				const FVector2D OnCoast = EA + (EB - EA) * Rng.GetFraction();
+				FVector2D Inward = FVector2D(-(EB - EA).Y, (EB - EA).X).GetSafeNormal();
+				if (!Layout.IsInside(OnCoast + Inward * 0.5))
+				{
+					Inward = -Inward;
+				}
+				Start = (OnCoast + Inward * Range(0.5, 6.0)) * 100.0;
+			}
 			const double Angle = Range(0.0, 2.0 * UE_DOUBLE_PI);
 			const double Reach = Range(50.0, 800.0);
 
@@ -531,12 +575,12 @@ int32 US1LevelGrayboxCommandlet::Main(const FString& Params)
 		}
 		else
 		{
-			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] built — wall %d · door post %d · pillar %d · free pillar %d · floor tile %d · rubble %d · boundary %d · tower %d · cover %d"),
+			UE_LOG(LogS1LevelGraybox, Display, TEXT("[LEVEL] built — wall %d · door post %d · pillar %d · free pillar %d · floor tile %d · rubble %d · boundary %d · tower %d · cover %d · island ground %d"),
 				Builder->NumInstances(ES1LevelModule::Wall), Builder->NumInstances(ES1LevelModule::DoorPost),
 				Builder->NumInstances(ES1LevelModule::Pillar), Builder->NumInstances(ES1LevelModule::FreePillar),
 				Builder->NumInstances(ES1LevelModule::FloorTile), Builder->NumInstances(ES1LevelModule::Rubble),
 				Builder->NumInstances(ES1LevelModule::Boundary), Builder->NumInstances(ES1LevelModule::TowerBody),
-				Builder->NumInstances(ES1LevelModule::Cover));
+				Builder->NumInstances(ES1LevelModule::Cover), Builder->NumInstances(ES1LevelModule::IslandGround));
 
 			// Round trip: what the level now holds must be the layout file, and pass every rule.
 			FS1LevelLayout Expected, Collected;

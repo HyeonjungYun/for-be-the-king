@@ -22,6 +22,7 @@
 #include "Game/Monster/S1MonsterCatalog.h"
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/S1SkillTable.h"
+#include "Game/Level/S1LevelBuilder.h"
 
 AS1Player::AS1Player()
 {
@@ -1086,6 +1087,13 @@ void AS1Player::TickDash(float DeltaTime)
 	{
 		// 유령 신랑의 저주 (skill_effects.csv ignores_walls) - no sweep, so the capsule passes through walls. The server
 		// skips its C_MOVE wall check for the same window (Room::ApplyMovement). Only the end point must be free.
+		// The coast is the exception (island 2026-10-11): the server refuses a position outside it even then
+		if (StopAtCoast(Step))
+		{
+			FinishDash();
+			ResolveDashEndOutOfWalls(/*bForwardFirst*/ false);		// forward is over the coast
+			return;
+		}
 		AddActorWorldOffset(DashDirection * Step, false, nullptr, ETeleportType::TeleportPhysics);
 		DashRemainingCm -= Step;
 
@@ -1117,7 +1125,39 @@ void AS1Player::TickDash(float DeltaTime)
 		FinishDash();
 }
 
-void AS1Player::ResolveDashEndOutOfWalls()
+bool AS1Player::StopAtCoast(float StepCm)
+{
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UWorld* World = GetWorld();
+	if (Capsule == nullptr || World == nullptr)
+		return false;
+
+	// Every static hit along the step, not just the first - a house wall in front must not hide the coast behind it
+	const FVector Start = GetActorLocation();
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), Capsule->GetScaledCapsuleHalfHeight());
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DashCoast), false, this);
+	TArray<FHitResult> Hits;
+	World->SweepMultiByObjectType(Hits, Start, Start + DashDirection * StepCm, FQuat::Identity, FCollisionObjectQueryParams(ECC_WorldStatic), Shape, Params);
+
+	const FHitResult* First = nullptr;
+	for (const FHitResult& Hit : Hits)
+	{
+		const UPrimitiveComponent* Component = Hit.GetComponent();
+		if (Component != nullptr && Component->ComponentHasTag(S1LevelCoastTag) && Hit.bStartPenetrating == false
+			&& (First == nullptr || Hit.Time < First->Time))
+		{
+			First = &Hit;
+		}
+	}
+	if (First == nullptr)
+		return false;
+
+	SetActorLocation(First->Location, false, nullptr, ETeleportType::TeleportPhysics);
+	UE_LOG(LogTemp, Log, TEXT("[DASH] wall-pass dash stopped at the coast after %.0f cm"), FVector::Dist2D(DashStartLocation, First->Location));
+	return true;
+}
+
+void AS1Player::ResolveDashEndOutOfWalls(bool bForwardFirst)
 {
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UWorld* World = GetWorld();
@@ -1137,7 +1177,7 @@ void AS1Player::ResolveDashEndOutOfWalls()
 	// Forward first - the other side of the wall is where the dash was going. Then back toward the start (the spot in
 	// front of the wall is always free). 25 cm steps: under the capsule radius, so no gap is skipped.
 	constexpr float StepCm = 25.f;
-	constexpr float MaxForwardCm = 400.f;
+	const float MaxForwardCm = bForwardFirst ? 400.f : 0.f;
 	for (float Extra = StepCm; Extra <= MaxForwardCm; Extra += StepCm)
 	{
 		const FVector Probe = End + DashDirection * Extra;

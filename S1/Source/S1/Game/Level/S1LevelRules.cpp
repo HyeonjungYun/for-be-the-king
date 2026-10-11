@@ -55,6 +55,31 @@ namespace S1LevelRules
 		return FloorHalf - FMath::Max(FMath::Abs(P.X), FMath::Abs(P.Y));
 	}
 
+	void ForFloorGrid(const FS1LevelLayout& L, int32 Step, double Inset, const TFunctionRef<void(const FVector2D&)>& Visit)
+	{
+		if (!L.HasOutline())
+		{
+			const int32 Lo = FMath::CeilToInt(-FloorHalf + Inset);
+			const int32 Hi = FMath::FloorToInt(FloorHalf - Inset);
+			for (int32 X = Lo; X <= Hi; X += Step)
+				for (int32 Y = Lo; Y <= Hi; Y += Step)
+					Visit(FVector2D(X, Y));
+			return;
+		}
+
+		double X0, X1, Y0, Y1;
+		L.FloorBounds(X0, X1, Y0, Y1);
+		for (int32 X = FMath::CeilToInt(X0); X <= FMath::FloorToInt(X1); X += Step)
+		{
+			for (int32 Y = FMath::CeilToInt(Y0); Y <= FMath::FloorToInt(Y1); Y += Step)
+			{
+				const FVector2D P(X, Y);
+				if (L.BoundaryGap(P) >= Inset)
+					Visit(P);
+			}
+		}
+	}
+
 	double RectDist(const FVector2D& P, const FS1LevelHouse& House)
 	{
 		const double Dx = FMath::Max3(House.X0 - P.X, 0.0, P.X - House.X1);
@@ -193,7 +218,7 @@ namespace S1LevelRules
 			double Gap = TNumericLimits<double>::Max();
 			for (const FVector2D& C : Corners(H))
 			{
-				Gap = FMath::Min(Gap, BoundaryGap(C));
+				Gap = FMath::Min(Gap, L.BoundaryGap(C));
 			}
 			R.Add(FString::Printf(TEXT("house %s boundary gap"), *H.Id), Gap, 0.0, true);
 
@@ -223,11 +248,13 @@ namespace S1LevelRules
 				R.Add(FString::Printf(TEXT("house %s-%s gap"), *A.Id, *B.Id), Gap, 0.0, true);
 			}
 		}
-		const double Share = Area / FMath::Square(2.0 * FloorHalf);
+		const double Share = Area / L.FloorArea();
 		R.Add(TEXT("house area share (R4) min"), Share, Lim.HouseAreaMin, true);
 		R.Add(TEXT("house area share (R4) max"), Share, Lim.HouseAreaMax, false);
 
-		// Towers (Core Rule 6)
+		// Towers (Core Rule 6) - 3 on the old square, 4 on the island (one near tower per house, the rest cover the far coast)
+		R.Add(TEXT("tower count min"), L.Towers.Num(), Lim.TowerCountMin, true);
+		R.Add(TEXT("tower count max"), L.Towers.Num(), Lim.TowerCountMax, false);
 		for (int32 i = 0; i < L.Towers.Num(); i++)
 		{
 			for (int32 j = i + 1; j < L.Towers.Num(); j++)
@@ -238,7 +265,7 @@ namespace S1LevelRules
 		}
 		for (const FS1LevelTower& T : L.Towers)
 		{
-			R.Add(FString::Printf(TEXT("tower %s boundary"), *T.Id), BoundaryGap(T.P), Lim.TowerBoundary, true);
+			R.Add(FString::Printf(TEXT("tower %s boundary"), *T.Id), L.BoundaryGap(T.P), Lim.TowerBoundary, true);
 			for (const FS1LevelHouse& H : L.Houses)
 			{
 				R.Add(FString::Printf(TEXT("tower %s - house %s wall"), *T.Id, *H.Id), RectDist(T.P, H), Lim.TowerHouse, true);
@@ -284,7 +311,7 @@ namespace S1LevelRules
 		R.Add(TEXT("entry count max"), L.Entries.Num(), Lim.EntryCount, false);
 		for (const FS1LevelEntry* E : Outer)
 		{
-			const double Gap = BoundaryGap(E->P);
+			const double Gap = L.BoundaryGap(E->P);
 			R.Add(FString::Printf(TEXT("entry %d band min"), E->Id), Gap, Lim.EntryBandMin, true);
 			R.Add(FString::Printf(TEXT("entry %d band max"), E->Id), Gap, Lim.EntryBandMax, false);
 		}
@@ -349,14 +376,14 @@ namespace S1LevelRules
 		// Open-field chests (Core Rule 10)
 		if (L.OpenChests.Num() > 0)
 		{
-			R.Add(TEXT("open chest count"), L.OpenChests.Num(), Lim.OpenChestCount, true);
+			R.Add(TEXT("open chest count"), L.OpenChests.Num(), L.OpenChestCount > 0 ? L.OpenChestCount : Lim.OpenChestCount, true);
 			for (const FS1LevelChest& C : L.OpenChests)
 			{
 				double House = TNumericLimits<double>::Max(), Tower = House, Entry = House;
 				for (const FS1LevelHouse& H : L.Houses) { House = FMath::Min(House, RectDist(C.P, H)); }
 				for (const FS1LevelTower& T : L.Towers) { Tower = FMath::Min(Tower, FVector2D::Distance(C.P, T.P)); }
 				for (const FS1LevelEntry& E : L.Entries) { Entry = FMath::Min(Entry, FVector2D::Distance(C.P, E.P)); }
-				R.Add(FString::Printf(TEXT("chest %d boundary"), C.Id), BoundaryGap(C.P), Lim.ChestBoundary, true);
+				R.Add(FString::Printf(TEXT("chest %d boundary"), C.Id), L.BoundaryGap(C.P), Lim.ChestBoundary, true);
 				R.Add(FString::Printf(TEXT("chest %d house"), C.Id), House, Lim.ChestHouse, true);
 				R.Add(FString::Printf(TEXT("chest %d tower"), C.Id), Tower, Lim.ChestTower, true);
 				R.Add(FString::Printf(TEXT("chest %d entry"), C.Id), Entry, Lim.ChestEntry, true);
@@ -379,22 +406,19 @@ namespace S1LevelRules
 			R.Add(FString::Printf(TEXT("monster %s entry"), *M.Id), Entry, Lim.MonsterEntry, true);
 		}
 
-		// F5 — worst distance from anywhere on the floor to the nearest tower
+		// F5 — worst distance from anywhere on the floor (the island only, not the sea) to the nearest tower
 		double Worst = 0.0;
 		FVector2D WorstAt = FVector2D::ZeroVector;
-		for (int32 X = -140; X <= 140; X += 2)
+		ForFloorGrid(L, 2, 0.0, [&](const FVector2D& P)
 		{
-			for (int32 Y = -140; Y <= 140; Y += 2)
+			double Nearest = TNumericLimits<double>::Max();
+			for (const FS1LevelTower& T : L.Towers) { Nearest = FMath::Min(Nearest, FVector2D::Distance(P, T.P)); }
+			if (Nearest > Worst)
 			{
-				double Nearest = TNumericLimits<double>::Max();
-				for (const FS1LevelTower& T : L.Towers) { Nearest = FMath::Min(Nearest, FVector2D::Distance(FVector2D(X, Y), T.P)); }
-				if (Nearest > Worst)
-				{
-					Worst = Nearest;
-					WorstAt = FVector2D(X, Y);
-				}
+				Worst = Nearest;
+				WorstAt = P;
 			}
-		}
+		});
 		R.Add(FString::Printf(TEXT("d_cover (F5) worst at (%.0f, %.0f)"), WorstAt.X, WorstAt.Y), Worst, Lim.DCoverMax, false,
 			FString::Printf(TEXT("t_reach %.1fs"), Worst * 1.2 / 3.4));
 	}
@@ -596,32 +620,28 @@ namespace S1LevelRules
 		}
 		double Worst = 0.0;
 		FVector2D WorstAt = FVector2D::ZeroVector;
-		for (int32 X = -139; X <= 139; X += 2)
+		ForFloorGrid(L, 2, 1.0, [&](const FVector2D& P)
 		{
-			for (int32 Y = -139; Y <= 139; Y += 2)
+			bool bSkip = false;
+			for (const FS1LevelHouse& H : L.Houses)
 			{
-				const FVector2D P(X, Y);
-				bool bSkip = false;
-				for (const FS1LevelHouse& H : L.Houses)
-				{
-					bSkip |= (H.X0 - 1 <= X && X <= H.X1 + 1 && H.Y0 - 1 <= Y && Y <= H.Y1 + 1);
-				}
-				for (const FS1LevelTower& T : L.Towers) { bSkip |= FVector2D::Distance(P, T.P) <= Lim.TowerRing; }
-				for (const FS1LevelEntry& E : L.Entries) { bSkip |= FVector2D::Distance(P, E.P) <= Lim.EntryClear; }
-				if (bSkip)
-				{
-					continue;
-				}
-				double D = BoundaryGap(P);
-				for (const FVector2D& C : L.Cover) { D = FMath::Min(D, FVector2D::Distance(P, C)); }
-				for (const FS1LevelHouse& H : L.Houses) { D = FMath::Min(D, RectDist(P, H)); }
-				if (D > Worst)
-				{
-					Worst = D;
-					WorstAt = P;
-				}
+				bSkip |= (H.X0 - 1 <= P.X && P.X <= H.X1 + 1 && H.Y0 - 1 <= P.Y && P.Y <= H.Y1 + 1);
 			}
-		}
+			for (const FS1LevelTower& T : L.Towers) { bSkip |= FVector2D::Distance(P, T.P) <= Lim.TowerRing; }
+			for (const FS1LevelEntry& E : L.Entries) { bSkip |= FVector2D::Distance(P, E.P) <= Lim.EntryClear; }
+			if (bSkip)
+			{
+				return;
+			}
+			double D = L.BoundaryGap(P);		// the coast is cover too (it blocks skills - the island's boundary walls)
+			for (const FVector2D& C : L.Cover) { D = FMath::Min(D, FVector2D::Distance(P, C)); }
+			for (const FS1LevelHouse& H : L.Houses) { D = FMath::Min(D, RectDist(P, H)); }
+			if (D > Worst)
+			{
+				Worst = D;
+				WorstAt = P;
+			}
+		});
 		R.Add(FString::Printf(TEXT("cover gap (R9) worst at (%.0f, %.0f)"), WorstAt.X, WorstAt.Y), Worst, Lim.CoverMaxGap, false,
 			FString::Printf(TEXT("%d cover pieces"), L.Cover.Num()));
 		for (const FVector2D& C : L.Cover)
@@ -983,6 +1003,13 @@ namespace S1LevelRules
 		if (E.BossHouse != A.BossHouse)
 		{
 			Diffs.Add(FString::Printf(TEXT("boss house: expected %s, got %s"), *E.BossHouse, *A.BossHouse));
+		}
+
+		// The coast is part of the floor (island 2026-10-11) - its walls and floor_outline.csv come from it
+		Polylines(TEXT("outline"), TEXT("coast"), E.Outline, A.Outline);
+		if (E.OpenChestCount != A.OpenChestCount)
+		{
+			Diffs.Add(FString::Printf(TEXT("open chest count rule: expected %d, got %d"), E.OpenChestCount, A.OpenChestCount));
 		}
 		return Diffs;
 	}

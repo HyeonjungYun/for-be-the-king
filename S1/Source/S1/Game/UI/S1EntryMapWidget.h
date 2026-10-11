@@ -18,7 +18,8 @@ class US1BaseCampSubsystem;
  * goes out once; [취소] (Esc) closes and sends nothing. The map faces the way the dungeon camera does —
  * screen up is world +X, screen right is world +Y — so the place you picked is where it looked to be.
  *
- * 🔴 The map is a TEMP square (MapHalfExtentCm) until the real floor has a picture.
+ * A floor with a coast (Server/Data/floor_outline.csv — the island, 2026-10-11) gets a map in its proportions with the
+ * coastline drawn; one without stays the square ± MapHalfExtentCm.
  */
 UCLASS()
 class S1_API US1EntryMapWidget : public UUserWidget
@@ -64,4 +65,20 @@ private:
 	int32		HoveredIndex = INDEX_NONE;
 	int32		ChosenIndex = INDEX_NONE;		// INDEX_NONE with bRequested = [무작위]
 	bool		bRequested = false;
+};
+
+/** S4's coastline — one closed line in map units, painted under the houses and markers. */
+UCLASS()
+class S1_API US1EntryMapCoastWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+
+	TArray<FVector2D> MapPoints;
+
+protected:
+
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 };

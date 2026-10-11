@@ -274,7 +274,10 @@ protected:
 	void FinishDash();
 
 	/** Wall-passing dash just ended: if the capsule sits inside blocking geometry, step forward (then back) to the first free spot. */
-	void ResolveDashEndOutOfWalls();
+	void ResolveDashEndOutOfWalls(bool bForwardFirst = true);
+
+	/** A wall-passing dash step that would cross the coast walls stops against them — true if it did. */
+	bool StopAtCoast(float StepCm);
 
 	/**
 	 * Casting marker shown to everyone. Server-driven, not predicted — this is what other

@@ -88,6 +88,86 @@ namespace S1LevelLayoutJson
 	}
 }
 
+namespace
+{
+	double SegmentDistance(const FVector2D& P, const FVector2D& A, const FVector2D& B)
+	{
+		const FVector2D V = B - A;
+		const double L2 = V.SizeSquared();
+		const double T = L2 <= 0.0 ? 0.0 : FMath::Clamp(FVector2D::DotProduct(P - A, V) / L2, 0.0, 1.0);
+		return FVector2D::Distance(P, A + V * T);
+	}
+}
+
+bool FS1LevelLayout::IsInside(const FVector2D& P) const
+{
+	if (!HasOutline())
+		return FMath::Max(FMath::Abs(P.X), FMath::Abs(P.Y)) <= SquareHalf;
+
+	// Ray casting - the same test as check_layout.py inside_outline (x is north, the ray runs along +x)
+	bool bInside = false;
+	const int32 N = Outline.Num();
+	for (int32 i = 0; i < N; i++)
+	{
+		const FVector2D& A = Outline[i];
+		const FVector2D& B = Outline[(i + 1) % N];
+		if ((A.Y > P.Y) != (B.Y > P.Y))
+		{
+			const double X = A.X + (P.Y - A.Y) * (B.X - A.X) / (B.Y - A.Y);
+			if (P.X < X)
+				bInside = !bInside;
+		}
+	}
+	return bInside;
+}
+
+double FS1LevelLayout::BoundaryGap(const FVector2D& P) const
+{
+	if (!HasOutline())
+		return SquareHalf - FMath::Max(FMath::Abs(P.X), FMath::Abs(P.Y));
+
+	double Best = TNumericLimits<double>::Max();
+	const int32 N = Outline.Num();
+	for (int32 i = 0; i < N; i++)
+		Best = FMath::Min(Best, SegmentDistance(P, Outline[i], Outline[(i + 1) % N]));
+	return IsInside(P) ? Best : -Best;
+}
+
+double FS1LevelLayout::FloorArea() const
+{
+	if (!HasOutline())
+		return FMath::Square(2.0 * SquareHalf);
+
+	double Twice = 0.0;
+	const int32 N = Outline.Num();
+	for (int32 i = 0; i < N; i++)
+	{
+		const FVector2D& A = Outline[i];
+		const FVector2D& B = Outline[(i + 1) % N];
+		Twice += A.X * B.Y - B.X * A.Y;
+	}
+	return FMath::Abs(Twice) * 0.5;
+}
+
+void FS1LevelLayout::FloorBounds(double& OutX0, double& OutX1, double& OutY0, double& OutY1) const
+{
+	if (!HasOutline())
+	{
+		OutX0 = OutY0 = -SquareHalf;
+		OutX1 = OutY1 = SquareHalf;
+		return;
+	}
+	OutX0 = OutY0 = TNumericLimits<double>::Max();
+	OutX1 = OutY1 = -TNumericLimits<double>::Max();
+	for (const FVector2D& P : Outline)
+	{
+		OutX0 = FMath::Min(OutX0, P.X);
+		OutX1 = FMath::Max(OutX1, P.X);
+		OutY0 = FMath::Min(OutY0, P.Y);
+		OutY1 = FMath::Max(OutY1, P.Y);
+	}
+}
+
 FVector2D FS1LevelHouse::DoorPoint(const FS1LevelDoor& Door) const
 {
 	switch (Door.Side)
@@ -251,6 +331,19 @@ bool FS1LevelLayout::ParseJson(const FString& Json, FString& OutError)
 			Cover.Add(XY(Value->AsObject()));
 		}
 	}
+
+	// The island coast (2026-10-11) - optional; without it the floor is the old square
+	if (const FJsonArray* Array = ArrayField(Root, TEXT("outline")))
+	{
+		if (!Points(Array, Outline) || Outline.Num() < 3)
+		{
+			OutError = TEXT("outline must be at least three [x, y] pairs");
+			return false;
+		}
+	}
+	double ChestCount = 0.0;
+	if (Root->TryGetNumberField(TEXT("open_chest_count"), ChestCount))
+		OpenChestCount = FMath::RoundToInt(ChestCount);
 
 	if (Houses.Num() == 0 || Towers.Num() == 0 || Entries.Num() == 0)
 	{

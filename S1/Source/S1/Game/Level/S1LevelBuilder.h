@@ -10,12 +10,15 @@
 class UHierarchicalInstancedStaticMeshComponent;
 class UStaticMesh;
 
+/** Component tag on the coast walls — what a wall-passing dash still stops at (2026-10-11 island). */
+inline const FName S1LevelCoastTag(TEXT("S1Coast"));
+
 /** Structural module kinds — design/levels/floor-1.md § 8. One instanced component each. */
 UENUM(BlueprintType)
 enum class ES1LevelModule : uint8
 {
-	Ground,			// the field slab (and the dark fill outside the boundary)
-	Boundary,		// impassable earth wall around the floor (not a server wall — the server uses the rectangle)
+	Ground,			// the base slab under the whole floor — the collision players walk on; the sea colour around an island
+	Boundary,		// impassable coast wall along the floor's outline (the square without one) — server wall kind "boundary"
 	Wall,			// W / WB — 4 m, server wall
 	DoorPost,		// DF — two posts per 3 m opening, server wall
 	Pillar,			// P at grid joints — server wall
@@ -25,6 +28,7 @@ enum class ES1LevelModule : uint8
 	TowerBody,		// 3 x 3 m box collision — server wall (ADR-0006: one box per server wall, so not a cylinder)
 	TowerPlaza,		// 12 m paved ring
 	Cover,			// open-field cover piece — server wall
+	IslandGround,	// island ground tiles inside the coast — look only, the Ground slab under them carries the collision
 	Count UMETA(Hidden)
 };
 
@@ -71,6 +75,17 @@ public:
 	/** Real module meshes. Missing kinds fall back to engine basic shapes. */
 	UPROPERTY(EditAnywhere, Category = "Level|Modules")
 	TMap<ES1LevelModule, TObjectPtr<UStaticMesh>> ModuleMeshes;
+
+	/**
+	 * The coast the last build raised (metres, clockwise from north) — empty = the 280 m square. CollectLayout reads it back,
+	 * the export writes it to floor_outline.csv and the server keeps players inside it (2026-10-11 island).
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Level")
+	TArray<FVector2D> CoastOutlineMetres;
+
+	/** The layout's open_chest_count rule (0 = the default 12), kept for the round trip. */
+	UPROPERTY(VisibleAnywhere, Category = "Level")
+	int32 OpenChestCountRule = 0;
 
 	/** Content hash of the last export (Core Rule 16). */
 	UPROPERTY(VisibleAnywhere, Category = "Level")
@@ -119,6 +134,9 @@ private:
 	bool HasModuleMesh(ES1LevelModule Module) const;
 	void AddModule(ES1LevelModule Module, const FVector& BottomCentreCm, double YawDeg, const FVector& SizeCm);
 	void BuildHouse(const FS1LevelHouse& House, const FS1HouseGrid& Grid, const TArray<FString>& OpenAirRooms);
+
+	/** Island ground tiles over the outline (a quadtree, 16 m inside down to 2 m at the coast) and the coast walls on it. */
+	void BuildIsland(const FS1LevelLayout& Layout);
 
 	template <typename T>
 	T* SpawnMarker(const FVector2D& Metres, const FString& Label, FColor Color);

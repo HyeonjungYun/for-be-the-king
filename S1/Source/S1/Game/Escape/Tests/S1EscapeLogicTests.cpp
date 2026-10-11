@@ -71,12 +71,14 @@ bool FS1EscapeDataTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("escape_config.csv"), FFileHelper::LoadFileToString(Config, *FPaths::Combine(Directory, TEXT("escape_config.csv"))));
 
 	const TArray<FS1TowerView> Floor1 = S1EscapeLogic::ParseTowers(Towers, 0, Error);
-	if (TestEqual(TEXT("three towers on floor 1"), Floor1.Num(), 3))
+	// The island (2026-10-11) has four towers — the 3-tower square could not cover its far east (level-map.md F5)
+	if (TestEqual(TEXT("four towers on floor 1"), Floor1.Num(), 4))
 	{
 		// Wire ids follow the string ids — the server makes the same mapping (escape-timer.md Core Rule 1)
 		TestEqual(TEXT("Ta = 1"), Floor1[0].TowerId + FString::FromInt(Floor1[0].WireId), FString(TEXT("Ta1")));
 		TestEqual(TEXT("Tc = 3"), Floor1[2].TowerId + FString::FromInt(Floor1[2].WireId), FString(TEXT("Tc3")));
-		TestEqual(TEXT("Tc position"), Floor1[2].Position, FVector2D(-7800.0, 0.0));
+		TestEqual(TEXT("Td = 4"), Floor1[3].TowerId + FString::FromInt(Floor1[3].WireId), FString(TEXT("Td4")));
+		TestEqual(TEXT("Tc position"), Floor1[2].Position, FVector2D(0.0, 18000.0));
 	}
 	TestEqual(TEXT("no towers on a TEMP floor"), S1EscapeLogic::ParseTowers(Towers, 2, Error).Num(), 0);
 

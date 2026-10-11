@@ -20,27 +20,92 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Rendering/DrawElements.h"
 
 using namespace S1ItemUIStyle;
 
 // Named, not anonymous — a unity build puts this file next to the other widgets.
 namespace S1EntryMapLayout
 {
-	constexpr float MapSize = 460.f;		// 1080p units — fits the 720p height with the title and buttons
+	constexpr float MapSize = 460.f;		// 1080p units — the square map; fits the 720p height with the title and buttons
+	constexpr float MapMaxWidth = 880.f;	// an island map is as wide as this, its height follows the island (≤ MapSize)
+	constexpr float CoastMarginFraction = 0.04f;
 	constexpr float MarkerSize = 36.f;
 	constexpr int32 MaxNumberKeys = 9;
 
-	/** World → map. Screen up is world +X, screen right is world +Y — the dungeon camera's way. */
-	FVector2D ToMap(float WorldX, float WorldY, float HalfExtentCm)
+	/** The floor area the map shows, and the map's size. Screen up is world +X, screen right is world +Y — the dungeon camera's way. */
+	struct FMapFrame
 	{
-		const float U = (WorldY + HalfExtentCm) / (2.f * HalfExtentCm);
-		const float V = (HalfExtentCm - WorldX) / (2.f * HalfExtentCm);
-		return FVector2D(FMath::Clamp(U, 0.f, 1.f) * MapSize, FMath::Clamp(V, 0.f, 1.f) * MapSize);
+		float MinX = -3000.f, MaxX = 3000.f, MinY = -3000.f, MaxY = 3000.f;
+		FVector2D Size = FVector2D(MapSize);
+
+		FVector2D ToMap(float WorldX, float WorldY) const
+		{
+			const float U = (WorldY - MinY) / FMath::Max(MaxY - MinY, 1.f);
+			const float V = (MaxX - WorldX) / FMath::Max(MaxX - MinX, 1.f);
+			return FVector2D(FMath::Clamp(U, 0.f, 1.f) * Size.X, FMath::Clamp(V, 0.f, 1.f) * Size.Y);
+		}
+
+		FVector2D ToMap(const FS1EntryPoint& Point) const
+		{
+			return ToMap(Point.X, Point.Y);
+		}
+	};
+
+	/** The square floor: ± MapHalfExtentCm (DefaultGame.ini). */
+	FMapFrame SquareFrame(float HalfExtentCm)
+	{
+		FMapFrame Frame;
+		Frame.MinX = Frame.MinY = -HalfExtentCm;
+		Frame.MaxX = Frame.MaxY = HalfExtentCm;
+		return Frame;
 	}
 
-	FVector2D ToMap(const FS1EntryPoint& Point, float HalfExtentCm)
+	/** The island: its coast's bounding box plus a margin, MapMaxWidth wide (narrower if the island is tall). */
+	FMapFrame CoastFrame(const TArray<FVector2D>& Coast)
 	{
-		return ToMap(Point.X, Point.Y, HalfExtentCm);
+		FBox2D Box(ForceInit);
+		for (const FVector2D& P : Coast)
+			Box += P;
+
+		const FVector2D Margin = Box.GetSize() * CoastMarginFraction;
+		Box = Box.ExpandBy(FMath::Max(Margin.X, Margin.Y));
+
+		FMapFrame Frame;
+		Frame.MinX = Box.Min.X;
+		Frame.MaxX = Box.Max.X;
+		Frame.MinY = Box.Min.Y;
+		Frame.MaxY = Box.Max.Y;
+
+		const float Tall = (Frame.MaxX - Frame.MinX) / FMath::Max(Frame.MaxY - Frame.MinY, 1.f);	// height per width
+		Frame.Size = FVector2D(MapMaxWidth, MapMaxWidth * Tall);
+		if (Frame.Size.Y > MapSize)
+			Frame.Size = FVector2D(MapSize / Tall, MapSize);
+		return Frame;
+	}
+
+	/** Rows of a Server/Data csv for one floor (FloorColumn = floor_id), header skipped. */
+	TArray<TArray<FString>> LoadFloorRows(const TCHAR* File, uint32 FloorId, int32 MinColumns, int32 FloorColumn)
+	{
+		TArray<TArray<FString>> Rows;
+
+		FString Relative;
+		GConfig->GetString(TEXT("/Script/S1.S1ItemSubsystem"), TEXT("ItemDataDirectory"), Relative, GGameIni);
+		FString Csv;
+		if (FFileHelper::LoadFileToString(Csv, *FPaths::Combine(FPaths::ProjectDir(), Relative, File)) == false)
+			return Rows;
+
+		TArray<FString> Lines;
+		Csv.ParseIntoArrayLines(Lines, true);
+		for (int32 i = 1; i < Lines.Num(); i++)
+		{
+			TArray<FString> Cells;
+			Lines[i].TrimStartAndEnd().ParseIntoArray(Cells, TEXT(","), false);
+			if (Cells.Num() < MinColumns || static_cast<uint32>(FCString::Atoi(*Cells[FloorColumn])) != FloorId)
+				continue;
+			Rows.Add(MoveTemp(Cells));
+		}
+		return Rows;
 	}
 
 	struct FHouseRect { float X0 = 0.f, X1 = 0.f, Y0 = 0.f, Y1 = 0.f; };
@@ -49,25 +114,23 @@ namespace S1EntryMapLayout
 	TArray<FHouseRect> LoadHouses(uint32 FloorId)
 	{
 		TArray<FHouseRect> Houses;
-
-		FString Relative;
-		GConfig->GetString(TEXT("/Script/S1.S1ItemSubsystem"), TEXT("ItemDataDirectory"), Relative, GGameIni);
-		FString Csv;
-		if (FFileHelper::LoadFileToString(Csv, *FPaths::Combine(FPaths::ProjectDir(), Relative, TEXT("houses.csv"))) == false)
-			return Houses;
-
-		TArray<FString> Lines;
-		Csv.ParseIntoArrayLines(Lines, true);
-		for (int32 i = 1; i < Lines.Num(); i++)
-		{
-			TArray<FString> Cells;
-			Lines[i].TrimStartAndEnd().ParseIntoArray(Cells, TEXT(","), false);
-			if (Cells.Num() < 6 || static_cast<uint32>(FCString::Atoi(*Cells[1])) != FloorId)
-				continue;
-
+		for (const TArray<FString>& Cells : LoadFloorRows(TEXT("houses.csv"), FloorId, 6, 1))
 			Houses.Add({ FCString::Atof(*Cells[2]), FCString::Atof(*Cells[3]), FCString::Atof(*Cells[4]), FCString::Atof(*Cells[5]) });
-		}
 		return Houses;
+	}
+
+	/** Server/Data/floor_outline.csv (floor_id,seq,x,y — cm) in seq order. Empty = the floor is the square. */
+	TArray<FVector2D> LoadCoast(uint32 FloorId)
+	{
+		TArray<TPair<int32, FVector2D>> Points;
+		for (const TArray<FString>& Cells : LoadFloorRows(TEXT("floor_outline.csv"), FloorId, 4, 0))
+			Points.Emplace(FCString::Atoi(*Cells[1]), FVector2D(FCString::Atof(*Cells[2]), FCString::Atof(*Cells[3])));
+		Points.Sort([](const TPair<int32, FVector2D>& A, const TPair<int32, FVector2D>& B) { return A.Key < B.Key; });
+
+		TArray<FVector2D> Coast;
+		for (const TPair<int32, FVector2D>& Point : Points)
+			Coast.Add(Point.Value);
+		return Coast.Num() >= 3 ? Coast : TArray<FVector2D>();
 	}
 
 	const FKey& NumberKey(int32 Index)
@@ -83,6 +146,20 @@ namespace S1EntryMapLayout
 			EKeys::NumPadFive, EKeys::NumPadSix, EKeys::NumPadSeven, EKeys::NumPadEight, EKeys::NumPadNine };
 		return Keys[Index];
 	}
+}
+
+int32 US1EntryMapCoastWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+	const int32 Layer = Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+	if (MapPoints.Num() < 3)
+		return Layer;
+
+	TArray<FVector2D> Closed = MapPoints;
+	Closed.Add(MapPoints[0]);
+	FSlateDrawElement::MakeLines(OutDrawElements, Layer + 1, AllottedGeometry.ToPaintGeometry(), Closed, ESlateDrawEffect::None,
+		FLinearColor(FColor(150, 190, 220, 230)), true, 2.5f);
+	return Layer + 1;
 }
 
 US1BaseCampSubsystem* US1EntryMapWidget::GetBaseCamp() const
@@ -138,10 +215,18 @@ void US1EntryMapWidget::NativeOnInitialized()
 		TitleSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 10.f));
 	}
 
-	// The floor — a square until the real map has a picture
+	const US1BaseCampSubsystem* BaseCamp = GetBaseCamp();
+	const float HalfExtent = BaseCamp != nullptr ? FMath::Max(BaseCamp->GetMapHalfExtentCm(), 1.f) : 3000.f;
+	const TArray<FS1EntryPoint> Points = BaseCamp != nullptr ? BaseCamp->GetEntryPoints().OnFloor(BaseCamp->GetFloorId()) : TArray<FS1EntryPoint>();
+	const uint32 FloorId = BaseCamp != nullptr ? BaseCamp->GetFloorId() : 0;
+
+	// The floor — the island's coast and its proportions when the floor has one (floor_outline.csv), else the square
+	const TArray<FVector2D> Coast = LoadCoast(FloorId);
+	const FMapFrame Frame = Coast.Num() > 0 ? CoastFrame(Coast) : SquareFrame(HalfExtent);
+
 	USizeBox* MapBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	MapBox->SetWidthOverride(MapSize);
-	MapBox->SetHeightOverride(MapSize);
+	MapBox->SetWidthOverride(Frame.Size.X);
+	MapBox->SetHeightOverride(Frame.Size.Y);
 
 	UBorder* MapFrame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	MapFrame->SetBrush(FSlateRoundedBoxBrush(PanelBackground(), 4.f, Divider(), 2.f));
@@ -154,16 +239,26 @@ void US1EntryMapWidget::NativeOnInitialized()
 	if (UVerticalBoxSlot* MapSlot = Column->AddChildToVerticalBox(MapBox))
 		MapSlot->SetHorizontalAlignment(HAlign_Center);
 
-	const US1BaseCampSubsystem* BaseCamp = GetBaseCamp();
-	const float HalfExtent = BaseCamp != nullptr ? FMath::Max(BaseCamp->GetMapHalfExtentCm(), 1.f) : 3000.f;
-	const TArray<FS1EntryPoint> Points = BaseCamp != nullptr ? BaseCamp->GetEntryPoints().OnFloor(BaseCamp->GetFloorId()) : TArray<FS1EntryPoint>();
-	const uint32 FloorId = BaseCamp != nullptr ? BaseCamp->GetFloorId() : 0;
+	// The coastline first, under everything — on an island it is the map's main landmark
+	if (Coast.Num() > 0)
+	{
+		US1EntryMapCoastWidget* CoastLine = WidgetTree->ConstructWidget<US1EntryMapCoastWidget>(US1EntryMapCoastWidget::StaticClass());
+		for (const FVector2D& P : Coast)
+			CoastLine->MapPoints.Add(Frame.ToMap(P.X, P.Y));
+		CoastLine->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* CoastSlot = Canvas->AddChildToCanvas(CoastLine))
+		{
+			CoastSlot->SetAutoSize(false);
+			CoastSlot->SetPosition(FVector2D::ZeroVector);
+			CoastSlot->SetSize(Frame.Size);
+		}
+	}
 
 	// Houses and towers under the points — the only landmarks the map shows (level-map.md § UI Requirements)
 	for (const FHouseRect& House : LoadHouses(FloorId))
 	{
-		const FVector2D TopLeft = ToMap(House.X1, House.Y0, HalfExtent);
-		const FVector2D BottomRight = ToMap(House.X0, House.Y1, HalfExtent);
+		const FVector2D TopLeft = Frame.ToMap(House.X1, House.Y0);
+		const FVector2D BottomRight = Frame.ToMap(House.X0, House.Y1);
 
 		UBorder* Outline = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 		Outline->SetBrush(FSlateRoundedBoxBrush(FLinearColor(1.f, 1.f, 1.f, 0.04f), 2.f, TextTertiary(), 1.5f));
@@ -189,7 +284,7 @@ void US1EntryMapWidget::NativeOnInitialized()
 				TowerSlot->SetAutoSize(false);
 				TowerSlot->SetSize(FVector2D(TowerMarker));
 				TowerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-				TowerSlot->SetPosition(ToMap(Tower.Position.X, Tower.Position.Y, HalfExtent));
+				TowerSlot->SetPosition(Frame.ToMap(Tower.Position.X, Tower.Position.Y));
 			}
 
 			UTextBlock* TowerLabel = MakeText(FontSmall, TextSecondary());
@@ -199,7 +294,7 @@ void US1EntryMapWidget::NativeOnInitialized()
 			{
 				LabelSlot->SetAutoSize(true);
 				LabelSlot->SetAlignment(FVector2D(0.5f, 0.f));
-				LabelSlot->SetPosition(ToMap(Tower.Position.X, Tower.Position.Y, HalfExtent) + FVector2D(0.f, TowerMarker * 0.5f + 1.f));
+				LabelSlot->SetPosition(Frame.ToMap(Tower.Position.X, Tower.Position.Y) + FVector2D(0.f, TowerMarker * 0.5f + 1.f));
 			}
 		}
 	}
@@ -212,7 +307,7 @@ void US1EntryMapWidget::NativeOnInitialized()
 		Marker.Name = Text(*FString::Printf(TEXT("entry.%u"), Points[i].EntryId));
 		Markers.Add(Marker);
 
-		const FVector2D At = ToMap(Points[i], HalfExtent);
+		const FVector2D At = Frame.ToMap(Points[i]);
 
 		UBorder* Circle = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 		Circle->SetBrush(FSlateRoundedBoxBrush(CellHover(), MarkerSize * 0.5f, TextTertiary(), 1.5f));

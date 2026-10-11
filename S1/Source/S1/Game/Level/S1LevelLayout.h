@@ -93,8 +93,34 @@ struct S1_API FS1LevelLayout
 	TArray<FVector2D>		Cover;
 	FString					BossHouse;
 
+	/**
+	 * The island coast (2026-10-11 map expansion, tools/level/gen_island.py) - a polygon in metres, clockwise from north.
+	 * Empty = the old 280 m square. Every boundary rule measures to this line, and the builder raises the coast on it.
+	 */
+	TArray<FVector2D>		Outline;
+
+	/** Open-field chests the rules ask for ("open_chest_count") - 0 = the limit's default (12). */
+	int32					OpenChestCount = 0;
+
 	/** Parses the tools/level/floor1.json format. */
 	bool ParseJson(const FString& Json, FString& OutError);
+
+	/** Square fallback half size when there is no outline (registry floor_size 280 m). */
+	static constexpr double SquareHalf = 140.0;
+
+	bool HasOutline() const { return Outline.Num() >= 3; }
+
+	/** Distance to the play area's edge - the coast, or the square. Negative = outside (check_layout.py boundary_gap). */
+	double BoundaryGap(const FVector2D& P) const;
+
+	/** Inside the coast (ray casting) - always true for the square inside |x|,|y| <= 140. */
+	bool IsInside(const FVector2D& P) const;
+
+	/** Area of the play area in m² - the polygon, or 280². */
+	double FloorArea() const;
+
+	/** (X0, X1, Y0, Y1) of the play area. */
+	void FloorBounds(double& OutX0, double& OutX1, double& OutY0, double& OutY1) const;
 
 	/** Reads a layout file. Grid paths inside it stay relative to the file's directory. */
 	bool LoadFromFile(const FString& Path, FString& OutError);

@@ -52,19 +52,28 @@ struct FS1LevelLimits
 	double MonsterEntry = 20.0;
 	double CoverMaxGap = 20.0;
 	double DCoverMax = 170.0;
-	double HouseAreaMin = 0.10, HouseAreaMax = 0.14;
+	// island (2026-10-11): three 56 m houses are 8 % of the 117,600 m² island - the share is measured on the island area
+	double HouseAreaMin = 0.07, HouseAreaMax = 0.14;
 	double TowerRing = 12.0;
 	int32  EntryCount = 9;
-	int32  OpenChestCount = 12;
+	int32  OpenChestCount = 12;			// the layout's open_chest_count overrides it (the island asks for 18)
+	int32  TowerCountMin = 3, TowerCountMax = 4;
 };
 
 namespace S1LevelRules
 {
-	constexpr double FloorHalf = 140.0;		// registry floor_size 280 m
+	constexpr double FloorHalf = FS1LevelLayout::SquareHalf;		// the old square's half size - a layout with an outline uses its coast
 
 	// ── Geometry ──────────────────────────────────────────────────────────────
 
+	/** The square's edge distance - kept for the square fixtures. Layout checks use FS1LevelLayout::BoundaryGap (the coast). */
 	S1_API double BoundaryGap(const FVector2D& P);
+
+	/**
+	 * Integer grid points of the play area at least Inset metres inside its edge, Step apart — check_layout.py floor_grid.
+	 * The square keeps its old even grid (-140 .. 140); the island walks its bounding box and keeps the points inside.
+	 */
+	S1_API void ForFloorGrid(const FS1LevelLayout& Layout, int32 Step, double Inset, const TFunctionRef<void(const FVector2D&)>& Visit);
 	S1_API double RectDist(const FVector2D& P, const FS1LevelHouse& House);
 	S1_API double SegmentDist(const FVector2D& P, const FVector2D& A, const FVector2D& B);
 	S1_API double PolylineDist(const FVector2D& P, const TArray<FVector2D>& Points);

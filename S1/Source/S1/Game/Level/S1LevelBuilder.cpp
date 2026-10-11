@@ -15,6 +15,13 @@
 #include "EngineUtils.h"
 #include "Game/Level/S1LevelMarkers.h"
 #include "HAL/FileManager.h"
+#include "Materials/Material.h"
+#if WITH_EDITOR
+#include "Materials/MaterialExpressionConstant3Vector.h"
+#include "Misc/PackageName.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
+#endif
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/SecureHash.h"
@@ -40,8 +47,22 @@ namespace S1LevelBuild
 	const FVector BoundarySize(400.0, 100.0, 400.0);
 	const FVector TowerBodySize(300.0, 300.0, 800.0);
 
+	// Island (2026-10-11): coast pieces are at most 4 m along an outline edge and 3 m thick outward — thick enough to hide
+	// the ground tiles that poke past the coast. Ground tiles: 16 m inside, quartered down to 2 m at the coast, where a
+	// tile stays if its centre is within CoastReachM outside (2 m tile half diagonal 1.41 m < 1.5 — every inside point is
+	// covered, and nothing pokes out further than 1.5 + 1.41 < 3 m)
+	constexpr double CoastPieceMaxM = 4.0;
+	constexpr double CoastThicknessCm = 300.0;
+	constexpr double CoastJointMinTurnDeg = 5.0;
+	constexpr double IslandTileMaxM = 16.0;
+	constexpr double IslandTileMinM = 2.0;
+	constexpr double CoastReachM = 1.5;
+	constexpr double IslandTileThicknessCm = 1.0;	// under trail dirt (top 3 cm) and house floor tiles (top 3.5 cm)
+	constexpr double SeaMarginM = 40.0;				// ground past the coast — the camera never sees the end of the world
+
 	// Server walls (docs/architecture/adr-0006-server-2d-walls.md § ①): every module that blocks movement except the
-	// ground and the boundary (the server checks the floor rectangle instead). Kind = the walls.csv kind column.
+	// ground. Since the island (2026-10-11) the coast is a server wall too — kind "boundary", pieces scaled to their edge
+	// so no design size (E3). Kind = the walls.csv kind column.
 	struct FServerWallModule
 	{
 		ES1LevelModule	Module;
@@ -57,6 +78,7 @@ namespace S1LevelBuild
 		{ ES1LevelModule::FreePillar,	TEXT("free_pillar"),	PillarSize },
 		{ ES1LevelModule::Cover,		TEXT("cover"),			CoverSize },
 		{ ES1LevelModule::TowerBody,	TEXT("tower"),			FVector::ZeroVector },
+		{ ES1LevelModule::Boundary,		TEXT("boundary"),		FVector::ZeroVector },
 	};
 
 	constexpr double AngleToleranceDeg = 0.01;
@@ -90,6 +112,7 @@ namespace S1LevelBuild
 		case ES1LevelModule::TowerBody:		return TEXT("TowerBody");
 		case ES1LevelModule::TowerPlaza:	return TEXT("TowerPlaza");
 		case ES1LevelModule::Cover:			return TEXT("Cover");
+		case ES1LevelModule::IslandGround:	return TEXT("IslandGround");
 		default:							return TEXT("Unknown");
 		}
 	}
@@ -101,6 +124,7 @@ namespace S1LevelBuild
 		case ES1LevelModule::FloorTile:
 		case ES1LevelModule::Rubble:
 		case ES1LevelModule::TowerPlaza:
+		case ES1LevelModule::IslandGround:
 			return false;	// walkable at floor height (≤ 0.2 m, Core Rule 2)
 		default:
 			return true;
@@ -127,6 +151,42 @@ namespace S1LevelBuild
 	{
 		return FMath::RoundToInt(Metres * Cm);
 	}
+
+	// The sea around an island (2026-10-11). The graybox has no material of its own and a runtime dynamic instance of the
+	// basic shape material did not change the instanced slab in game — so the builder makes one flat-colour material asset
+	// once (editor only, flagged for instanced meshes so the game does not fall back to the default) and keeps using it
+	const TCHAR* SeaPackage = TEXT("/Game/Level/M_S1Sea");
+	const TCHAR* SeaObject = TEXT("/Game/Level/M_S1Sea.M_S1Sea");
+	const FLinearColor SeaColor(0.015f, 0.07f, 0.16f);
+
+	UMaterialInterface* SeaMaterial()
+	{
+		if (UMaterialInterface* Existing = LoadObject<UMaterialInterface>(nullptr, SeaObject, nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			return Existing;
+		}
+#if WITH_EDITOR
+		UPackage* Package = CreatePackage(SeaPackage);
+		UMaterial* Material = NewObject<UMaterial>(Package, TEXT("M_S1Sea"), RF_Public | RF_Standalone);
+		UMaterialExpressionConstant3Vector* Color = NewObject<UMaterialExpressionConstant3Vector>(Material);
+		Color->Constant = SeaColor;
+		Material->GetExpressionCollection().AddExpression(Color);
+		Material->GetEditorOnlyData()->BaseColor.Connect(0, Color);
+		Material->bUsedWithInstancedStaticMeshes = true;
+		Material->PostEditChange();
+
+		FSavePackageArgs Args;
+		Args.TopLevelFlags = RF_Public | RF_Standalone;
+		const FString File = FPackageName::LongPackageNameToFilename(SeaPackage, FPackageName::GetAssetPackageExtension());
+		if (!UPackage::SavePackage(Package, Material, *File, Args))
+		{
+			UE_LOG(LogS1Level, Error, TEXT("[LEVEL] cannot save the sea material %s"), *File);
+		}
+		return Material;
+#else
+		return nullptr;
+#endif
+	}
 }
 
 AS1LevelBuilder::AS1LevelBuilder()
@@ -151,9 +211,13 @@ AS1LevelBuilder::AS1LevelBuilder()
 		Component->SetupAttachment(RootComponent);
 		Component->SetStaticMesh(IsCylinder(Module) ? Cylinder.Object : Cube.Object);
 		Component->SetCollisionProfileName(BlocksMovement(Module) ? TEXT("BlockAll") : TEXT("NoCollision"));
-		if (IsServerWall(Module) || Module == ES1LevelModule::Boundary)
+		if (IsServerWall(Module))
 		{
 			Component->CanCharacterStepUpOn = ECB_No;	// never step onto a wall or cover (ADR-0006 E8)
+		}
+		if (Module == ES1LevelModule::Boundary)
+		{
+			Component->ComponentTags.Add(S1LevelCoastTag);	// the ghost dash passes walls but stops here (AS1Player::TickDash)
 		}
 		Component->SetMobility(EComponentMobility::Static);
 		Modules.Add(Component);
@@ -307,9 +371,27 @@ bool AS1LevelBuilder::Build(FString& OutError)
 		Modules[i]->SetStaticMesh(HasModuleMesh(Module) ? ModuleMeshes[Module].Get() : BasicShape(Module));
 	}
 
-	// Ground: the 280 m floor plus 24 m of dark fill past the boundary (level-map.md § Visual "경계 띠").
+	CoastOutlineMetres = Layout.Outline;
+	OpenChestCountRule = Layout.OpenChestCount;
+
+	// Ground: one slab under the whole floor — the collision players walk on. The square: 280 m plus 24 m of fill past the
+	// boundary (level-map.md § Visual "경계 띠"). The island: its bounding box plus SeaMarginM, coloured as sea at play
 	const double Half = S1LevelRules::FloorHalf * Cm;
-	AddModule(ES1LevelModule::Ground, FVector(0.0, 0.0, -20.0), 0.0, FVector((Half + 2400.0) * 2.0, (Half + 2400.0) * 2.0, 20.0));
+	if (Layout.HasOutline())
+	{
+		double X0, X1, Y0, Y1;
+		Layout.FloorBounds(X0, X1, Y0, Y1);
+		AddModule(ES1LevelModule::Ground, FVector((X0 + X1) * 0.5 * Cm, (Y0 + Y1) * 0.5 * Cm, -20.0), 0.0,
+			FVector((X1 - X0 + 2.0 * SeaMarginM) * Cm, (Y1 - Y0 + 2.0 * SeaMarginM) * Cm, 20.0));
+	}
+	else
+	{
+		AddModule(ES1LevelModule::Ground, FVector(0.0, 0.0, -20.0), 0.0, FVector((Half + 2400.0) * 2.0, (Half + 2400.0) * 2.0, 20.0));
+	}
+	if (!HasModuleMesh(ES1LevelModule::Ground))
+	{
+		Modules[static_cast<int32>(ES1LevelModule::Ground)]->SetMaterial(0, Layout.HasOutline() ? SeaMaterial() : nullptr);
+	}
 
 	// Temporary lighting — only so the graybox is visible; the lighting spike decides the real setup (OQ-3).
 	if (bTemporaryLighting)
@@ -331,13 +413,20 @@ bool AS1LevelBuilder::Build(FString& OutError)
 		SpawnMarker<ASkyAtmosphere>(FVector2D::ZeroVector, TEXT("TEMP Graybox Atmosphere (OQ-3)"), FColor::White);
 	}
 
-	// Boundary: a continuous earth wall just outside the play rectangle (Core Rule 3).
-	for (double Along = -Half + 200.0; Along < Half; Along += 400.0)
+	// Boundary: a continuous wall just outside the play area (Core Rule 3) — the island's coast, or the square
+	if (Layout.HasOutline())
 	{
-		AddModule(ES1LevelModule::Boundary, FVector(Half + 50.0, Along, 0.0), 90.0, BoundarySize);
-		AddModule(ES1LevelModule::Boundary, FVector(-Half - 50.0, Along, 0.0), 90.0, BoundarySize);
-		AddModule(ES1LevelModule::Boundary, FVector(Along, Half + 50.0, 0.0), 0.0, BoundarySize);
-		AddModule(ES1LevelModule::Boundary, FVector(Along, -Half - 50.0, 0.0), 0.0, BoundarySize);
+		BuildIsland(Layout);
+	}
+	else
+	{
+		for (double Along = -Half + 200.0; Along < Half; Along += 400.0)
+		{
+			AddModule(ES1LevelModule::Boundary, FVector(Half + 50.0, Along, 0.0), 90.0, BoundarySize);
+			AddModule(ES1LevelModule::Boundary, FVector(-Half - 50.0, Along, 0.0), 90.0, BoundarySize);
+			AddModule(ES1LevelModule::Boundary, FVector(Along, Half + 50.0, 0.0), 0.0, BoundarySize);
+			AddModule(ES1LevelModule::Boundary, FVector(Along, -Half - 50.0, 0.0), 0.0, BoundarySize);
+		}
 	}
 
 	// Houses, from their 4 m grids.
@@ -456,6 +545,93 @@ bool AS1LevelBuilder::Build(FString& OutError)
 
 	MarkPackageDirty();
 	return true;
+}
+
+void AS1LevelBuilder::BuildIsland(const FS1LevelLayout& Layout)
+{
+	using namespace S1LevelBuild;
+
+	// Ground tiles: a square wholly inside is one tile, one across the coast is quartered down to 2 m
+	TFunction<void(const FVector2D&, double)> Visit = [&](const FVector2D& C, double Size)
+	{
+		const double Gap = Layout.BoundaryGap(C);
+		const double HalfDiagonal = Size * UE_INV_SQRT_2;
+		if (Gap >= HalfDiagonal || (Size <= IslandTileMinM && Gap >= -CoastReachM))
+		{
+			AddModule(ES1LevelModule::IslandGround, FVector(C.X * Cm, C.Y * Cm, 0.0), 0.0, FVector(Size * Cm, Size * Cm, IslandTileThicknessCm));
+			return;
+		}
+		if (Gap < -HalfDiagonal - CoastReachM || Size <= IslandTileMinM)
+		{
+			return;		// all sea
+		}
+		const double Q = Size * 0.25;
+		for (const FVector2D& D : { FVector2D(-Q, -Q), FVector2D(-Q, Q), FVector2D(Q, -Q), FVector2D(Q, Q) })
+		{
+			Visit(C + D, Size * 0.5);
+		}
+	};
+	double X0, X1, Y0, Y1;
+	Layout.FloorBounds(X0, X1, Y0, Y1);
+	for (double X = FMath::FloorToDouble(X0 / IslandTileMaxM) * IslandTileMaxM; X < X1; X += IslandTileMaxM)
+	{
+		for (double Y = FMath::FloorToDouble(Y0 / IslandTileMaxM) * IslandTileMaxM; Y < Y1; Y += IslandTileMaxM)
+		{
+			Visit(FVector2D(X, Y) + FVector2D(IslandTileMaxM * 0.5), IslandTileMaxM);
+		}
+	}
+
+	// Coast: pieces along every edge, the inner face on the coast line and the body outward. Which side is outward
+	// follows the winding (signed area), so the outline may run either way
+	const TArray<FVector2D>& P = Layout.Outline;
+	const int32 N = P.Num();
+	double Twice = 0.0;
+	for (int32 i = 0; i < N; i++)
+	{
+		Twice += P[i].X * P[(i + 1) % N].Y - P[(i + 1) % N].X * P[i].Y;
+	}
+	const double Winding = Twice >= 0.0 ? 1.0 : -1.0;		// +1: counter-clockwise in (x, y), the inside on the left
+	auto Outward = [Winding](const FVector2D& Dir) { return FVector2D(Dir.Y, -Dir.X) * Winding; };
+
+	for (int32 i = 0; i < N; i++)
+	{
+		const FVector2D A = P[i];
+		const FVector2D B = P[(i + 1) % N];
+		const double Length = FVector2D::Distance(A, B);
+		if (Length < UE_KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+		const FVector2D Dir = (B - A) / Length;
+		const FVector2D Out = Outward(Dir);
+		const int32 Pieces = FMath::Max(1, FMath::CeilToInt(Length / CoastPieceMaxM));
+		const double Piece = Length / Pieces;
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
+		for (int32 k = 0; k < Pieces; k++)
+		{
+			const FVector2D Mid = A + Dir * (Piece * (k + 0.5));
+			const FVector2D Centre = Mid * Cm + Out * (CoastThicknessCm * 0.5);
+			AddModule(ES1LevelModule::Boundary, FVector(Centre, 0.0), Yaw, FVector(Piece * Cm, CoastThicknessCm, BoundarySize.Z));
+		}
+
+		// A convex corner opens a wedge between the two pieces on the sea side — a square joint on the outward bisector
+		// closes it. Its inner face runs through the corner square to the bisector, so it stays out of the island
+		const FVector2D C = P[(i + 2) % N];
+		const double NextLength = FVector2D::Distance(B, C);
+		if (NextLength < UE_KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+		const FVector2D NextDir = (C - B) / NextLength;
+		const double Turn = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(FVector2D::CrossProduct(Dir, NextDir), -1.0, 1.0)));
+		if (Turn * Winding > CoastJointMinTurnDeg)
+		{
+			const FVector2D Bisector = (Out + Outward(NextDir)).GetSafeNormal();
+			const FVector2D Centre = B * Cm + Bisector * (CoastThicknessCm * 0.5);
+			AddModule(ES1LevelModule::Boundary, FVector(Centre, 0.0), FMath::RadiansToDegrees(FMath::Atan2(Bisector.Y, Bisector.X)),
+				FVector(CoastThicknessCm, CoastThicknessCm, BoundarySize.Z));
+		}
+	}
 }
 
 void AS1LevelBuilder::BuildHouse(const FS1LevelHouse& House, const FS1HouseGrid& Grid, const TArray<FString>& OpenAirRooms)
@@ -670,7 +846,7 @@ bool AS1LevelBuilder::CollectLayout(FS1LevelLayout& Out, FString& OutError) cons
 		(It->Kind == ES1RouteKind::Lantern ? Out.LanternRoutes : Out.Detours).Add(MoveTemp(Route));
 	}
 
-	// Cover: every cover instance in the level's builders.
+	// Cover: every cover instance in the level's builders. The coast and the chest-count rule: the builder that raised a coast
 	for (TActorIterator<AS1LevelBuilder> It(World); It; ++It)
 	{
 		const UHierarchicalInstancedStaticMeshComponent* Cover = It->Modules[static_cast<int32>(ES1LevelModule::Cover)];
@@ -680,6 +856,11 @@ bool AS1LevelBuilder::CollectLayout(FS1LevelLayout& Out, FString& OutError) cons
 			Cover->GetInstanceTransform(i, T, /*bWorldSpace*/ true);
 			Out.Cover.Add(FVector2D(T.GetLocation().X / Cm, T.GetLocation().Y / Cm));
 		}
+		if (Out.Outline.Num() == 0)
+		{
+			Out.Outline = It->CoastOutlineMetres;
+		}
+		Out.OpenChestCount = FMath::Max(Out.OpenChestCount, It->OpenChestCountRule);
 	}
 
 	// Stable order — the actor iterator's order is not the file's.
@@ -807,6 +988,15 @@ bool AS1LevelBuilder::Export(FS1LevelReport& OutReport, FString& OutDirectory, F
 		Walls.Add(Floor + TEXT(",") + Row);
 	}
 
+	// The coast polygon (2026-10-11 island) — the server keeps every position inside it, also where walls are skipped
+	// (the ghost dash) or not swept (blink · teleports). No rows = the square
+	TArray<FString> Outline;
+	Outline.Add(TEXT("floor_id,seq,x,y"));
+	for (int32 i = 0; i < Layout.Outline.Num(); i++)
+	{
+		Outline.Add(FString::Printf(TEXT("%s,%d,%d,%d"), *Floor, i, RoundCm(Layout.Outline[i].X), RoundCm(Layout.Outline[i].Y)));
+	}
+
 	TArray<TPair<FString, FString>> Files;
 	Files.Emplace(TEXT("entry_points.csv"), Join(Entries));
 	Files.Emplace(TEXT("chest_spawns.csv"), Join(Chests));
@@ -814,6 +1004,7 @@ bool AS1LevelBuilder::Export(FS1LevelReport& OutReport, FString& OutDirectory, F
 	Files.Emplace(TEXT("monster_spots.csv"), Join(Monsters));
 	Files.Emplace(TEXT("houses.csv"), Join(Houses));
 	Files.Emplace(TEXT("walls.csv"), Join(Walls));
+	Files.Emplace(TEXT("floor_outline.csv"), Join(Outline));
 
 	// Data version (Core Rule 16): hash of the content with line endings normalised.
 	FString All;
@@ -949,7 +1140,7 @@ bool AS1LevelBuilder::CollectServerWalls(TArray<FString>& OutRows, FString& OutE
 				YawCenti -= 18000;
 			}
 
-			// RoundToInt(double) is int64 in UE5 — every value here is well inside ±14,000 cm
+			// RoundToInt(double) is int64 in UE5 — every value here is well inside ±30,000 cm (FloorBounds)
 			Rows.Add({ Spec.Kind, static_cast<int32>(FMath::RoundToInt(Centre.X)), static_cast<int32>(FMath::RoundToInt(Centre.Y)), YawCenti,
 				static_cast<int32>(FMath::RoundToInt(HalfLength)), static_cast<int32>(FMath::RoundToInt(HalfThickness)) });
 		}
@@ -989,7 +1180,7 @@ void AS1LevelBuilder::FindClientOnlyBlockers(TArray<FString>& OutNames) const
 
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		// The builder's modules are server walls, the boundary (the server's rectangle) or walkable floor
+		// The builder's modules are server walls (the coast too) or walkable floor
 		if (It->IsA<AS1LevelBuilder>())
 		{
 			continue;

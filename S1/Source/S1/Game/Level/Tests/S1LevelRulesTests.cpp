@@ -27,10 +27,13 @@ namespace
 		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../tools/level")));
 	}
 
-	bool LoadGolden(FAutomationTestBase& Test, FS1LevelLayout& Out)
+	/** floor1.json — the island since 2026-10-11. The approved square it replaced stays as a regression fixture. */
+	const TCHAR* SquareFixture = TEXT("floor1-square-2026-10-05.json");
+
+	bool LoadGolden(FAutomationTestBase& Test, FS1LevelLayout& Out, const TCHAR* File = TEXT("floor1.json"))
 	{
 		FString Error;
-		const FString Path = FPaths::Combine(LevelToolsDir(), TEXT("floor1.json"));
+		const FString Path = FPaths::Combine(LevelToolsDir(), File);
 		if (!Out.LoadFromFile(Path, Error))
 		{
 			Test.AddError(FString::Printf(TEXT("golden fixture %s: %s"), *Path, *Error));
@@ -76,41 +79,100 @@ namespace
 
 // ── Golden fixture — every rule passes (AC-LM-11 … 21 on the real floor) ─────────
 
+namespace
+{
+	/** Every rule passes, and the numbers match what tools/level/check_layout.py prints for the same file. */
+	void CheckGoldenLayout(FAutomationTestBase& Test, const TCHAR* File, double CoverF5, const TCHAR* LanternCheck, double LanternLength)
+	{
+		FS1LevelLayout Layout;
+		if (!LoadGolden(Test, Layout, File))
+		{
+			return;
+		}
+
+		FS1LevelReport Report;
+		const int32 Failed = Failures(Test, Layout, &Report);
+		if (Failed > 0)
+		{
+			Test.AddError(FString::Printf(TEXT("%s\n%s"), File, *Report.ToString(/*bFailuresOnly*/ true)));
+		}
+		Test.TestEqual(FString::Printf(TEXT("%s failed checks"), File), Failed, 0);
+		Test.TestTrue(FString::Printf(TEXT("%s checks ran"), File), Report.Checks.Num() > 400);
+
+		const FS1LevelCheck* Cover = Report.Find(TEXT("d_cover (F5)"));
+		if (Test.TestNotNull(TEXT("F5 checked"), Cover))
+		{
+			Test.TestEqual(FString::Printf(TEXT("%s worst distance to a tower (F5)"), File), Cover->Value, CoverF5, 0.01);
+		}
+		for (const TCHAR* Tag : { TEXT("detour H1 middle third"), TEXT("detour H2 middle third"), TEXT("detour H3 middle third") })
+		{
+			const FS1LevelCheck* Detour = Report.Find(Tag);
+			Test.TestTrue(FString::Printf(TEXT("%s %s checked"), File, Tag), Detour != nullptr);
+			if (Detour != nullptr)
+			{
+				Test.TestEqual(FString::Printf(TEXT("%s %s visible pairs"), File, Tag), Detour->Value, 0.0);
+			}
+		}
+		const FS1LevelCheck* Lantern = Report.Find(LanternCheck);
+		if (Test.TestNotNull(LanternCheck, Lantern))
+		{
+			Test.TestEqual(FString::Printf(TEXT("%s %s"), File, LanternCheck), Lantern->Value, LanternLength, 0.01);
+		}
+	}
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1LevelGoldenLayoutTest, "S1.Level.Rules.GoldenFloor1_EveryLayoutAndRouteRule_Passes", GS1LevelTestFlags)
 bool FS1LevelGoldenLayoutTest::RunTest(const FString& Parameters)
 {
-	FS1LevelLayout Layout;
-	if (!LoadGolden(*this, Layout))
-	{
-		return false;
-	}
+	// The island (2026-10-11) — 4 towers, 18 open chests, the coast as the boundary
+	CheckGoldenLayout(*this, TEXT("floor1.json"), 155.62, TEXT("lantern H2->Ta path length"), 67.0);
 
-	FS1LevelReport Report;
-	const int32 Failed = Failures(*this, Layout, &Report);
-	if (Failed > 0)
-	{
-		AddError(Report.ToString(/*bFailuresOnly*/ true));
-	}
-	TestEqual(TEXT("failed checks"), Failed, 0);
-	TestTrue(TEXT("checks ran"), Report.Checks.Num() > 400);
+	// The square it replaced — the rules still pass a floor without a coast
+	CheckGoldenLayout(*this, SquareFixture, 153.11, TEXT("lantern H2->Tc path length"), 42.17);
+	return true;
+}
 
-	// The same numbers the Python checker prints (tools/level/check_layout.py).
-	if (const FS1LevelCheck* Cover = Report.Find(TEXT("d_cover (F5)")))
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1LevelIslandGeometryTest, "S1.Level.Layout.Island_CoastDistanceInsideAndArea_MatchThePolygon", GS1LevelTestFlags)
+bool FS1LevelIslandGeometryTest::RunTest(const FString& Parameters)
+{
+	// A 100 x 60 m rectangle, clockwise from its north-west corner (+X north, +Y east)
+	FS1LevelLayout Box;
+	Box.Outline = { FVector2D(30.0, -50.0), FVector2D(30.0, 50.0), FVector2D(-30.0, 50.0), FVector2D(-30.0, -50.0) };
+
+	TestTrue(TEXT("has an outline"), Box.HasOutline());
+	TestEqual(TEXT("area"), Box.FloorArea(), 6000.0, 1e-6);
+	TestEqual(TEXT("centre is 30 m from the north and south coast"), Box.BoundaryGap(FVector2D::ZeroVector), 30.0, 1e-9);
+	TestEqual(TEXT("10 m inside the east coast"), Box.BoundaryGap(FVector2D(0.0, 40.0)), 10.0, 1e-9);
+	TestEqual(TEXT("on the coast"), Box.BoundaryGap(FVector2D(30.0, 0.0)), 0.0, 1e-9);
+	TestEqual(TEXT("5 m out to sea is negative"), Box.BoundaryGap(FVector2D(35.0, 0.0)), -5.0, 1e-9);
+	TestTrue(TEXT("centre inside"), Box.IsInside(FVector2D::ZeroVector));
+	TestFalse(TEXT("past the east coast is outside"), Box.IsInside(FVector2D(0.0, 50.01)));
+	TestFalse(TEXT("far out is outside"), Box.IsInside(FVector2D(200.0, 200.0)));
+
+	double X0, X1, Y0, Y1;
+	Box.FloorBounds(X0, X1, Y0, Y1);
+	TestTrue(TEXT("bounds are the coast's box"), X0 == -30.0 && X1 == 30.0 && Y0 == -50.0 && Y1 == 50.0);
+
+	// No outline = the old 280 m square
+	FS1LevelLayout Square;
+	TestFalse(TEXT("square has no outline"), Square.HasOutline());
+	TestEqual(TEXT("square area"), Square.FloorArea(), 78400.0, 1e-6);
+	TestEqual(TEXT("square edge distance"), Square.BoundaryGap(FVector2D(125.0, 0.0)), 15.0, 1e-9);
+
+	// The island: every grid point the rules walk is inside, and its area is the research number (117,571 m²)
+	FS1LevelLayout Island;
+	if (LoadGolden(*this, Island))
 	{
-		TestEqual(TEXT("worst distance to a tower (F5)"), Cover->Value, 153.11, 0.01);
-	}
-	for (const TCHAR* Tag : { TEXT("detour H1 middle third"), TEXT("detour H2 middle third"), TEXT("detour H3 middle third") })
-	{
-		const FS1LevelCheck* Detour = Report.Find(Tag);
-		TestTrue(FString::Printf(TEXT("%s checked"), Tag), Detour != nullptr);
-		if (Detour != nullptr)
+		TestTrue(TEXT("island has an outline"), Island.HasOutline());
+		TestEqual(TEXT("island area"), Island.FloorArea(), 117571.0, 100.0);
+		int32 Points = 0, Outside = 0;
+		S1LevelRules::ForFloorGrid(Island, 2, 1.0, [&](const FVector2D& P)
 		{
-			TestEqual(FString::Printf(TEXT("%s visible pairs"), Tag), Detour->Value, 0.0);
-		}
-	}
-	if (const FS1LevelCheck* Lantern = Report.Find(TEXT("lantern H2->Tc path length")))
-	{
-		TestEqual(TEXT("H2 lantern route length"), Lantern->Value, 42.17, 0.01);
+			Points++;
+			Outside += (Island.BoundaryGap(P) < 1.0 || !Island.IsInside(P)) ? 1 : 0;
+		});
+		TestTrue(TEXT("grid covers the island"), Points > 25000);
+		TestEqual(TEXT("grid points closer than 1 m to the coast"), Outside, 0);
 	}
 	return true;
 }
@@ -173,15 +235,23 @@ bool FS1LevelBoundaryTest::RunTest(const FString& Parameters)
 			TestFalse(TEXT("towers 100 m apart pass"), FailsCheck(L, TEXT("tower Ta-Tb separation")));
 		}
 	}
-	{	// AC-LM-14 — outer entry band 15–30 m inside the boundary
+	{	// AC-LM-14 — outer entry band 15–30 m inside the boundary (the coast): straight in from the middle of its first edge
 		FS1LevelLayout L = Golden;
 		FS1LevelEntry* E1 = L.Entries.FindByPredicate([](const FS1LevelEntry& E) { return E.Id == 1; });
-		if (TestTrue(TEXT("entry 1 exists"), E1 != nullptr))
+		if (TestTrue(TEXT("entry 1 exists"), E1 != nullptr) && TestTrue(TEXT("golden floor has a coast"), L.HasOutline()))
 		{
-			E1->P = FVector2D(125.01, 0.0);
-			TestTrue(TEXT("14.99 m from the boundary fails"), FailsCheck(L, TEXT("entry 1 band min")));
-			E1->P = FVector2D(125.0, 0.0);
-			TestFalse(TEXT("15 m from the boundary passes"), FailsCheck(L, TEXT("entry 1 band min")));
+			const FVector2D A = L.Outline[0], B = L.Outline[1];
+			const FVector2D Mid = (A + B) * 0.5;
+			FVector2D Inward = FVector2D(-(B - A).Y, (B - A).X).GetSafeNormal();
+			if (!L.IsInside(Mid + Inward))
+			{
+				Inward = -Inward;
+			}
+			// The edge is sloped, so "exactly 15 m" comes back as 14.999999… — a micrometre over it is the limit itself
+			E1->P = Mid + Inward * 14.99;
+			TestTrue(TEXT("14.99 m from the coast fails"), FailsCheck(L, TEXT("entry 1 band min")));
+			E1->P = Mid + Inward * 15.000001;
+			TestFalse(TEXT("15 m from the coast passes"), FailsCheck(L, TEXT("entry 1 band min")));
 		}
 	}
 	{	// AC-LM-18 — open-field chests 45 m apart
