@@ -163,6 +163,7 @@
     <ClCompile Include="RoomVision.cpp" />
     <ClCompile Include="RoomSkills2.cpp" />
     <ClCompile Include="RoomSkills3.cpp" />
+    <ClCompile Include="RoomSkills4.cpp" />
     <ClCompile Include="RoomTest.cpp" />
     <ClCompile Include="WallTable.cpp" />
     <ClCompile Include="TowerTable.cpp" />
@@ -223,6 +224,7 @@
     <ClInclude Include="MonsterTable.h" />
     <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="MonsterPack.h" />
+    <ClInclude Include="PositionHistory.h" />
     <ClInclude Include="EscapeLogic.h" />
     <ClInclude Include="EquipStats.h" />
     <ClInclude Include="KillBatch.h" />

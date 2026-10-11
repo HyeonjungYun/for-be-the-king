@@ -88,6 +88,17 @@ public:
 	bool	HasMark(const string& kind, uint64 instigatorId) const;
 	bool	ConsumeMark(const string& kind, uint64 instigatorId);
 
+	// 내게 남은 표식 전부 (누가 남겼든) - 삼십육계 (2026-10-11). 지우기 전에 fn(mark) 를 부른다. 돌려주는 값 = 지운 수
+	template <typename Fn>
+	uint32	RemoveAllMarks(Fn&& fn)
+	{
+		for (const MarkInstance& m : _marks)
+			fn(m);
+		const uint32 n = static_cast<uint32>(_marks.size());
+		_marks.clear();
+		return n;
+	}
+
 	// 끝난 것을 빼며 fn(Protocol::StatusKind, const string& param, uint64 instigatorId, uint32 remainingStacks) 를 부른다.
 	// 돌려주는 값 = 버프가 하나라도 빠졌다 (스탯 재계산 필요)
 	template <typename Fn>

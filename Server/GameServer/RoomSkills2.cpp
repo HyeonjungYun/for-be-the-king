@@ -520,26 +520,47 @@ void Room::CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillE
 	LOG_LINE << "[HAWK] fly char=" << ownerId << " to=" << targetId << " dist=" << ::lroundf(::sqrtf(bestSq)) << " reveal=" << e.intervalMs << "ms" << '\n';
 }
 
-void Room::StartVisionArea(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs)
+void Room::StartVisionArea(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
 	PlayerRef owner = dynamic_pointer_cast<Player>(caster);
 	if (owner == nullptr)
 		return;
 
-	// 맹수의 탐색 - 땅 울림이 닿는 둘레. param walls = 벽 너머, stealth = 은신까지 ("보이지 않는 적들을 탐지한다")
+	// 맹수의 탐색 - 땅 울림이 닿는 둘레. param walls = 벽 너머, stealth = 은신까지 ("보이지 않는 적들을 탐지한다").
+	// 루멘 (param point, 2026-10-11) - 시전자가 아니라 가리킨 지점(사거리 끝까지)에 빛의 구체
+	float cx = owner->posInfo->x();
+	float cy = owner->posInfo->y();
+	const bool atPoint = (e.param.find("point") != string::npos);
+	if (atPoint)
+	{
+		const float dx = ctx.aimX - ctx.originX;
+		const float dy = ctx.aimY - ctx.originY;
+		const float len = ::sqrtf(dx * dx + dy * dy);
+		cx = ctx.originX;
+		cy = ctx.originY;
+		if (len > 1.f)
+		{
+			const float reach = (std::min)(len, def.rangeCm);
+			cx += dx / len * reach;
+			cy += dy / len * reach;
+		}
+		PushVisualZone(owner->objectInfo->object_id(), def.effectId, cx, cy, 45.f, e.durationMs, "lumen");
+	}
+
 	VisionExtra extra;
 	extra.sourceId = GNextDecoyId.fetch_add(1);
-	extra.x = owner->posInfo->x();
-	extra.y = owner->posInfo->y();
+	extra.x = cx;
+	extra.y = cy;
 	extra.radiusCm = e.radiusCm;
 	extra.untilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
 	extra.needsLos = (e.param.find("walls") == string::npos);
 	extra.seesStealth = (e.param.find("stealth") != string::npos);
-	extra.kind = "detect";
+	extra.kind = atPoint ? "light" : "detect";
 	AddVisionExtra(owner, extra);
 
 	LOG_LINE << "[DETECT] char=" << owner->objectInfo->object_id() << " skill=" << def.skillId << " r=" << ::lroundf(e.radiusCm)
-		<< " for=" << e.durationMs << "ms walls=" << (extra.needsLos ? 0 : 1) << " stealth=" << (extra.seesStealth ? 1 : 0) << '\n';
+		<< " for=" << e.durationMs << "ms walls=" << (extra.needsLos ? 0 : 1) << " stealth=" << (extra.seesStealth ? 1 : 0)
+		<< (atPoint ? " at=(" + to_string(::lroundf(cx)) + "," + to_string(::lroundf(cy)) + ")" : string()) << '\n';
 
 	// param ping - 둘레의 적 자리에 표시를 띄운다 (2026-10-11 "적이 있는 위치를 표시해 줬으면")
 	if (e.param.find("ping") != string::npos)
@@ -593,6 +614,9 @@ void Room::ApplyShield(const CreatureRef& caster, const SkillDef& def, const Ski
 	caster->shieldAmount = (std::max)(1, static_cast<int32>(::lroundf(caster->maxHp * e.magnitude)));
 	caster->shieldUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
 	caster->shieldSkillId = def.skillId;
+	// 스쿠툼 (param burst, 2026-10-11) - 속성이 깃든 채 깨지면 둘레에 그 속성 피해 (BurstShield). 다른 보호막은 터지지 않는다
+	caster->shieldBurstRatio = (e.param == "burst") ? e.apRatio : 0.f;
+	caster->shieldBurstRadiusCm = (e.param == "burst") ? e.radiusCm : 0.f;
 	_windowOwners.insert(id);
 
 	PushStatus(true, id, Protocol::STATUS_BUFF, "shield", 1, e.durationMs, static_cast<float>(caster->shieldAmount), id);

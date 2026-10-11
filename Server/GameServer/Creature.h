@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Object.h"
 #include "StatusEffects.h"
+#include "PositionHistory.h"
 
 constexpr int32		SKILL_SLOT_COUNT = 6;
 
@@ -89,6 +90,11 @@ public:
 	// 버프가 걸리거나 끝났다 - 플레이어는 장비 합산 위에 버프를 다시 얹는다 (Player::RebuildCombatStats). 몬스터는 버프가 없다
 	virtual void		OnBuffsChanged() {}
 
+	// 장착(결속)된 스킬의 패시브 스탯 합 (passive_stat - 모래주머니 이속 · 날개 move_dist, 2026-10-11 3차 로스터)
+	float				PassiveStatSum(SkillBuffStat stat) const;
+	// 결속된 패시브의 CC 저항 (cc_resist param slow · knockback) - 가장 큰 것. 0 ~ 1
+	float				CcResistOf(const string& kind) const;
+
 	// 전투 중 상태를 전부 지운다 - 입장 · 몬스터 복귀. CC · 상태 효과 · 재입력 · 시전
 	void				ClearCombatState();
 
@@ -127,6 +133,7 @@ public:
 	uint64				healReductionEndUs = 0;
 	float				healReductionMagnitude = 0.f;
 	uint64				blindEndUs = 0;				// 실명 - 소프트. 서버는 시간만 센다, 시야 축소는 클라 (skill_rules blind_view_scale)
+	float				blindScale = 1.f;			// 실명 중 시야 배율 - 걸 때의 크기 (실명 스킬 = blind_view_scale · 연막 = 0.4). FoW 반경이 본다
 	uint64				tauntEndUs = 0;				// 도발 - 하드. 시전자(tauntSourceId)에게 taunt_speed_cms 로 끌려간다 (Room::StepTaunts), 평타 · 스킬 · 회전 불가
 	uint64				tauntSourceId = 0;
 
@@ -217,6 +224,19 @@ public:
 
 	// 테스트 모드 /t god - 체력이 1 아래로 내려가지 않는다 (피해 숫자는 그대로 나간다). 죽음 · 사망 커밋이 없다
 	bool				testGod = false;
+
+	// ── 3차 로스터 (2026-10-11) - RoomSkills4.cpp ──
+	uint32				anchorSkillId = 0;			// 비창 · 포르타 - 재입력으로 돌아갈 자리 (그 스킬의 재입력 창 동안)
+	bool				anchorSet = false;			// 비창은 던진 창이 멈춰야 자리가 생긴다
+	float				anchorX = 0.f;
+	float				anchorY = 0.f;
+	uint64				anchorUntilUs = 0;
+	uint64				anchorZoneId = 0;			// 자리 표시 (연출 장판) - 쓰면 일찍 지운다
+	bool				parryAllProjectiles = false;	// 풍차 - 받아넘기기가 사방의 투사체만 (근접은 막지 않는다)
+	float				shieldBurstRatio = 0.f;		// 스쿠툼 - 속성이 깃든 채 깨지면 둘레에 그 속성 피해 (AP 계수)
+	float				shieldBurstRadiusCm = 0.f;
+	uint64				lastCombatUs = 0;			// 마지막으로 피해를 주거나 받은 때 (행군)
+	PositionHistory		history;					// 지난 8 초의 자리 (10 Hz) - 회귀 · 발자국 추적
 
 	vector<SlowSource>	slowSources;
 

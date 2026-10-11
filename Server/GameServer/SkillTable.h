@@ -103,7 +103,14 @@ enum class SkillEffectType : uint8
 	Shield,			// self - 최대 체력 × magnitude 만큼 피해를 먼저 막는 보호막, duration 동안 (전사의 다짐)
 	Volley,			// self - 이 스킬의 투사체를 hits(+ per_level × 강화) 발. magnitude = 퍼짐 각(°), interval_ms > 0 이면 한 발씩 바라보는 방향으로, duration_ms = 첫 발까지 지연
 	Clone,			// self - 시전자 모습의 분신이 조준 방향으로 dist 를 speed 로 걷는다. radius = 분신 시야(주인과 공유), duration = 최대 수명. 맞으면 사라진다 (그림자 보내기)
-	RaiseWall		// self - 조준 방향으로 길이 dist · 두께 magnitude 의 벽을 duration 동안 세운다 (시작은 radius_cm 앞). 이동 · 공격 · 시선을 막는다 (지각변동)
+	RaiseWall,		// self - 조준 방향으로 길이 dist · 두께 magnitude 의 벽을 duration 동안 세운다 (시작은 radius_cm 앞). 이동 · 공격 · 시선을 막는다 (지각변동)
+
+	// ── 3차 로스터 (게임 ID 1138 ~ 1189, 2026-10-11) - RoomSkills4.cpp ──
+	Anchor,			// self - 돌아갈 자리. param point(조준 지점, 포르타) · projectile(투사체가 멈춘 자리, 비창). duration = 재입력 창 · 자리 수명
+	CooldownCut,	// self - param 계열(staff)의 내 스킬 남은 쿨다운 × (1 - magnitude) (템푸스)
+	PassiveStat,	// self 패시브 - 장착 중 내내 stat + magnitude (모래주머니 이속 -10 % · 날개 move_dist). duration 0
+	CcResist,		// self 패시브 - param slow(감속 시간) · knockback(밀리는 거리) × (1 - magnitude) (단단한 · 유연한 발목)
+	Footprints		// self - radius 안 적들이 interval_ms 동안 지나간 자리를 duration 동안 주인에게만 보여 준다 (발자국 추적)
 };
 
 enum class SkillRequire : uint8
@@ -127,7 +134,17 @@ enum class SkillRequire : uint8
 	OnDashAtMe,		// on_dash - 적이 나를 향해 질주해 왔을 때 (그 적이 대상)
 	OnSkill,		// on_skill:<id> - 내 그 스킬이 피해를 입혔을 때 (맞은 적이 대상)
 	Alone,			// alone - 반경(radius_cm) 안에 아무도 없을 때만 사용 가능
-	OnBasic			// on_basic - 이 스킬의 basic_proc 버프가 켜진 동안 내 평타가 맞을 때마다 (맞은 적이 대상, radius_cm > 0 이면 그 둘레 적 전부)
+	OnBasic,		// on_basic - 이 스킬의 basic_proc 버프가 켜진 동안 내 평타가 맞을 때마다 (맞은 적이 대상, radius_cm > 0 이면 그 둘레 적 전부)
+
+	// ── 3차 로스터 (2026-10-11) ──
+	ElementIs,		// element:<속성> - 시전자의 스태프 속성이 그것일 때 (시길룸)
+	OnStance,		// on_stance - 패시브. 속성이 바뀔 때 radius 안 적에게 (플럭스)
+	NearWall,		// near_wall - 벽에 붙어 있을 때만 사용 가능 (벽 차기)
+	IdleCombat,		// idle_combat - 패시브. interval_ms 동안 피해를 주고받지 않으면 (행군)
+	OnDamaged,		// on_damaged - 패시브. 피해를 받으면 (반격의 걸음)
+	OnKill,			// on_kill - 패시브. 적을 처치하면 (사냥꾼의 걸음)
+	OnMoveEnd,		// on_move_end - 패시브. 이동 스킬이 끝난 자리의 radius 안 적에게 (착지 충격)
+	LowHp			// low_hp - 패시브(쿨다운). 체력이 move 효과 magnitude 비율 아래로 (줄행랑)
 };
 
 enum class SkillBuffStat : uint8
@@ -153,7 +170,16 @@ enum class SkillBuffStat : uint8
 	BasicSpin,		// 평타 = 사방 베기 - 적중 때 나를 중심으로 magnitude cm 안의 적 전부 (난무)
 	BasicMelee,		// 평타 = 근접 - 투사체 대신 magnitude cm 사거리로 벤다 (푸리아 · 은장도)
 	LowHpBonus,		// 평타 피해 × (1 + magnitude × 잃은 체력 비율) (은장도)
-	Thorns			// 나를 근접 평타로 때린 적에게 받은 피해 × magnitude 를 마법 피해로 되돌린다 (고슴도치)
+	Thorns,			// 나를 근접 평타로 때린 적에게 받은 피해 × magnitude 를 마법 피해로 되돌린다 (고슴도치)
+
+	// ── 3차 로스터 (2026-10-11) ──
+	FrontGuard,		// 앞(120°)에서 받는 피해 × (1 - magnitude) (철벽진)
+	Unmovable,		// 밀리거나 끌리지 않는다 - 넉백 · 끌기 · 던지기 · 도발 끌림 (철벽진 · 무거운 발)
+	ProjectileDodge,	// 투사체에 맞지 않는다 (구르기 - 구르는 동안)
+	DamageTaken,	// 받는 피해 × (1 + magnitude) (맨발)
+	MoveAttack,		// 평타 windup 끝의 사거리 재검사가 × 1.5 - 움직이며 때려도 끊기지 않는다 (이동 사격)
+	BasicDouble,	// 평타 투사체가 두 발 - 한 발 피해 × magnitude (두플렉스)
+	MoveDist		// 패시브 스탯만 - 이동 스킬 거리 × (1 + magnitude) (날개)
 };
 
 struct SkillEffect
@@ -269,6 +295,9 @@ public:
 
 	static const char*		EffectName(SkillEffectType type);
 	static const char*		BuffStatName(SkillBuffStat stat);		// skill_effects.csv stat 열 이름 그대로 - S_STATUS param
+
+	// 재입력 창 - anchor 효과가 있으면 그 지속(비창 5 s · 포르타 10 s), 아니면 skill_rules recast_window_ms (2026-10-11 3차 로스터)
+	static uint32			RecastWindowMs(const SkillDef& def);
 
 private:
 	static unordered_map<uint32, SkillDef> s_defs;

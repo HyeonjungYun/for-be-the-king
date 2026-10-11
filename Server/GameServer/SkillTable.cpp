@@ -75,6 +75,8 @@ namespace
 		{ "stealth", SkillEffectType::Stealth }, { "vision_area", SkillEffectType::VisionArea }, { "hawk", SkillEffectType::Hawk },
 		{ "scent", SkillEffectType::Scent }, { "shield", SkillEffectType::Shield }, { "volley", SkillEffectType::Volley },
 		{ "clone", SkillEffectType::Clone }, { "raise_wall", SkillEffectType::RaiseWall },
+		{ "anchor", SkillEffectType::Anchor }, { "cooldown_cut", SkillEffectType::CooldownCut }, { "passive_stat", SkillEffectType::PassiveStat },
+		{ "cc_resist", SkillEffectType::CcResist }, { "footprints", SkillEffectType::Footprints },
 	};
 
 	const vector<pair<const char*, SkillRequire>> REQUIRE_NAMES =
@@ -84,11 +86,20 @@ namespace
 		{ "stunned", SkillRequire::Stunned }, { "element", SkillRequire::Element }, { "no_element", SkillRequire::NoElement },
 		{ "hit", SkillRequire::Hit }, { "no_kill", SkillRequire::NoKill }, { "recast", SkillRequire::Recast }, { "wall", SkillRequire::Wall },
 		{ "on_dash", SkillRequire::OnDashAtMe }, { "alone", SkillRequire::Alone }, { "on_basic", SkillRequire::OnBasic },
+		{ "on_stance", SkillRequire::OnStance }, { "near_wall", SkillRequire::NearWall }, { "idle_combat", SkillRequire::IdleCombat },
+		{ "on_damaged", SkillRequire::OnDamaged }, { "on_kill", SkillRequire::OnKill }, { "on_move_end", SkillRequire::OnMoveEnd },
+		{ "low_hp", SkillRequire::LowHp },
 	};
 
-	// requires 열의 접두사 형태 - on_dot:<kind> · on_skill:<id>. 맞으면 true 로 채우고, 접두사가 아니면 false (그때는 이름표로)
+	// requires 열의 접두사 형태 - on_dot:<kind> · on_skill:<id> · element:<속성>. 맞으면 true 로 채우고, 접두사가 아니면 false (그때는 이름표로)
 	bool ParseRequirePrefix(const string& text, OUT SkillEffect& e)
 	{
+		if (text.rfind("element:", 0) == 0)
+		{
+			e.condition = SkillRequire::ElementIs;
+			e.conditionParam = text.substr(8);
+			return e.conditionParam.empty() == false;
+		}
 		if (text.rfind("on_dot:", 0) == 0)
 		{
 			e.condition = SkillRequire::OnDot;
@@ -119,6 +130,9 @@ namespace
 		{ "attack_range", SkillBuffStat::AttackRange }, { "basic_only", SkillBuffStat::BasicOnly }, { "basic_proc", SkillBuffStat::BasicProc },
 		{ "basic_dash", SkillBuffStat::BasicDash }, { "basic_spin", SkillBuffStat::BasicSpin }, { "basic_melee", SkillBuffStat::BasicMelee },
 		{ "low_hp_bonus", SkillBuffStat::LowHpBonus }, { "thorns", SkillBuffStat::Thorns },
+		{ "front_guard", SkillBuffStat::FrontGuard }, { "unmovable", SkillBuffStat::Unmovable }, { "projectile_dodge", SkillBuffStat::ProjectileDodge },
+		{ "damage_taken", SkillBuffStat::DamageTaken }, { "move_attack", SkillBuffStat::MoveAttack }, { "basic_double", SkillBuffStat::BasicDouble },
+		{ "move_dist", SkillBuffStat::MoveDist },
 	};
 
 	bool ParseBool(const string& s, OUT bool& out)
@@ -335,21 +349,72 @@ namespace
 					error = ew + " must be who=self with dist_cm > 0";
 					return false;
 				}
-				// blink · to_mark:<표식> · behind(대상 등 뒤, 그림자 밟기) 는 즉시 (speed 0). 나머지는 dash_kinematics 지속 상한 안
+				// blink · to_mark:<표식> · behind(대상 등 뒤, 그림자 밟기) 는 즉시 (speed 0). 나머지는 dash_kinematics 지속 상한 안.
+				// 3차 로스터 (2026-10-11): to_anchor(비창 · 포르타 - 남겨 둔 자리로) · rewind(회귀 - duration_ms 전 자리로, dist = 상한) 도 즉시.
+				// slide(활주) 는 길고 느린 미끄러짐이 뜻이라 지속 상한 밖 · off_wall(벽 차기) 은 서버가 벽 반대쪽으로 민다
 				{
-					const bool instant = (e.param == "blink") || (e.param == "behind") || (e.param.rfind("to_mark:", 0) == 0);
-					if (instant == false && (e.speedCms <= 0.f || e.speedCms < e.distCm / DASH_DURATION_MAX_S))
+					const bool instant = (e.param == "blink") || (e.param == "behind") || (e.param.rfind("to_mark:", 0) == 0)
+						|| (e.param == "to_anchor") || (e.param == "rewind");
+					const bool longSlide = (e.param == "slide");
+					if (instant == false && (e.speedCms <= 0.f || (longSlide == false && e.speedCms < e.distCm / DASH_DURATION_MAX_S)))
 					{
 						error = ew + " speed_cms must be >= dist_cm / 0.4 (dash_duration cap)";
 						return false;
 					}
 					// to_target = 대상 바로 앞까지 (기습 · 일도양단) · dash_through = 유닛을 지나간다(벽은 막힌다, 그림자 베기) - 둘 다 클라가 움직인다
 					if (instant == false && e.param != "dash" && e.param != "leap" && e.param != "back" && e.param != "forward"
-						&& e.param != "to_target" && e.param != "dash_through")
+						&& e.param != "to_target" && e.param != "dash_through" && e.param != "slide" && e.param != "off_wall")
 					{
-						error = ew + " param must be dash / leap / back / forward / to_target / dash_through / blink / to_mark:<mark>";
+						error = ew + " param must be dash / leap / back / forward / to_target / dash_through / slide / off_wall / blink / to_mark:<mark> / to_anchor / rewind";
 						return false;
 					}
+					if (e.param == "rewind" && e.durationMs == 0)
+					{
+						error = ew + " rewind needs duration_ms (how far back)";
+						return false;
+					}
+				}
+				break;
+
+			// ── 3차 로스터 (2026-10-11) ──
+			case SkillEffectType::Anchor:
+				if (e.self == false || e.durationMs == 0 || (e.param != "point" && e.param != "projectile"))
+				{
+					error = ew + " needs who=self, duration_ms (recast window) and param point / projectile";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::CooldownCut:
+				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f || e.param.empty())
+				{
+					error = ew + " needs who=self, magnitude (0, 1] and param (weapon pool)";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::PassiveStat:
+				// 장착 중 내내 - 크기는 음수도 된다 (모래주머니 이속 -10 %)
+				if (e.self == false || e.stat == SkillBuffStat::None || e.durationMs != 0 || e.magnitude == 0.f)
+				{
+					error = ew + " needs who=self, stat, magnitude (non-zero) and no duration";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::CcResist:
+				if (e.self == false || e.magnitude <= 0.f || e.magnitude > 1.f || (e.param != "slow" && e.param != "knockback"))
+				{
+					error = ew + " needs who=self, magnitude (0, 1] and param slow / knockback";
+					return false;
+				}
+				break;
+
+			case SkillEffectType::Footprints:
+				if (e.self == false || e.radiusCm <= 0.f || e.durationMs == 0 || e.intervalMs == 0)
+				{
+					error = ew + " needs who=self, radius_cm, duration_ms (shown) and interval_ms (how far back)";
+					return false;
 				}
 				break;
 
@@ -651,6 +716,13 @@ const char* SkillTable::BuffStatName(SkillBuffStat stat)
 	return "?";
 }
 
+uint32 SkillTable::RecastWindowMs(const SkillDef& def)
+{
+	if (const SkillEffect* anchor = def.FindEffect(SkillEffectType::Anchor))
+		return anchor->durationMs;
+	return s_rules.recastWindowMs;
+}
+
 bool SkillTable::Load(const string& dataDir, OUT string& error)
 {
 	const char* names[3] = { "skills.csv", "skill_effects.csv", "skill_rules.csv" };
@@ -910,9 +982,9 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 				return false;
 			}
 
-			// 크기(magnitude)는 자기 버프만 음수가 된다 (디버프)
+			// 크기(magnitude)는 자기 버프 · 패시브 스탯만 음수가 된다 (디버프 - 광전사의 눈물 · 모래주머니)
 			if (e.distCm < 0.f || e.speedCms < 0.f || e.radiusCm < 0.f || e.perLevel < 0.f
-				|| (e.magnitude < 0.f && e.type != SkillEffectType::SelfBuff))
+				|| (e.magnitude < 0.f && e.type != SkillEffectType::SelfBuff && e.type != SkillEffectType::PassiveStat))
 			{
 				error = where + " values must be >= 0";
 				return false;

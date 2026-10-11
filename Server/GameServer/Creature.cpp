@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "Creature.h"
+#include "SkillTable.h"
 
 Creature::Creature()
 {
@@ -149,9 +150,56 @@ void Creature::ClearCombatState()
 	shieldAmount = 0;
 	shieldUntilUs = 0;
 	shieldSkillId = 0;
+	shieldBurstRatio = 0.f;
+	shieldBurstRadiusCm = 0.f;
+	anchorSkillId = 0;
+	anchorSet = false;
+	anchorUntilUs = 0;
+	anchorZoneId = 0;
+	parryAllProjectiles = false;
+	lastCombatUs = 0;
+	history.Clear();		// 입장 · 귀환 - 예전 층 · 예전 자리로 회귀하지 않게
 
 	status.Clear();
 	OnBuffsChanged();
+}
+
+float Creature::PassiveStatSum(SkillBuffStat stat) const
+{
+	float sum = 0.f;
+	for (const SkillSlot& slot : skillSlots)
+	{
+		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
+			continue;
+		const SkillDef* def = SkillTable::Find(slot.skillId);
+		if (def == nullptr)
+			continue;
+		for (const SkillEffect& e : def->effects)
+		{
+			if (e.type == SkillEffectType::PassiveStat && e.stat == stat)
+				sum += e.magnitude;
+		}
+	}
+	return sum;
+}
+
+float Creature::CcResistOf(const string& kind) const
+{
+	float best = 0.f;
+	for (const SkillSlot& slot : skillSlots)
+	{
+		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
+			continue;
+		const SkillDef* def = SkillTable::Find(slot.skillId);
+		if (def == nullptr)
+			continue;
+		for (const SkillEffect& e : def->effects)
+		{
+			if (e.type == SkillEffectType::CcResist && e.param == kind)
+				best = (std::max)(best, e.magnitude);
+		}
+	}
+	return std::clamp(best, 0.f, 1.f);
 }
 
 int32 Creature::TakeDamage(int32 amount)
@@ -240,7 +288,10 @@ void Creature::ApplySoftCc(Protocol::CcType type, uint64 nowUs, uint32 effective
 			healReductionMagnitude = magnitude;
 		break;
 	case Protocol::CC_TYPE_BLIND:
-		// 갱신 - 더 긴 쪽. 시야 배율은 규칙 하나뿐이라 들고 있지 않는다
+		// 갱신 - 더 긴 쪽. 시야 배율 - 실명 스킬은 규칙(blind_view_scale), 연막(1189, 2026-10-11)은 장판의 크기(0.4).
+		// 겹치면 어두운 쪽 · 다 풀린 뒤 새로 걸리면 새 값
+		if (magnitude > 0.f && magnitude <= 1.f)
+			blindScale = (nowUs < blindEndUs) ? (std::min)(blindScale, magnitude) : magnitude;
 		if (endUs > blindEndUs)
 			blindEndUs = endUs;
 		break;

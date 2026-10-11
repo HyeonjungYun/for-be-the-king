@@ -81,7 +81,8 @@ void Player::RebuildCombatStats()
 	critChance		= min(EquipStats::CRIT_CHANCE_MAX, t.critChance + pct(SkillBuffStat::CritChance));
 	critMultiplier	= t.critMultiplier;
 	percentAsBonus	= t.percentAsBonus + pct(SkillBuffStat::AttackSpeed);
-	percentMsBonus	= t.percentMsBonus + pct(SkillBuffStat::MoveSpeed);
+	// 모래주머니 (1174) - 장착 중 내내 이속 -10 % (passive_stat). 버프와 같은 합에 들어간다 (2026-10-11 3차 로스터)
+	percentMsBonus	= t.percentMsBonus + pct(SkillBuffStat::MoveSpeed) + PassiveStatSum(SkillBuffStat::MoveSpeed);
 	resistance		= t.resistance;
 	attackRange		= t.attackRange;
 	attackSpeed		= t.attackSpeed;

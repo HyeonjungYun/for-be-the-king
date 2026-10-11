@@ -144,7 +144,7 @@ float Room::VisionRadiusOf(const PlayerRef& player, uint64 nowUs) const
 
 	// 실명 - 보이는 반경 자체가 줄어든다 (사용자 결정 2026-10-11 "FoW 가 오면 주변 전부 암흑 시야"). 클라는 암흑 오버레이로 같은 반경을 그린다
 	if (nowUs < player->blindEndUs)
-		radius *= SkillTable::Rules().blindViewScale;
+		radius *= (player->blindScale > 0.f && player->blindScale <= 1.f) ? player->blindScale : SkillTable::Rules().blindViewScale;
 
 	return (std::max)(radius, rules.minRadiusCm);
 }

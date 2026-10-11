@@ -358,6 +358,19 @@ void Room::NotifyPassiveTrigger(const CreatureRef& owner, uint32 skillId)
 		}
 	}
 
+	NotifyCooldown(player, skillId, cooldownMs);
+	LOG_LINE << "[PASSIVE] trigger char=" << player->objectInfo->object_id() << " skill=" << skillId << " cd=" << cooldownMs << "ms" << '\n';
+}
+
+void Room::NotifyCooldown(const CreatureRef& owner, uint32 skillId, uint32 remainingMs)
+{
+	PlayerRef player = dynamic_pointer_cast<Player>(owner);
+	GameSessionRef session = (player != nullptr) ? player->session.lock() : nullptr;
+	if (session == nullptr)
+		return;
+
+	// S_STATUS 쿨다운 - 클라는 그 스킬이 걸린 슬롯의 쿨다운을 지금부터 remaining 으로 맞춘다 (StartCooldownForSkill).
+	// 템푸스(2026-10-11)가 남은 쿨다운을 줄일 때도 같은 길 - 클라가 예측한 값을 서버 값으로 덮는다
 	const uint64 id = player->objectInfo->object_id();
 	Protocol::S_STATUS pkt;
 	Protocol::StatusInfo* info = pkt.add_applied();
@@ -365,11 +378,9 @@ void Room::NotifyPassiveTrigger(const CreatureRef& owner, uint32 skillId)
 	info->set_kind(Protocol::STATUS_COOLDOWN);
 	info->set_param(to_string(skillId));
 	info->set_stacks(1);
-	info->set_remaining_ms(cooldownMs);
+	info->set_remaining_ms(remainingMs);
 	info->set_instigator_id(id);
 	SEND_PACKET(pkt);
-
-	LOG_LINE << "[PASSIVE] trigger char=" << id << " skill=" << skillId << " cd=" << cooldownMs << "ms" << '\n';
 }
 
 // ── 건곤일척 1111 - 쓰고 움직이지 않은 채 쓴 망치 스킬 한 번만 피해 증가, 쓰고 나면 사라진다 ──
@@ -569,7 +580,7 @@ void Room::ResolveSpecialBasic(const CreatureRef& attacker, uint64 nowUs)
 				continue;
 
 			// 반격 · 받아넘기기 - 보통 평타와 같다
-			if (TryCounter(target, attacker, attackerId, nowUs) || TryParry(target, cx, cy, nowUs))
+			if (TryCounter(target, attacker, attackerId, nowUs) || TryParry(target, cx, cy, /*projectile*/ false, nowUs))
 				continue;
 
 			bool isCrit = false;

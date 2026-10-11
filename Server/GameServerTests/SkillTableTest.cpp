@@ -36,14 +36,20 @@ TEST(SkillRoster, 실제_데이터가_읽히고_76개_전부_있다)
 	string error;
 	ASSERT_TRUE(LoadRealData(OUT error)) << error;
 
-	// src/스킬_목록.csv 게임 ID 1002 ~ 1137 (1001 채찍 제외). 9001 은 몬스터
-	for (uint32 n = 2; n <= 137; n++)
+	// src/스킬_목록.csv 게임 ID 1002 ~ 1189 (1001 채찍 제외 · 1155 는 목록에서 빠졌다). 9001 은 몬스터
+	for (uint32 n = 2; n <= 189; n++)
+	{
+		if (n == 155)
+			continue;
 		EXPECT_NE(SkillTable::Find(1000 + n), nullptr) << "skill " << n << " is missing";
+	}
 
 	EXPECT_NE(SkillTable::Find(9001), nullptr);
 	EXPECT_EQ(SkillTable::Find(1001), nullptr) << "채찍(#1)은 구현하지 않는다";
+	EXPECT_EQ(SkillTable::Find(1155), nullptr) << "1155 는 스킬 목록에 없다";
 	// 76 + 몬스터 9001 + 모자 27 (#78 ~ #104) + 모자 1 · 갑옷 9 (#105 ~ #114, 2026-10-10 오후) + 2차 로스터 23 (1115 ~ 1137, 2026-10-11)
-	EXPECT_EQ(SkillTable::All().size(), 137u);
+	// + 3차 로스터 51 (1138 ~ 1189 - 1155, 2026-10-11 밤)
+	EXPECT_EQ(SkillTable::All().size(), 188u);
 }
 
 // 🔴 갑옷 로스터 #106 ~ #114 - "망치 / 검을 들고 있을 때만" 은 skills.csv requires_weapon 열 (Room::MeetsWeaponRequirement 가 본다)
@@ -88,8 +94,11 @@ TEST(SkillRoster, 갑옷_스킬은_무기_조건을_가진다)
 	const unordered_map<string, vector<uint32>> byWeapon = {
 		{ "sword",	{ 1115, 1117, 1118, 1119 } },
 		{ "hammer",	{ 1116, 1122 } },
-		{ "dagger",	{ 1120, 1121, 1124, 1125, 1126, 1127, 1128, 1129 } },
+		{ "dagger",	{ 1120, 1121, 1124, 1125, 1126, 1127, 1128, 1129, 1189 } },
 		{ "bow",	{ 1130, 1131, 1133, 1134, 1135, 1136, 1137 } },
+		// 3차 로스터 (2026-10-11) - 창 갑옷 10 · 스태프 갑옷 9
+		{ "spear",	{ 1138, 1139, 1140, 1141, 1142, 1143, 1144, 1145, 1146, 1147 } },
+		{ "staff",	{ 1149, 1150, 1151, 1152, 1153, 1154, 1156, 1157, 1158 } },
 	};
 	for (const auto& [weapon, ids] : byWeapon)
 	{
@@ -104,6 +113,16 @@ TEST(SkillRoster, 갑옷_스킬은_무기_조건을_가진다)
 	EXPECT_TRUE(SkillTable::Find(1132)->requiresWeapon.empty());
 	EXPECT_EQ(PoolsOf(1123), vector<string>{ "hammer" });
 	EXPECT_EQ(PoolsOf(1132), vector<string>{ "helmet" });
+
+	// 3차 로스터 - 글라키에스는 스태프 무기 스킬(조건 없음), 신발 30 은 신발 풀에만 · 조건 없음
+	EXPECT_TRUE(SkillTable::Find(1148)->requiresWeapon.empty());
+	EXPECT_EQ(PoolsOf(1148), vector<string>{ "staff" });
+	for (uint32 id = 1159; id <= 1188; id++)
+	{
+		ASSERT_NE(SkillTable::Find(id), nullptr) << id;
+		EXPECT_TRUE(SkillTable::Find(id)->requiresWeapon.empty()) << id;
+		EXPECT_EQ(PoolsOf(id), vector<string>{ "boots" }) << id;
+	}
 
 	// 건곤일척(damage_mod tag:hammer) 이 보는 태그 - 망치 풀 스킬 전부 + 갑옷 망치 스킬
 	for (uint32 id : { 1005u, 1006u, 1026u, 1028u, 1030u, 1031u, 1032u, 1033u, 1034u, 1106u, 1107u, 1108u, 1109u, 1110u, 1116u, 1122u, 1123u })
@@ -125,12 +144,13 @@ TEST(SkillRoster, 벽을_지나는_이동은_유령_신랑의_저주뿐이다)
 	ASSERT_NE(move, nullptr);
 	EXPECT_TRUE(move->ignoresWalls) << "1002 move effect must carry ignores_walls=1";
 
-	// 블링크(1075)는 서버가 옮기는 이동이라 열이 1 이어도 C_MOVE 창을 열지 않는다 (BlinkCaster) - 여기서 제외
+	// 블링크(1075)는 서버가 옮기는 이동이라 열이 1 이어도 C_MOVE 창을 열지 않는다 (BlinkCaster) - 여기서 제외.
+	// to_anchor(비창 · 포르타 재입력, 2026-10-11)도 서버가 옮기는 순간이동이다 (TeleportToAnchor)
 	for (const auto& [id, def] : SkillTable::All())
 	{
 		for (const SkillEffect& e : def.effects)
 		{
-			if (e.ignoresWalls && e.param != "blink")
+			if (e.ignoresWalls && e.param != "blink" && e.param != "to_anchor")
 				EXPECT_EQ(id, 1002u) << "skill " << id << " effect param=" << e.param << " has ignores_walls=1";
 		}
 	}
@@ -361,11 +381,17 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 		{
 			++passives;
 			// 패시브가 발동하는 길: 평타 적중 · 치명상 · 면역 · 피해 배율 · 첫 타 경감 · 트리거 조건(on_dot / on_dash / on_skill)
+			// + 3차 로스터 (2026-10-11): 장착 스탯 · CC 저항 · 트리거(on_stance / idle_combat / on_damaged / on_kill / on_move_end / low_hp)
 			bool hasTrigger = def.FindEffect(SkillEffectType::OnHit) != nullptr || def.FindEffect(SkillEffectType::LethalSave) != nullptr
 				|| def.FindEffect(SkillEffectType::Immune) != nullptr || def.FindEffect(SkillEffectType::DamageMod) != nullptr
-				|| def.FindEffect(SkillEffectType::DamageReduceOnce) != nullptr || def.FindEffect(SkillEffectType::Vision) != nullptr;
+				|| def.FindEffect(SkillEffectType::DamageReduceOnce) != nullptr || def.FindEffect(SkillEffectType::Vision) != nullptr
+				|| def.FindEffect(SkillEffectType::PassiveStat) != nullptr || def.FindEffect(SkillEffectType::CcResist) != nullptr;
 			for (const SkillEffect& e : def.effects)
-				hasTrigger |= (e.condition == SkillRequire::OnDot || e.condition == SkillRequire::OnDashAtMe || e.condition == SkillRequire::OnSkill);
+			{
+				hasTrigger |= (e.condition == SkillRequire::OnDot || e.condition == SkillRequire::OnDashAtMe || e.condition == SkillRequire::OnSkill
+					|| e.condition == SkillRequire::OnStance || e.condition == SkillRequire::IdleCombat || e.condition == SkillRequire::OnDamaged
+					|| e.condition == SkillRequire::OnKill || e.condition == SkillRequire::OnMoveEnd || e.condition == SkillRequire::LowHp);
+			}
 			EXPECT_TRUE(hasTrigger) << "passive skill " << skillId << " has no on_hit / lethal_save effect";
 			EXPECT_EQ(def.castMs, 0u) << "passive skill " << skillId;
 		}
@@ -387,9 +413,83 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 		}
 	}
 
-	EXPECT_EQ(passives, 11) << "#24 뇌신 · #34 맹수의 본능 · #67 화신 + 모자 #83 #88 #89 #90 #94 #96 #97 + 천리안 1132";
-	// 낚아채기 #45 는 2026-10-11 스킬 개선에서 재입력이 아니게 됐다 - 맞자마자 끌려온다
-	EXPECT_EQ(recasts, 2) << "#38 피의 추적 · 찌르고 베기 1118";
+	// + 3차 로스터 10: 추혼 1143 · 플럭스 1151 · 신발 1177 ~ 1184
+	EXPECT_EQ(passives, 21) << "#24 뇌신 · #34 맹수의 본능 · #67 화신 + 모자 #83 #88 #89 #90 #94 #96 #97 + 천리안 1132 + 3차 10";
+	// 낚아채기 #45 는 2026-10-11 스킬 개선에서 재입력이 아니게 됐다 - 맞자마자 끌려온다. 3차 로스터: 비창 · 포르타 · 이단 질주
+	EXPECT_EQ(recasts, 5) << "#38 피의 추적 · 찌르고 베기 1118 · 비창 1138 · 포르타 1150 · 이단 질주 1159";
+}
+
+// 3차 로스터 (게임 ID 1138 ~ 1189, 2026-10-11 밤) - 데이터가 엔진의 새 경로를 실제로 탄다 (짝이 없으면 엔진은 조용히 아무 일도 안 한다)
+TEST(SkillRoster, 3차_로스터_데이터가_새_경로를_탄다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	auto def = [](uint32 id) { return SkillTable::Find(id); };
+	auto moveParam = [&](uint32 id, bool recast) -> string
+		{
+			for (const SkillEffect& e : def(id)->effects)
+			{
+				if (e.type == SkillEffectType::Movement && (e.condition == SkillRequire::Recast) == recast)
+					return e.param;
+			}
+			return "";
+		};
+
+	// 비창 - 던진 창이 멈춘 자리 · 재입력 순간이동 · 창 5 s. 포르타 - 찍은 자리 · 10 s. 이단 질주는 기본 창 (2 s)
+	ASSERT_NE(def(1138)->FindEffect(SkillEffectType::Anchor), nullptr);
+	EXPECT_EQ(def(1138)->FindEffect(SkillEffectType::Anchor)->param, "projectile");
+	EXPECT_EQ(moveParam(1138, true), "to_anchor");
+	EXPECT_EQ(SkillTable::RecastWindowMs(*def(1138)), 5000u);
+	EXPECT_EQ(def(1150)->FindEffect(SkillEffectType::Anchor)->param, "point");
+	EXPECT_EQ(moveParam(1150, true), "to_anchor");
+	EXPECT_EQ(SkillTable::RecastWindowMs(*def(1150)), 10000u);
+	EXPECT_EQ(SkillTable::RecastWindowMs(*def(1159)), SkillTable::Rules().recastWindowMs);
+	EXPECT_EQ(moveParam(1159, true), "dash");
+
+	// 벽 차기 - 벽에 붙어 있을 때만 · 서버가 벽 반대쪽으로. 회귀 - 3 s 전. 활주 - 길고 느리다 (지속 상한 밖)
+	EXPECT_EQ(def(1163)->FindEffect(SkillEffectType::Movement)->condition, SkillRequire::NearWall);
+	EXPECT_EQ(moveParam(1163, false), "off_wall");
+	EXPECT_EQ(def(1167)->FindEffect(SkillEffectType::Movement)->durationMs, 3000u);
+	EXPECT_EQ(moveParam(1167, false), "rewind");
+	const SkillEffect* slide = def(1170)->FindEffect(SkillEffectType::Movement);
+	EXPECT_EQ(slide->param, "slide");
+	EXPECT_GT(slide->distCm / slide->speedCms, 1.f) << "활주는 1 초 넘게 미끄러진다";
+
+	// 전력 질주 - 유지형 · 이속 버프. 모래주머니 - 장착 중 이속 -10 %. 날개 - 이동 거리
+	EXPECT_EQ(def(1169)->kind, SkillKind::Hold);
+	EXPECT_EQ(def(1169)->FindEffect(SkillEffectType::Hold)->param, "sprint");
+	EXPECT_EQ(def(1169)->FindEffect(SkillEffectType::SelfBuff)->stat, SkillBuffStat::MoveSpeed);
+	const SkillEffect* sandbag = def(1174)->FindEffect(SkillEffectType::PassiveStat);
+	ASSERT_NE(sandbag, nullptr);
+	EXPECT_EQ(sandbag->stat, SkillBuffStat::MoveSpeed);
+	EXPECT_LT(sandbag->magnitude, 0.f);
+	EXPECT_EQ(def(1184)->FindEffect(SkillEffectType::PassiveStat)->stat, SkillBuffStat::MoveDist);
+
+	// 시길룸 - 예고 + 속성마다 다른 효과 (불 · 번개 · 얼음 조건)
+	EXPECT_GT(def(1156)->telegraphMs, 0u);
+	set<string> elements;
+	for (const SkillEffect& e : def(1156)->effects)
+	{
+		if (e.condition == SkillRequire::ElementIs)
+			elements.insert(e.conditionParam);
+	}
+	EXPECT_EQ(elements, (set<string>{ "fire", "lightning", "frost" }));
+
+	// 추혼 - 점지 표식 대상에게만 · 창 조건. 착지 충격 · 플럭스 - 반경이 있어야 맞는다
+	EXPECT_EQ(def(1143)->FindEffect(SkillEffectType::OnHit)->condition, SkillRequire::MarkSpear);
+	EXPECT_GT(def(1182)->effects[0].radiusCm, 0.f);
+	EXPECT_GT(def(1151)->effects[0].radiusCm, 0.f);
+
+	// 바쿠움 - 지점으로 끌기 (하드 CC 지만 스태프 조건부라 갑옷 풀 허용)
+	EXPECT_EQ(def(1154)->FindEffect(SkillEffectType::Pull)->param, "to_point");
+	EXPECT_TRUE(def(1154)->HasHardCc());
+	EXPECT_EQ(def(1154)->requiresWeapon, "staff");
+
+	// 글라키에스 - 얼음 속성. 스쿠툼 - 깨지면 터지는 보호막
+	EXPECT_EQ(def(1148)->FindEffect(SkillEffectType::Stance)->param, "frost");
+	EXPECT_EQ(def(1149)->FindEffect(SkillEffectType::Shield)->param, "burst");
+	EXPECT_GT(def(1149)->FindEffect(SkillEffectType::Shield)->apRatio, 0.f);
 }
 
 // 2차 로스터 (2026-10-11) - 새 효과가 서로 맞물리는가. 엔진은 짝이 없으면 조용히 아무 일도 하지 않는다 - 여기서 잡는다

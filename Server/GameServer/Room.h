@@ -200,6 +200,24 @@ struct PendingSlam
 	float				y = 0.f;
 };
 
+// 도착하면 거는 CC (추격 1165 "도착하면 그 적은 이동 속도가 느려진다", 2026-10-11 3차 로스터) - 질주 시간 뒤
+struct PendingCc
+{
+	uint64				targetId = 0;
+	uint64				instigatorId = 0;
+	Protocol::CcType	type = Protocol::CC_TYPE_NONE;
+	uint32				durationMs = 0;
+	float				magnitude = 0.f;
+	uint64				atUs = 0;
+};
+
+// 이동 스킬이 끝나는 때 (착지 충격 1182) - 그 자리 둘레 적에게 패시브 효과
+struct PendingLanding
+{
+	uint64				casterId = 0;
+	uint64				atUs = 0;
+};
+
 // 지연 폭발 (전염) - duration 뒤 대상에게 피해 + radius 안으로 스킬의 지속 피해
 struct PendingBurst
 {
@@ -221,6 +239,9 @@ extern atomic<uint64> GNextProjectileId;
 // 유도 스킬 화살 (포착 · 약속의 한 발, 2026-10-11) - 사거리 밖의 보이는 표식 대상까지 날아간다. 끝없이 쫓지 않게 이만큼만
 constexpr float HOMING_SKILL_MAX_CM = 3000.f;
 
+// 이동 사격 (1176, 2026-10-11) - 평타 windup 끝의 사거리 재검사 배율. 움직이며 때려도 끊기지 않는다
+constexpr float MOVE_ATTACK_RANGE_SCALE = 1.5f;
+
 struct Projectile
 {
 	uint64				id = 0;
@@ -239,6 +260,7 @@ struct Projectile
 	vector<uint64>		hitIds;					// 관통이 이미 맞힌 대상 - 두 번 맞지 않는다
 	SkillContext		ctx;
 	uint64				lastStepUs = 0;
+	float				damageMult = 1.f;		// 평타 투사체 한 발의 몫 (두플렉스 두 발 = 각 0.6, 2026-10-11)
 };
 
 class Room : public JobQueue
@@ -401,7 +423,7 @@ private:
 	void	UpdateHolds(uint64 nowUs);
 	void	HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillEffect& hold, uint64 nowUs);
 	bool	TryCounter(const CreatureRef& target, const CreatureRef& attacker, uint64 attackerId, uint64 nowUs);	// true = 막고 반격했다
-	bool	TryParry(const CreatureRef& target, float fromX, float fromY, uint64 nowUs);							// true = 받아넘겼다
+	bool	TryParry(const CreatureRef& target, float fromX, float fromY, bool projectile, uint64 nowUs);			// true = 받아넘겼다 (풍차는 사방의 투사체만)
 	bool	TryReflect(Projectile& p, const CreatureRef& caster, const CreatureRef& target, uint64 nowUs);			// 자업자득 - true = 되돌려 보냈다 (새 투사체 발사)
 	bool	MeetsWeaponRequirement(const CreatureRef& caster, const SkillDef& def) const;							// skills.csv requires_weapon (갑옷 #106 ~ #114)
 	void	ApplyWallEffects(const CreatureRef& caster, const SkillDef& def, uint64 nowUs);							// requires=wall 효과 (회오리 · 질풍노도)
@@ -526,7 +548,7 @@ private:
 	void	SpawnClone(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 그림자 보내기
 	void	StepClones(uint64 nowUs);																// FlushMoves - 분신이 걷는다
 	void	CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 종이매
-	void	StartVisionArea(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 맹수의 탐색
+	void	StartVisionArea(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 맹수의 탐색 · 루멘(param point - 조준 지점)
 	void	MoveBehindTarget(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 그림자 밟기
 	void	ApplyShield(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 전사의 다짐
 	void	ApplyBasicProcs(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs);	// basic_proc 버프의 on_basic 효과 (혼원일체 · 여진)
@@ -555,6 +577,33 @@ private:
 	void	ScheduleSlam(const CreatureRef& caster, const CreatureRef& target, const SkillDef& def, const SkillEffect& e, float flownCm, uint32 travelMs, const SkillContext& ctx, uint64 nowUs);	// 저 멀리 - 벽 충돌
 	void	UpdateSlams(uint64 nowUs);
 	void	PushTargetVisual(uint64 casterId, uint32 effectId, const CreatureRef& target);		// 맞은 대상마다 연출 (낙뢰 벼락 · 혼원일체 원혼)
+
+	// ── 3차 로스터 (게임 ID 1138 ~ 1189, 2026-10-11) - RoomSkills4.cpp ──
+	void	SetAnchor(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 포르타 문 · 비창(투사체가 멈추면)
+	void	OnAnchorProjectileEnd(const Projectile& p);													// 비창 - 던진 창이 멈춘 자리
+	void	TeleportToAnchor(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);
+	void	Rewind(const CreatureRef& caster, const SkillEffect& e, uint64 nowUs);							// 회귀
+	bool	IsNearWall(const CreatureRef& creature) const;													// 벽 차기 - 붙어 있는가
+	void	WallKick(const CreatureRef& caster, const SkillEffect& e, uint64 nowUs);						// 벽 차기 - 벽 반대쪽으로
+	void	CutCooldowns(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 템푸스
+	void	SendFootprints(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 발자국 추적 - 주인에게만
+	void	ScheduleCcOnArrive(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const CreatureRef& target, uint64 nowUs);	// 추격
+	void	UpdatePendingCcs(uint64 nowUs);
+	void	ScheduleLanding(const CreatureRef& caster, uint32 travelMs, uint64 nowUs);						// 착지 충격 - 이동이 끝나는 때
+	void	UpdateLandings(uint64 nowUs);
+	float	MoveDistScale(const CreatureRef& creature) const;												// 날개 - 이동 스킬 거리 × (1 + move_dist)
+	void	TriggerSelfPassives(const CreatureRef& owner, SkillRequire condition, uint64 nowUs);			// on_damaged · on_kill 자기 효과 (반격의 걸음 · 사냥꾼의 걸음)
+	void	TriggerStancePassives(const CreatureRef& owner, const string& element, uint64 nowUs);			// 플럭스 - 속성이 바뀌었다
+	void	TryLowHpEscape(const CreatureRef& victim, const CreatureRef& attacker, uint64 nowUs);			// 줄행랑
+	void	UpdateIdleCombat(uint64 nowUs);																	// 행군 - UpdateTick
+	void	RecordHistories(uint64 nowUs);																	// 회귀 · 발자국 - UpdateTick 10 Hz
+	void	BurstShield(const CreatureRef& owner, uint64 nowUs);											// 스쿠툼 - 속성이 깃든 채 깨졌다
+	bool	DodgesProjectiles(const CreatureRef& target) const;												// 구르기
+	bool	IsUnmovable(const CreatureRef& target) const;													// 철벽진 · 무거운 발
+	float	IncomingDamageMult(const CreatureRef& attacker, const CreatureRef& target) const;				// 철벽진 앞 · 맨발 받는 피해
+	void	PullToPoint(const CreatureRef& target, uint64 instigatorId, float x, float y, float speedCms, uint64 nowUs);	// 바쿠움
+	void	NotifyCooldown(const CreatureRef& owner, uint32 skillId, uint32 remainingMs);					// 클라 슬롯 쿨다운을 서버 값으로 (템푸스 · 패시브)
+	bool	IsSprinting(const CreatureRef& creature) const;													// 전력 질주 - 공격 · 스킬 불가
 
 public:
 	uint32								_floorId = 0;
@@ -665,6 +714,10 @@ private:
 	unordered_map<uint64, uint64>		_trailBuffPushedUs;		// 핏자국 이속 버프 - 밟는 동안 S_STATUS 를 0.5 s 에 한 번만
 	vector<PendingVolley>				_volleys;
 	unordered_set<uint64>				_clones;
+
+	// 3차 로스터 (2026-10-11) - 도착 CC (추격) · 착지 (착지 충격)
+	vector<PendingCc>					_pendingCcs;
+	vector<PendingLanding>				_pendingLandings;
 };
 
 constexpr int32 FLOOR_COUNT = 4;

@@ -515,8 +515,18 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 
 		if (castDef != nullptr && castDef->HasMovement() && player->castEndAtUs <= dueUs + COMBAT_FLUSH_MS * 1000)
 		{
+			const float beforeX = player->posInfo->x();
+			const float beforeY = player->posInfo->y();
+
 			player->castEndAtUs = min(player->castEndAtUs, dueUs);
 			ResolveCasts(dueUs);
+
+			// 서버가 옮기는 이동 스킬(벽 차기 · 회귀 · 블링크)이 방금 자리를 바꿨다 - 이 패킷은 옮기기 전 자리에서 보낸 것이다.
+			// 검사하면 거리 초과로 되돌림 S_MOVE 가 나가 클라가 끝점으로 순간이동한 뒤 넉백 연출로 한 번 더 밀린다 (2026-10-11 벽 차기 실기동). 버린다
+			const float movedX = player->posInfo->x() - beforeX;
+			const float movedY = player->posInfo->y() - beforeY;
+			if (movedX * movedX + movedY * movedY > 1.f)
+				return;
 		}
 	}
 
@@ -697,6 +707,10 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 	if (attacker->IsCasting())
 		return;
 
+	// 전력 질주 (1169) - "그동안 공격과 스킬을 사용할 수 없다" (스킬은 유지 중이라 이미 막힌다)
+	if (IsSprinting(attacker))
+		return;
+
 	if (attackerId == targetId)
 		return;
 
@@ -847,11 +861,16 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	if (caster->IsCasting())
 		return;
 
-	// 외로운 외침 - 반경 안에 아무도 없을 때만 쓸 수 있다 (requires alone)
+	// 외로운 외침 - 반경 안에 아무도 없을 때만 쓸 수 있다 (requires alone). 벽 차기 - 벽에 붙어 있을 때만 (requires near_wall, 2026-10-11)
 	for (const SkillEffect& e : def->effects)
 	{
 		if (e.condition == SkillRequire::Alone && IsAlone(caster, def->radiusCm) == false)
 			return;
+		if (e.condition == SkillRequire::NearWall && IsNearWall(caster) == false)
+		{
+			LOG_LINE << "[SKILL REJECT] caster=" << casterId << " skill=" << def->skillId << " reason=not_near_wall" << '\n';
+			return;
+		}
 	}
 
 	// 대상 지정 단일기만 대상을 검사한다 - 조준 없는 단일기(맹수의 포효)는 서버가 전방에서 고른다 (CollectSkillTargets)
@@ -946,6 +965,17 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 		return;
 	if (target->IsInvulnerable(nowUs))
 		return;
+
+	// 감속 - 질풍 · 족쇄 끊기의 면역 (immune slow), 단단한 발목의 저항 (cc_resist slow), 2026-10-11 3차 로스터
+	if (type == Protocol::CC_TYPE_SLOW)
+	{
+		if (HasImmunity(target, "slow", nowUs))
+		{
+			LOG_LINE << "[IMMUNE] target=" << targetId << " ignored slow" << '\n';
+			return;
+		}
+		baseDurationMs = static_cast<uint32>(baseDurationMs * (1.f - target->CcResistOf("slow")));
+	}
 
 	const uint32 effectiveMs = target->ComputeCcDurationMs(baseDurationMs);
 	if (effectiveMs == 0)
@@ -1052,11 +1082,13 @@ void Room::ResolveAttacks(uint64 nowUs)
 
 
 		// 공격자 사망, 대상 소명, 대상 사망, 사거리 이탈, 대상 진입 무적 -> 취소. 쿨다운을 소모 하지 않는다.
-		// 공격자가 이번 Flush 에 막 죽었으면 이 히트는 동시다 - 그대로 들어간다 (TR-combat-022, KillBatch)
+		// 공격자가 이번 Flush 에 막 죽었으면 이 히트는 동시다 - 그대로 들어간다 (TR-combat-022, KillBatch).
+		// 이동 사격 (1176, 2026-10-11) - windup 끝의 사거리 재검사를 × 1.5 로 - 움직이며 때려도 끊기지 않는다
+		const bool movingShot = (attacker->status.BuffMax(SkillBuffStat::MoveAttack) > 0.f);
 		if (CanStillStrike(attacker) == false
 			|| target == nullptr
 			|| target->IsAlive() == false
-			|| IsInAttackRange(attacker, target) == false
+			|| (movingShot ? IsInSkillRange(attacker, target, attacker->attackRange * MOVE_ATTACK_RANGE_SCALE) : IsInAttackRange(attacker, target)) == false
 			|| (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs)))
 		{
 			_pendingAttackCancels.push_back(attackerId);
@@ -1087,6 +1119,25 @@ void Room::ResolveAttacks(uint64 nowUs)
 			p.homingTargetId = targetId;
 			p.lastStepUs = nowUs;
 			p.ctx.casterId = attackerId;
+
+			// 두플렉스 (1158, 2026-10-11) - 마법 구체가 두 발. 옆으로 조금 벌려 나란히 날아가고 한 발 피해는 × magnitude
+			const float twin = attacker->status.BuffMax(SkillBuffStat::BasicDouble);
+			if (twin > 0.f)
+			{
+				const float len = ::sqrtf(p.dirX * p.dirX + p.dirY * p.dirY);
+				const float sideX = (len > 0.001f) ? -p.dirY / len : 0.f;
+				const float sideY = (len > 0.001f) ? p.dirX / len : 1.f;
+				constexpr float TWIN_OFFSET_CM = 30.f;
+
+				Projectile second = p;
+				p.x += sideX * TWIN_OFFSET_CM;
+				p.y += sideY * TWIN_OFFSET_CM;
+				second.x -= sideX * TWIN_OFFSET_CM;
+				second.y -= sideY * TWIN_OFFSET_CM;
+				p.damageMult = twin;
+				second.damageMult = twin;
+				LaunchProjectile(move(second));
+			}
 			LaunchProjectile(move(p));
 
 			attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
@@ -1094,7 +1145,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 		}
 
 		// 반격(정좌) · 받아넘기기(유수) - 평타가 무효. 후딜은 소모된다 (3 단계)
-		if (TryCounter(target, attacker, attackerId, nowUs) || TryParry(target, attacker->posInfo->x(), attacker->posInfo->y(), nowUs))
+		if (TryCounter(target, attacker, attackerId, nowUs) || TryParry(target, attacker->posInfo->x(), attacker->posInfo->y(), /*projectile*/ false, nowUs))
 		{
 			attacker->attackReadyAtUs = nowUs + static_cast<uint64>(attacker->GetAttackRecoveryMs()) * 1000;
 			_pendingAttackCancels.push_back(attackerId);
@@ -1362,6 +1413,26 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 	}
 	else
 	{
+		// 예고 표시 - 터질 자리를 예고 시간 동안 바닥에 (시길룸 마법진, 2026-10-11). 몬스터 예고(9001)는 클라가 따로 그린다
+		if (caster->IsPlayer() && def.radiusCm > 0.f)
+		{
+			float cx = originX;
+			float cy = originY;
+			if (def.shape == SkillShape::CirclePoint)
+			{
+				const float dx = aimX - originX;
+				const float dy = aimY - originY;
+				const float len = ::sqrtf(dx * dx + dy * dy);
+				if (len > 1.f)
+				{
+					const float reach = min(len, def.rangeCm);
+					cx += dx / len * reach;
+					cy += dy / len * reach;
+				}
+			}
+			PushVisualZone(casterId, def.effectId, cx, cy, def.radiusCm, def.telegraphMs, "telegraph");
+		}
+
 		PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
 		pending.casterId = casterId;
 		pending.skillId = def.skillId;
@@ -1379,12 +1450,13 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 			<< " in=" << def.telegraphMs << "ms" << '\n';
 	}
 
-	// 재입력 창 - 첫 발동 뒤 recast_window_ms 안의 같은 키 (사용자 결정 2026-10-10: 2 초)
+	// 재입력 창 - 첫 발동 뒤 recast_window_ms 안의 같은 키 (사용자 결정 2026-10-10: 2 초). 돌아갈 자리를 남기는 스킬은
+	// 그 자리의 수명이 창이다 (비창 5 s · 포르타 10 s, 2026-10-11)
 	if (recast == false && def.kind == SkillKind::Recast)
 	{
 		caster->recastSkillId = def.skillId;
 		caster->recastSlot = slot;
-		caster->recastUntilUs = nowUs + static_cast<uint64>(SkillTable::Rules().recastWindowMs) * 1000;
+		caster->recastUntilUs = nowUs + static_cast<uint64>(SkillTable::RecastWindowMs(def)) * 1000;
 		caster->recastTargetId = castTargetId;
 		caster->recastAimX = aimX;
 		caster->recastAimY = aimY;
@@ -2271,6 +2343,10 @@ void Room::UpdateTick()
 	UpdateMonsters(nowUs);
 	UpdateDecoys(nowUs);
 
+	// 3차 로스터 (2026-10-11) - 회귀 · 발자국 추적의 자리 기록 (10 Hz), 행군
+	RecordHistories(nowUs);
+	UpdateIdleCombat(nowUs);
+
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
 }
@@ -2328,6 +2404,8 @@ void Room::FlushCombat()
 
 	UpdateCc(nowUs);
 	UpdatePendingSelfCcs(nowUs);	// 오버로드 · 니힐 - 효과가 끝날 때의 자기 기절 (2026-10-11)
+	UpdatePendingCcs(nowUs);		// 추격 - 도착하면 감속 (2026-10-11 3차 로스터)
+	UpdateLandings(nowUs);			// 착지 충격 - 질주 · 도약이 끝난 자리
 	UpdateStatuses(nowUs);
 	UpdateTrails(nowUs);
 	UpdatePathPainters(nowUs);		// 열화 - 지나간 길에 장판 (2026-10-11)
@@ -3256,11 +3334,28 @@ bool Room::MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const C
 		return caster != nullptr && IsAlone(caster, def != nullptr ? def->radiusCm : 0.f);
 	}
 
+	case SkillRequire::ElementIs:
+	{
+		// 시길룸 (2026-10-11) - 그 속성이 깃든 상태일 때만 (불 → 불타는 땅 · 번개 → 벼락 · 얼음 → 빙결)
+		auto casterIt = _objects.find(ctx.casterId);
+		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		return caster != nullptr && caster->stance == e.conditionParam;
+	}
+
+	case SkillRequire::NearWall:
+		return true;		// 사용 조건 - HandleSkill 이 발동 전에 본다
+
 	case SkillRequire::OnDot:
 	case SkillRequire::OnDashAtMe:
 	case SkillRequire::OnSkill:
 	case SkillRequire::OnBasic:
-		return false;		// 트리거 - 발동 때가 아니라 OnDotApplied · TriggerDashMarks · OnSkillDamageLanded · ApplyBasicProcs 가 부른다
+	case SkillRequire::OnStance:
+	case SkillRequire::IdleCombat:
+	case SkillRequire::OnDamaged:
+	case SkillRequire::OnKill:
+	case SkillRequire::OnMoveEnd:
+	case SkillRequire::LowHp:
+		return false;		// 트리거 - 발동 때가 아니라 OnDotApplied · TriggerDashMarks · OnSkillDamageLanded · ApplyBasicProcs · RoomSkills4 가 부른다
 	}
 
 	return false;
@@ -3279,9 +3374,18 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 			MoveToMark(caster, def, e, e.param.substr(8), nowUs);
 		else if (e.param == "behind")
 			MoveBehindTarget(caster, def, e, ctx, nowUs);		// 그림자 밟기 - 대상의 등 뒤로
+		else if (e.param == "to_anchor")
+			TeleportToAnchor(caster, def, e, nowUs);			// 비창 · 포르타 재입력 - 남겨 둔 자리로 (2026-10-11)
+		else if (e.param == "rewind")
+			Rewind(caster, e, nowUs);							// 회귀 - 3 초 전 자리로
+		else if (e.param == "off_wall")
+			WallKick(caster, e, nowUs);							// 벽 차기 - 서버가 벽 반대쪽으로 민다
 		else
 		{
 			ApplyMovement(caster, e, nowUs);
+
+			// 착지 충격 - 질주 · 도약이 끝나는 때 (패시브가 있을 때만 예약한다). 날개 배율만큼 길다
+			ScheduleLanding(caster, SkillKinematics::TravelMs(e.distCm * MoveDistScale(caster), e.speedCms), nowUs);
 
 			// 간파 - 나를 향해 질주해 오는 적에게 확신의 표식 (상대의 패시브)
 			if (e.param == "dash" || e.param == "leap" || e.param == "forward")
@@ -3421,9 +3525,11 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 	}
 
 	case SkillEffectType::Parry:
+		// 풍차 (param all_projectiles, 2026-10-11) - 사방의 투사체만 쳐낸다 (근접은 막지 않는다). 유수는 앞쪽의 투사체 · 근접
 		caster->parryUntilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
-		PushStatus(true, ctx.casterId, Protocol::STATUS_PARRY, "parry", 1, e.durationMs, 0.f, ctx.casterId);
-		LOG_LINE << "[PARRY] start char=" << ctx.casterId << " for=" << e.durationMs << "ms" << '\n';
+		caster->parryAllProjectiles = (e.param == "all_projectiles");
+		PushStatus(true, ctx.casterId, Protocol::STATUS_PARRY, caster->parryAllProjectiles ? "windmill" : "parry", 1, e.durationMs, 0.f, ctx.casterId);
+		LOG_LINE << "[PARRY] start char=" << ctx.casterId << " for=" << e.durationMs << "ms" << (caster->parryAllProjectiles ? " all projectiles" : "") << '\n';
 		break;
 
 	case SkillEffectType::Reflect:
@@ -3474,7 +3580,7 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 		break;
 
 	case SkillEffectType::VisionArea:
-		StartVisionArea(caster, def, e, nowUs);
+		StartVisionArea(caster, def, e, ctx, nowUs);
 		break;
 
 	case SkillEffectType::Hawk:
@@ -3503,6 +3609,23 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 		RaiseWall(caster, def, e, ctx, nowUs);
 		break;
 
+	// ── 3차 로스터 (2026-10-11) - RoomSkills4.cpp ──
+	case SkillEffectType::Anchor:
+		SetAnchor(caster, def, e, ctx, nowUs);
+		break;
+
+	case SkillEffectType::CooldownCut:
+		CutCooldowns(caster, def, e, nowUs);
+		break;
+
+	case SkillEffectType::Footprints:
+		SendFootprints(caster, def, e, nowUs);
+		break;
+
+	case SkillEffectType::PassiveStat:
+	case SkillEffectType::CcResist:
+		break;		// 장착 중 내내 - Creature::PassiveStatSum · CcResistOf 가 슬롯에서 읽는다
+
 	default:
 		// OnHit · LethalSave 는 패시브 - 평타 · 피해 경로에서 발동한다. FallOnHit 는 FireSkill 이 예고로 돌린다
 		break;
@@ -3525,12 +3648,17 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 
 		DamageSource src;
 		src.skillId = def.skillId;
-		src.elem = ElementOf(e.param);
+		// param stance - 시전자에게 지금 깃든 속성이 피해 속성 (시길룸 마법진 · 플럭스, 2026-10-11). 속성이 없으면 속성 없는 마법 피해
+		src.elem = (e.param == "stance") ? caster->stance : ElementOf(e.param);
 		src.extraMult = (target != caster) ? ctx.bonusDamageMod : 0.f;
 
 		bool isCrit = false;
 		const int32 damage = caster->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
 		const int32 remaining = DealDamage(caster, casterId, target, damage, e.DamageType(), isCrit, nowUs, src);
+
+		// 속성 조건의 번개 (시길룸 - "번개는 벼락이 떨어져 더 큰 피해") - 맞은 대상마다 벼락 연출
+		if (e.condition == SkillRequire::ElementIs && src.elem == "lightning")
+			PushTargetVisual(casterId, def.effectId, target);
 
 		// 월척 등 - 내 스킬이 맞혔을 때의 패시브 (자해는 제외)
 		if (target != caster && damage > 0)
@@ -3586,6 +3714,12 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 
 	case SkillEffectType::HardCc:
 	case SkillEffectType::SoftCc:
+		// 추격 (param on_arrive, 2026-10-11) - 질주가 대상 앞에 도착하는 때 건다
+		if (e.durationMs > 0 && e.param == "on_arrive" && target != caster)
+		{
+			ScheduleCcOnArrive(caster, def, e, target, nowUs);
+			break;
+		}
 		if (e.durationMs > 0)
 		{
 			// 뇌섬 (param facing) - 시전자 쪽을 바라보던 적만 (바라보는 방향과 시전자 방향의 내적 > 0).
@@ -3655,6 +3789,24 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 	}
 
 	case SkillEffectType::Pull:
+		// 바쿠움 (param to_point, 2026-10-11) - 시전자가 아니라 찍은 지점으로 끌어모은다 (사거리 밖을 찍었으면 사거리 끝)
+		if (e.param == "to_point")
+		{
+			float px = ctx.originX;
+			float py = ctx.originY;
+			const float dx = ctx.aimX - ctx.originX;
+			const float dy = ctx.aimY - ctx.originY;
+			const float len = ::sqrtf(dx * dx + dy * dy);
+			if (len > 1.f)
+			{
+				const float reach = min(len, def.rangeCm);
+				px += dx / len * reach;
+				py += dy / len * reach;
+			}
+			PullToPoint(target, casterId, px, py, e.speedCms > 0.f ? e.speedCms : rules.pullSpeedCms, nowUs);
+			break;
+		}
+
 		// 부름 (param monsters) - 몬스터만 끌고, 끌린 몬스터는 시전자를 노린다
 		if (e.param == "monsters")
 		{
@@ -3809,7 +3961,10 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 		damage -= absorbed;
 		LOG_LINE << "[SHIELD] char=" << target->objectInfo->object_id() << " absorbed=" << absorbed << " left=" << target->shieldAmount << '\n';
 		if (target->shieldAmount <= 0)
+		{
 			target->shieldUntilUs = nowUs;		// UpdateWindows 가 끝 상태를 보낸다
+			BurstShield(target, nowUs);			// 스쿠툼 - 속성이 깃든 채 깨졌다 (2026-10-11)
+		}
 	}
 
 	// 치명상 방어 (맹수의 본능) - 죽을 피해를 체력 1 로 막고 뒤로 도약
@@ -3827,6 +3982,20 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 	// 그림자 감추기 - 피해를 받으면 모습이 드러난다 (사용자 결정 2026-10-11). 니힐은 무적이라 여기까지 오지 않는다
 	if (damage > 0 && target->stealthBreaksOnDamage && target->IsStealthed(nowUs))
 		BreakStealth(target, "damaged", nowUs);
+
+	// 3차 로스터 (2026-10-11) - 행군(피해를 주고받은 때) · 반격의 걸음(받으면 이속) · 줄행랑(체력이 낮아지면 뒤로)
+	if (shownDamage > 0 && attacker != target)
+	{
+		target->lastCombatUs = nowUs;
+		if (attacker != nullptr)
+			attacker->lastCombatUs = nowUs;
+
+		if (remainingHp > 0 && target->IsPlayer())
+		{
+			TriggerSelfPassives(target, SkillRequire::OnDamaged, nowUs);
+			TryLowHpEscape(target, attacker, nowUs);
+		}
+	}
 
 	Protocol::DamageInfo& dmg = _pendingDamages.emplace_back();
 	dmg.set_attacker_id(attackerId);
@@ -3952,6 +4121,19 @@ void Room::PushCreature(const CreatureRef& target, uint64 instigatorId, float di
 	if (target->IsInvulnerable(nowUs) || target->IsDecoy())
 		return;
 
+	// 남이 미는 것만 - 철벽진 · 무거운 발은 밀리지 않고, 유연한 발목은 덜 밀린다. 내 이동(맹수의 본능 · 벽 차기 · 줄행랑)은 그대로 (2026-10-11)
+	if (instigatorId != targetId)
+	{
+		if (IsUnmovable(target))
+		{
+			LOG_LINE << "[PUSH] target=" << targetId << " by=" << instigatorId << " blocked=unmovable" << '\n';
+			return;
+		}
+		distCm *= (1.f - target->CcResistOf("knockback"));
+		if (distCm <= 0.f)
+			return;
+	}
+
 	const float len = ::sqrtf(dirX * dirX + dirY * dirY);
 	if (len < 0.0001f)
 		return;
@@ -4009,6 +4191,13 @@ void Room::PullCreature(const CreatureRef& target, const CreatureRef& caster, fl
 	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
 		return;
 
+	// 철벽진 · 무거운 발 - 끌려가지 않는다 (2026-10-11)
+	if (IsUnmovable(target))
+	{
+		LOG_LINE << "[PULL] target=" << targetId << " by=" << casterId << " blocked=unmovable" << '\n';
+		return;
+	}
+
 	const float startX = target->posInfo->x();
 	const float startY = target->posInfo->y();
 
@@ -4059,13 +4248,14 @@ void Room::BlinkCaster(const CreatureRef& caster, const SkillEffect& e, const Sk
 	float dx = ctx.aimX - ctx.originX;
 	float dy = ctx.aimY - ctx.originY;
 	const float len = ::sqrtf(dx * dx + dy * dy);
-	float reach = e.distCm;
+	const float maxReach = e.distCm * MoveDistScale(caster);		// 날개 (2026-10-11)
+	float reach = maxReach;
 
 	if (len >= 1.f)
 	{
 		dx /= len;
 		dy /= len;
-		reach = min(len, e.distCm);
+		reach = min(len, maxReach);
 	}
 	else
 	{
@@ -4116,6 +4306,10 @@ void Room::ApplyOnHitPassives(const CreatureRef& attacker, const CreatureRef& ta
 		if (def == nullptr || def->kind != SkillKind::Passive)
 			continue;
 
+		// 갑옷 패시브 "창을 들고 있을 때만 효과가 있다" (추혼 1143, 2026-10-11)
+		if (MeetsWeaponRequirement(attacker, *def) == false)
+			continue;
+
 		for (const SkillEffect& e : def->effects)
 		{
 			if (target->IsAlive() == false)
@@ -4123,6 +4317,13 @@ void Room::ApplyOnHitPassives(const CreatureRef& attacker, const CreatureRef& ta
 
 			if (e.type == SkillEffectType::OnHit)
 			{
+				// 표식 조건 (추혼 - 내 점지 표식이 남은 적만). 표식은 남는다 - 평타마다 벼락이 따라 떨어진다
+				const char* needMark = RequiredMark(e.condition);
+				if (needMark != nullptr && target->status.HasMark(needMark, attackerId) == false)
+					continue;
+				if (needMark != nullptr)
+					PushTargetVisual(attackerId, def->effectId, target);
+
 				// 속성이 붙어 있다 (연뢰 번개 · 점화 화염) - 면역(피뢰 · 방염)과 속성 피해 증가(이열치열 · 냉혈)가 본다 (2026-10-11 고침)
 				bool isCrit = false;
 				const int32 extra = attacker->ComputeSkillDamageTo(*target, e.adRatio, e.apRatio, OUT isCrit);
@@ -4201,9 +4402,11 @@ void Room::UpdateStatuses(uint64 nowUs)
 				});
 		}
 
+		// 버프는 전부 자기 버프 - 걸 때 시전자 = 주인으로 보냈다. 끝도 주인으로 보내야 클라가 같은 줄을 찾는다
+		// (클라는 종류 · param · 시전자로 줄을 찾는다. 예전엔 0 이라 못 찾고 남은 시간이 지나야 지워졌다 - 2026-10-11 행군 실기동에서 발견)
 		const bool buffGone = target->status.Expire(nowUs, [&](Protocol::StatusKind kind, const string& param, uint64 instigatorId, uint32 stacks)
 			{
-				PushStatus(false, id, kind, param, stacks, 0, 0.f, instigatorId);
+				PushStatus(false, id, kind, param, stacks, 0, 0.f, kind == Protocol::STATUS_BUFF ? id : instigatorId);
 			});
 
 		if (buffGone)
@@ -4442,6 +4645,10 @@ bool Room::StepStraight(Projectile& p, const CreatureRef& caster, const WallMap&
 		if (CanProjectileHit(caster, target, nowUs) == false)
 			continue;
 
+		// 구르기 (1162) - 구르는 동안은 투사체가 지나간다 (2026-10-11)
+		if (DodgesProjectiles(target))
+			continue;
+
 		const float t = SkillKinematics::SegmentCircleHit(x0, y0, x1, y1, target->posInfo->x(), target->posInfo->y(), p.radiusCm + SkillKinematics::CAPSULE_RADIUS_CM);
 		if (t <= 1.f && t < wallT)
 			candidates.push_back({ t, target });
@@ -4521,6 +4728,13 @@ bool Room::StepHoming(Projectile& p, const CreatureRef& caster, const WallMap& w
 		p.x = tx;
 		p.y = ty;
 
+		// 구르기 - 쫓아온 투사체도 구르는 순간엔 빗나간다 (필중은 "피할 수 없다" 의 예외 하나)
+		if (DodgesProjectiles(target))
+		{
+			EndProjectile(p, Protocol::PROJECTILE_END_LOST, 0);
+			return true;
+		}
+
 		if (CanProjectileHit(caster, target, nowUs))
 			OnProjectileHit(p, caster, target, nowUs);
 
@@ -4570,7 +4784,7 @@ void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const Creat
 		return;
 
 	// 받아넘기기(유수) - 전방에서 오는 투사체는 무효 (평타 · 스킬 모두)
-	if (TryParry(target, p.x - p.dirX * 10.f, p.y - p.dirY * 10.f, nowUs))
+	if (TryParry(target, p.x - p.dirX * 10.f, p.y - p.dirY * 10.f, /*projectile*/ true, nowUs))
 		return;
 
 	// 평타 도착 - ResolveAttacks 의 근접 경로와 같은 계산, 도착 시점 스탯으로
@@ -4584,6 +4798,10 @@ void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const Creat
 
 		if (target->status.HasMark("spear", p.casterId))
 			damage = static_cast<int32>(damage * (1.f + SkillTable::Rules().markSpearBasicBonus));
+
+		// 두플렉스 - 두 발 중 한 발의 몫 (보통 평타는 1)
+		if (p.damageMult != 1.f)
+			damage = (std::max)(1, static_cast<int32>(::lroundf(damage * p.damageMult)));
 
 		DamageSource basic;
 		basic.basic = true;
@@ -4614,6 +4832,9 @@ void Room::OnProjectileHit(Projectile& p, const CreatureRef& caster, const Creat
 
 void Room::EndProjectile(const Projectile& p, Protocol::ProjectileEnd reason, uint64 targetId)
 {
+	// 비창 (1138) - 던진 창이 멈춘 자리가 재입력으로 순간이동할 자리다 (맞혔든 벽에 꽂혔든 사거리 끝이든, 2026-10-11)
+	OnAnchorProjectileEnd(p);
+
 	Protocol::ProjectileEndInfo& info = _pendingProjectileEnds.emplace_back();
 	info.set_projectile_id(p.id);
 	info.set_x(p.x);
@@ -4902,6 +5123,24 @@ void Room::StopHold(const CreatureRef& caster, uint64 nowUs, const char* why)
 		PushStatus(false, casterId, Protocol::STATUS_COUNTER, "counter", 0, 0, 0.f, casterId);
 	}
 
+	// 전력 질주 (1169, 2026-10-11) - 멈추면 그 스킬의 이속 버프도 끝난다 (버프 지속은 유지 상한과 같아 그대로 두면 남는다)
+	if (param == "sprint" && def != nullptr)
+	{
+		vector<SkillBuffStat> stats;
+		for (const BuffInstance& b : caster->status.Buffs())
+		{
+			if (b.skillId == skillId)
+				stats.push_back(b.stat);
+		}
+		if (caster->status.RemoveBuffs(skillId) > 0)
+		{
+			caster->OnBuffsChanged();
+			for (SkillBuffStat stat : stats)
+				PushStatus(false, casterId, Protocol::STATUS_BUFF, SkillTable::BuffStatName(stat), 0, 0, 0.f, casterId);
+			LOG_LINE << "[HOLD] sprint buffs removed char=" << casterId << " n=" << stats.size() << '\n';
+		}
+	}
+
 	PushStatus(false, casterId, Protocol::STATUS_HOLD, param.empty() ? "hold" : param, 0, 0, 0.f, casterId);
 	LOG_LINE << "[HOLD] stop char=" << casterId << " skill=" << skillId << " why=" << why << " held=" << heldMs << "ms" << '\n';
 }
@@ -4970,6 +5209,10 @@ void Room::HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillE
 	ctx.aimY = cy;
 	ctx.itemLevel = caster->castItemLevel;
 	ctx.slot = caster->holdSlot;
+
+	// 전력 질주 - 틱에 할 일이 없다 (이속 버프는 발동 때 걸렸고, 유지는 공격 · 스킬을 막을 뿐)
+	if (hold.param == "sprint")
+		return;
 
 	// 빈쿨룸 - 자기도 속박 (ApplyCcRaw 를 거치지 않는다 - 유지를 끊지 않게). 틱 간격 + 여유
 	const uint32 ccMs = (hold.intervalMs > 0 ? hold.intervalMs : SkillTable::Rules().dotTickMs) + 200;
@@ -5081,10 +5324,18 @@ bool Room::TryCounter(const CreatureRef& target, const CreatureRef& attacker, ui
 	return true;
 }
 
-bool Room::TryParry(const CreatureRef& target, float fromX, float fromY, uint64 nowUs)
+bool Room::TryParry(const CreatureRef& target, float fromX, float fromY, bool projectile, uint64 nowUs)
 {
 	if (target == nullptr || target->IsParrying(nowUs) == false)
 		return false;
+
+	// 풍차 (1146, 2026-10-11) - 머리 위로 돌리는 창이 사방의 투사체만 쳐낸다. 근접 공격은 막지 않는다
+	if (target->parryAllProjectiles)
+	{
+		if (projectile)
+			LOG_LINE << "[PARRY] char=" << target->objectInfo->object_id() << " windmill deflected" << '\n';
+		return projectile;
+	}
 
 	// 전방 반평면 - 바라보는 방향과 공격이 오는 방향의 내적
 	const float yawRad = target->posInfo->yaw() * 3.14159265f / 180.f;
@@ -5408,10 +5659,15 @@ void Room::SetStance(const CreatureRef& caster, const string& element, float rat
 	if (caster->stance.empty() == false && caster->stance != element)
 		PushStatus(false, casterId, Protocol::STATUS_STANCE, caster->stance, 0, 0, 0.f, casterId);
 
+	const bool changed = (caster->stance != element);
 	caster->stance = element;
 	caster->stanceRatio = ratio;
 	PushStatus(true, casterId, Protocol::STATUS_STANCE, element, 1, 0, ratio, casterId);
 	LOG_LINE << "[STANCE] char=" << casterId << " " << element << " ratio=" << ratio << '\n';
+
+	// 플럭스 (1151) - 속성이 바뀔 때마다 둘레 적에게 그 속성 피해 (같은 속성을 다시 걸면 바뀐 게 아니다, 2026-10-11)
+	if (changed)
+		TriggerStancePassives(caster, element, nowUs);
 }
 
 void Room::ApplyThrow(const CreatureRef& caster, const CreatureRef& target, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
@@ -5607,6 +5863,10 @@ int32 Room::ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& targ
 
 	damage = static_cast<int32>(::lroundf(damage * mult));
 
+	// 받는 쪽 - 맨발(받는 피해 증가) · 철벽진(앞에서 오는 피해 감소), 2026-10-11 3차 로스터
+	if (attacker != target)
+		damage = static_cast<int32>(::lroundf(damage * IncomingDamageMult(attacker, target)));
+
 	// 면역 (피뢰 · 방염 · 만독불침)
 	if (HasImmunity(target, src.elem, nowUs))
 	{
@@ -5801,6 +6061,38 @@ void Room::Cleanse(const CreatureRef& creature, const string& what, uint64 nowUs
 		for (const DotInstance& d : creature->status.Dots())
 			PushStatus(false, id, Protocol::STATUS_DOT, d.kind, 0, 0, 0.f, d.instigatorId);
 		dots = creature->status.RemoveDots("");
+	}
+	else if (what == "slow")
+	{
+		// 족쇄 끊기 (1185, 2026-10-11) - 걸린 감속만
+		if (creature->slowSources.empty() == false)
+		{
+			creature->slowSources.clear();
+			creature->RefreshActiveSlow(nowUs);
+			Protocol::CcEventInfo& info = _pendingCcExpired.emplace_back();
+			info.set_target_id(id);
+			info.set_cc_type(Protocol::CC_TYPE_SLOW);
+		}
+	}
+	else if (what == "marks")
+	{
+		// 삼십육계 (1188, 2026-10-11) - 내게 남은 표식 전부 (누가 남겼든)
+		const uint32 marks = creature->status.RemoveAllMarks([&](const MarkInstance& m)
+			{
+				PushStatus(false, id, Protocol::STATUS_MARK, m.kind, 0, 0, 0.f, m.instigatorId);
+			});
+
+		// 일편단심의 표식도 사라졌다 - 나를 노리던 집중도 풀린다 (남은 시간 동안 다른 적에게 피해 0 이 되지 않게)
+		for (auto& item : _objects)
+		{
+			CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+			if (other != nullptr && other->focusTargetId == id)
+			{
+				other->focusTargetId = 0;
+				other->focusUntilUs = 0;
+			}
+		}
+		LOG_LINE << "[CLEANSE] char=" << id << " marks=" << marks << '\n';
 	}
 	else
 	{
@@ -6097,6 +6389,9 @@ void Room::StepTaunts(uint64 nowUs)
 
 		const float room = dist - rules.tauntStopCm;
 		float step = min(rules.tauntSpeedCms * STEP_SEC, room);
+		// 철벽진 · 무거운 발 - 끌려가지 않는다 (도발은 그대로 - 바라보고 아무것도 못 한다, 2026-10-11)
+		if (IsUnmovable(target))
+			step = 0.f;
 		if (dist > 1.f && step > 0.f)
 		{
 			dx /= dist;
@@ -6372,7 +6667,8 @@ void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, u
 
 	constexpr uint64 DASH_GRACE_US = 100'000;
 
-	const double durSec = static_cast<double>(effect.distCm) / effect.speedCms;
+	// 날개 (1184, 2026-10-11) - 이동 스킬 거리 × (1 + move_dist). 클라도 같은 배율로 더 멀리 간다 (속도는 그대로 - 창이 길어진다)
+	const double durSec = static_cast<double>(effect.distCm) * MoveDistScale(caster) / effect.speedCms;
 	const uint64 durUs = static_cast<uint64>(durSec * 1'000'000.0);
 
 	player->moveExceptionSpeed = effect.speedCms;
@@ -6588,6 +6884,10 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 	// 배수진 - 저주 중에 적 플레이어를 처치했다 → 해제 + 만피
 	if (instigator != nullptr && victim->IsPlayer() && instigator->IsDoomed(nowUs))
 		LiftDoom(instigator, true, nowUs);
+
+	// 사냥꾼의 걸음 (1181) - 적을 처치하면 이속 (몬스터 포함, 2026-10-11)
+	if (instigator != nullptr && instigator != victim && instigator->IsPlayer())
+		TriggerSelfPassives(instigator, SkillRequire::OnKill, nowUs);
 
 	// 일편단심 - 표식 대상이 죽으면 집중도 풀린다 (남은 시간 동안 다른 적에게 피해 0 이 되지 않게)
 	for (auto& item : _objects)
