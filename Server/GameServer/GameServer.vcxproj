@@ -170,6 +170,9 @@
     <ClCompile Include="MonsterTable.cpp" />
     <ClCompile Include="MonsterBrain.cpp" />
     <ClCompile Include="MonsterPack.cpp" />
+    <ClCompile Include="PartyBook.cpp" />
+    <ClCompile Include="PartyManager.cpp" />
+    <ClCompile Include="InstanceManager.cpp" />
     <ClCompile Include="RoomPacks.cpp" />
     <ClCompile Include="EscapeLogic.cpp" />
     <ClCompile Include="EquipStats.cpp" />
@@ -225,6 +228,10 @@
     <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="MonsterPack.h" />
     <ClInclude Include="PositionHistory.h" />
+    <ClInclude Include="PartyBook.h" />
+    <ClInclude Include="PartyManager.h" />
+    <ClInclude Include="InstanceManager.h" />
+    <ClInclude Include="InstanceRules.h" />
     <ClInclude Include="EscapeLogic.h" />
     <ClInclude Include="EquipStats.h" />
     <ClInclude Include="KillBatch.h" />

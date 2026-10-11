@@ -107,6 +107,7 @@
     <ClCompile Include="StatusEffectsTest.cpp" />
     <ClCompile Include="SkillKinematicsTest.cpp" />
     <ClCompile Include="PositionHistoryTest.cpp" />
+    <ClCompile Include="PartyTest.cpp" />
     <ClCompile Include="BuffStatsTest.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -138,6 +139,7 @@
     <ClCompile Include="..\GameServer\MonsterTable.cpp" />
     <ClCompile Include="..\GameServer\MonsterBrain.cpp" />
     <ClCompile Include="..\GameServer\MonsterPack.cpp" />
+    <ClCompile Include="..\GameServer\PartyBook.cpp" />
     <ClCompile Include="..\GameServer\EscapeLogic.cpp" />
     <ClCompile Include="..\GameServer\EquipStats.cpp" />
     <ClCompile Include="..\GameServer\CommitRetry.cpp" />

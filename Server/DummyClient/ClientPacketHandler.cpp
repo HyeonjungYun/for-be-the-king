@@ -35,8 +35,81 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 	uint64 expected = 0;
 	GGrantTargetId.compare_exchange_strong(expected, Character.object_info().object_id());
 
+	// PVE (ADR-0014) - 솔로는 바로 자기 인스턴스로. 협동은 파티부터: 번호로 나눈 첫 봇이 나머지를 초대하고(틱이 보낸다),
+	// 모두 모이면 서버가 말하는 파티장이 입장해 멤버를 데려간다 (Handle_S_PARTY_STATE)
+	const int32 mode = GRunMode.load();
+	if (mode == Protocol::RUN_MODE_PVE_COOP)
+	{
+		const int32 size = (std::max)(2, (std::min)(3, GPartySize.load()));
+		if ((static_cast<int32>(bot->botIndex) - 1) % size == 0)
+			bot->nextInviteAtUs.store(Utils::NowMicroseconds() + 1'000'000);		// 같은 묶음 봇이 로그인할 틈
+		return true;
+	}
+	if (mode == Protocol::RUN_MODE_PVE_SOLO)
+	{
+		enterPkt.set_mode(Protocol::RUN_MODE_PVE_SOLO);
+		enterPkt.set_floor_id(0);
+	}
+
 	bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
 
+	return true;
+}
+
+bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED& pkt)
+{
+	auto bot = static_pointer_cast<BotSession>(session);
+
+	// 봇은 받는다
+	Protocol::C_PARTY_RESPONSE response;
+	response.set_party_id(pkt.party_id());
+	response.set_accept(true);
+	bot->Send(ClientPacketHandler::MakeSendBuffer(response));
+
+	LOG_LINE << "[BOT PARTY] invited idx=" << bot->botIndex << " by=" << pkt.from_name() << " party=" << pkt.party_id() << " - accept\n";
+	return true;
+}
+
+bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pkt)
+{
+	auto bot = static_pointer_cast<BotSession>(session);
+	const uint64 me = bot->characterId.load();
+
+	bool leader = false;
+	{
+		lock_guard<mutex> guard(bot->partyLock);
+		bot->partyMembers.clear();
+		for (const Protocol::PartyMember& m : pkt.members())
+		{
+			bot->partyMembers.push_back(m.character_id());
+			if (m.character_id() == me && m.leader())
+				leader = true;
+		}
+	}
+	bot->partyId.store(pkt.party_id());
+	bot->partyLeader.store(leader);
+	const bool wasInRun = bot->partyInRun.exchange(pkt.in_run());
+
+	if (pkt.result() != Protocol::PARTY_OK)
+		LOG_LINE << "[BOT PARTY] idx=" << bot->botIndex << " result=" << Protocol::PartyResult_Name(pkt.result()) << " subject=" << pkt.subject_name() << '\n';
+
+	// 파티 인스턴스가 닫혔다 - 다음 판을 열 수 있다
+	if (wasInRun && pkt.in_run() == false)
+		bot->coopEnterSent.store(false);
+
+	// 다 모였고 판이 없고 나는 베이스캠프 - 파티장이 연다 (멤버는 서버가 함께 데려간다)
+	const int32 size = (std::max)(2, (std::min)(3, GPartySize.load()));
+	if (GRunMode.load() == Protocol::RUN_MODE_PVE_COOP && leader && pkt.members_size() >= size && pkt.in_run() == false
+		&& bot->inGame.load() == false && bot->coopEnterSent.exchange(true) == false)
+	{
+		Protocol::C_ENTER_GAME enterPkt;
+		enterPkt.set_playerindex(0);
+		enterPkt.set_floor_id(0);
+		enterPkt.set_entry_point_id(GEntryPointId.load());
+		enterPkt.set_mode(Protocol::RUN_MODE_PVE_COOP);
+		bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
+		LOG_LINE << "[BOT PARTY] leader idx=" << bot->botIndex << " enters co-op with " << pkt.members_size() << " members\n";
+	}
 	return true;
 }
 
@@ -46,6 +119,14 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	if (pkt.success() == false)
 	{
+		// 협동 - 끊지 않고 베이스캠프에서 파티를 기다린다 (파티 상태가 다음 입장을 정한다)
+		if (GRunMode.load() == Protocol::RUN_MODE_PVE_COOP)
+		{
+			LOG_LINE << "[BOT] co-op enter rejected idx=" << bot->botIndex << " char=" << bot->characterId.load() << " - waiting for the party\n";
+			bot->coopEnterSent.store(false);
+			return true;
+		}
+
 		// -holdonreject: UE 클라처럼 베이스캠프에 남아 있다가 다시 입장한다 - 기다리는 동안 이 세션이 베이스캠프 동기화를 받는다
 		if (GHoldOnReject.load())
 		{
@@ -83,7 +164,8 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	bot->inGame.store(true);
 
-	LOG_LINE << "[BOT] entered char=" << bot->objectId.load() << " at=(" << bot->x << "," << bot->y << ") run_left=" << pkt.run_remaining_ms() << "ms\n";
+	LOG_LINE << "[BOT] entered char=" << bot->objectId.load() << " at=(" << bot->x << "," << bot->y << ") run_left=" << pkt.run_remaining_ms() << "ms"
+		<< " mode=" << Protocol::RunMode_Name(pkt.mode()) << '\n';
 
 	// -gold N: 런 골드 (서버 FBTK_DEBUG_GOLD=1 일 때만 받는다) - 만료 30 % · 탈출 100 % 시험 (AC-ET-20)
 	if (const uint64 gold = GRunGold.load(); gold > 0)

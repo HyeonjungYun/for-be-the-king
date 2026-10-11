@@ -196,3 +196,12 @@ message VisionSource
 	bool sees_stealth = 8;
 	string kind = 9;			// hawk (종이매 - 클라가 매를 그린다) · clone · detect (2026-10-11)
 }
+
+// One PVE co-op party member (2026-10-11 - ADR-0014)
+message PartyMember
+{
+	uint64 character_id = 1;		// the same as the player's object_id in the dungeon
+	string name = 2;
+	bool leader = 3;
+	PartyMemberState state = 4;
+}

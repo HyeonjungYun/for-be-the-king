@@ -5,6 +5,7 @@
 #include "Player.h"
 #include "Room.h"
 #include "AccountManager.h"
+#include "PartyManager.h"
 
 void GameSession::OnConnected()
 {
@@ -16,6 +17,11 @@ void GameSession::OnDisconnected()
 	LOG_LINE << "[DISCONNECT] enter\n";
 
 	GSessionManager.Remove(static_pointer_cast<GameSession>(shared_from_this()));
+
+	// PVE 협동 파티 (ADR-0014) - 베이스캠프에서 끊기면 파티에서 빠지고, 던전에서 끊기면 "접속 끊김" 으로 남는다.
+	// accountId 를 비우기 전에 캐릭터를 읽는다 (characters 는 accountId 보다 먼저 쓰였다)
+	const uint64 characterId = (accountId.load() != 0 && characters.empty() == false) ? characters[0].object_info().object_id() : 0;
+	GParties.OnDisconnected(characterId, place.load());
 
 	GAccountManager.LogOut(accountId.exchange(0));
 

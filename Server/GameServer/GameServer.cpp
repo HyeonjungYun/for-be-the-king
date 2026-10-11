@@ -26,6 +26,8 @@
 #include "Bag.h"
 #include "DBJobQueue.h"
 #include "ObjectUtils.h"
+#include "InstanceManager.h"
+#include "PartyManager.h"
 
 enum
 {
@@ -62,6 +64,8 @@ namespace
 		case PKT_S_BAG_CONTENTS:	return "S_BAG_CONTENTS";
 		case PKT_S_ESCAPE_GAUGE:	return "S_ESCAPE_GAUGE";
 		case PKT_S_CHEST_STATE:		return "S_CHEST_STATE";
+		case PKT_S_PARTY_INVITED:	return "S_PARTY_INVITED";
+		case PKT_S_PARTY_STATE:		return "S_PARTY_STATE";
 		case STAT_ID_BAG_SPAWN:		return "S_SPAWN(bag)";
 		case STAT_ID_BAG_DESPAWN:	return "S_DESPAWN(bag)";
 		default:					return nullptr;
@@ -286,6 +290,7 @@ int main()
 			}
 		}
 
+		GMonstersOn.store(monstersOn);		// PVE 인스턴스도 같은 스위치를 따른다 (ADR-0014)
 		if (monstersOn)
 		{
 			for (int32 i = 0; i < FLOOR_COUNT; i++)
@@ -578,6 +583,11 @@ int main()
 		this_thread::sleep_for(10s);
 		GStats.Dump(service->GetCurrentSessionCount());
 		GMonsterStats.Dump(10);
+
+		// PVE (ADR-0014) - 살아 있는 인스턴스 수 · 지금까지 만든 수 · 파티 초대 만료 (30 s, 10 s 단위로 알린다)
+		GParties.Tick(Utils::NowMicroseconds());
+		if (const uint64 created = GInstances.CreatedCount(); created > 0)
+			LOG_LINE << "[INST] live=" << GInstances.LiveCount() << " created=" << created << '\n';
 	}
 
 

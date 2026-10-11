@@ -76,6 +76,21 @@ public:
 	vector<pair<float, float>>						path;
 	size_t											pathIndex = 0;
 
+	// -mode coop (PVE 협동, ADR-0014) - 파티 상태 (S_PARTY_STATE). 번호로 나눈 첫 봇이 나머지를 초대하고, 서버가 말하는 파티장이 입장한다
+	mutex											partyLock;
+	vector<uint64>									partyMembers;		// 내 파티의 캐릭터 id (나 포함)
+	atomic<uint64>									partyId = 0;
+	atomic<bool>									partyLeader = false;	// 서버가 말한 파티장
+	atomic<bool>									partyInRun = false;
+	atomic<bool>									coopEnterSent = false;
+	atomic<uint64>									nextInviteAtUs = 0;	// 번호 파티장이 빠진 멤버를 다시 초대할 시각. 0 = 초대하지 않는다
+
+	bool			IsPartyMember(uint64 characterId)
+	{
+		lock_guard<mutex> guard(partyLock);
+		return find(partyMembers.begin(), partyMembers.end(), characterId) != partyMembers.end();
+	}
+
 	// 서버가 세션별로 같은 요청 id 를 한 번만 받는다 (GameSession::TryBeginRequest)
 	string			NextRequestId() { return "b" + to_string(requestSeq.fetch_add(1)); }
 };
@@ -126,6 +141,12 @@ extern atomic<bool> GSwapArmor;	// -swap
 extern atomic<bool> GStayDead;	// -staydead - 죽어도 접속을 끊지 않는다
 extern atomic<int32> GTowerCount;	// -towercount N - -tower 에서 botIndex <= N 만 타워로, 나머지는 제자리에 서서 지켜본다 (완충 방송 수신자). 0 = 전원
 extern atomic<bool> GHoldOnReject;	// -holdonreject - 입장 거절에 끊지 않고 베이스캠프에서 기다렸다 다시 입장 (UE 클라처럼, ADR-0007 R-3 시험)
+
+// PVE (ADR-0014) - -mode pvp|solo|coop · -party N (협동 파티 크기 2~3, 기본 3) · -allyfire (일부러 파티원을 때린다 - 서버 거부 시험)
+// PVE 에서는 봇끼리 싸우지 않고 몬스터를 쫓는다 (-monsterpull 과 같다)
+extern atomic<int32> GRunMode;		// 0 PvP · 1 솔로 · 2 협동 (Protocol::RunMode 값)
+extern atomic<int32> GPartySize;
+extern atomic<bool> GAllyFire;
 extern atomic<uint64> GLeaveEscaped;
 extern atomic<uint64> GLeaveExpired;
 

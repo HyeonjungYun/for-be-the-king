@@ -369,6 +369,7 @@ void Room::SpawnClone(const CreatureRef& caster, const SkillDef& def, const Skil
 
 	// 떡밥과 같은 인형 - 체력 1 (맞으면 사라진다). 다른 사람에겐 시전자와 똑같은 플레이어로 보인다 (S_SPAWN CREATE_TYPE_PLAYER)
 	auto clone = make_shared<Decoy>(GNextDecoyId.fetch_add(1), ctx.casterId, nowUs + static_cast<uint64>(e.durationMs) * 1000, 1);
+	clone->teamId = caster->teamId;		// 아군은 내 분신을 때리지 않는다 (PVE 협동, ADR-0014)
 	clone->posInfo->set_x(caster->posInfo->x());
 	clone->posInfo->set_y(caster->posInfo->y());
 	clone->posInfo->set_z(caster->posInfo->z());
@@ -468,6 +469,8 @@ void Room::CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillE
 			continue;
 		CreatureRef c = static_pointer_cast<Creature>(item.second);
 		if (c->IsAlive() == false || c->IsStealthed(nowUs))
+			continue;
+		if (SameTeam(c, caster))		// 매는 적을 찾는다 - 아군 · 아군 인형은 건너뛴다 (ADR-0014)
 			continue;
 		if (c->IsDecoy() && static_pointer_cast<Decoy>(c)->ownerId == ownerId)
 			continue;

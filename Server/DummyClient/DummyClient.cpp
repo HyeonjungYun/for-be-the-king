@@ -34,6 +34,9 @@ atomic<uint32> GChatAfterMs = 0;
 atomic<bool> GSwapArmor = false;
 atomic<bool> GStayDead = false;
 atomic<bool> GHoldOnReject = false;
+atomic<int32> GRunMode = 0;
+atomic<int32> GPartySize = 3;
+atomic<bool> GAllyFire = false;
 atomic<int32> GTowerCount = 0;
 atomic<uint64> GLeaveEscaped = 0;
 atomic<uint64> GLeaveExpired = 0;
@@ -418,18 +421,45 @@ static void TickBots(float deltaTime)
 
 	const uint64 nowUs = Utils::NowMicroseconds();
 
+	const int32 runMode = GRunMode.load();
+
 	for (BotSessionRef& bot : snapshot)
 	{
-		// 탈출해 베이스캠프에 있는 봇 - 잠깐 뒤 같은 층으로 다시 들어간다
+		// 협동 - 번호로 나눈 첫 봇이 아직 안 들어온 묶음 봇을 초대한다 (로그인 순서가 섞여 NOT_FOUND 면 2 s 뒤 다시)
+		if (runMode == Protocol::RUN_MODE_PVE_COOP && bot->inGame.load() == false)
+		{
+			const uint64 inviteAt = bot->nextInviteAtUs.load();
+			const int32 size = (std::max)(2, (std::min)(3, GPartySize.load()));
+			size_t members = 0;
+			{
+				lock_guard<mutex> guard(bot->partyLock);
+				members = bot->partyMembers.size();
+			}
+			if (inviteAt != 0 && nowUs >= inviteAt && static_cast<int32>(members) < size)
+			{
+				bot->nextInviteAtUs.store(nowUs + 2'000'000);
+				for (int32 k = 1; k < size; k++)
+				{
+					Protocol::C_PARTY_INVITE invite;
+					invite.set_target_name("bot_" + to_string(bot->botIndex + k));
+					bot->Send(ClientPacketHandler::MakeSendBuffer(invite));
+				}
+			}
+		}
+
+		// 탈출해 베이스캠프에 있는 봇 - 잠깐 뒤 같은 층으로 다시 들어간다 (협동은 파티장이 파티 상태를 보고 연다)
 		const uint64 reenterAt = bot->reenterAtUs.load();
 		if (reenterAt != 0 && nowUs >= reenterAt && bot->inGame.load() == false && bot->alive.load())
 		{
 			bot->reenterAtUs.store(0);
+			if (runMode == Protocol::RUN_MODE_PVE_COOP)
+				continue;
 
 			Protocol::C_ENTER_GAME enterPkt;
 			enterPkt.set_playerindex(0);
-			enterPkt.set_floor_id(bot->floorId);
+			enterPkt.set_floor_id(runMode == Protocol::RUN_MODE_PVE_SOLO ? 0 : bot->floorId);
 			enterPkt.set_entry_point_id(GEntryPointId.load());
+			enterPkt.set_mode(static_cast<Protocol::RunMode>(runMode));
 			bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
 			GReenterSent.fetch_add(1);
 			continue;
@@ -476,11 +506,17 @@ static void TickBots(float deltaTime)
 		BotSessionRef target = nullptr;
 		float bestDistSq = FLT_MAX;
 
+		// PVE - 봇끼리 싸우지 않는다. -allyfire 면 일부러 파티원만 노린다 (서버가 [ALLY] 로 막는지 본다)
+		const bool pve = (runMode != Protocol::RUN_MODE_PVP);
+		const bool allyFire = pve && GAllyFire.load();
+
 		for (BotSessionRef& other : snapshot)
 		{
 			if (other == bot)
 				continue;
 			if (other->inGame.load() == false || other->alive.load() == false)
+				continue;
+			if (pve && (allyFire == false || bot->IsPartyMember(other->characterId.load()) == false))
 				continue;
 
 			const float ox = other->x - bot->x;
@@ -495,9 +531,9 @@ static void TickBots(float deltaTime)
 			}
 		}
 
-		// -monsterpull: 봇 대신 가장 가까운 몬스터. 봇끼리는 싸우지 않는다
+		// -monsterpull: 봇 대신 가장 가까운 몬스터. 봇끼리는 싸우지 않는다. PVE 도 같다 (-allyfire 는 파티원을 노린다)
 		uint64 monsterId = 0;
-		if (GMonsterPull.load())
+		if (GMonsterPull.load() || (pve && allyFire == false))
 		{
 			target = nullptr;
 			lock_guard<mutex> guard(bot->itemLock);
@@ -774,6 +810,13 @@ int main(int argc, char* argv[])
 			GTowerCount.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-floor") == 0)
 			GForceFloor.store(::atoi(argv[i + 1]));
+		else if (::strcmp(argv[i], "-mode") == 0)
+		{
+			const string mode = argv[i + 1];
+			GRunMode.store(mode == "solo" ? Protocol::RUN_MODE_PVE_SOLO : mode == "coop" ? Protocol::RUN_MODE_PVE_COOP : Protocol::RUN_MODE_PVP);
+		}
+		else if (::strcmp(argv[i], "-party") == 0)
+			GPartySize.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-tower") == 0 && i + 2 < argc)
 		{
 			GTowerMode.store(true);
@@ -805,6 +848,8 @@ int main(int argc, char* argv[])
 			GStayDead.store(true);
 		else if (::strcmp(argv[i], "-holdonreject") == 0)
 			GHoldOnReject.store(true);
+		else if (::strcmp(argv[i], "-allyfire") == 0)
+			GAllyFire.store(true);
 	}
 
 	GBurstStartUs = Utils::NowMicroseconds();
@@ -862,6 +907,8 @@ int main(int argc, char* argv[])
 		<< (GNoClientMs.load() ? " - client_ms OFF" : " - client_ms ON")
 		<< (GBurst.load() ? " - burst ON (all packets held 1.5s every 20s)" : "")
 		<< (GMonsterPull.load() ? " - monster pull ON (chase + hit the nearest monster)" : "")
+		<< (GRunMode.load() == Protocol::RUN_MODE_PVE_SOLO ? " - PVE solo" : GRunMode.load() == Protocol::RUN_MODE_PVE_COOP
+			? " - PVE co-op party=" + to_string(GPartySize.load()) + (GAllyFire.load() ? " ALLY FIRE (negative test)" : "") : string())
 		<< (GTowerMode.load() ? " - tower mode (walk to " + to_string(static_cast<int32>(GTowerX)) + "," + to_string(static_cast<int32>(GTowerY)) + " and stand)" : string())
 		<< " - entry=" << GEntryPointId.load() << " gold=" << GRunGold.load() << '\n';
 

@@ -139,6 +139,7 @@ struct Zone
 	uint32				dotDurationMs = 0;
 	string				param;
 	uint64				groupId = 0;				// 같은 발동이 깐 장판 묶음 (열화 경로) - 한 틱에 한 대상은 묶음에서 한 번만 맞는다. 0 = 혼자
+	uint64				teamId = 0;					// 놓은 사람의 팀 - 시전자가 떠난 뒤에도 아군을 맞히지 않는다 (PVE 협동, ADR-0014)
 
 	// 부채꼴 장판 (네불라 아르카나 2026-10-11) - 원점에서 dir 쪽으로 반각 cos 안. 아니면 원
 	bool				cone = false;
@@ -229,6 +230,7 @@ struct PendingBurst
 	float				baseDamage = 0.f;
 	Protocol::DamageType type = Protocol::DAMAGE_TYPE_MAGIC;
 	SkillContext		ctx;
+	uint64				teamId = 0;					// 심은 사람의 팀 - 시전자가 떠난 뒤에도 아군에게 번지지 않는다 (ADR-0014)
 };
 
 // 날아가는 투사체 (skill-roster 2 단계). 스킬 투사체는 직선 · 피할 수 있다 · 벽에 막힌다 · 관통이면 지나간 적을 다 맞힌다.
@@ -263,11 +265,21 @@ struct Projectile
 	float				damageMult = 1.f;		// 평타 투사체 한 발의 몫 (두플렉스 두 발 = 각 0.6, 2026-10-11)
 };
 
+// 방 종류 (ADR-0014) - World = GRooms 의 층 방 (PvP). PVE 는 런마다 · 파티마다 새 인스턴스 (InstanceManager)
+enum class RoomKind : uint8 { World = 0, PveSolo = 1, PveCoop = 2 };
+
 class Room : public JobQueue
 {
 public:
 			Room();
 	virtual ~Room();
+
+	// PVE 인스턴스 (ADR-0014) - InstanceManager::Create 가 부른다. 레벨 · 몬스터 · 상자 · 타워를 그 층 그대로 들고, 4 루프를 돌린다
+	void	InitInstance();
+	void	StartLoops();
+	bool	IsInstance() const { return _instanceId != 0; }
+	Protocol::RunMode RunModeOf() const;
+	string	Tag() const;									// 로그용 - 층 방 "w0" · 인스턴스 "i17"
 
 	bool	EnterRoom(ObjectRef object, bool randPos = true);
 	bool	LeaveRoom(ObjectRef object);
@@ -607,6 +619,26 @@ private:
 
 public:
 	uint32								_floorId = 0;
+
+	// PVE 인스턴스 (ADR-0014) - 만들 때 한 번 정하고 이후 읽기만 한다. 층 방은 0 / World
+	RoomKind							_kind = RoomKind::World;
+	uint64								_instanceId = 0;
+	uint64								_partyId = 0;			// 협동 인스턴스를 가진 파티 (솔로 = 0)
+	uint64								_teamId = 0;			// 들어오는 플레이어가 받는 팀 (협동 = 파티 id, 솔로 = 0)
+
+private:
+	// 인스턴스 수명 - 방 큐 안에서만
+	void	TryCloseInstance(uint64 nowUs);
+	void	CloseInstance();
+	bool	RefuseInstanceJoin(const PlayerRef& player, const char* reason, Protocol::PartyResult notice);
+	bool								_closing = false;		// 닫혔다 - 루프가 다시 걸리지 않고 입장을 받지 않는다
+	int32								_pendingDeathCommits = 0;	// BeginDeathCommit ++ · OnBagCreated -- (가방이 아직 안 생겼다)
+	uint64								_emptySinceUs = 0;
+	unordered_set<uint64>				_enteredOnce;			// 이 인스턴스에 한 번 들어온 캐릭터 - 다시 못 들어온다 (D3)
+
+	// 팀 (ADR-0014) - 자기 자신은 아군이 아니다 (자기 자신은 원래 따로 거른다)
+	static bool	SameTeam(const Creature& a, const Creature& b);
+	static bool	SameTeam(const CreatureRef& a, const CreatureRef& b) { return a != nullptr && b != nullptr && SameTeam(*a, *b); }
 
 private:
 	unordered_map<uint64, ObjectRef>	_objects;

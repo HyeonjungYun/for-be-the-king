@@ -9,6 +9,9 @@
 #include "ItemTable.h"
 #include "EntryPointTable.h"
 #include "EscapeLogic.h"
+#include "GameSessionManager.h"
+#include "InstanceManager.h"
+#include "PartyManager.h"
 #include <sstream>
 #include <thread>
 
@@ -558,10 +561,127 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			// 로그인하면 베이스캠프 화면(S3)이 뜬다 - 보관까지 담아 보낸다 (UI 4단계).
 			// 캐릭터는 아직 계정당 하나이고, 입장도 0 번으로 한다.
 			if (loginPkt.success() && loginPkt.characters_size() > 0)
+			{
 				SendBaseCampInventory(conn, gameSession, loginPkt.characters(0).object_info().object_id());
+
+				// 런 중에 끊겼던 파티원이 돌아왔다 - 파티 상태를 다시 보낸다 (PVE 협동, ADR-0014)
+				GParties.OnLogin(gameSession);
+			}
 		});
 
 	return true;
+}
+
+namespace
+{
+	// 입장 거절 - 베이스캠프로 되돌리고 S_ENTER_GAME false. notice 가 있으면 파티 안내도 (협동 · 모드 규칙)
+	void RejectEnter(const GameSessionRef& session, const char* why, uint64 characterId, Protocol::PartyResult notice = Protocol::PARTY_OK)
+	{
+		SessionPlace expected = SessionPlace::Entering;
+		session->place.compare_exchange_strong(expected, SessionPlace::BaseCamp);
+
+		LOG_LINE << "[ENTER] rejected - " << why << " char=" << characterId << '\n';
+
+		Protocol::S_ENTER_GAME rejectPkt;
+		rejectPkt.set_success(false);
+		SEND_PACKET_DECLARATION(rejectPkt);
+		session->Send(sendBuffer);
+
+		if (notice != Protocol::PARTY_OK)
+			GParties.SendNotice(characterId, notice);
+	}
+
+	// 몸을 만들고 DB 에서 장비를 실어 방에 넣는다 (예전 Handle_C_ENTER_GAME 본문). 세션은 이미 Entering 이다.
+	// 인스턴스면 입장 예약을 쥔 채 들어온다 - 방이 HandleEnterPlayer 에서, 적재가 실패하면 여기서 놓는다
+	void QueueEnter(const GameSessionRef& gameSession, const Protocol::CharacterInfo& character, RoomRef room, uint32 floorId, uint32 entryPointId)
+	{
+		// 플레이어 생성
+		PlayerRef player = ObjectUtils::CreatePlayer(gameSession, character.object_info().object_id());
+
+		// 맨몸 바닥. 장비 합산은 Room::EnterRoom 이 착용을 다 실은 뒤 더한다 (EquipStats)
+		player->nakedMaxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
+		player->maxHp = player->nakedMaxHp;
+
+		// 입장 체력은 항상 최대치 - 런마다 새로 시작한다. 베이스캠프에 회복 수단이 없다 (entry-point.md · 2026-10-05).
+		// 세션의 characters 는 로그인 때 캐시라 런 사이에 낡는다 - 위치 · 체력을 거기서 읽지 않는다.
+		player->hp = player->maxHp;
+
+		if (GEntryFromDb.load())
+		{
+			// 부하 측정 · 테스트 픽스처 전용(FBTK_ENTRY_FROM_DB=1) - 예전처럼 저장 좌표에서 시작한다.
+			// 봇이 진입 지점 몇 곳에 몰리면 이전 측정과 비교가 안 된다. 원점이면 Room 이 층 기본 위치로 둔다.
+			const Protocol::PosInfo& saved = character.object_info().pos_info();
+			player->posInfo->set_x(saved.x());
+			player->posInfo->set_y(saved.y());
+			player->posInfo->set_z(saved.z());
+			player->posInfo->set_yaw(saved.yaw());
+
+			// 죽은 채로 저장된 캐릭터는 흩뿌려 되살린다 - 이전 측정과 같은 규칙
+			if (character.hp() <= 0)
+			{
+				player->posInfo->set_x(Utils::GetRandom(-2000.f, 2000.f));
+				player->posInfo->set_y(Utils::GetRandom(-2000.f, 2000.f));
+				player->posInfo->set_z(100.f);
+			}
+		}
+		else
+		{
+			// 플레이어가 S4 에서 고른 진입 지점. 0 · 없는 id · 다른 층이면 그 층 지점 중 무작위 (AC-EP-03 · 08)
+			thread_local mt19937 rng{ random_device{}() };
+			bool wasRandom = false;
+
+			if (const EntryPoint* point = EntryPointTable::Resolve(floorId, entryPointId, rng, OUT wasRandom))
+			{
+				player->posInfo->set_x(point->x);
+				player->posInfo->set_y(point->y);
+				player->posInfo->set_z(point->z);
+				player->posInfo->set_yaw(point->yaw);
+				player->spreadOnEnter = true;		// 같은 지점을 고른 사람끼리 겹치지 않게 Room 이 둘레에 펼친다 (AC-EP-04)
+				player->entryPointId = point->entryId;	// 텔레메트리 - 어디서 시작한 런인가
+
+				LOG_LINE << "[ENTER] point=" << (wasRandom ? "random" : "chosen") << " entry=" << point->entryId
+					<< " requested=" << entryPointId << " char=" << character.object_info().object_id() << " room=" << room->Tag() << '\n';
+			}
+			else
+			{
+				LOG_LINE << "[ENTER] no entry point on floor " << floorId << " - floor default. char="
+					<< character.object_info().object_id() << '\n';
+			}
+		}
+
+		GDBQueue.Push([gameSession, player, room, name = character.name()](DBConnection* conn)
+			{
+				int32 ownedRows = 0;
+				if (LoadPlayerItems(conn, player, OUT ownedRows) == false)
+				{
+					LOG_LINE << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << '\n';
+
+					if (room->IsInstance())
+						GInstances.ReleaseJoin(room->_instanceId);
+					gameSession->Disconnect(L"item load failed");
+					return;
+				}
+
+				// 부하 측정 전용 - 맨몸 봇에 기본 3점 (FBTK_BOT_REGEAR).
+				// 기본 장비보다 먼저 - 봇이 채워지면 아래는 채울 부위가 없어 [REGEAR] 집계가 예전 측정과 같다
+				if (GBotRegear.load())
+				{
+					if (const int32 filled = RegearBot(*player, name); filled > 0)
+						LOG_LINE << "[REGEAR] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
+				}
+
+				// 기본 장비 - 착용 · 소지 · 창고가 모두 비었다 (account-login-mvp-2026-10-09.md Core Rule 8 · ADR-0011 Decision 4).
+				// 창고에 하나라도 있으면 주지 않는다 - 맡겨 두고 공짜 장비만 들고 들어가는 것을 막는다
+				if (ownedRows == 0)
+				{
+					if (const int32 filled = EquipStarterKit(*player); filled > 0)
+						LOG_LINE << "[STARTER] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
+				}
+
+				// 방에 입장
+				room->DoAsync(&Room::HandleEnterPlayer, player);
+			});
+	}
 }
 
 bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
@@ -600,98 +720,125 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 		}
 	}
 
-	RoomRef room = GetRoomForFloor(pkt.floor_id());
-	if (room == nullptr)
-		return false;
+	const uint64 characterId = character.object_info().object_id();
+	const uint32 floorId = pkt.floor_id();
 
+	// 베이스캠프에서만 입장한다 - 예전엔 결과를 버려 두 번째 C_ENTER_GAME 이 몸을 하나 더 만들었다.
+	// 인스턴스가 생기며 "두 방에 두 몸" 이 되어 캐릭터 단위 전역(GDeathCommits · GDetachedBodies)이 깨진다 (ADR-0014)
 	SessionPlace expected = SessionPlace::BaseCamp;
-	gameSession->place.compare_exchange_strong(expected, SessionPlace::Entering);
-
-	// 플레이어 생성
-	PlayerRef player = ObjectUtils::CreatePlayer(gameSession, character.object_info().object_id());
-
-	// 맨몸 바닥. 장비 합산은 Room::EnterRoom 이 착용을 다 실은 뒤 더한다 (EquipStats)
-	player->nakedMaxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
-	player->maxHp = player->nakedMaxHp;
-
-	// 입장 체력은 항상 최대치 - 런마다 새로 시작한다. 베이스캠프에 회복 수단이 없다 (entry-point.md · 2026-10-05).
-	// 세션의 characters 는 로그인 때 캐시라 런 사이에 낡는다 - 위치 · 체력을 거기서 읽지 않는다.
-	player->hp = player->maxHp;
-
-	if (GEntryFromDb.load())
+	if (gameSession->place.compare_exchange_strong(expected, SessionPlace::Entering) == false)
 	{
-		// 부하 측정 · 테스트 픽스처 전용(FBTK_ENTRY_FROM_DB=1) - 예전처럼 저장 좌표에서 시작한다.
-		// 봇이 진입 지점 몇 곳에 몰리면 이전 측정과 비교가 안 된다. 원점이면 Room 이 층 기본 위치로 둔다.
-		const Protocol::PosInfo& saved = character.object_info().pos_info();
-		player->posInfo->set_x(saved.x());
-		player->posInfo->set_y(saved.y());
-		player->posInfo->set_z(saved.z());
-		player->posInfo->set_yaw(saved.yaw());
+		LOG_LINE << "[ENTER] rejected - not in base camp (place=" << static_cast<int32>(expected) << ") char=" << characterId << '\n';
 
-		// 죽은 채로 저장된 캐릭터는 흩뿌려 되살린다 - 이전 측정과 같은 규칙
-		if (character.hp() <= 0)
-		{
-			player->posInfo->set_x(Utils::GetRandom(-2000.f, 2000.f));
-			player->posInfo->set_y(Utils::GetRandom(-2000.f, 2000.f));
-			player->posInfo->set_z(100.f);
-		}
+		Protocol::S_ENTER_GAME rejectPkt;
+		rejectPkt.set_success(false);
+		SEND_PACKET_DECLARATION(rejectPkt);
+		gameSession->Send(sendBuffer);
+		return true;
 	}
-	else
+
+	if (floorId >= FLOOR_COUNT)
 	{
-		// 플레이어가 S4 에서 고른 진입 지점. 0 · 없는 id · 다른 층이면 그 층 지점 중 무작위 (AC-EP-03 · 08)
+		RejectEnter(gameSession, "no such floor", characterId);
+		return true;
+	}
+
+	// 방 고르기 (ADR-0014) - PvP = 층 방, PVE 솔로 = 새 인스턴스, PVE 협동 = 파티 인스턴스 (파티장이 열고 멤버를 데려간다).
+	// 2명 이상 파티는 협동으로만 들어간다 (D7)
+	RoomRef room;
+	vector<GameSessionRef> pulls;
+	switch (pkt.mode())
+	{
+	case Protocol::RUN_MODE_PVE_SOLO:
+		if (GParties.SizeOf(characterId) >= 2)
+		{
+			RejectEnter(gameSession, "party of 2+ asked for solo", characterId, Protocol::PARTY_COOP_ONLY);
+			return true;
+		}
+		room = GInstances.Create(RoomKind::PveSolo, floorId, 0, 0);
+		break;
+
+	case Protocol::RUN_MODE_PVE_COOP:
+	{
+		PartyManager::CoopEnter coop = GParties.BeginCoopEnter(gameSession, floorId);
+		if (coop.room == nullptr)
+		{
+			RejectEnter(gameSession, "co-op refused", characterId, coop.result);
+			return true;
+		}
+		room = coop.room;
+		pulls = move(coop.pulls);
+		break;
+	}
+
+	default:
+		if (GParties.SizeOf(characterId) >= 2)
+		{
+			RejectEnter(gameSession, "party of 2+ asked for PvP", characterId, Protocol::PARTY_COOP_ONLY);
+			return true;
+		}
+		room = GetRoomForFloor(floorId);
+		break;
+	}
+
+	if (room->IsInstance())
+		LOG_LINE << "[INST] enter char=" << characterId << " room=" << room->Tag() << " pulls=" << pulls.size() << '\n';
+
+	// 데려가는 멤버는 파티장과 같은 지점에 - [무작위] 면 여기서 한 번 뽑아 모두에게 준다 (둘레 고리로 펼쳐진다, AC-EP-04)
+	uint32 entryPointId = pkt.entry_point_id();
+	if (pulls.empty() == false && entryPointId == 0)
+	{
 		thread_local mt19937 rng{ random_device{}() };
 		bool wasRandom = false;
-
-		if (const EntryPoint* point = EntryPointTable::Resolve(pkt.floor_id(), pkt.entry_point_id(), rng, OUT wasRandom))
-		{
-			player->posInfo->set_x(point->x);
-			player->posInfo->set_y(point->y);
-			player->posInfo->set_z(point->z);
-			player->posInfo->set_yaw(point->yaw);
-			player->spreadOnEnter = true;		// 같은 지점을 고른 사람끼리 겹치지 않게 Room 이 둘레에 펼친다 (AC-EP-04)
-			player->entryPointId = point->entryId;	// 텔레메트리 - 어디서 시작한 런인가
-
-			LOG_LINE << "[ENTER] point=" << (wasRandom ? "random" : "chosen") << " entry=" << point->entryId
-				<< " requested=" << pkt.entry_point_id() << " char=" << character.object_info().object_id() << '\n';
-		}
-		else
-		{
-			LOG_LINE << "[ENTER] no entry point on floor " << pkt.floor_id() << " - floor default. char="
-				<< character.object_info().object_id() << '\n';
-		}
+		if (const EntryPoint* point = EntryPointTable::Resolve(floorId, 0, rng, OUT wasRandom))
+			entryPointId = point->entryId;
 	}
 
-	GDBQueue.Push([gameSession, player, room, name = character.name()](DBConnection* conn)
+	QueueEnter(gameSession, character, room, floorId, entryPointId);
+
+	// 파티장이 데려가는 멤버 - 각자 베이스캠프에서 Entering 으로 넘어가야 한다. 그 사이 다른 데로 갔으면 건너뛴다 (예약을 놓는다)
+	for (const GameSessionRef& member : pulls)
+	{
+		SessionPlace memberPlace = SessionPlace::BaseCamp;
+		if (member->characters.empty() || member->place.compare_exchange_strong(memberPlace, SessionPlace::Entering) == false)
 		{
-			int32 ownedRows = 0;
-			if (LoadPlayerItems(conn, player, OUT ownedRows) == false)
-			{
-				LOG_LINE << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << '\n';
+			GInstances.ReleaseJoin(room->_instanceId);
+			continue;
+		}
 
-				gameSession->Disconnect(L"item load failed");
-				return;
-			}
+		QueueEnter(member, member->characters[0], room, floorId, entryPointId);
+	}
 
-			// 부하 측정 전용 - 맨몸 봇에 기본 3점 (FBTK_BOT_REGEAR).
-			// 기본 장비보다 먼저 - 봇이 채워지면 아래는 채울 부위가 없어 [REGEAR] 집계가 예전 측정과 같다
-			if (GBotRegear.load())
-			{
-				if (const int32 filled = RegearBot(*player, name); filled > 0)
-					LOG_LINE << "[REGEAR] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
-			}
+	return true;
+}
 
-			// 기본 장비 - 착용 · 소지 · 창고가 모두 비었다 (account-login-mvp-2026-10-09.md Core Rule 8 · ADR-0011 Decision 4).
-			// 창고에 하나라도 있으면 주지 않는다 - 맡겨 두고 공짜 장비만 들고 들어가는 것을 막는다
-			if (ownedRows == 0)
-			{
-				if (const int32 filled = EquipStarterKit(*player); filled > 0)
-					LOG_LINE << "[STARTER] char=" << player->objectInfo->object_id() << " filled=" << filled << '\n';
-			}
+bool Handle_C_PARTY_INVITE(PacketSessionRef& session, Protocol::C_PARTY_INVITE& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	if (gameSession->accountId.load() == 0)
+		return false;
 
-			// 방에 입장
-			room->DoAsync(&Room::HandleEnterPlayer, player);
-		});
+	GParties.Invite(gameSession, pkt.target_name());
+	return true;
+}
 
+bool Handle_C_PARTY_RESPONSE(PacketSessionRef& session, Protocol::C_PARTY_RESPONSE& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	if (gameSession->accountId.load() == 0)
+		return false;
+
+	GParties.Respond(gameSession, pkt.party_id(), pkt.accept());
+	return true;
+}
+
+bool Handle_C_PARTY_LEAVE(PacketSessionRef& session, Protocol::C_PARTY_LEAVE& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	if (gameSession->accountId.load() == 0)
+		return false;
+
+	GParties.Leave(gameSession, pkt.character_id());
 	return true;
 }
 

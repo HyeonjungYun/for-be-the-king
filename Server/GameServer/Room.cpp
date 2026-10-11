@@ -17,6 +17,10 @@
 #include "Telemetry.h"
 #include "SkillKinematics.h"
 #include "Decoy.h"
+#include "ChestSpawnTable.h"
+#include "InstanceManager.h"
+#include "InstanceRules.h"
+#include "PartyManager.h"
 
 namespace
 {
@@ -216,6 +220,170 @@ Room::~Room()
 {
 }
 
+// ── PVE 인스턴스 (ADR-0014) ──────────────────────────────────────────────
+
+void Room::InitInstance()
+{
+	JOB_TAG();
+	InitEscape();
+	if (GMonstersOn.load())
+		InitMonsters();
+
+	// 상자 - 층 방은 부팅이 넣는다. 인스턴스는 자기 몫을 새로 (메모리 전용 · 판마다 Sealed)
+	int32 chests = 0;
+	for (const ChestSpawn& spawn : ChestSpawnTable::All())
+	{
+		if (spawn.floorId != _floorId)
+			continue;
+		AddBag(ObjectUtils::CreateChest(spawn));
+		chests++;
+	}
+
+	LOG_LINE << "[INST] create " << Tag() << " kind=" << (_kind == RoomKind::PveSolo ? "solo" : "coop") << " floor=" << _floorId
+		<< " party=" << _partyId << " monsters=" << _monsters.size() << " chests=" << chests << " live=" << GInstances.LiveCount() << '\n';
+}
+
+void Room::StartLoops()
+{
+	DoAsync(&Room::UpdateTick);
+	DoAsync(&Room::FlushMoves);
+	DoAsync(&Room::FlushCombat);
+	DoAsync(&Room::FlushSpawns);
+}
+
+Protocol::RunMode Room::RunModeOf() const
+{
+	switch (_kind)
+	{
+	case RoomKind::PveSolo:	return Protocol::RUN_MODE_PVE_SOLO;
+	case RoomKind::PveCoop:	return Protocol::RUN_MODE_PVE_COOP;
+	default:				return Protocol::RUN_MODE_PVP;
+	}
+}
+
+string Room::Tag() const
+{
+	return IsInstance() ? "i" + to_string(_instanceId) : "w" + to_string(_floorId);
+}
+
+bool Room::SameTeam(const Creature& a, const Creature& b)
+{
+	return &a != &b && InstanceRules::Allied(a.teamId, b.teamId);
+}
+
+bool Room::RefuseInstanceJoin(const PlayerRef& player, const char* reason, Protocol::PartyResult notice)
+{
+	const uint64 characterId = player->objectInfo->object_id();
+	LOG_LINE << "[INST] join refused " << Tag() << " char=" << characterId << " - " << reason << '\n';
+
+	if (GameSessionRef session = player->session.lock())
+	{
+		SessionPlace expected = SessionPlace::Entering;
+		session->place.compare_exchange_strong(expected, SessionPlace::BaseCamp);
+
+		// 들어가지 못한 몸 - 세션이 쥐고 있지 않게 (다음 입장이 새로 만든다)
+		PlayerRef current = player;
+		session->player.compare_exchange_strong(current, nullptr);
+
+		Protocol::S_ENTER_GAME rejectPkt;
+		rejectPkt.set_success(false);
+		SEND_PACKET_DECLARATION(rejectPkt);
+		session->Send(sendBuffer);
+	}
+
+	if (notice != Protocol::PARTY_OK)
+		GParties.SendNotice(characterId, notice);
+	return false;
+}
+
+void Room::TryCloseInstance(uint64 nowUs)
+{
+	if (IsInstance() == false || _closing)
+		return;
+
+	// 몸이 남은 플레이어 - 살았든 죽어서 나가기를 기다리든 끊겼든. 탈출 · 만료는 이미 _objects 에서 빠졌다
+	int32 players = 0;
+	for (const auto& [objectId, object] : _objects)
+	{
+		if (dynamic_pointer_cast<Player>(object) != nullptr)
+			players++;
+	}
+
+	switch (InstanceRules::JudgeClose(players, _pendingDeathCommits, _emptySinceUs, nowUs))
+	{
+	case InstanceRules::CloseVerdict::Keep:
+		if (players > 0)
+			_emptySinceUs = 0;
+		return;
+
+	case InstanceRules::CloseVerdict::StartGrace:
+		_emptySinceUs = nowUs;
+		return;
+
+	case InstanceRules::CloseVerdict::Close:
+		// 입장(DB 적재 중) 예약이 남았으면 아직 - 그 사람이 들어오면 다시 사람이 있다
+		if (GInstances.TryRetire(_instanceId))
+			CloseInstance();
+		return;
+	}
+}
+
+void Room::CloseInstance()
+{
+	_closing = true;
+
+	// 남은 사망 가방 - DB 행이 있다. 인스턴스와 함께 사라진다 (10 분 만료와 같은 결과, D10). 상자 · 몬스터 드랍은 메모리뿐이다
+	vector<uint64> bagIds;
+	vector<uint64> instanceIds;
+	for (const auto& [bagId, bag] : _bags)
+	{
+		if (bag->IsChest())
+			continue;
+		bagIds.push_back(bagId);
+		for (const ItemEntry& e : bag->items)
+		{
+			if (e.isNew == false)
+				instanceIds.push_back(e.instanceId);
+		}
+	}
+	if (bagIds.empty() == false)
+	{
+		GDBQueue.Push([bagIds, instanceIds](DBConnection* conn)
+			{
+				DeleteExpiredBags(conn, bagIds, instanceIds);
+			});
+	}
+
+	// 전역 몬스터 수를 맞춘다 - 살아 있던 것만 (죽은 것은 죽을 때 뺐다)
+	int32 aliveMonsters = 0;
+	for (const auto& [monsterId, monster] : _monsters)
+	{
+		if (monster->IsAlive())
+			aliveMonsters++;
+	}
+	if (aliveMonsters > 0)
+		GMonsterStats.alive.fetch_sub(aliveMonsters);
+
+	const size_t objects = _objects.size();
+	_monsters.clear();				// Monster::spawn 이 _packs · _dummySpawns 를 가리킨다 - 몬스터 먼저
+	_monsterSlots.clear();
+	_packs.clear();
+	_dummySpawns.clear();
+	_objects.clear();
+	_bags.clear();
+	_projectiles.clear();
+	_zones.clear();
+	_decoys.clear();
+	_clones.clear();
+	_towers.clear();
+
+	LOG_LINE << "[INST] close " << Tag() << " objects=" << objects << " bags_dropped=" << bagIds.size() << " items=" << instanceIds.size()
+		<< " monsters_alive=" << aliveMonsters << " live=" << GInstances.LiveCount() << '\n';
+
+	if (_kind == RoomKind::PveCoop)
+		GParties.OnInstanceClosed(_partyId, _instanceId);
+}
+
 bool Room::EnterRoom(ObjectRef object, bool randPos)
 {
 	if (object->posInfo->x() == 0.f && object->posInfo->y() == 0.f)
@@ -279,6 +447,13 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->objectInfo->set_max_hp(player->maxHp);
 		LogStats(player, "enter");
 
+		// PVE 인스턴스 (ADR-0014) - 팀은 들어오는 순간 정해지고 그 런 동안 그대로다(D6). 한 캐릭터는 한 인스턴스에 한 번(D3)
+		if (success && IsInstance())
+		{
+			player->teamId = _teamId;
+			_enteredOnce.insert(player->objectInfo->object_id());
+		}
+
 		// 체류 타이머는 방에 놓인 순간부터 - DB 적재 지연이 30 분을 깎지 않는다 (escape-timer.md Core Rule 13)
 		if (success)
 		{
@@ -321,6 +496,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(success);
+		enterGamePkt.set_mode(RunModeOf());
 		if (success)
 			enterGamePkt.set_run_remaining_ms(static_cast<uint32>(EscapeConfig::Get().runLimitUs / 1000));
 
@@ -346,6 +522,10 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			SendEquipSync(player);
 			SendInventorySync(player);
 		}
+
+		// 협동 - 파티원 화면의 상태(던전)를 바꾼다
+		if (success && _kind == RoomKind::PveCoop)
+			GParties.NotifyChanged(player->objectInfo->object_id());
 	}
 
 	_pendingSpawns.push_back(object->objectInfo->object_id());
@@ -367,6 +547,9 @@ bool Room::LeaveRoom(ObjectRef object)
 
 		if (auto session = player->session.lock())
 			session->place.store(SessionPlace::BaseCamp);
+
+		// 협동 파티원 화면의 상태(베이스캠프)를 바꾼다 (ADR-0014). 파티가 없으면 바로 돌아온다
+		GParties.NotifyChanged(objectId);
 	}
 
 	// 퇴장 사실을 퇴장하는 플레이어에게 알린다.
@@ -408,12 +591,27 @@ bool Room::LeaveRoom(ObjectRef object)
 bool Room::HandleEnterPlayer(PlayerRef player)
 {
 	JOB_TAG();
+	// 인스턴스 입장 예약은 이 잡에서 놓는다 - 들어왔든 못 들어왔든 (ADR-0014). 들어왔으면 이미 _objects 에 있어 방이 닫히지 않는다
+	struct JoinRelease
+	{
+		Room* room;
+		~JoinRelease() { if (room->IsInstance()) GInstances.ReleaseJoin(room->_instanceId); }
+	} release{ this };
+
 	// 적재하는 사이에 끊겼다 - 런이 시작되기 전이라 몸을 남기지 않는다.
 	GameSessionRef session = player->session.lock();
 	if (session == nullptr || session->IsConnected() == false)
 	{
 		LOG_LINE << "[ENTER] skipped - session gone. char=" << player->objectInfo->object_id() << '\n';
 		return false;
+	}
+
+	if (IsInstance())
+	{
+		if (_closing)
+			return RefuseInstanceJoin(player, "closed", Protocol::PARTY_NO_INSTANCE);
+		if (_enteredOnce.contains(player->objectInfo->object_id()))
+			return RefuseInstanceJoin(player, "already entered once", Protocol::PARTY_ALREADY_ENTERED);
 	}
 
 	const uint64 beginUs = Utils::NowMicroseconds();
@@ -739,6 +937,13 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 	if (attacker->IsMonster() && target->IsMonster())
 		return;
 
+	// PVE 협동 아군 - 때릴 수 없다 (ADR-0014). 클라도 아군을 대상으로 보내지 않지만 서버가 막는다
+	if (SameTeam(attacker, target))
+	{
+		LOG_LINE << "[ALLY] blocked attack a=" << attackerId << " b=" << targetId << '\n';
+		return;
+	}
+
 	// 진입 무적 - 때릴 수 없다 (AC-10). 3 초 동안만 생기는 줄이라 로그로 남긴다
 	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
 	{
@@ -888,6 +1093,13 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		if (target == nullptr || target->IsAlive() == false)
 			return;
 
+		// PVE 협동 아군은 지정할 수 없다 (ADR-0014) - 쿨다운 없이 거부한다
+		if (SameTeam(caster, target))
+		{
+			LOG_LINE << "[ALLY] blocked skill target a=" << casterId << " b=" << pkt.target_id() << " skill=" << def->skillId << '\n';
+			return;
+		}
+
 		if (IsInSkillRange(caster, target, def->rangeCm) == false)
 			return;
 
@@ -966,6 +1178,16 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 		return;
 	if (target->IsInvulnerable(nowUs))
 		return;
+
+	// PVE 협동 아군이 건 CC 는 받지 않는다 - 안전망 (대상 고르기가 먼저 거른다, ADR-0014). 자기 CC(self_cc)는 그대로
+	if (instigatorId != targetId)
+	{
+		if (auto instIt = _objects.find(instigatorId); instIt != _objects.end())
+		{
+			if (CreatureRef instigator = dynamic_pointer_cast<Creature>(instIt->second); SameTeam(instigator, target))
+				return;
+		}
+	}
 
 	// 감속 - 질풍 · 족쇄 끊기의 면역 (immune slow), 단단한 발목의 저항 (cc_resist slow), 2026-10-11 3차 로스터
 	if (type == Protocol::CC_TYPE_SLOW)
@@ -2035,7 +2257,8 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 
 	DeathSnapshot snap;
 	snap.characterId = characterId;
-	snap.floorId = _floorId;
+	// PVE 인스턴스의 가방 행은 floor_id = 1000 + 층 - 재시작하면 부팅이 지운다. 공용 층(PvP)에 되살아나지 않는다 (ADR-0014 D10)
+	snap.floorId = IsInstance() ? InstanceRules::INSTANCE_BAG_FLOOR_BASE + _floorId : _floorId;
 	snap.x = player->posInfo->x();
 	snap.y = player->posInfo->y();
 	snap.z = player->posInfo->z();
@@ -2053,6 +2276,10 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 
 	if (GDeathCommits.TryBegin(characterId) == false)
 		return;
+
+	// 가방이 생길 때까지 인스턴스를 닫지 않는다 (OnBagCreated 가 뺀다)
+	if (IsInstance())
+		_pendingDeathCommits++;
 
 	snap.bagId = GNextBagId.fetch_add(1);
 	snap.expiresAtUs = Utils::NowMicroseconds() + BAG_LIFETIME_US;
@@ -2106,9 +2333,24 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 	// 끊긴 몸이 죽었다 - 커밋이 됐든 안 됐든 몸을 치운다. 다음 접속은 DB에서 새로 적재한다.
 	ReleaseDetachedBody(snap.characterId);
 
+	if (IsInstance() && _pendingDeathCommits > 0)
+		_pendingDeathCommits--;
+
 	if (ok == false)
 	{
 		LOG_LINE << "[DEATH] commit abandoned - no bag, items stay with the owner. char=" << snap.characterId << '\n';
+		return;
+	}
+
+	// 닫힌 인스턴스 - 가방을 놓을 곳이 없다. 커밋된 행을 지운다 (닫힐 때 남은 가방과 같은 결과). 위 카운터가 있어 보통은 오지 않는다
+	if (_closing)
+	{
+		vector<uint64> bagIds{ snap.bagId };
+		vector<uint64> instanceIds;
+		for (const ItemEntry& e : snap.items)
+			instanceIds.push_back(e.instanceId);
+		GDBQueue.Push([bagIds, instanceIds](DBConnection* conn) { DeleteExpiredBags(conn, bagIds, instanceIds); });
+		LOG_LINE << "[INST] death bag after close " << Tag() << " - deleted bag=" << snap.bagId << '\n';
 		return;
 	}
 
@@ -2226,6 +2468,7 @@ void Room::BeginEscapeCommitInto(uint64 playerId, vector<uint64>* despawnBatch)
 		{
 			session->place.store(SessionPlace::BaseCamp);
 			GDeathCommits.End(snap.characterId);
+			GParties.NotifyChanged(snap.characterId);		// 협동 파티원 화면 - 탈출해 베이스캠프 (ADR-0014)
 
 			// 포기(데이터가 깨진 경우뿐)면 DB 는 런 전 그대로다 - "탈출 성공" 배너 없이(RUN_END_NONE) 베이스캠프로, 아래 동기화가 실제 상태를 보여 준다
 			Protocol::S_LEAVE_GAME leavePkt;
@@ -2308,6 +2551,7 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	enterPkt.mutable_player()->CopyFrom(*body->objectInfo);
 	// 마감은 그대로 - 끊긴 동안에도 시간은 흘렀다 (escape-timer.md Core Rule 14)
 	enterPkt.set_run_remaining_ms(static_cast<uint32>(EscapeLogic::RemainingUs(body->runDeadlineUs, nowUs) / 1000));
+	enterPkt.set_mode(RunModeOf());		// 다시 붙은 방의 모드 - 클라가 재접속 뒤에도 PVE 인지 안다 (ADR-0014)
 	SEND_PACKET_DECLARATION(enterPkt);
 	session->Send(sendBuffer);
 
@@ -2330,6 +2574,9 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 void Room::UpdateTick()
 {
 	JOB_TAG();
+	if (_closing)
+		return;		// 닫힌 인스턴스 - 다시 걸지 않는다. 남은 참조가 풀리면 방이 사라진다 (ADR-0014)
+
 	const uint64 nowUs = Utils::NowMicroseconds();
 
 	UpdateSaves(nowUs);
@@ -2348,6 +2595,14 @@ void Room::UpdateTick()
 	RecordHistories(nowUs);
 	UpdateIdleCombat(nowUs);
 
+	// PVE 인스턴스 - 비면 닫는다 (사망 커밋 · 입장 예약 · 유예 3 s)
+	if (IsInstance())
+	{
+		TryCloseInstance(nowUs);
+		if (_closing)
+			return;
+	}
+
 	// 0.1초 경과했으면, UpdateTick()
 	DoTimer(100, &Room::UpdateTick);
 }
@@ -2355,6 +2610,8 @@ void Room::UpdateTick()
 void Room::FlushMoves()
 {
 	JOB_TAG();
+	if (_closing)
+		return;
 	_retiredWalls.clear();		// 잡 맨 앞 - 아무도 옛 벽 지도를 쥐고 있지 않다
 
 	// 몬스터 이동을 같은 틱에 적분해 같은 S_MOVE 에 싣는다 - 패킷 · Send 수가 늘지 않는다 (monster-ai.md Core Rule 25)
@@ -2397,6 +2654,8 @@ void Room::FlushMoves()
 void Room::FlushCombat()
 {
 	JOB_TAG();
+	if (_closing)
+		return;
 	const uint64 nowUs = Utils::NowMicroseconds();
 	_retiredWalls.clear();
 
@@ -2617,6 +2876,8 @@ void Room::FlushCombat()
 void Room::FlushSpawns()
 {
 	JOB_TAG();
+	if (_closing)
+		return;
 	if (_pendingSpawns.empty() == false)
 	{
 		// 플레이어와 가방 · 상자를 다른 패킷에 담는다 - 클라 처리는 같고(S_SPAWN 하나), 송신 통계에서
@@ -2988,6 +3249,8 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 			if (target == nullptr || target->IsAlive() == false)
 				return false;
 			if (caster->IsMonster() && target->IsMonster())
+				return false;
+			if (SameTeam(caster, target))		// PVE 협동 아군 (ADR-0014)
 				return false;
 			if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
 				return false;
@@ -3912,6 +4175,7 @@ void Room::ApplyTargetEffect(const CreatureRef& caster, const SkillDef& def, uin
 		burst.baseDamage = static_cast<float>(caster->SkillPower()) * (max(e.adRatio, 0.f) + max(e.apRatio, 0.f)) * (1.f + caster->outgoingDamagePct);
 		burst.type = e.DamageType();
 		burst.ctx = ctx;
+		burst.teamId = caster->teamId;
 		PushStatus(true, targetId, Protocol::STATUS_DOT, "incubating", 1, e.durationMs, burst.baseDamage, casterId);
 		LOG_LINE << "[BURST] planted target=" << targetId << " by=" << casterId << " in=" << e.durationMs << "ms" << '\n';
 		break;
@@ -3938,6 +4202,13 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 	// 니힐 · 배수진 - 모든 공격 무효
 	if (target->IsInvulnerable(nowUs))
 		return target->hp;
+
+	// PVE 협동 아군 - 피해 깔때기의 안전망 (ADR-0014). 대상 고르기 · 투사체 판정이 먼저 거르므로 여기 오면 빠진 경로다
+	if (attacker != nullptr && SameTeam(attacker, target))
+	{
+		LOG_LINE << "[ALLY] blocked damage a=" << attackerId << " b=" << target->objectInfo->object_id() << " dmg=" << damage << '\n';
+		return target->hp;
+	}
 
 	// 모자 로스터 - 일편단심 · 피해 배율 · 면역 · 염두
 	damage = ApplyDamageMods(attacker, target, damage, src, nowUs);
@@ -4574,6 +4845,10 @@ bool Room::CanProjectileHit(const CreatureRef& caster, const CreatureRef& target
 		return false;
 	if (caster->IsMonster() && target->IsMonster())
 		return false;
+	// PVE 협동 아군 - 투사체 · 장판 · 유지 · 연쇄 · 폭발 · 던지기 · 벽 효과 · 충격파 · 회전 평타가 모두 이 판정을 쓴다 (ADR-0014).
+	// 아군은 직선 투사체를 "막지도" 않는다 - 지나간다
+	if (SameTeam(caster, target))
+		return false;
 	if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
 		return false;
 	return true;
@@ -4887,6 +5162,7 @@ void Room::PlaceZone(const CreatureRef& caster, const SkillDef& def, uint32 effe
 	z.ccType = e.ccType;
 	z.ccMagnitude = e.magnitude;
 	z.param = (e.param == "element_path") ? caster->stance : e.param;
+	z.teamId = caster->teamId;
 
 	// 스킬의 지속 피해는 장판 안에 있는 동안 갱신된다 (틱마다 쌓이지 않는다)
 	for (const SkillEffect& d : def.effects)
@@ -5023,6 +5299,8 @@ void Room::UpdateZones(uint64 nowUs)
 				if (target == nullptr || target->IsAlive() == false)
 					continue;
 				if (caster != nullptr && CanProjectileHit(caster, target, nowUs) == false)
+					continue;
+				if (InstanceRules::Allied(z.teamId, target->teamId))		// 시전자가 떠난 뒤에도 아군은 아니다 (ADR-0014)
 					continue;
 				if (target->IsPlayer() && static_pointer_cast<Player>(target)->IsSpawnInvulnerable(nowUs))
 					continue;
@@ -5538,6 +5816,8 @@ void Room::ResolveBursts(uint64 nowUs)
 				continue;
 			if (caster != nullptr && CanProjectileHit(caster, other, nowUs) == false)
 				continue;
+			if (InstanceRules::Allied(b.teamId, other->teamId))		// 시전자가 떠난 뒤에도 아군에게 번지지 않는다 (ADR-0014)
+				continue;
 
 			const float dx = other->posInfo->x() - tx;
 			const float dy = other->posInfo->y() - ty;
@@ -5991,6 +6271,8 @@ void Room::TriggerDashMarks(const CreatureRef& dasher, float dirX, float dirY, u
 		CreatureRef watcher = dynamic_pointer_cast<Creature>(item.second);
 		if (watcher == nullptr || watcher->IsAlive() == false || watcher->IsPlayer() == false)
 			continue;
+		if (SameTeam(watcher, dasher))		// 간파는 "질주해 오는 적" - 아군의 돌진에는 표식을 남기지 않는다 (ADR-0014)
+			continue;
 
 		for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
 		{
@@ -6435,6 +6717,7 @@ void Room::SpawnDecoy(const CreatureRef& caster, const SkillEffect& e, const Ski
 	const int32 decoyHp = static_cast<int32>(e.magnitude > 0.f ? e.magnitude : static_cast<float>(rules.decoyHp));
 
 	auto decoy = make_shared<Decoy>(GNextDecoyId.fetch_add(1), ctx.casterId, nowUs + static_cast<uint64>(e.durationMs) * 1000, max(1, decoyHp));
+	decoy->teamId = caster->teamId;		// 아군은 내 미끼를 때리지 않는다 (PVE 협동, ADR-0014)
 	decoy->posInfo->set_x(caster->posInfo->x());
 	decoy->posInfo->set_y(caster->posInfo->y());
 	decoy->posInfo->set_z(caster->posInfo->z());
@@ -7735,6 +8018,7 @@ void Room::BeginExpiryCommit(const PlayerRef& player, uint64 nowUs)
 			}
 
 			session->place.store(SessionPlace::BaseCamp);
+			GParties.NotifyChanged(snap.characterId);		// 협동 파티원 화면 - 만료로 베이스캠프 (ADR-0014)
 
 			// 포기면 아무것도 지워지지 않았다 - 결과 배너 없이(RUN_END_NONE), 동기화가 실제 상태를 보여 준다
 			Protocol::S_LEAVE_GAME leavePkt;

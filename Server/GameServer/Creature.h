@@ -140,6 +140,11 @@ public:
 	bool				IsTaunted(uint64 nowUs) const { return nowUs < tauntEndUs; }
 
 public:
+	// 팀 (PVE 협동, ADR-0014) - 0 = 팀 없음 (모두에게 적대, PvP). 같은 0 아닌 값끼리 아군 - 피해 · CC · 대상 지정이 막힌다.
+	// 협동 인스턴스에 들어갈 때 파티 id 를 받고 그 런 동안 바뀌지 않는다. 미끼 · 분신은 주인 것을 받는다
+	uint64				teamId = 0;
+
+public:
 	// 상태 효과 - 지속 피해 · 버프 · 표식 (StatusEffects.h). Room 이 Flush 마다 틱 · 만료를 돌린다
 	StatusSet			status;
 

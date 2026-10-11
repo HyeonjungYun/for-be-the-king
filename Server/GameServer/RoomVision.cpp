@@ -205,6 +205,28 @@ void Room::UpdateVisibility(uint64 nowUs)
 			_fowSources.push_back(own);
 		}
 
+		// PVE 협동 - 아군의 시야를 같이 본다 (ADR-0014 D8). 아군을 따라가는 추가 시야원이라 클라 안개도 그 둘레를 연다.
+		// 아군이 방을 떠나면 아래 루프가 따라갈 생물을 못 찾아 지운다
+		if (_kind == RoomKind::PveCoop && viewer->teamId != 0)
+		{
+			for (auto& other : _objects)
+			{
+				if (other.first == viewerId || other.second->IsPlayer() == false)
+					continue;
+				PlayerRef ally = static_pointer_cast<Player>(other.second);
+				if (SameTeam(*viewer, *ally) == false || ally->IsAlive() == false)
+					continue;
+
+				VisionExtra shared;
+				shared.sourceId = ally->objectInfo->object_id();
+				shared.followId = shared.sourceId;
+				shared.radiusCm = VisionRadiusOf(ally, nowUs);
+				shared.needsLos = true;
+				shared.kind = "ally";
+				AddVisionExtra(viewer, shared);
+			}
+		}
+
 		for (size_t i = 0; i < viewer->visionExtras.size(); )
 		{
 			const VisionExtra& e = viewer->visionExtras[i];
@@ -270,6 +292,10 @@ void Room::UpdateVisibility(uint64 nowUs)
 			if (subject->IsDecoy() && static_pointer_cast<Decoy>(subject)->ownerId == viewerId)
 			{
 				seen = true;		// 내 미끼 · 분신은 늘 안다
+			}
+			else if (SameTeam(*viewer, *subject))
+			{
+				seen = true;		// PVE 협동 아군 (과 아군의 미끼 · 분신) - 은신이어도 늘 안다 (ADR-0014)
 			}
 			else if (viewer->fowRevealed.find(subjectId) != viewer->fowRevealed.end())
 			{

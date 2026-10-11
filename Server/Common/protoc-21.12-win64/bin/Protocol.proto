@@ -21,6 +21,7 @@ message C_ENTER_GAME
 	uint64 playerIndex = 1;
 	uint32 floor_id = 2;
 	uint32 entry_point_id = 3;
+	RunMode mode = 4;				// PVP = the shared floor (default). PVE solo / co-op = a private instance (ADR-0014)
 }
 
 message S_ENTER_GAME
@@ -28,6 +29,7 @@ message S_ENTER_GAME
 	bool success = 1;
 	ObjectInfo player = 2;
 	uint32 run_remaining_ms = 3;	// stay timer left, also on reattach. 0 = unknown (escape-timer.md Core Rule 15)
+	RunMode mode = 4;				// the mode of the room I am in - also on reattach
 }
 
 message C_LEAVE_GAME
@@ -272,4 +274,38 @@ message S_VISION
 	float radius_cm = 1;					// my current vision radius (blind and passives applied)
 	repeated VisionSource sources = 2;		// the full list - replaces the previous one
 	float camera_scale = 3;					// camera distance multiplier from passives (helmet 1132 wider sight) - blind does not move the camera
+}
+
+// PVE co-op party (2026-10-11 - ADR-0014). Invite by character name, up to 3. The invitee must be in base camp
+message C_PARTY_INVITE
+{
+	string target_name = 1;
+}
+
+message S_PARTY_INVITED
+{
+	uint64 party_id = 1;
+	string from_name = 2;
+	uint32 expires_ms = 3;			// the invite is dropped after this
+}
+
+message C_PARTY_RESPONSE
+{
+	uint64 party_id = 1;
+	bool accept = 2;
+}
+
+message C_PARTY_LEAVE
+{
+	uint64 character_id = 1;		// 0 = leave myself. Otherwise the leader removes that member
+}
+
+// The whole party - to every member on any change, and to a requester with the outcome. No members = not in a party
+message S_PARTY_STATE
+{
+	uint64 party_id = 1;
+	repeated PartyMember members = 2;
+	bool in_run = 3;				// the party instance is alive - members in base camp may join it
+	PartyResult result = 4;			// outcome of the receiver's last party request (OK otherwise)
+	string subject_name = 5;		// who the result is about (invite target, decliner)
 }

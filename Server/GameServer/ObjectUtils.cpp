@@ -428,16 +428,18 @@ bool RestoreIdCounters(DBConnection* conn)
 
 bool PurgeExpiredBags(DBConnection* conn)
 {
+	// 만료된 가방 + PVE 인스턴스의 가방 (floor_id >= 1000, InstanceRules::INSTANCE_BAG_FLOOR_BASE) - 인스턴스는 재시작을 넘지 않는다.
+	// 기록 재처리(ReplayCommitJournal)가 이보다 먼저라 재처리된 PVE 사망 가방도 여기서 지워진다 (ADR-0014 D10)
 	if (conn->Excute(
 		"DELETE FROM item_instances WHERE bag_id IN"
-		"(SELECT bag_id FROM bags WHERE expires_at <= NOW())") == false)
+		"(SELECT bag_id FROM bags WHERE expires_at <= NOW() OR floor_id >= 1000)") == false)
 	{
 		LOG_LINE << "[BOOT] purge items failed: " << conn->GetError() << '\n';
 		return false;
 	}
 
 	const uint64 removedItems = conn->GetAffectedRows();
-	if (conn->Excute("DELETE FROM bags WHERE expires_at <= NOW()") == false)
+	if (conn->Excute("DELETE FROM bags WHERE expires_at <= NOW() OR floor_id >= 1000") == false)
 	{
 		LOG_LINE << "[BOOT] purge bags failed: " << conn->GetError() << '\n';
 		return false;
@@ -535,9 +537,10 @@ bool ValidateItemRows(DBConnection* conn)
 
 bool LoadLiveBags(DBConnection* conn)
 {
+	// 공용 층의 가방만 - PVE 인스턴스 가방(floor_id >= 1000)은 정리가 지웠고, 남았더라도 월드에 되살리지 않는다 (ADR-0014)
 	MYSQL_RES* bagRes = conn->Query(
 		"SELECT bag_id, floor_id, x, y, z, TIMESTAMPDIFF(MICROSECOND, NOW(), expires_at) "
-		"FROM bags WHERE expires_at > NOW()");
+		"FROM bags WHERE expires_at > NOW() AND floor_id < 1000");
 
 	if (bagRes == nullptr)
 	{

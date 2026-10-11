@@ -159,3 +159,35 @@ enum ProjectileEnd
 	PROJECTILE_END_WALL = 2;	// 벽에 막혔다
 	PROJECTILE_END_LOST = 3;	// 시전자 · 대상이 사라졌다
 }
+
+// Which room C_ENTER_GAME goes to (PVE modes, 2026-10-11 - ADR-0014)
+enum RunMode
+{
+	RUN_MODE_PVP = 0;			// the shared floor room - default for old clients and bots
+	RUN_MODE_PVE_SOLO = 1;		// a private copy of the floor for one player
+	RUN_MODE_PVE_COOP = 2;		// the party's private copy, up to 3 party members
+}
+
+// Outcome of a party request - S_PARTY_STATE.result
+enum PartyResult
+{
+	PARTY_OK = 0;
+	PARTY_NOT_FOUND = 1;			// no such character online in base camp
+	PARTY_FULL = 2;					// 3 members already
+	PARTY_ALREADY_IN_PARTY = 3;		// the target is in another party
+	PARTY_DECLINED = 4;
+	PARTY_EXPIRED = 5;				// the invite timed out or the party is gone
+	PARTY_NOT_LEADER = 6;
+	PARTY_BUSY = 7;					// entering, a run end commit pending, a detached body, or in a run
+	PARTY_SELF = 8;
+	PARTY_NO_INSTANCE = 9;			// join asked while the party has no running instance
+	PARTY_ALREADY_ENTERED = 10;		// this character already entered this instance once
+	PARTY_COOP_ONLY = 11;			// a party of 2 or more may only enter PVE co-op
+}
+
+enum PartyMemberState
+{
+	PARTY_MEMBER_BASECAMP = 0;
+	PARTY_MEMBER_IN_RUN = 1;
+	PARTY_MEMBER_OFFLINE = 2;
+}

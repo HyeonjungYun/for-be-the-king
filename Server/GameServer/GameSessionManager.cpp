@@ -25,6 +25,44 @@ void GameSessionManager::Broadcast(SendBufferRef sendBuffer)
 	}
 }
 
+GameSessionRef GameSessionManager::FindByCharacter(uint64 characterId)
+{
+	WRITE_LOCK;
+	for (const GameSessionRef& session : _sessions)
+	{
+		// accountId 가 0 이 아니면 로그인 작업이 characters 를 다 채운 뒤다 (accountId 를 마지막에 쓴다)
+		if (session->accountId.load() == 0)
+			continue;
+
+		for (const Protocol::CharacterInfo& character : session->characters)
+		{
+			if (character.object_info().object_id() == characterId)
+				return session;
+		}
+	}
+	return nullptr;
+}
+
+GameSessionRef GameSessionManager::FindByName(const string& name)
+{
+	if (name.empty())
+		return nullptr;
+
+	WRITE_LOCK;
+	for (const GameSessionRef& session : _sessions)
+	{
+		if (session->accountId.load() == 0)
+			continue;
+
+		for (const Protocol::CharacterInfo& character : session->characters)
+		{
+			if (character.name() == name)
+				return session;
+		}
+	}
+	return nullptr;
+}
+
 GameSessionRef GameSessionManager::FindInBaseCamp(uint64 characterId)
 {
 	WRITE_LOCK;
