@@ -88,3 +88,13 @@ Server/Data/export/
 !Server/packages/**/x64/**
 # 텔레메트리 · 테스트 출력 (design/gdd/escape-timer.md § G) - 원격 푸시에 들어가면 안 된다
 Server/Logs/
+
+# ── Fab 애니메이션 팩 (2026-10-12 런처로 받음, 약 5.7 GB · 6,389 애셋) ──
+# 라이선스상 원본을 공개 저장소에 두지 않는다. 프로젝트가 참조하는 클립은 경로만 코드 · CSV 에 남긴다.
+# 다시 받으려면 런처 라이브러리 → 프로젝트에 추가 (S1)
+S1/Content/Archer/
+S1/Content/BCD_Anims/
+S1/Content/Dagger/
+S1/Content/Fighter_Animations/
+S1/Content/Mage/
+S1/Content/Spear/
