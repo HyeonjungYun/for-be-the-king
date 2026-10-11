@@ -167,4 +167,63 @@ bool FS1SkillTableRulesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// 3rd roster (2026-10-11) - the anchor's lifetime is the recast window, passive stats feed movement, the wall and sprint flags.
+// Same rows as Server/Data (비창 1138 · 벽 차기 1163 · 전력 질주 1169 · 모래주머니 1174 · 날개 1184)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1SkillTableRoster3Test, "S1.Skill.Table.Parse_Roster3_AnchorWindowPassiveStatsFlags", GS1SkillTestFlags)
+bool FS1SkillTableRoster3Test::RunTest(const FString& Parameters)
+{
+	const TCHAR* Skills =
+		TEXT("skill_id,name_key,power,kind,cast_ms,cooldown_ms,can_move,telegraph_ms,shape,aim,range_cm,width_cm,radius_cm,angle_deg,allowed_slot,projectile_speed_cms,pierce\r\n")
+		TEXT("1138,skill.1138,ad,recast,300,10000,0,0,projectile,direction,800,80,0,0,0,1800,0\r\n")
+		TEXT("1159,skill.1159,none,recast,60,8000,0,0,circle_self,direction,400,0,0,0,0,0,0\r\n")
+		TEXT("1163,skill.1163,none,active,60,8000,0,0,circle_self,facing,700,0,0,0,0,0,0\r\n")
+		TEXT("1169,skill.1169,none,hold,0,12000,0,0,none,none,0,0,0,0,0,0,0\r\n")
+		TEXT("1174,skill.1174,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0\r\n")
+		TEXT("1184,skill.1184,none,passive,0,0,0,0,none,none,0,0,0,0,0,0,0\r\n");
+	const TCHAR* Effects =
+		TEXT("skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,duration_ms,magnitude,dist_cm,speed_cms,ignores_walls,stat,per_level,radius_cm,param\r\n")
+		TEXT("1138,1,damage,target,none,1.4,0,1,0,none,0,0,0,0,0,none,0,0,none\r\n")
+		TEXT("1138,2,anchor,self,none,0,0,0,0,none,5000,0,0,0,0,none,0,0,projectile\r\n")
+		TEXT("1138,3,move,self,recast,0,0,0,0,none,0,0,3000,0,1,none,0,0,to_anchor\r\n")
+		TEXT("1159,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,dash\r\n")
+		TEXT("1159,2,move,self,recast,0,0,0,0,none,0,0,400,1200,0,none,0,0,dash\r\n")
+		TEXT("1163,1,move,self,near_wall,0,0,0,0,none,0,0,700,1750,0,none,0,0,off_wall\r\n")
+		TEXT("1169,1,hold,self,none,0,0,0,0,none,8000,0,0,0,0,none,0,0,sprint\r\n")
+		TEXT("1169,2,buff,self,none,0,0,0,0,none,8000,0.6,0,0,0,move_speed,0,0,none\r\n")
+		TEXT("1174,1,passive_stat,self,none,0,0,0,0,none,0,-0.1,0,0,0,move_speed,0,0,none\r\n")
+		TEXT("1174,2,buff,self,none,0,0,0,0,none,5000,0.6,0,0,0,move_speed,0.03,0,none\r\n")
+		TEXT("1184,1,passive_stat,self,none,0,0,0,0,none,0,0.3,0,0,0,move_dist,0,0,none\r\n");
+
+	FString Error;
+	TestTrue(TEXT("rules parse"), FS1SkillTable::ParseRules(TEXT("key,value\r\nrecast_window_ms,2000\r\n"), Error));
+	TestTrue(*FString::Printf(TEXT("fixture parses: %s"), *Error), FS1SkillTable::Parse(Skills, Effects, Error));
+
+	const FS1SkillDef* Spear = FS1SkillTable::Find(1138);
+	const FS1SkillDef* Twice = FS1SkillTable::Find(1159);
+	const FS1SkillDef* Kick = FS1SkillTable::Find(1163);
+	const FS1SkillDef* Sprint = FS1SkillTable::Find(1169);
+	const FS1SkillDef* Sandbag = FS1SkillTable::Find(1174);
+	const FS1SkillDef* Wings = FS1SkillTable::Find(1184);
+	if (TestNotNull(TEXT("1138"), Spear) && TestNotNull(TEXT("1159"), Twice))
+	{
+		TestEqual(TEXT("spear window = anchor 5 s"), static_cast<int32>(FS1SkillTable::RecastWindowMsFor(*Spear)), 5000);
+		TestEqual(TEXT("double dash keeps the global window"), static_cast<int32>(FS1SkillTable::RecastWindowMsFor(*Twice)), 2000);
+		TestEqual(TEXT("spear second press is a server teleport - no local dash"), Spear->RecastMoveSpeedCms, 0.f);
+	}
+	if (TestNotNull(TEXT("1163"), Kick))
+	{
+		TestTrue(TEXT("wall kick needs a wall"), Kick->bNeedsWall);
+		TestFalse(TEXT("wall kick is server-driven - no local dash"), Kick->HasMovement());
+	}
+	if (TestNotNull(TEXT("1169"), Sprint))
+		TestTrue(TEXT("sprint blocks attacks"), Sprint->bHoldBlocksAttacks);
+	if (TestNotNull(TEXT("1174"), Sandbag) && TestNotNull(TEXT("1184"), Wings))
+	{
+		TestEqual(TEXT("sandbag passive move speed"), Sandbag->PassiveMoveSpeed, -0.1f);
+		TestEqual(TEXT("wings passive move dist"), Wings->PassiveMoveDist, 0.3f);
+		TestEqual(TEXT("wings changes no speed"), Wings->PassiveMoveSpeed, 0.f);
+	}
+	return true;
+}
+
 #endif

@@ -13,6 +13,7 @@
 #include "InputActionValue.h"
 #include "S1MyPlayer.h"
 #include "S1.h"
+#include "S1GameInstance.h"
 #include "DrawDebugHelpers.h"
 #include "Components/TextRenderComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -193,7 +194,24 @@ void AS1Player::TickCc()
 	// Player::ComputeMoveSpeed (its ceiling for our moves), where the buff is added to percentMsBonus
 	const US1ItemSubsystem* Items = US1ItemSubsystem::Get();
 	const float Bonus = Items != nullptr ? Items->GetMoveSpeedBonus() : 0.f;
-	Movement->MaxWalkSpeed = BaseWalkSpeed * (1.f + Bonus + MoveSpeedBuff) * (1.f - ActiveSlow);
+
+	// 모래주머니 (1174, 2026-10-11) - a bound skill's passive move_speed is in the same sum (server Player::RebuildCombatStats)
+	float Passive = 0.f;
+	if (const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+	{
+		for (const Protocol::SkillInfo& Info : GameInstance->SkillSlots)
+		{
+			if (Info.bind_state() != Protocol::BIND_BOUND)
+				continue;
+			if (const FS1SkillDef* Def = FS1SkillTable::Find(Info.skill_id()))
+				Passive += Def->PassiveMoveSpeed;
+		}
+	}
+
+	// Clamped like the server's Player::ComputeMoveSpeed (0.5x .. 1.5x base) - 전력 질주 +60 % on top of boots would otherwise
+	// run past the server's ceiling and every move would bounce
+	const float Speed = BaseWalkSpeed * (1.f + Bonus + MoveSpeedBuff + Passive) * (1.f - ActiveSlow);
+	Movement->MaxWalkSpeed = FMath::Clamp(Speed, BaseWalkSpeed * 0.5f, BaseWalkSpeed * 1.5f);
 
 	if (CanMove() == false)
 		Movement->StopMovementImmediately();
@@ -673,6 +691,19 @@ void AS1Player::DrawStatusDebug()
 				Piece = TEXT("LAST STAND");
 			else if (Entry.Param == TEXT("thorns"))
 				Piece = FString::Printf(TEXT("thorns %d%%"), FMath::RoundToInt(Entry.Magnitude * 100.f));
+			// 3차 로스터 (2026-10-11)
+			else if (Entry.Param == TEXT("front_guard"))
+				Piece = FString::Printf(TEXT("GUARD front -%d%%"), FMath::RoundToInt(Entry.Magnitude * 100.f));
+			else if (Entry.Param == TEXT("unmovable"))
+				Piece = TEXT("UNMOVABLE");
+			else if (Entry.Param == TEXT("projectile_dodge"))
+				Piece = TEXT("DODGE");
+			else if (Entry.Param == TEXT("damage_taken"))
+				Piece = FString::Printf(TEXT("taken +%d%%"), FMath::RoundToInt(Entry.Magnitude * 100.f));
+			else if (Entry.Param == TEXT("move_attack"))
+				Piece = TEXT("MOVING SHOT");
+			else if (Entry.Param == TEXT("basic_double"))
+				Piece = TEXT("TWIN ORBS");
 			else
 				Piece = FString::Printf(TEXT("%s %+d%%"), *Entry.Param, FMath::RoundToInt(Entry.Magnitude * 100.f));
 			break;
@@ -687,7 +718,8 @@ void AS1Player::DrawStatusDebug()
 			break;
 		case Protocol::STATUS_PARRY:
 			// 자업자득(갑옷 #107)은 같은 종류에 param "reflect" 로 온다 - 투사체를 되돌려 보내는 창
-			Piece = (Entry.Param == TEXT("reflect")) ? TEXT("REFLECT") : TEXT("PARRY");
+			// 풍차(창 갑옷 1146, 2026-10-11)는 param "windmill" - 사방의 투사체만
+			Piece = (Entry.Param == TEXT("reflect")) ? TEXT("REFLECT") : (Entry.Param == TEXT("windmill") ? TEXT("WINDMILL") : TEXT("PARRY"));
 			break;
 		case Protocol::STATUS_STANCE:
 			Piece = FString::Printf(TEXT("stance:%s"), *Entry.Param);

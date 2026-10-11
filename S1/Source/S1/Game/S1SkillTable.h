@@ -102,6 +102,22 @@ struct FS1SkillDef
 
 	bool				bHasHardCc = false;	// For the detail pane — "this key stuns" is part of how a key is used
 
+	/**
+	 * 3rd roster (2026-10-11). The recast window when the skill leaves a spot to come back to (anchor duration - 비창 5 s,
+	 * 포르타 10 s); 0 = the global recast_window_ms. Same rule as the server's SkillTable::RecastWindowMs.
+	 */
+	uint32				RecastWindowMs = 0;
+
+	/** passive_stat while the skill is bound: move_speed (모래주머니 -10 %) and move_dist (날개 +30 % movement distance). */
+	float				PassiveMoveSpeed = 0.f;
+	float				PassiveMoveDist = 0.f;
+
+	/** requires near_wall (벽 차기) - checked locally against the level's collision before sending, like the weapon requirement. */
+	bool				bNeedsWall = false;
+
+	/** A hold that forbids attacking while it runs (전력 질주 - hold param sprint). The server refuses the swings too. */
+	bool				bHoldBlocksAttacks = false;
+
 	/** skills.csv tags (semicolon list - sword · ghost · hammer · homing:arrow …) and requires_weapon ("sword", "sword:ghost"). */
 	TArray<FString>		Tags;
 	FString				RequiresWeapon;		// weapon skill pool the armor skill needs (item_types.csv skill_pool) - empty = none
@@ -138,6 +154,9 @@ public:
 
 	/** How long after a recast skill fires the same key fires its second part (skill_rules recast_window_ms). 0 until rules load. */
 	static uint32 RecastWindowMs();
+
+	/** The window for this skill - its anchor's duration if it leaves one, else the global window (2026-10-11). */
+	static uint32 RecastWindowMsFor(const FS1SkillDef& Def) { return Def.RecastWindowMs > 0 ? Def.RecastWindowMs : RecastWindowMs(); }
 
 private:
 	static TMap<uint32, FS1SkillDef>& Defs();

@@ -302,6 +302,9 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 		const int32 ColSpeed	= Csv.Column(TEXT("speed_cms"));
 		const int32 ColWalls	= Csv.Column(TEXT("ignores_walls"));
 		const int32 ColParam	= Csv.Column(TEXT("param"));
+		const int32 ColDuration	= Csv.Column(TEXT("duration_ms"));		// optional - older fixtures (anchor window, 2026-10-11)
+		const int32 ColStat		= Csv.Column(TEXT("stat"));				// optional (passive_stat)
+		const int32 ColMagnitude = Csv.Column(TEXT("magnitude"));			// optional (passive_stat)
 
 		for (int32 Col : { ColId, ColEffect, ColWho, ColRequires, ColCc, ColDist, ColSpeed, ColWalls, ColParam })
 		{
@@ -340,6 +343,29 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 			const FString& Effect = Cells[ColEffect];
 			if (IsHardCc(Effect, Cells[ColCc]))
 				Def->bHasHardCc = true;
+
+			// 3rd roster (2026-10-11) - the anchor's lifetime is the recast window; passive stats the movement code reads; the wall requirement
+			if (Effect == TEXT("anchor") && ColDuration != INDEX_NONE)
+			{
+				int32 WindowMs = 0;
+				if (FDefaultValueHelper::ParseInt(Cells[ColDuration], WindowMs) && WindowMs > 0)
+					Def->RecastWindowMs = static_cast<uint32>(WindowMs);
+			}
+			if (Effect == TEXT("passive_stat") && ColStat != INDEX_NONE && ColMagnitude != INDEX_NONE)
+			{
+				float Magnitude = 0.f;
+				if (FDefaultValueHelper::ParseFloat(Cells[ColMagnitude], Magnitude))
+				{
+					if (Cells[ColStat] == TEXT("move_speed"))
+						Def->PassiveMoveSpeed += Magnitude;
+					else if (Cells[ColStat] == TEXT("move_dist"))
+						Def->PassiveMoveDist += Magnitude;
+				}
+			}
+			if (Cells[ColRequires] == TEXT("near_wall"))
+				Def->bNeedsWall = true;
+			if (Effect == TEXT("hold") && Cells[ColParam] == TEXT("sprint"))
+				Def->bHoldBlocksAttacks = true;
 
 			// The first movement that runs on the first press. A recast's second dash is not the key's cast.
 			if (Effect == TEXT("move") && Cells[ColWho] == TEXT("self") && Cells[ColRequires] == TEXT("none") && Def->MoveDistCm <= 0.f)

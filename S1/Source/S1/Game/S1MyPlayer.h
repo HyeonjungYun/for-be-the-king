@@ -99,6 +99,19 @@ protected:
 	bool MeetsWeaponRequirement(const FS1SkillDef& Def, FText& OutWhy) const;
 
 	/**
+	 * 벽 차기 (1163, 2026-10-11) "벽에 붙어 있을 때만" — rays against the level's static collision in 16 directions,
+	 * the same 110 cm the server's Room::IsNearWall uses. Refusing here keeps the local cooldown from starting on a cast
+	 * the server would drop.
+	 */
+	bool IsNearWallLocal() const;
+
+	/** 날개 (1184) — movement skills travel × (1 + passive move_dist of the bound skills). The server scales its window the same way. */
+	float GetMoveDistScale() const;
+
+	/** 전력 질주 (1169) — a hold that forbids attacking is running. */
+	bool IsAttackBlockedByHold() const;
+
+	/**
 	 * Basic attack reach as the server will judge it: the worn weapon's attack_range_cm (item_types.csv), then the
 	 * buffs the server told us about — basic_melee replaces it (푸리아 · 은장도), attack_range adds to it (명경지수 ·
 	 * 통아 · 육량전). ATTACK_RANGE_CM before the first inventory sync. Display and the RMB range gate only.

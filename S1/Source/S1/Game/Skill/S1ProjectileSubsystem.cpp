@@ -208,7 +208,8 @@ void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
 		Z.Start = Now;
 		Z.Until = Now + Info.duration_ms() / 1000.f;
 		Z.Param = Param;
-		Z.bFlash = (Param == TEXT("shock") || Param == TEXT("spin") || Param == TEXT("slash"));
+		// A short visual-only zone (shock · spin · slash, and the 3rd-roster element bursts - 플럭스 · 스쿠툼, 2026-10-11) is one growing ring
+		Z.bFlash = (Param == TEXT("shock") || Param == TEXT("spin") || Param == TEXT("slash") || Info.duration_ms() <= 600);
 		Z.bExpires = (Param == TEXT("ping"));
 		Z.AngleDeg = Info.angle_deg();
 		Z.Dir = FVector(1.f, 0.f, 0.f).RotateAngleAxis(Info.yaw(), FVector::UpVector);
@@ -226,6 +227,16 @@ void US1ProjectileSubsystem::HandleZones(const Protocol::S_ZONE& Pkt)
 		else if (Z.Param == TEXT("spin"))			Z.Colour = FColor(225, 225, 255);
 		else if (Z.Param == TEXT("slash"))			Z.Colour = FColor(225, 225, 255);
 		else if (Z.Param == TEXT("ping"))			Z.Colour = FColor(255, 70, 60);
+		// 3rd roster (2026-10-11)
+		else if (Z.Param == TEXT("frost"))			Z.Colour = FColor(150, 220, 255);
+		else if (Z.Param == TEXT("gravity"))		Z.Colour = FColor(150, 80, 220);
+		else if (Z.Param == TEXT("smoke"))			Z.Colour = FColor(140, 140, 140);
+		else if (Z.Param == TEXT("caltrops"))		Z.Colour = FColor(205, 205, 205);
+		else if (Z.Param == TEXT("portal"))			Z.Colour = FColor(180, 110, 255);
+		else if (Z.Param == TEXT("spear"))			Z.Colour = FColor(255, 200, 120);
+		else if (Z.Param == TEXT("telegraph"))		Z.Colour = FColor(255, 90, 60);
+		else if (Z.Param == TEXT("lumen"))			Z.Colour = FColor(255, 245, 160);
+		else if (Z.Param == TEXT("footprint"))		Z.Colour = FColor(175, 140, 95);
 		else										Z.Colour = ColourFor(Info.effect_id());
 
 		Zones.Add(Z);
@@ -427,9 +438,84 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 			continue;
 		}
 
+		// 3rd-roster marks with no end packet of their own (2026-10-11) - gone exactly at their deadline
+		const bool bTimedMark = (Z.Param == TEXT("telegraph") || Z.Param == TEXT("footprint") || Z.Param == TEXT("lumen"));
+		if (bTimedMark && Now > Z.Until)
+		{
+			Zones.RemoveAtSwap(i);
+			continue;
+		}
+
 		if (Now > Z.Until + 1.f)
 		{
 			Zones.RemoveAtSwap(i);		// the end packet was lost - trim a second after the server's deadline
+			continue;
+		}
+
+		// 시길룸 - where it will burst, filling up until it does
+		if (Z.Param == TEXT("telegraph"))
+		{
+			const float Span = FMath::Max(Z.Until - Z.Start, 0.05f);
+			const float Fill = FMath::Clamp((Now - Z.Start) / Span, 0.f, 1.f);
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 40, Z.Colour, false, -1.f, 0, 6.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugCircle(World, Z.Pos, FMath::Max(Z.RadiusCm * Fill, 5.f), 32, Z.Colour, false, -1.f, 0, 3.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			continue;
+		}
+
+		// 발자국 추적 - a small print, toed in the direction it was walking
+		if (Z.Param == TEXT("footprint"))
+		{
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 10, Z.Colour, false, -1.f, 0, 3.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugLine(World, Z.Pos, Z.Pos + Z.Dir * (Z.RadiusCm * 1.8f), Z.Colour, false, -1.f, 0, 3.f);
+			continue;
+		}
+
+		// 루멘 - an orb hanging in the air over the spot it lights
+		if (Z.Param == TEXT("lumen"))
+		{
+			const FVector Orb = Z.Pos + FVector(0.f, 0.f, 200.f);
+			DrawDebugSphere(World, Orb, Z.RadiusCm, 12, Z.Colour, false, -1.f, 0, 2.f);
+			DrawDebugLine(World, Z.Pos, Orb, Z.Colour, false, -1.f, 0, 1.f);
+			continue;
+		}
+
+		// 포르타 문 · 비창 자리 - the spot the second press goes to: a ring and a post you can find across the screen
+		if (Z.Param == TEXT("portal") || Z.Param == TEXT("spear"))
+		{
+			const float Beat = FMath::Fmod(Now * 1.2f, 1.f);
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 24, Z.Colour, false, -1.f, 0, 5.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm * (0.4f + 0.6f * Beat), 16, Z.Colour, false, -1.f, 0, 2.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugLine(World, Z.Pos, Z.Pos + FVector(0.f, 0.f, 220.f), Z.Colour, false, -1.f, 0, 4.f);
+			continue;
+		}
+
+		// 그라비타스 - rings falling inward
+		if (Z.Param == TEXT("gravity"))
+		{
+			const float In = 1.f - FMath::Fmod(Now * 0.9f, 1.f);
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 32, Z.Colour, false, -1.f, 0, 5.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			DrawDebugCircle(World, Z.Pos, FMath::Max(Z.RadiusCm * In, 10.f), 24, Z.Colour, false, -1.f, 0, 2.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			continue;
+		}
+
+		// 연막 - thick grey, no pulse: it is a cloud, not a timer
+		if (Z.Param == TEXT("smoke"))
+		{
+			for (int32 k = 0; k < 4; k++)
+				DrawDebugCircle(World, Z.Pos + FVector(0.f, 0.f, 30.f * k), Z.RadiusCm * (1.f - 0.15f * k), 28, Z.Colour, false, -1.f, 0, 8.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			continue;
+		}
+
+		// 마름쇠 - a ring of little crosses
+		if (Z.Param == TEXT("caltrops"))
+		{
+			DrawDebugCircle(World, Z.Pos, Z.RadiusCm, 20, Z.Colour, false, -1.f, 0, 2.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+			for (int32 k = 0; k < 6; k++)
+			{
+				const FVector At = Z.Pos + FVector(1.f, 0.f, 0.f).RotateAngleAxis(60.f * k + 15.f, FVector::UpVector) * (Z.RadiusCm * 0.55f);
+				DrawDebugLine(World, At + FVector(-12.f, -12.f, 0.f), At + FVector(12.f, 12.f, 0.f), Z.Colour, false, -1.f, 0, 3.f);
+				DrawDebugLine(World, At + FVector(-12.f, 12.f, 0.f), At + FVector(12.f, -12.f, 0.f), Z.Colour, false, -1.f, 0, 3.f);
+			}
 			continue;
 		}
 

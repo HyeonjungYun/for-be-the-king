@@ -531,6 +531,53 @@ bool AS1MyPlayer::MeetsWeaponRequirement(const FS1SkillDef& Def, FText& OutWhy) 
 	return false;
 }
 
+bool AS1MyPlayer::IsNearWallLocal() const
+{
+	const UWorld* World = GetWorld();
+	if (World == nullptr)
+		return false;
+
+	// The server measures from the capsule centre on its 2D wall map; here the same reach against the level's static collision,
+	// at waist height so the floor never counts
+	constexpr float ReachCm = 110.f;
+	constexpr int32 Rays = 16;
+	const FVector From = GetActorLocation();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(NearWall), false, this);
+
+	for (int32 k = 0; k < Rays; k++)
+	{
+		const FVector Dir = FVector(1.f, 0.f, 0.f).RotateAngleAxis(360.f * k / Rays, FVector::UpVector);
+		if (World->LineTraceTestByChannel(From, From + Dir * ReachCm, ECC_WorldStatic, Params))
+			return true;
+	}
+	return false;
+}
+
+float AS1MyPlayer::GetMoveDistScale() const
+{
+	float Bonus = 0.f;
+	if (const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+	{
+		for (const Protocol::SkillInfo& Info : GameInstance->SkillSlots)
+		{
+			if (Info.bind_state() != Protocol::BIND_BOUND)
+				continue;
+			if (const FS1SkillDef* Def = FS1SkillTable::Find(Info.skill_id()))
+				Bonus += Def->PassiveMoveDist;
+		}
+	}
+	return FMath::Max(0.f, 1.f + Bonus);
+}
+
+bool AS1MyPlayer::IsAttackBlockedByHold() const
+{
+	if (HoldingSlot == 0)
+		return false;
+	const Protocol::SkillInfo* Slot = FindUsableSlot(HoldingSlot);
+	const FS1SkillDef* Def = Slot != nullptr ? FS1SkillTable::Find(Slot->skill_id()) : nullptr;
+	return Def != nullptr && Def->bHoldBlocksAttacks;
+}
+
 bool AS1MyPlayer::HasTargetlessBasic() const
 {
 	for (const FS1StatusEntry& Entry : Statuses)
@@ -621,6 +668,14 @@ void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
 		return;
 	}
 
+	// 벽 차기 - 벽에 붙어 있을 때만 (2026-10-11). The server checks the same and drops it without a cooldown
+	if (Def->bNeedsWall && IsNearWallLocal() == false)
+	{
+		ShowFloatingNotice(FText::FromStringTable(TEXT("S1Items"), TEXT("notice.skill_needs_wall")));
+		UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] slot=%d skill=%u refused locally - not next to a wall"), EquipSlotValue, Def->SkillId);
+		return;
+	}
+
 	// Nothing to point at — the key fires it outright. This is what keeps instant skills
 	// instant now that everything else costs an extra click (R4, R12b).
 	if (Def->NeedsAiming() == false)
@@ -656,14 +711,19 @@ void AS1MyPlayer::OpenRecastWindow(int32 EquipSlotValue)
 	if (World == nullptr)
 		return;
 
+	// The skill's own window when it leaves a spot behind (비창 · 포르타 anchor, 2026-10-11), else the global one
+	const Protocol::SkillInfo* Slot = FindUsableSlot(EquipSlotValue);
+	const FS1SkillDef* Def = Slot != nullptr ? FS1SkillTable::Find(Slot->skill_id()) : nullptr;
+	const uint32 WindowMs = Def != nullptr ? FS1SkillTable::RecastWindowMsFor(*Def) : FS1SkillTable::RecastWindowMs();
+
 	RecastSlot = EquipSlotValue;
-	RecastUntil = World->GetTimeSeconds() + FS1SkillTable::RecastWindowMs() / 1000.f;
+	RecastUntil = World->GetTimeSeconds() + WindowMs / 1000.f;
 	RecastTargetId = PendingRecastTargetId;
 
 	bPendingRecast = false;
 	PendingRecastTargetId = 0;
 
-	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] recast window open slot=%d target=%llu for %ums"), RecastSlot, RecastTargetId, FS1SkillTable::RecastWindowMs());
+	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] recast window open slot=%d target=%llu for %ums"), RecastSlot, RecastTargetId, WindowMs);
 }
 
 void AS1MyPlayer::FireRecast()
@@ -708,8 +768,12 @@ void AS1MyPlayer::FireRecast()
 		if (Def->RecastMoveKind == TEXT("back"))
 			Dir = -Dir;
 
+		// 이단 질주 (1159) - the second dash goes where the character faces now, not at a locked target
+		if (TargetId == 0)
+			Dir = GetActorForwardVector();
+
 		if (Dir.Normalize())
-			RequestDash(Dir, Def->RecastMoveDistCm, Def->RecastMoveSpeedCms);
+			RequestDash(Dir, Def->RecastMoveDistCm * GetMoveDistScale(), Def->RecastMoveSpeedCms);
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] recast fired slot=%d target=%llu"), SlotValue, TargetId);
@@ -726,6 +790,9 @@ void AS1MyPlayer::OnConfirmPressed()
 	{
 		AS1Player* Target = AcquireTargetActorUnderCursor();
 		AimingSlot = 0;
+
+		if (IsAttackBlockedByHold())
+			return;
 
 		// 일보일검 · 난무 - the swing needs no target (2026-10-11)
 		if (HasTargetlessBasic())
@@ -837,15 +904,21 @@ void AS1MyPlayer::FireAimedSkill()
 	if (Def != nullptr && Def->HasMovement() && Def->MoveKind != TEXT("blink"))
 	{
 		FVector DashDir = FVector(SkillPkt.aim_x(), SkillPkt.aim_y(), 0.f) - GetActorLocation();
-		float DashDistCm = Def->MoveDistCm;
+		// 날개 (1184, 2026-10-11) - every movement skill goes further by the bound passive's share; the server's window grows with it
+		const float MaxDistCm = Def->MoveDistCm * GetMoveDistScale();
+		float DashDistCm = MaxDistCm;
 
 		// to_target (기습 단검 · 일도양단, 2026-10-11) - straight at the clicked enemy, stopping just in front of it
 		if (Def->MoveKind == TEXT("to_target") && ClickedTarget != nullptr)
 		{
 			constexpr float StopShortCm = 90.f;		// two capsule radii plus a little - land beside it, not inside it
 			DashDir = ClickedTarget->GetActorLocation() - GetActorLocation();
-			DashDistCm = FMath::Clamp(static_cast<float>(FVector(DashDir.X, DashDir.Y, 0.f).Size()) - StopShortCm, 0.f, Def->MoveDistCm);
+			DashDistCm = FMath::Clamp(static_cast<float>(FVector(DashDir.X, DashDir.Y, 0.f).Size()) - StopShortCm, 0.f, MaxDistCm);
 		}
+
+		// 도약 (1166) - a leap aimed at a point lands on that point, never past it (walls still stop it - the sweep)
+		if (Def->AimType == ES1SkillAimType::Point && Def->MoveKind == TEXT("leap"))
+			DashDistCm = FMath::Min(static_cast<float>(FVector(DashDir.X, DashDir.Y, 0.f).Size()), MaxDistCm);
 
 		DashDir.Z = 0.0;
 		if (Def->MoveKind == TEXT("back"))
@@ -1152,6 +1225,10 @@ void AS1MyPlayer::TickSustainedAttack()
 		return;
 
 	if (CanAttack() == false)
+		return;
+
+	// 전력 질주 - no swings while it runs (the server refuses them too)
+	if (IsAttackBlockedByHold())
 		return;
 
 	// A swing the server never acknowledged was refused (sent a hair early, mid-CC, out of range) - free the gate so
