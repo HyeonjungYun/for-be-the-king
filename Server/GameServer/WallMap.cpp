@@ -85,7 +85,62 @@ namespace
 		return static_cast<int32>(cell);
 	}
 
-	const char* const KIND_NAMES[] = { "wall", "door_post", "pillar", "free_pillar", "cover", "tower" };
+	const char* const KIND_NAMES[] = { "wall", "door_post", "pillar", "free_pillar", "cover", "tower", "boundary" };
+	static_assert(size(KIND_NAMES) == static_cast<size_t>(WallKind::Boundary) + 1, "one name per WallKind");
+
+	// 점에서 선분 a-b 까지 거리와 가장 가까운 점 (double - 해안선은 수백 m 라 float 차이가 cm 를 넘을 수 있다)
+	double PointSegment(double px, double py, const OutlinePoint& a, const OutlinePoint& b, OUT double& qx, OUT double& qy)
+	{
+		const double vx = static_cast<double>(b.x) - a.x;
+		const double vy = static_cast<double>(b.y) - a.y;
+		const double l2 = vx * vx + vy * vy;
+		double t = (l2 > 0.0) ? ((px - a.x) * vx + (py - a.y) * vy) / l2 : 0.0;
+		t = (std::min)((std::max)(t, 0.0), 1.0);
+		qx = a.x + vx * t;
+		qy = a.y + vy * t;
+		return std::sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
+	}
+
+	// 다각형 안 (반직선 교차 - check_layout.py inside_outline 과 같은 판정). 면 위는 거리 0 이라 부르는 쪽이 따로 안으로 본다
+	bool InsidePolygon(const vector<OutlinePoint>& poly, double px, double py)
+	{
+		bool inside = false;
+		const size_t n = poly.size();
+		for (size_t i = 0; i < n; i++)
+		{
+			const OutlinePoint& a = poly[i];
+			const OutlinePoint& b = poly[(i + 1) % n];
+			if ((a.y > py) != (b.y > py))
+			{
+				const double x = a.x + (py - a.y) * (static_cast<double>(b.x) - a.x) / (static_cast<double>(b.y) - a.y);
+				if (px < x)
+					inside = !inside;
+			}
+		}
+		return inside;
+	}
+
+	// 두 선분이 끝점 말고 다른 곳에서 만나는가 (이웃 변은 부르는 쪽이 뺀다)
+	bool SegmentsCross(const OutlinePoint& a, const OutlinePoint& b, const OutlinePoint& c, const OutlinePoint& d)
+	{
+		auto cross = [](const OutlinePoint& o, const OutlinePoint& p, const OutlinePoint& q)
+		{
+			return (static_cast<double>(p.x) - o.x) * (static_cast<double>(q.y) - o.y) - (static_cast<double>(p.y) - o.y) * (static_cast<double>(q.x) - o.x);
+		};
+		const double d1 = cross(c, d, a);
+		const double d2 = cross(c, d, b);
+		const double d3 = cross(a, b, c);
+		const double d4 = cross(a, b, d);
+		if (((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0)))
+			return true;
+
+		// 한 끝점이 다른 선분 위 - 겹치거나 닿은 꼬임
+		auto onSegment = [](const OutlinePoint& p, const OutlinePoint& q, const OutlinePoint& r)
+		{
+			return (std::min)(p.x, q.x) <= r.x && r.x <= (std::max)(p.x, q.x) && (std::min)(p.y, q.y) <= r.y && r.y <= (std::max)(p.y, q.y);
+		};
+		return (d1 == 0.0 && onSegment(c, d, a)) || (d2 == 0.0 && onSegment(c, d, b)) || (d3 == 0.0 && onSegment(a, b, c)) || (d4 == 0.0 && onSegment(a, b, d));
+	}
 
 	constexpr float		PUSH_EPS_CM = 0.5f;		// 밀어낸 점이 면 위에 걸치지 않게 - "벽 안" 은 열린 집합이다
 	constexpr float		RING_STEP_CM = 10.f;
@@ -257,6 +312,138 @@ bool WallMap::Build(vector<WallBox> walls, OUT string& error)
 	return true;
 }
 
+bool WallMap::SetOutline(vector<OutlinePoint> points, OUT string& error)
+{
+	if (points.empty())
+	{
+		_outline.clear();
+		return true;
+	}
+
+	const size_t n = points.size();
+	if (n < 3 || n > static_cast<size_t>(MAX_OUTLINE_POINTS))
+	{
+		error = "the coast needs 3 to " + to_string(MAX_OUTLINE_POINTS) + " points, got " + to_string(n);
+		return false;
+	}
+
+	double twiceArea = 0.0;
+	for (size_t i = 0; i < n; i++)
+	{
+		const OutlinePoint& p = points[i];
+		if (FloorBounds::Contains(p.x, p.y) == false)
+		{
+			error = "coast point #" + to_string(i) + " is not a number inside the floor square (±" + to_string(static_cast<int32>(FloorBounds::HALF_CM)) + " cm)";
+			return false;
+		}
+
+		const OutlinePoint& q = points[(i + 1) % n];
+		if (p.x == q.x && p.y == q.y)
+		{
+			error = "coast points #" + to_string(i) + " and the next are the same point";
+			return false;
+		}
+		twiceArea += static_cast<double>(p.x) * q.y - static_cast<double>(q.x) * p.y;
+	}
+
+	if (std::fabs(twiceArea) < 1.0)
+	{
+		error = "the coast has no area";
+		return false;
+	}
+
+	// 꼬인 해안선은 안 · 밖이 뒤섞인다 - 이웃하지 않는 변끼리 만나면 거부 (n ≤ 512 라 n² 이면 충분)
+	for (size_t i = 0; i < n; i++)
+	{
+		for (size_t j = i + 1; j < n; j++)
+		{
+			const bool neighbours = (j == i + 1) || (i == 0 && j == n - 1);
+			if (neighbours == false && SegmentsCross(points[i], points[(i + 1) % n], points[j], points[(j + 1) % n]))
+			{
+				error = "the coast crosses itself (edges #" + to_string(i) + " and #" + to_string(j) + ")";
+				return false;
+			}
+		}
+	}
+
+	_outline = move(points);
+	return true;
+}
+
+bool WallMap::InsideFloor(float x, float y) const
+{
+	if (FloorBounds::Contains(x, y) == false)
+		return false;
+	if (_outline.empty())
+		return true;
+
+	return CoastGap(x, y) >= 0.f;
+}
+
+float WallMap::CoastGap(float x, float y) const
+{
+	if (std::isfinite(x) == false || std::isfinite(y) == false)
+		return -std::numeric_limits<float>::infinity();
+
+	if (_outline.empty())
+		return FloorBounds::HALF_CM - (std::max)(std::fabs(x), std::fabs(y));
+
+	double best = std::numeric_limits<double>::infinity();
+	double qx = 0.0;
+	double qy = 0.0;
+	const size_t n = _outline.size();
+	for (size_t i = 0; i < n; i++)
+		best = (std::min)(best, PointSegment(x, y, _outline[i], _outline[(i + 1) % n], OUT qx, OUT qy));
+
+	// 면 위(거리 0)는 안이다 - 반직선 판정이 어느 쪽으로 떨어지든
+	return static_cast<float>((best == 0.0 || InsidePolygon(_outline, x, y)) ? best : -best);
+}
+
+void WallMap::PullInsideCoast(float& x, float& y, float inset) const
+{
+	if (_outline.empty() || CoastGap(x, y) >= inset)
+		return;
+
+	// 가장 가까운 해안 점 q - 바다면 q 를 지나 안으로, 안인데 너무 가까우면 q 에서 멀어지는 쪽으로 inset 만큼
+	double best = std::numeric_limits<double>::infinity();
+	double bx = x;
+	double by = y;
+	size_t bestEdge = 0;
+	const size_t n = _outline.size();
+	for (size_t i = 0; i < n; i++)
+	{
+		double qx = 0.0;
+		double qy = 0.0;
+		const double d = PointSegment(x, y, _outline[i], _outline[(i + 1) % n], OUT qx, OUT qy);
+		if (d < best)
+		{
+			best = d;
+			bx = qx;
+			by = qy;
+			bestEdge = i;
+		}
+	}
+
+	// 안쪽 방향 - 점이 해안선 위에 있으면 변의 법선 중 다각형 안을 향하는 쪽
+	const OutlinePoint& a = _outline[bestEdge];
+	const OutlinePoint& b = _outline[(bestEdge + 1) % n];
+	double nx = -(static_cast<double>(b.y) - a.y);
+	double ny = static_cast<double>(b.x) - a.x;
+	const double len = std::sqrt(nx * nx + ny * ny);
+	if (len <= 0.0)
+		return;
+	nx /= len;
+	ny /= len;
+	if (InsidePolygon(_outline, bx + nx * 1.0, by + ny * 1.0) == false)
+	{
+		nx = -nx;
+		ny = -ny;
+	}
+
+	x = static_cast<float>(bx + nx * inset);
+	y = static_cast<float>(by + ny * inset);
+}
+
 // 사각형이 걸치는 칸의 벽을 모두 넘긴다. 두 칸에 걸친 벽은 두 번 넘어올 수 있다 - 결과(최솟값 · 하나라도)는 같다
 template <typename Fn>
 void WallMap::ForEachCandidate(float minX, float minY, float maxX, float maxY, Fn&& fn) const
@@ -361,10 +548,13 @@ bool WallMap::FindNearestFree(float x, float y, float r, float maxSearch, OUT fl
 	if (inset <= 0.f)
 		return false;
 
-	auto clampToFloor = [inset](float& px, float& py)
+	// 섬이면 해안선도 경계다 - 바다 위 점은 해안선 안쪽 r 로 끌어온다 (2026-10-11). 오목한 해안에서는 끌어온 점이
+	// 다른 변에 가까울 수 있어 consider 가 해안 거리를 한 번 더 본다
+	auto clampToFloor = [this, inset, r](float& px, float& py)
 	{
 		px = (std::min)((std::max)(px, -inset), inset);
 		py = (std::min)((std::max)(py, -inset), inset);
+		PullInsideCoast(px, py, r + PUSH_EPS_CM);
 	};
 
 	bool found = false;
@@ -376,7 +566,7 @@ bool WallMap::FindNearestFree(float x, float y, float r, float maxSearch, OUT fl
 	{
 		clampToFloor(px, py);
 		const float d2 = (px - x) * (px - x) + (py - y) * (py - y);
-		if (d2 <= bestD2 && Overlaps(px, py, r) == false)
+		if (d2 <= bestD2 && (_outline.empty() || CoastGap(px, py) >= r) && Overlaps(px, py, r) == false)
 		{
 			found = true;
 			bestX = px;
@@ -389,6 +579,14 @@ bool WallMap::FindNearestFree(float x, float y, float r, float maxSearch, OUT fl
 	float cx = x;
 	float cy = y;
 	clampToFloor(cx, cy);
+
+	// 섬: 바다 위 목표는 해안까지 끌어온 점에서 잰다 - 바다로 쏜 블링크 · 순간이동이 실패하지 않고 해안에 내린다.
+	// 사각형 층은 예전대로 원래 점에서 잰다 (경계 밖 maxSearch 넘게 떨어진 목표는 실패)
+	if (_outline.empty() == false)
+	{
+		x = cx;
+		y = cy;
+	}
 	consider(cx, cy);
 	if (found && bestX == cx && bestY == cy)
 	{

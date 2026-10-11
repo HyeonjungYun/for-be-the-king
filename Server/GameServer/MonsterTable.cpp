@@ -255,11 +255,10 @@ namespace
 				return false;
 			}
 
-			// 경계에서 10 m - 정상 추격으로 경계에 닿지 않는다
-			constexpr float LIMIT = FloorBounds::HALF_CM - MonsterConfig::BOUNDARY_MIN_DIST_CM;
-			if (FloorBounds::Contains(s.x, s.y) == false || ::fabsf(s.x) > LIMIT || ::fabsf(s.y) > LIMIT)
+			// 경계에서 10 m - 정상 추격으로 경계에 닿지 않는다. 섬은 해안선에서 (2026-10-11)
+			if (WallTable::Get(s.floorId).CoastGap(s.x, s.y) < MonsterConfig::BOUNDARY_MIN_DIST_CM)
 			{
-				error = where + " home must be inside the floor and at least 10 m from its edge";
+				error = where + " home must be inside the floor and at least 10 m from its edge (the coast on an island)";
 				return false;
 			}
 
@@ -385,11 +384,10 @@ namespace
 				return false;
 			}
 
-			// 경계에서 10 m - 정상 추격으로 경계에 닿지 않는다 (집 규칙과 같다)
-			constexpr float LIMIT = FloorBounds::HALF_CM - MonsterConfig::BOUNDARY_MIN_DIST_CM;
-			if (FloorBounds::Contains(x, y) == false || ::fabsf(x) > LIMIT || ::fabsf(y) > LIMIT)
+			// 경계에서 10 m - 정상 추격으로 경계에 닿지 않는다 (집 규칙과 같다). 섬은 해안선에서
+			if (WallTable::Get(floorId).CoastGap(x, y) < MonsterConfig::BOUNDARY_MIN_DIST_CM)
 			{
-				error = where + " point must be inside the floor and at least 10 m from its edge";
+				error = where + " point must be inside the floor and at least 10 m from its edge (the coast on an island)";
 				return false;
 			}
 

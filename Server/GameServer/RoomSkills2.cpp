@@ -63,9 +63,10 @@ void Room::RebuildWalls()
 	for (const DynamicWall& w : _dynWalls)
 		all.push_back(w.box);
 
+	// 해안선도 옮긴다 - 임시 벽이 선 동안에도 바다는 바다다 (2026-10-11 섬)
 	auto map = make_shared<WallMap>();
 	string error;
-	if (map->Build(move(all), OUT error) == false)
+	if (map->Build(move(all), OUT error) == false || map->SetOutline(WallTable::Get(_floorId).Outline(), OUT error) == false)
 	{
 		LOG_LINE << "[WALL] rebuild failed - " << error << " (temporary walls ignored)\n";
 		_wallsWithDynamic.reset();
@@ -96,6 +97,10 @@ void Room::RaiseWall(const CreatureRef& caster, const SkillDef& def, const Skill
 	w.endUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
 	w.casterId = ctx.casterId;
 	w.effectId = def.effectId;
+
+	// 바다 위에는 세우지 않는다 - 가운데가 해안선 밖이면 짓지 못한 것으로 (2026-10-11 섬)
+	if (WallTable::Get(_floorId).InsideFloor(w.box.cx, w.box.cy) == false)
+		return;
 
 	_dynWalls.push_back(w);
 	RebuildWalls();

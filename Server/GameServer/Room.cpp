@@ -562,8 +562,9 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		if (player->moveBudget > maxBudget)
 			player->moveBudget = maxBudget;
 
-		// 층 사각형 밖 · NaN · 무한대 - 예산을 쓰지 않고 거부한다 (FloorBounds.h, level-map.md AC-LM-02)
-		if (FloorBounds::Contains(pkt.info().x(), pkt.info().y()) == false)
+		// 층 밖 · NaN · 무한대 - 예산을 쓰지 않고 거부한다 (FloorBounds.h, level-map.md AC-LM-02).
+		// 섬은 해안선 밖(바다)도 층 밖이다 - 벽을 건너뛰는 유령 대시 창 안에서도 (2026-10-11, ADR-0013)
+		if (Walls().InsideFloor(pkt.info().x(), pkt.info().y()) == false)
 		{
 			rejected = true;
 
@@ -7408,7 +7409,8 @@ void Room::InitEscape()
 		t.y = def.y;
 	}
 
-	// 와이어 id = CSV 문자열 id 오름차순 순번 (Ta=1 · Tb=2 · Tc=3) - Core Rule 1
+	// 와이어 id = CSV 문자열 id 오름차순 순번 (Ta=1 · Tb=2 · Tc=3 · Td=4) - Core Rule 1
+	static_assert(TowerTable::MAX_TOWERS_PER_FLOOR <= static_cast<size_t>(Player::MAX_TOWERS), "the boot check lets through more towers than a player's gauge arrays hold");
 	sort(_towers.begin(), _towers.end(), [](const EscapeTowerState& a, const EscapeTowerState& b) { return a.towerId < b.towerId; });
 	if (static_cast<int32>(_towers.size()) > Player::MAX_TOWERS)
 		_towers.resize(Player::MAX_TOWERS);

@@ -1,4 +1,5 @@
 #pragma once
+#include "FloorBounds.h"
 
 /*-----------
 	WallMap
@@ -12,9 +13,10 @@
 //
 // "벽 안" 은 열린 집합이다 - 면에 닿거나 면을 따라 미끄러지는 것은 막힘이 아니다 (AC-LM-04).
 
-enum class WallKind : uint8 { Wall, DoorPost, Pillar, FreePillar, Cover, Tower };
+// Boundary = 섬 해안 벽 (2026-10-11, ADR-0013). 뒤에 붙여 기존 값은 그대로다
+enum class WallKind : uint8 { Wall, DoorPost, Pillar, FreePillar, Cover, Tower, Boundary };
 
-// walls.csv 의 kind 열 이름 - wall · door_post · pillar · free_pillar · cover · tower
+// walls.csv 의 kind 열 이름 - wall · door_post · pillar · free_pillar · cover · tower · boundary
 const char*	WallKindName(WallKind kind);
 bool		ParseWallKind(const string& s, OUT WallKind& out);
 
@@ -46,16 +48,38 @@ namespace WallGeom
 	float	Sweep(const WallBox& w, float ax, float ay, float bx, float by, float r);
 }
 
+// 해안선 꼭짓점 (cm) - floor_outline.csv 의 x, y
+struct OutlinePoint
+{
+	float	x = 0.f;
+	float	y = 0.f;
+};
+
 class WallMap
 {
 public:
 	static constexpr int32	MAX_WALLS	= 2000;					// 층당 상한 - 넘으면 부팅 거부 (ADR-0006 § ④)
 	static constexpr float	CELL_CM		= 800.f;				// 격자 칸 8 m
-	static constexpr int32	GRID_N		= 35;					// 28,000 / 800
+	static constexpr int32	GRID_N		= static_cast<int32>(2.f * FloorBounds::HALF_CM / CELL_CM);	// 60,000 / 800 = 75
 	static constexpr float	WALL_EPS_CM	= WallGeom::EPS_CM;
+	static constexpr int32	MAX_OUTLINE_POINTS = 512;
 
-	// 실패하면 이유를 error 에 남기고 false. 맵은 빈 채로 둔다
+	static_assert(GRID_N * CELL_CM == 2.f * FloorBounds::HALF_CM, "the wall grid must tile the floor square exactly");
+
+	// 실패하면 이유를 error 에 남기고 false. 맵은 빈 채로 둔다 (해안선은 그대로 둔다 - 따로 정한다)
 	bool	Build(vector<WallBox> walls, OUT string& error);
+
+	// 섬 해안선 (2026-10-11, ADR-0013) - 층의 진짜 안. 빈 목록 = 해안선 없음 (FloorBounds 사각형이 곧 층).
+	// 꼭짓점 3개 이상 · 유한값 · FloorBounds 안 · 스스로 꼬이지 않음 · 넓이 > 0. 실패하면 해안선은 바뀌지 않는다
+	bool	SetOutline(vector<OutlinePoint> points, OUT string& error);
+	const vector<OutlinePoint>&	Outline() const { return _outline; }
+	bool	HasOutline() const { return _outline.empty() == false; }
+
+	// 층 안인가 - FloorBounds 안이고, 해안선이 있으면 그 다각형 안 (면 위는 안). NaN · 무한대는 밖
+	bool	InsideFloor(float x, float y) const;
+
+	// 해안선까지 거리 (cm) - 안이면 양수, 밖이면 음수. 해안선이 없으면 사각형 경계까지 (같은 부호 규칙)
+	float	CoastGap(float x, float y) const;
 
 	// (x, y) 중심 반지름 r 원이 벽 안과 겹치는가. r = 0 이면 점이 벽 안(면 제외)인가. 블링크 도착 · 부팅 9 m 검사
 	bool	Overlaps(float x, float y, float r) const;
@@ -73,7 +97,8 @@ public:
 	float	PenetrationDepth(float x, float y) const;
 
 	// 블링크 도착점 보정 (skill-system R13 · movement-camera § Edge Cases · ADR-0006 § ⑦).
-	// (x, y) 의 반지름 r 원이 벽이나 층 경계(r 만큼 줄인 사각형)와 겹치면 (x, y) 에서 maxSearch 안의 가장 가까운 빈 점을 찾는다.
+	// (x, y) 의 반지름 r 원이 벽이나 층 경계(r 만큼 줄인 사각형 · 해안선)와 겹치면 (x, y) 에서 maxSearch 안의 가장 가까운 빈 점을 찾는다.
+	// 바다 위 점은 해안선 안쪽으로 끌어온 뒤 찾는다 - 답은 언제나 해안선 안이다 (2026-10-11).
 	// 겹치지 않으면 그 자리. 못 찾으면 false - 블링크 발동 실패 · 쿨다운 미소모.
 	// 벽 하나에 걸린 경우는 정확하고, 여러 벽이 맞물린 곳은 고리 탐색(10 cm · 32 방향)이라 최대 약 10 cm 멀 수 있다
 	bool	FindNearestFree(float x, float y, float r, float maxSearch, OUT float& outX, OUT float& outY) const;
@@ -85,7 +110,11 @@ private:
 	template <typename Fn>
 	void	ForEachCandidate(float minX, float minY, float maxX, float maxY, Fn&& fn) const;
 
+	// 해안선 안쪽 inset 보다 가까우면 (또는 바다면) 가장 가까운 해안 점에서 안으로 inset 만큼 들인 점으로 옮긴다
+	void	PullInsideCoast(float& x, float& y, float inset) const;
+
 	vector<WallBox>	_walls;
 	vector<int32>	_cellStart;		// GRID_N² + 1 - 칸 i 의 벽 = _cellWalls[_cellStart[i] .. _cellStart[i + 1])
 	vector<uint16>	_cellWalls;
+	vector<OutlinePoint>	_outline;
 };

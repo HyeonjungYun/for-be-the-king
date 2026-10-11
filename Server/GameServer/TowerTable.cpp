@@ -2,6 +2,7 @@
 #include "TowerTable.h"
 #include "CsvTable.h"
 #include "FloorBounds.h"
+#include "WallTable.h"
 
 vector<TowerDef> TowerTable::s_towers;
 
@@ -85,10 +86,23 @@ bool TowerTable::ValidateForEscape(float leaveCm, float alertCm, uint32 floorCou
 		if (onFloor.empty())
 			continue;
 
-		if (onFloor.size() != 3)
+		if (onFloor.size() < MIN_TOWERS_PER_FLOOR || onFloor.size() > MAX_TOWERS_PER_FLOOR)
 		{
-			error = "floor " + to_string(floor) + " has " + to_string(onFloor.size()) + " towers (a floor with towers needs exactly 3)";
+			error = "floor " + to_string(floor) + " has " + to_string(onFloor.size()) + " towers (a floor with towers needs "
+				+ to_string(MIN_TOWERS_PER_FLOOR) + " to " + to_string(MAX_TOWERS_PER_FLOOR) + ")";
 			return false;
+		}
+
+		// 섬 - 해안선 안쪽 12 m (바다 위 타워 · 해안 벽에 붙은 타워 거부)
+		const WallMap& walls = WallTable::Get(floor);
+		for (const TowerDef* t : onFloor)
+		{
+			if (walls.HasOutline() && walls.CoastGap(t->x, t->y) < COAST_MIN_CM)
+			{
+				error = "tower " + t->towerId + " on floor " + to_string(floor) + " is not " + to_string(static_cast<int32>(COAST_MIN_CM))
+					+ " cm inside the coast";
+				return false;
+			}
 		}
 
 		const float minGap = max(2.f * leaveCm, 2.f * alertCm);

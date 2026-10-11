@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "EscapeLogic.h"
 #include "TowerTable.h"
+#include "WallTable.h"
 #include "Telemetry.h"
 #include "ItemTable.h"
 #include <thread>
@@ -208,20 +209,42 @@ TEST(EscapeConfig, 실제_설정_파일과_범위_검사_AC_ET_13_28)
 	EXPECT_FALSE(parse("escape_debug_command,maybe\n", OUT error));
 }
 
-TEST(TowerTable, 탈출_규칙_층당_3개_간격_검사_AC_ET_13)
+TEST(TowerTable, 탈출_규칙_층당_3에서_4개_간격_해안선_검사_AC_ET_13)
 {
+	// 해안선은 WallTable 이 쥔다 - 다른 테스트가 남긴 표에 기대지 않게 해안선 없는 표로 시작한다
 	string error;
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 4, {}, OUT error)) << error;
+
 	ASSERT_TRUE(TowerTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;
-	EXPECT_TRUE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error)) << error;		// 1층 144 m 간격 > 80 m
+	EXPECT_TRUE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error)) << error;		// 실제 1층 (섬 - 4개, 172 m 이상 간격 > 80 m)
 
 	ASSERT_TRUE(TowerTable::Parse("tower_id,floor_id,x,y\nTa,0,0,0\nTb,0,10000,0\n", 4, OUT error));
 	EXPECT_FALSE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error));				// 2개
+	EXPECT_NE(error.find("3 to 4"), string::npos) << error;
 
 	ASSERT_TRUE(TowerTable::Parse("tower_id,floor_id,x,y\nTa,0,0,0\nTb,0,7000,0\nTc,0,-9000,0\n", 4, OUT error));
 	EXPECT_FALSE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error));				// 70 m < 2 × 40 m
 
+	// 섬 1층처럼 4개는 된다 (게이지 배열 Player::MAX_TOWERS = 4), 5개는 안 된다
+	const string four = "tower_id,floor_id,x,y\nTa,0,0,0\nTb,0,10000,0\nTc,0,-10000,0\nTd,0,0,15000\n";
+	ASSERT_TRUE(TowerTable::Parse(four, 4, OUT error)) << error;
+	EXPECT_TRUE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error)) << error;
+	ASSERT_TRUE(TowerTable::Parse(four + "Te,0,0,-15000\n", 4, OUT error)) << error;
+	EXPECT_FALSE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error));
+
+	// 해안선이 있으면 그 안쪽 12 m - 북쪽 해안 x = 11,000 에서 10 m 인 Tb 는 거부
+	const string coast = "floor_id,seq,x,y\n0,0,11000,-20000\n0,1,11000,20000\n0,2,-11000,20000\n0,3,-11000,-20000\n";
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 4, {}, OUT error, &coast)) << error;
+	ASSERT_TRUE(TowerTable::Parse(four, 4, OUT error)) << error;
+	EXPECT_FALSE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error));
+	EXPECT_NE(error.find("tower Tb"), string::npos) << error;
+	ASSERT_TRUE(TowerTable::Parse("tower_id,floor_id,x,y\nTa,0,0,0\nTb,0,9800,0\nTc,0,-9800,0\nTd,0,0,15000\n", 4, OUT error)) << error;
+	EXPECT_TRUE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error)) << error;		// 12 m 딱
+
 	ASSERT_TRUE(TowerTable::Parse("tower_id,floor_id,x,y\n", 4, OUT error));
 	EXPECT_TRUE(TowerTable::ValidateForEscape(1100.f, 4000.f, 4, OUT error));				// TEMP 층 - 타워 없음
+
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 4, {}, OUT error)) << error;				// 다음 테스트에 남기지 않는다
 }
 
 TEST(Telemetry, 런_한_줄은_22열이다_AC_ET_15)

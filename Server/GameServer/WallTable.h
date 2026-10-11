@@ -11,9 +11,11 @@
 //
 //   walls.csv            floor_id,kind,cx,cy,half_length,half_thickness,yaw     레벨 빌더 내보내기만 쓴다
 //   level_versions.csv   floor_id,data_version                                  레벨이 있는 층
+//   floor_outline.csv    floor_id,seq,x,y                                       섬 해안선 (2026-10-11, ADR-0013) - 없는 층은 사각형
 //
 // 🔴 레벨이 아직 없는 층(TEMP)은 벽 0개로 돈다 - 지금 동작 그대로다 (level-map.md § Edge Cases).
 //    level_versions.csv 에 있는 층은 레벨이 있다는 뜻이라 벽이 0개면 부팅을 거부한다 - 파일을 지워 벽이 조용히 꺼지지 않게.
+//    해안선이 있는 층은 진입 지점이 모두 그 안이어야 한다.
 
 class WallTable
 {
@@ -27,7 +29,7 @@ public:
 
 	// nullptr = 그 파일이 없다. 실패하면 모든 층이 빈 맵으로 남는다
 	static bool				Parse(const string* wallsCsv, const string* versionsCsv, uint32 floorCount,
-								const vector<EntryPoint>& entries, OUT string& error);
+								const vector<EntryPoint>& entries, OUT string& error, const string* outlineCsv = nullptr);
 
 	// 벽 없는 층 · 범위 밖 층은 빈 맵 (nullptr 이 아니다)
 	static const WallMap&	Get(uint32 floorId);

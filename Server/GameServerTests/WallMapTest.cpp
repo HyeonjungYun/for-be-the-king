@@ -147,20 +147,21 @@ namespace
 		return depth;
 	}
 
-	// 1층 황금 파일 - 레벨 빌더 내보내기(Server/Data/export/floor0)를 그대로 복사했다. 데이터 버전 b716c8a5e4af.
+	// 1층 황금 파일 - 레벨 빌더 내보내기(Server/Data/export/floor0)를 그대로 복사했다. 데이터 버전 91d32ceb04ca (섬, 2026-10-11).
 	// 🔴 레벨을 바꿔 다시 내보내면 Server/GameServerTests/Data/floor1_*.csv 도 같이 바꾼다
 	string FixturePath(const char* name)
 	{
 		return ItemTable::DefaultDataDir() + "\\..\\GameServerTests\\Data\\" + name;
 	}
 
-	// 1층 = floor_id 0. 실제 진입 지점 9곳으로 부팅 검사(9 m 무벽 원)까지 거친다
+	// 1층 = floor_id 0. 실제 진입 지점 9곳으로 부팅 검사(9 m 무벽 원 · 해안선 안)까지 거친다. 섬(2026-10-11)은 해안선도 읽는다
 	bool LoadFloor1(OUT string& error)
 	{
-		string walls, versions, entries;
+		string walls, versions, entries, outline;
 		if (Csv::ReadFile(FixturePath("floor1_walls.csv"), OUT walls) == false
 			|| Csv::ReadFile(FixturePath("floor1_level_versions.csv"), OUT versions) == false
-			|| Csv::ReadFile(FixturePath("floor1_entry_points.csv"), OUT entries) == false)
+			|| Csv::ReadFile(FixturePath("floor1_entry_points.csv"), OUT entries) == false
+			|| Csv::ReadFile(FixturePath("floor1_floor_outline.csv"), OUT outline) == false)
 		{
 			error = "fixture missing under " + FixturePath("");
 			return false;
@@ -169,7 +170,29 @@ namespace
 		if (EntryPointTable::Parse(entries, 1, OUT error) == false)
 			return false;
 
-		return WallTable::Parse(&walls, &versions, 1, EntryPointTable::All(), OUT error);
+		return WallTable::Parse(&walls, &versions, 1, EntryPointTable::All(), OUT error, &outline);
+	}
+
+	// 1층 집 세 채 + 4 m (cm, x0 x1 y0 y1) - 벽이 가장 빽빽한 곳. 섬 맵(2026-10-11)은 집이 한 줄이 아니라 집마다 뽑는다
+	constexpr float HOUSES[3][4] =
+	{
+		{ 1200.f, 7600.f, -13200.f, -6800.f },		// H1 16..72, -128..-72 m
+		{ 1800.f, 8200.f, -4800.f, 1600.f },		// H2 22..78, -44..12 m (보스)
+		{ -7200.f, -800.f, -16400.f, -10000.f },	// H3 -68..-12, -160..-104 m
+	};
+
+	// 무작위 집 하나 안(+4 m)의 점
+	template <typename Rng>
+	pair<float, float> InHouse(Rng& rng)
+	{
+		const float* h = HOUSES[uniform_int_distribution<int32>(0, 2)(rng)];
+		return { uniform_real_distribution<float>(h[0], h[1])(rng), uniform_real_distribution<float>(h[2], h[3])(rng) };
+	}
+
+	// 시험용 오목 해안선 - 100 × 60 m 에서 북동쪽 40 × 30 m 를 파낸 ㄱ자 (시계 방향, +X 북 · +Y 동)
+	vector<OutlinePoint> NotchedCoast()
+	{
+		return { { 3000.f, -5000.f }, { 3000.f, 1000.f }, { 0.f, 1000.f }, { 0.f, 5000.f }, { -3000.f, 5000.f }, { -3000.f, -5000.f } };
 	}
 }
 
@@ -318,7 +341,7 @@ TEST(WallMap, 벽에_붙은_채_벽_쪽으로_밀리면_그_자리에서_막힌�
 TEST(WallMap, 벽이_없으면_어디로든_간다)
 {
 	const WallMap unbuilt;
-	EXPECT_FLOAT_EQ(unbuilt.SweepFirstHit(-14000.f, -14000.f, 14000.f, 14000.f, 42.f), 1.f);
+	EXPECT_FLOAT_EQ(unbuilt.SweepFirstHit(-FloorBounds::HALF_CM, -FloorBounds::HALF_CM, FloorBounds::HALF_CM, FloorBounds::HALF_CM, 42.f), 1.f);
 	EXPECT_FALSE(unbuilt.Overlaps(0.f, 0.f, 900.f));
 
 	const WallMap empty = Build({});
@@ -379,8 +402,8 @@ TEST(WallMap, 블링크_도착점이_층_밖이면_층_안으로_당긴다)
 	const WallMap map = OneWall();
 	float x = 0.f, y = 0.f;
 
-	ASSERT_TRUE(map.FindNearestFree(14000.f, 5000.f, 42.f, 300.f, OUT x, OUT y));
-	EXPECT_FLOAT_EQ(x, 14000.f - 42.f);
+	ASSERT_TRUE(map.FindNearestFree(FloorBounds::HALF_CM, 5000.f, 42.f, 300.f, OUT x, OUT y));
+	EXPECT_FLOAT_EQ(x, FloorBounds::HALF_CM - 42.f);
 	EXPECT_FLOAT_EQ(y, 5000.f);
 }
 
@@ -405,14 +428,11 @@ TEST(WallMap, 블링크_보정_결과는_언제나_비어_있고_탐색_반경_�
 	const WallMap& map = WallTable::Get(0);
 
 	mt19937 rng(5);
-	uniform_real_distribution<float> houseX(-4000.f, 2400.f);
-	uniform_real_distribution<float> houseY(-11600.f, 11600.f);
 
 	int32 corrected = 0;
 	for (int32 i = 0; i < 2000; i++)
 	{
-		const float tx = houseX(rng);
-		const float ty = houseY(rng);
+		const auto [tx, ty] = InHouse(rng);
 		float x = 0.f, y = 0.f;
 
 		if (map.FindNearestFree(tx, ty, 42.f, 300.f, OUT x, OUT y) == false)
@@ -480,15 +500,13 @@ TEST(WallMap, 격자_결과는_전수_검사와_같다)
 
 TEST(WallMap, 1층_황금_벽에서도_격자_결과는_전수_검사와_같다)
 {
-	// 실제 레벨 771개 - 집 3채에 몰려 있다. 질의도 집이 있는 띠에 몰아 빽빽한 곳을 본다
+	// 실제 레벨 1,240개 (섬) - 집 3채에 몰려 있다. 질의도 집 안팎에 몰아 빽빽한 곳을 본다
 	string error;
 	ASSERT_TRUE(LoadFloor1(OUT error)) << error;
 	const WallMap& map = WallTable::Get(0);
 
 	mt19937 rng(11);
-	uniform_real_distribution<float> houseX(-4000.f, 2400.f);
-	uniform_real_distribution<float> houseY(-11600.f, 11600.f);
-	uniform_real_distribution<float> anyXY(-14000.f, 14000.f);
+	uniform_real_distribution<float> anyXY(-FloorBounds::HALF_CM, FloorBounds::HALF_CM);
 	uniform_real_distribution<float> angle(0.f, 6.2831853f);
 	uniform_real_distribution<float> coin(0.f, 1.f);
 	const float radii[] = { 0.f, 42.f };
@@ -499,8 +517,9 @@ TEST(WallMap, 1층_황금_벽에서도_격자_결과는_전수_검사와_같다)
 	for (int32 i = 0; i < 10000; i++)
 	{
 		const bool inHouses = coin(rng) < 0.8f;
-		const float ax = inHouses ? houseX(rng) : anyXY(rng);
-		const float ay = inHouses ? houseY(rng) : anyXY(rng);
+		const auto house = InHouse(rng);
+		const float ax = inHouses ? house.first : anyXY(rng);
+		const float ay = inHouses ? house.second : anyXY(rng);
 		const float a = angle(rng);
 		const float length = coin(rng) * ((coin(rng) < 0.9f) ? 300.f : 3000.f);
 		const float bx = ax + length * std::cos(a);
@@ -545,7 +564,8 @@ TEST(WallMapParity, 클라_캡슐_스윕과_서버_벽_판정이_5cm_안에서_�
 	ASSERT_TRUE(Csv::Parse(text, "floor1_parity.csv", OUT table, OUT error)
 		&& Csv::FindColumns(table, "floor1_parity.csv", { "ax", "ay", "bx", "by", "ue_start_blocked", "ue_hit", "ue_stop_cm" }, OUT c, OUT error)) << error;
 
-	// 여유 = 가장 가까운 막힘까지 거리 - 42. 0 이면 캡슐이 면에 닿아 있다. 층 경계(UE 의 경계 흙벽 안쪽 면 = ±14,000)도 막힘이다
+	// 여유 = 가장 가까운 막힘까지 거리 - 42. 0 이면 캡슐이 면에 닿아 있다. 섬의 해안은 boundary 벽이라 map.Walls() 에 들어 있다.
+	// 바깥 안전 사각형(±30,000)은 UE 에 벽이 없지만 커맨드렛이 그 근처를 뽑지 않는다 (섬 경계 상자 안쪽 10 m)
 	auto clearance = [&](float x, float y)
 	{
 		float sd = FloorBounds::HALF_CM - (std::max)(std::fabs(x), std::fabs(y));
@@ -649,6 +669,124 @@ TEST(WallMapParity, 클라_캡슐_스윕과_서버_벽_판정이_5cm_안에서_�
 	EXPECT_EQ(earlyMismatch, 0);
 }
 
+/*-------- 섬 해안선 (2026-10-11 · ADR-0013) --------*/
+
+TEST(WallMapCoast, 해안선_안팎과_거리는_다각형을_따른다)
+{
+	WallMap map;
+	string error;
+	ASSERT_TRUE(map.SetOutline(NotchedCoast(), OUT error)) << error;
+	ASSERT_TRUE(map.HasOutline());
+
+	EXPECT_TRUE(map.InsideFloor(0.f, 0.f));
+	EXPECT_TRUE(map.InsideFloor(-2999.f, 4999.f));
+	EXPECT_FALSE(map.InsideFloor(1500.f, 3000.f));			// 파낸 자리 - 바다
+	EXPECT_FALSE(map.InsideFloor(3001.f, 0.f));
+	EXPECT_FALSE(map.InsideFloor(0.f, 20000.f));
+	EXPECT_TRUE(map.InsideFloor(3000.f, 0.f));				// 해안선 위는 안
+	EXPECT_TRUE(map.InsideFloor(0.f, 1000.f));				// 오목한 꼭짓점 위도 안
+
+	EXPECT_FLOAT_EQ(map.CoastGap(2000.f, -1000.f), 1000.f);	// 북쪽 해안 10 m
+	EXPECT_FLOAT_EQ(map.CoastGap(-1000.f, 4000.f), 1000.f);	// 동쪽 해안 10 m (파낸 곳 남쪽)
+	EXPECT_FLOAT_EQ(map.CoastGap(1500.f, 3000.f), -1500.f);	// 바다 - 파낸 곳 남쪽 해안 (x = 0) 까지 15 m
+	EXPECT_FLOAT_EQ(map.CoastGap(3000.f, 0.f), 0.f);
+
+	const float nan = numeric_limits<float>::quiet_NaN();
+	EXPECT_FALSE(map.InsideFloor(nan, 0.f));
+	EXPECT_LT(map.CoastGap(0.f, nan), 0.f);
+
+	// 해안선이 없으면 안전 사각형이 곧 층이다
+	const WallMap square;
+	EXPECT_FALSE(square.HasOutline());
+	EXPECT_TRUE(square.InsideFloor(FloorBounds::HALF_CM, 0.f));
+	EXPECT_FALSE(square.InsideFloor(FloorBounds::HALF_CM + 1.f, 0.f));
+	EXPECT_FLOAT_EQ(square.CoastGap(FloorBounds::HALF_CM - 1000.f, 0.f), 1000.f);
+}
+
+TEST(WallMapCoast, 꼬이거나_좁거나_사각형_밖인_해안선은_거부한다)
+{
+	WallMap map;
+	string error;
+
+	EXPECT_FALSE(map.SetOutline({ { 0.f, 0.f }, { 1000.f, 0.f } }, OUT error));
+	EXPECT_NE(error.find("3 to"), string::npos) << error;
+
+	// 나비넥타이 - 변 0 과 변 2 가 (667, 667) 에서 엇갈린다. 대칭이면 넓이가 0 이라 그쪽에서 먼저 걸려 비대칭으로
+	EXPECT_FALSE(map.SetOutline({ { 0.f, 0.f }, { 1000.f, 1000.f }, { 1000.f, 0.f }, { 0.f, 2000.f } }, OUT error));
+	EXPECT_NE(error.find("crosses itself"), string::npos) << error;
+
+	EXPECT_FALSE(map.SetOutline({ { 0.f, 0.f }, { 1000.f, 0.f }, { 2000.f, 0.f } }, OUT error));		// 한 줄 - 넓이 0
+	EXPECT_NE(error.find("no area"), string::npos) << error;
+
+	EXPECT_FALSE(map.SetOutline({ { 0.f, 0.f }, { 0.f, 0.f }, { 1000.f, 0.f }, { 0.f, 1000.f } }, OUT error));
+	EXPECT_NE(error.find("same point"), string::npos) << error;
+
+	EXPECT_FALSE(map.SetOutline({ { 0.f, 0.f }, { FloorBounds::HALF_CM + 1.f, 0.f }, { 0.f, 1000.f } }, OUT error));
+	EXPECT_NE(error.find("inside the floor square"), string::npos) << error;
+
+	EXPECT_FALSE(map.SetOutline({ { 0.f, 0.f }, { numeric_limits<float>::infinity(), 0.f }, { 0.f, 1000.f } }, OUT error));
+
+	// 실패하면 해안선은 그대로 (없음)
+	EXPECT_FALSE(map.HasOutline());
+	EXPECT_TRUE(map.SetOutline(NotchedCoast(), OUT error)) << error;
+	EXPECT_TRUE(map.SetOutline({}, OUT error));		// 빈 목록 = 해안선 지우기
+	EXPECT_FALSE(map.HasOutline());
+}
+
+TEST(WallMapCoast, 블링크_보정은_바다로_쏴도_해안선_안에_내린다)
+{
+	// 해안 벽 없이 해안선만 - 해안선 판정만으로 바다를 막는지 본다. 무작위 목표 4,000개 (반은 바다)
+	WallMap map = Build({ Box(-1500.f, 0.f, 400.f, 25.f, 90.f) });		// 안쪽 벽 하나
+	string error;
+	ASSERT_TRUE(map.SetOutline(NotchedCoast(), OUT error)) << error;
+
+	mt19937 rng(17);
+	uniform_real_distribution<float> px(-4500.f, 4500.f);
+	uniform_real_distribution<float> py(-6500.f, 6500.f);
+
+	int32 found = 0, sea = 0;
+	for (int32 i = 0; i < 4000; i++)
+	{
+		const float tx = px(rng);
+		const float ty = py(rng);
+		sea += map.InsideFloor(tx, ty) ? 0 : 1;
+
+		float x = 0.f, y = 0.f;
+		if (map.FindNearestFree(tx, ty, 42.f, 200.f, OUT x, OUT y) == false)
+			continue;
+
+		found++;
+		EXPECT_GE(map.CoastGap(x, y), 42.f - 0.01f) << tx << "," << ty << " -> " << x << "," << y;
+		EXPECT_FALSE(map.Overlaps(x, y, 42.f)) << tx << "," << ty;
+	}
+
+	EXPECT_GT(sea, 1000);
+	EXPECT_EQ(found, 4000);		// 바다 목표도 해안에서 다시 재므로 모두 찾는다
+
+	// 북쪽 바다 20 m 앞을 겨눈 블링크 - 해안선 안쪽 42.5 cm 에 내린다
+	float x = 0.f, y = 0.f;
+	ASSERT_TRUE(map.FindNearestFree(5000.f, -2000.f, 42.f, 200.f, OUT x, OUT y));
+	EXPECT_NEAR(x, 3000.f - 42.5f, 0.1f);
+	EXPECT_NEAR(y, -2000.f, 0.1f);
+}
+
+TEST(WallMapCoast, 해안_벽_종류를_읽고_막는다)
+{
+	WallKind kind = WallKind::Wall;
+	ASSERT_TRUE(ParseWallKind("boundary", OUT kind));
+	EXPECT_EQ(kind, WallKind::Boundary);
+	EXPECT_STREQ(WallKindName(WallKind::Boundary), "boundary");
+
+	WallBox coast = Box(3150.f, 0.f, 200.f, 150.f, 0.f);		// 북쪽 해안 바깥으로 3 m 두께 - 안쪽 면이 x = 3000
+	coast.kind = WallKind::Boundary;
+	const WallMap map = Build({ coast });
+
+	WallKind hit = WallKind::Wall;
+	EXPECT_TRUE(map.SweepBlocked(2900.f, 0.f, 3100.f, 0.f, 42.f, OUT &hit));
+	EXPECT_EQ(hit, WallKind::Boundary);
+	EXPECT_TRUE(map.SightBlocked(2900.f, 0.f, 3400.f, 0.f));			// 해안 벽은 시선도 막는다 (엄폐물만 통과)
+}
+
 /*-------- 만들기 검증 --------*/
 
 TEST(WallMap, 상한을_넘거나_층_밖으로_나가거나_크기가_0이면_만들지_않는다)
@@ -662,13 +800,14 @@ TEST(WallMap, 상한을_넘거나_층_밖으로_나가거나_크기가_0이면_�
 	EXPECT_NE(error.find("limit"), string::npos) << error;
 	EXPECT_EQ(map.Count(), 0);
 
-	// 중심은 안이지만 끝이 층 밖 (13,990 + 20 > 14,000)
-	EXPECT_FALSE(map.Build({ Box(13990.f, 0.f, 20.f, 5.f, 0.f) }, OUT error));
+	// 중심은 안이지만 끝이 층 밖 (H - 10 + 20 > H)
+	constexpr float H = FloorBounds::HALF_CM;
+	EXPECT_FALSE(map.Build({ Box(H - 10.f, 0.f, 20.f, 5.f, 0.f) }, OUT error));
 	EXPECT_NE(error.find("outside"), string::npos) << error;
 
 	// 회전하면 외접 사각형이 커진다 - 45° 의 4 m 벽은 중심에서 약 159 cm 까지 뻗는다
-	EXPECT_TRUE(map.Build({ Box(13800.f, 0.f, 200.f, 25.f, 0.f) }, OUT error)) << error;
-	EXPECT_FALSE(map.Build({ Box(13900.f, 0.f, 200.f, 25.f, 45.f) }, OUT error));
+	EXPECT_TRUE(map.Build({ Box(H - 200.f, 0.f, 200.f, 25.f, 0.f) }, OUT error)) << error;
+	EXPECT_FALSE(map.Build({ Box(H - 100.f, 0.f, 200.f, 25.f, 45.f) }, OUT error));
 
 	EXPECT_FALSE(map.Build({ Box(0.f, 0.f, 0.f, 25.f, 0.f) }, OUT error));
 	EXPECT_NE(error.find("> 0"), string::npos) << error;
@@ -796,17 +935,49 @@ TEST(WallTable, 진입_지점_9m_안에_벽이_있으면_부팅을_거부한다)
 	EXPECT_NE(error.find("entry point 1"), string::npos) << error;
 }
 
+TEST(WallTable, 해안선_파일을_읽고_seq_가_어긋나거나_진입_지점이_바다면_부팅을_거부한다)
+{
+	const string outline = "floor_id,seq,x,y\n0,2,0,1000\n0,0,3000,-5000\n0,1,3000,1000\n0,3,0,5000\n0,4,-3000,5000\n0,5,-3000,-5000\n";
+	string error;
+
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 2, Entries(0.f, 0.f), OUT error, &outline)) << error;
+	EXPECT_TRUE(WallTable::Get(0).HasOutline());
+	EXPECT_FALSE(WallTable::Get(1).HasOutline());
+	ASSERT_EQ(WallTable::Get(0).Outline().size(), 6u);
+	EXPECT_FLOAT_EQ(WallTable::Get(0).Outline()[2].y, 1000.f);			// 파일 순서가 아니라 seq 순서
+	EXPECT_FALSE(WallTable::Get(0).InsideFloor(1500.f, 3000.f));
+
+	// seq 빠짐
+	const string gapped = "floor_id,seq,x,y\n0,0,0,0\n0,2,1000,0\n0,3,0,1000\n";
+	EXPECT_FALSE(WallTable::Parse(nullptr, nullptr, 2, Entries(0.f, 0.f), OUT error, &gapped));
+	EXPECT_NE(error.find("seq"), string::npos) << error;
+
+	// 진입 지점이 바다 (파낸 자리) · 해안에서 9 m 안
+	EXPECT_FALSE(WallTable::Parse(nullptr, nullptr, 2, Entries(1500.f, 3000.f), OUT error, &outline));
+	EXPECT_NE(error.find("inside the floor's edge"), string::npos) << error;
+	EXPECT_FALSE(WallTable::Parse(nullptr, nullptr, 2, Entries(2200.f, 0.f), OUT error, &outline));		// 북쪽 해안 8 m
+
+	// 꼬인 해안선
+	const string bowTie = "floor_id,seq,x,y\n0,0,0,0\n0,1,1000,1000\n0,2,1000,0\n0,3,0,2000\n";
+	EXPECT_FALSE(WallTable::Parse(nullptr, nullptr, 2, {}, OUT error, &bowTie));
+	EXPECT_NE(error.find("floor_outline.csv floor 0"), string::npos) << error;
+
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 2, Entries(0.f, 0.f), OUT error)) << error;		// 다음 테스트에 남기지 않는다
+}
+
 TEST(WallTable, 1층_황금_벽이_부팅_검사를_통과한다)
 {
 	// 실제 레벨 - 진입 지점 9곳 모두 9 m 안에 벽이 없어야 서버가 뜬다 (Core Rule 15 · ADR-0006 § Migration 2)
 	string error;
 	ASSERT_TRUE(LoadFloor1(OUT error)) << error;
 
+	// 섬 (2026-10-11): 집 세 채 그대로 + 엄폐 136 · 타워 4 · 해안 401 (조각 + 볼록 모서리 이음)
 	const WallMap& map = WallTable::Get(0);
-	EXPECT_EQ(map.Count(), 771);		// 벽 309 · 문 기둥 58 · 격자점 기둥 328 · 독립 기둥 4 · 엄폐 69 · 타워 3 (floor-1.md § 8)
-	EXPECT_EQ(WallTable::DataVersion(0), "b716c8a5e4af");
+	EXPECT_EQ(map.Count(), 1240);
+	EXPECT_EQ(WallTable::DataVersion(0), "91d32ceb04ca");
+	EXPECT_LT(map.Count(), WallMap::MAX_WALLS * 2 / 3);		// 지각변동 임시 벽이 들어갈 자리 (MAX_WALLS 는 층 + 임시 합)
 
-	int32 perKind[6] = {};
+	int32 perKind[static_cast<int32>(WallKind::Boundary) + 1] = {};
 	for (const WallBox& w : map.Walls())
 		perKind[static_cast<int32>(w.kind)]++;
 
@@ -814,13 +985,23 @@ TEST(WallTable, 1층_황금_벽이_부팅_검사를_통과한다)
 	EXPECT_EQ(perKind[static_cast<int32>(WallKind::DoorPost)], 58);
 	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Pillar)], 328);
 	EXPECT_EQ(perKind[static_cast<int32>(WallKind::FreePillar)], 4);
-	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Cover)], 69);
-	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Tower)], 3);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Cover)], 136);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Tower)], 4);
+	EXPECT_EQ(perKind[static_cast<int32>(WallKind::Boundary)], 401);
 
-	// 타워 Tc (-78, 0) m 본체를 가로지르는 이동은 막힌다 - 원기둥이 아니라 3 x 3 m 상자다
+	// 해안선 38 점 - 진입 지점 9곳 모두 그 안쪽 9 m 넘게 (LoadFloor1 이 부팅 검사로 이미 봤다)
+	ASSERT_EQ(map.Outline().size(), 38u);
+	EXPECT_FALSE(map.InsideFloor(15400.f, 0.f));			// 북쪽 끝(153 m) 너머 바다
+	EXPECT_TRUE(map.InsideFloor(15000.f, 0.f));
+
+	// 타워 Tc (0, 180) m 본체를 가로지르는 이동은 막힌다 - 원기둥이 아니라 3 x 3 m 상자다
 	WallKind kind = WallKind::Wall;
-	EXPECT_TRUE(map.SweepBlocked(-7800.f, -500.f, -7800.f, 500.f, 0.f, OUT &kind));
+	EXPECT_TRUE(map.SweepBlocked(-500.f, 18000.f, 500.f, 18000.f, 0.f, OUT &kind));
 	EXPECT_EQ(kind, WallKind::Tower);
+
+	// 북쪽 해안으로 걸어 나가면 해안 벽이 막는다 - 바다로 나가는 길이 없다
+	EXPECT_TRUE(map.SweepBlocked(14500.f, 0.f, 16500.f, 0.f, 42.f, OUT &kind));
+	EXPECT_EQ(kind, WallKind::Boundary);
 }
 
 TEST(WallTable, 실제_데이터_파일이_부팅_검사를_통과한다)
@@ -848,7 +1029,7 @@ TEST(WallMapBench, DISABLED_이동_1회_벽_검사_시간)
 
 	string error;
 	if (LoadFloor1(OUT error))
-		cases.push_back({ "floor-1 (golden)", WallTable::Get(0).Walls(), -3600.f, 2000.f, -11200.f, 11200.f });
+		cases.push_back({ "floor-1 (golden)", WallTable::Get(0).Walls(), -6800.f, 7800.f, -16000.f, 1200.f });		// 섬 - 집 세 채의 상자
 	else
 		ADD_FAILURE() << error;
 

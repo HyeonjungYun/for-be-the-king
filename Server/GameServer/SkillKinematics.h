@@ -14,6 +14,7 @@ namespace SkillKinematics
 	constexpr float	CAPSULE_RADIUS_CM	= 42.f;		// ADR-0006 § ⑦ - 넉백 · 대시 · 블링크 반지름
 	constexpr float	WALL_BACKOFF_CM		= 1.f;		// 벽 면에 딱 붙지 않게 (WallMap 의 "벽 안" 은 열린 집합 - 면은 밖이지만 여유를 둔다)
 	constexpr float	PULL_FREE_STEP_CM	= 10.f;		// 벽을 지나는 끌기 - 끝점이 벽에 걸리면 이 간격으로 빈 자리를 찾는다
+	constexpr float	COAST_STEP_CM		= 10.f;		// 섬 - 끝점이 해안선에 몸 하나만큼 못 미치면 이 간격으로 물린다 (2026-10-11)
 
 	struct PushResult
 	{

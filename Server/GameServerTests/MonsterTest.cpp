@@ -188,9 +188,18 @@ TEST(MonsterTable, 자리는_진입_20m_타워_35m_경계_10m_를_지키고_경�
 	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,1999,0,100,0,0,1800\n", OUT error));
 	EXPECT_TRUE(ParseSpawn(hound, "301,0,1,6500,0,100,0,0,1800\n", OUT error)) << error;		// 타워에서 정확히 35 m
 	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,6501,0,100,0,0,1800\n", OUT error));
-	EXPECT_TRUE(ParseSpawn(hound, "301,0,1,0,13000,100,0,0,1800\n", OUT error)) << error;		// 경계에서 정확히 10 m
-	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,13001,100,0,0,1800\n", OUT error));
-	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,14001,100,0,0,1800\n", OUT error));				// 층 밖
+	EXPECT_TRUE(ParseSpawn(hound, "301,0,1,0,29000,100,0,0,1800\n", OUT error)) << error;		// 경계(±30,000)에서 정확히 10 m
+	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,29001,100,0,0,1800\n", OUT error));
+	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,30001,100,0,0,1800\n", OUT error));				// 층 밖
+
+	// 섬 (2026-10-11) - 해안선에서 10 m. 북쪽 해안 x = 20,000
+	const string coast = "floor_id,seq,x,y\n0,0,20000,-20000\n0,1,20000,20000\n0,2,-20000,20000\n0,3,-20000,-20000\n";
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 2, EntryPointTable::All(), OUT error, &coast)) << error;
+	EXPECT_TRUE(ParseSpawn(hound, "301,0,1,19000,0,100,0,0,1800\n", OUT error)) << error;		// 해안에서 정확히 10 m
+	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,19001,0,100,0,0,1800\n", OUT error));
+	EXPECT_NE(error.find("coast"), string::npos) << error;
+	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,25000,0,100,0,0,1800\n", OUT error));				// 바다
+	ASSERT_TRUE(WallTable::Parse(nullptr, nullptr, 2, EntryPointTable::All(), OUT error)) << error;
 	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,5000,100,0,0,59\n", OUT error));					// respawn_s < 60
 	EXPECT_TRUE(ParseSpawn(hound, "301,0,1,0,5000,100,0,0,60\n", OUT error)) << error;
 	EXPECT_FALSE(ParseSpawn(hound, "301,0,1,0,5000,100,0,0,1800\n302,0,1,0,5000,100,0,0,1800\n", OUT error));	// 같은 자리 같은 종류
@@ -227,18 +236,18 @@ TEST(MonsterTable, 파일이_없으면_몬스터_0_자리_파일만_있으면_�
 	EXPECT_TRUE(MonsterTable::Spawns().empty());
 }
 
-TEST(TowerTable, 실제_타워_3개를_읽고_파일이_없으면_0개)
+TEST(TowerTable, 실제_타워_4개를_읽고_파일이_없으면_0개)
 {
 	string error;
 	ASSERT_TRUE(TowerTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;
-	ASSERT_EQ(TowerTable::All().size(), 3u);
+	ASSERT_EQ(TowerTable::All().size(), 4u);		// 섬 1층 Ta · Tb · Tc · Td (2026-10-11)
 	EXPECT_EQ(TowerTable::All()[0].towerId, "Ta");
 
 	EXPECT_TRUE(TowerTable::Load("C:\\no\\such\\dir", 4, OUT error));
 	EXPECT_TRUE(TowerTable::All().empty());
 
 	EXPECT_FALSE(TowerTable::Parse("tower_id,floor_id,x,y\nTa,0,0,0\nTa,0,10,0\n", 4, OUT error));	// 중복
-	EXPECT_FALSE(TowerTable::Parse("tower_id,floor_id,x,y\nTa,0,15000,0\n", 4, OUT error));		// 층 밖
+	EXPECT_FALSE(TowerTable::Parse("tower_id,floor_id,x,y\nTa,0,30001,0\n", 4, OUT error));		// 층 밖 (±30,000)
 }
 
 /*-------- 상태기 --------*/
@@ -691,11 +700,11 @@ TEST(MonsterMover, 더_빠른_목표를_곧게_쫓는_것은_막힘이_아니다
 TEST(MonsterMover, 층_밖으로_나가지_않고_오래_멈춘_뒤에도_한_걸음이_100ms_를_넘지_않는다_AC_MA_33_35)
 {
 	MonsterBrainState s;
-	float x = 13900.f, y = 0.f;
+	float x = FloorBounds::HALF_CM - 100.f, y = 0.f;
 	uint64 now = 100 * SEC;
-	Walk(s, x, y, 20000.f, 0.f, 0.f, 300.f, now, 2 * SEC);
-	EXPECT_LE(x, 14000.f - 40.f);
-	EXPECT_LE(::fabsf(y), 14000.f - 40.f);
+	Walk(s, x, y, FloorBounds::HALF_CM + 6000.f, 0.f, 0.f, 300.f, now, 2 * SEC);
+	EXPECT_LE(x, FloorBounds::HALF_CM - 40.f);
+	EXPECT_LE(::fabsf(y), FloorBounds::HALF_CM - 40.f);
 
 	MonsterBrainState t;
 	StepInput in;

@@ -41,6 +41,16 @@ namespace SkillKinematics
 			actual = max(0.f, actual - WALL_BACKOFF_CM);
 		}
 
+		// 섬 - 해안 벽이 먼저 막지만, 끝점이 몸 하나만큼 해안선 안이 아니면 거기까지 물린다 (2026-10-11 백스톱)
+		if (walls.HasOutline())
+		{
+			while (actual >= 1.f && walls.CoastGap(x + dirX * actual, y + dirY * actual) < CAPSULE_RADIUS_CM)
+			{
+				r.hitWall = true;
+				actual -= COAST_STEP_CM;
+			}
+		}
+
 		if (actual < 1.f)
 			return r;
 
@@ -78,7 +88,12 @@ namespace SkillKinematics
 			// 대상 쪽으로 물린다 - 내 쪽에 몸 하나 들어갈 자리가 없으면 벽 저편 면까지만 끌려온다
 			const float ux = dx / d;
 			const float uy = dy / d;
-			auto freeAt = [&](float l) { return walls.Overlaps(fromX + ux * l, fromY + uy * l, CAPSULE_RADIUS_CM) == false; };
+			auto freeAt = [&](float l)
+			{
+				const float px = fromX + ux * l;
+				const float py = fromY + uy * l;
+				return walls.Overlaps(px, py, CAPSULE_RADIUS_CM) == false && walls.CoastGap(px, py) >= CAPSULE_RADIUS_CM;	// 바다(만) 건너편 X
+			};
 
 			const float want = d - stopCm;
 			const float bodiesTouch = d - 2.f * CAPSULE_RADIUS_CM;

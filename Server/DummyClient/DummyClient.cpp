@@ -816,7 +816,9 @@ int main(int argc, char* argv[])
 	if (GTowerMode.load())
 		BotPath::Load(0);
 
-	// -pathcheck: 0층 대각선을 벽을 돌아 걸으면 몇 초인가 (roadmap P3 완료 기준 "약 116 초 ±15 %", game-concept.md 396 m ÷ 3.4) - 계산만 하고 끝낸다
+	// -pathcheck: 0층을 끝에서 끝까지 벽을 돌아 걸으면 몇 초인가 - 계산만 하고 끝낸다.
+	// 섬(2026-10-11)은 서쪽 끝 ↔ 동쪽 끝(직선 약 570 m · 168 s) · 북 ↔ 남(약 280 m · 82 s), 각 끝은 해안선 안쪽 8~13 m.
+	// 옛 280 m 정사각형의 대각선(396 m, "약 116 초 ±15 %")은 모서리가 바다라 더 못 잰다
 	for (int i = 1; i < argc; i++)
 	{
 		if (::strcmp(argv[i], "-pathcheck") != 0)
@@ -825,13 +827,12 @@ int main(int argc, char* argv[])
 		if (BotPath::Load(0) == false)
 			return 1;
 
-		constexpr float CORNER = 13900.f;		// 층 경계(14,000) 안쪽 1 m
 		const float pairs[4][4] =
 		{
-			{ -CORNER, -CORNER,  CORNER,  CORNER },
-			{  CORNER,  CORNER, -CORNER, -CORNER },
-			{ -CORNER,  CORNER,  CORNER, -CORNER },
-			{  CORNER, -CORNER, -CORNER,  CORNER },
+			{      0.f, -28500.f,   1000.f,  28200.f },		// 서쪽 끝 → 동쪽 끝
+			{   1000.f,  28200.f,      0.f, -28500.f },
+			{  14000.f,      0.f, -14000.f,   -600.f },		// 북 → 남
+			{ -14000.f,   -600.f,  14000.f,      0.f },
 		};
 
 		for (const auto& p : pairs)

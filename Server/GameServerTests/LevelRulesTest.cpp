@@ -10,13 +10,17 @@
 
 TEST(FloorBounds, 경계_자체는_안이고_조금이라도_넘으면_밖이다)
 {
-	EXPECT_TRUE(FloorBounds::Contains(0.f, 0.f));
-	EXPECT_TRUE(FloorBounds::Contains(14000.f, -14000.f));
-	EXPECT_TRUE(FloorBounds::Contains(-14000.f, 14000.f));
+	// 섬 맵(2026-10-11)부터 바깥 안전 사각형 ±30,000 - 섬(동서 589 m)을 감싼다. 진짜 안은 해안선 (WallMapTest)
+	constexpr float H = FloorBounds::HALF_CM;
+	static_assert(H == 30000.f, "level-map.md Core Rule 1 / ADR-0013 - the outer square is 600 m");
 
-	EXPECT_FALSE(FloorBounds::Contains(14000.01f, 0.f));
-	EXPECT_FALSE(FloorBounds::Contains(0.f, -14000.01f));
-	EXPECT_FALSE(FloorBounds::Contains(20000.f, 20000.f));
+	EXPECT_TRUE(FloorBounds::Contains(0.f, 0.f));
+	EXPECT_TRUE(FloorBounds::Contains(H, -H));
+	EXPECT_TRUE(FloorBounds::Contains(-H, H));
+
+	EXPECT_FALSE(FloorBounds::Contains(30000.01f, 0.f));
+	EXPECT_FALSE(FloorBounds::Contains(0.f, -30000.01f));
+	EXPECT_FALSE(FloorBounds::Contains(40000.f, 40000.f));
 }
 
 TEST(FloorBounds, NaN_과_무한대는_밖이다)

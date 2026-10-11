@@ -6,9 +6,9 @@
 
 namespace
 {
-	constexpr float		HALF_CM				= 14000.f;	// FloorBounds::HALF_CM - 층 280 m
+	constexpr float		HALF_CM				= FloorBounds::HALF_CM;		// 섬을 감싸는 600 m 사각형 (2026-10-11)
 	constexpr float		CELL_CM				= 100.f;
-	constexpr int32		GRID				= 280;		// 28,000 / 100
+	constexpr int32		GRID				= static_cast<int32>(2.f * HALF_CM / CELL_CM);	// 60,000 / 100 = 600 (36만 칸)
 	constexpr float		CLEARANCE_CM		= 60.f;		// 칸 중심이 벽에서 이만큼 떨어져야 지나간다
 	constexpr float		SMOOTH_RADIUS_CM	= 40.f;		// 건너뛸 때 이 굵기로 쓸어 본다 - 서버 검증(점)보다 굵게
 	constexpr int32		NEAREST_FREE_MAX	= 40;		// 도착점이 벽 안이면 이 칸 수 안에서 빈 칸을 찾는다 (타워 반지름 + 여유)

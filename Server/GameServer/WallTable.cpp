@@ -77,7 +77,7 @@ namespace
 			WallBox w;
 			if (ParseWallKind(row[c[1]], OUT w.kind) == false)
 			{
-				error = where + " unknown kind '" + row[c[1]] + "' (wall, door_post, pillar, free_pillar, cover, tower)";
+				error = where + " unknown kind '" + row[c[1]] + "' (wall, door_post, pillar, free_pillar, cover, tower, boundary)";
 				return false;
 			}
 
@@ -110,20 +110,74 @@ namespace
 
 		return true;
 	}
+
+	// floor_outline.csv - 층마다 seq 0, 1, 2, ... 빠짐 · 겹침 없이. 순서는 seq 순 (파일 순서와 무관)
+	bool ParseOutlines(const string& csv, uint32 floorCount, OUT vector<vector<OutlinePoint>>& perFloor, OUT string& error)
+	{
+		CsvTable table;
+		vector<int32> c;
+
+		if (Csv::Parse(csv, "floor_outline.csv", OUT table, OUT error) == false
+			|| Csv::FindColumns(table, "floor_outline.csv", { "floor_id", "seq", "x", "y" }, OUT c, OUT error) == false)
+			return false;
+
+		vector<vector<pair<uint32, OutlinePoint>>> rows(floorCount);
+		for (size_t r = 0; r < table.rows.size(); r++)
+		{
+			const vector<string>& row = table.rows[r];
+			const string where = "floor_outline.csv:" + to_string(table.lineNumbers[r]);
+
+			uint32 floor = 0;
+			uint32 seq = 0;
+			OutlinePoint p;
+			if (Csv::ParseUInt(row[c[0]], OUT floor) == false || floor >= floorCount)
+			{
+				error = where + " floor_id must be 0.." + to_string(floorCount - 1);
+				return false;
+			}
+			if (Csv::ParseUInt(row[c[1]], OUT seq) == false || Csv::ParseFloat(row[c[2]], OUT p.x) == false || Csv::ParseFloat(row[c[3]], OUT p.y) == false
+				|| std::isfinite(p.x) == false || std::isfinite(p.y) == false)
+			{
+				error = where + " seq must be a whole number and x, y finite numbers";
+				return false;
+			}
+			rows[floor].push_back({ seq, p });
+		}
+
+		for (uint32 floor = 0; floor < floorCount; floor++)
+		{
+			auto& points = rows[floor];
+			sort(points.begin(), points.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+			for (size_t i = 0; i < points.size(); i++)
+			{
+				if (points[i].first != i)
+				{
+					error = "floor_outline.csv floor " + to_string(floor) + " seq must run 0.." + to_string(points.size() - 1) + " without gaps or repeats";
+					return false;
+				}
+				perFloor[floor].push_back(points[i].second);
+			}
+		}
+
+		return true;
+	}
 }
 
 bool WallTable::Load(const string& dataDir, uint32 floorCount, const vector<EntryPoint>& entries, OUT string& error)
 {
 	string walls;
 	string versions;
+	string outlines;
 	const bool hasWalls = Csv::ReadFile(dataDir + "\\walls.csv", OUT walls);
 	const bool hasVersions = Csv::ReadFile(dataDir + "\\level_versions.csv", OUT versions);
+	const bool hasOutlines = Csv::ReadFile(dataDir + "\\floor_outline.csv", OUT outlines);
 
-	return Parse(hasWalls ? &walls : nullptr, hasVersions ? &versions : nullptr, floorCount, entries, OUT error);
+	return Parse(hasWalls ? &walls : nullptr, hasVersions ? &versions : nullptr, floorCount, entries, OUT error,
+		hasOutlines ? &outlines : nullptr);
 }
 
 bool WallTable::Parse(const string* wallsCsv, const string* versionsCsv, uint32 floorCount,
-	const vector<EntryPoint>& entries, OUT string& error)
+	const vector<EntryPoint>& entries, OUT string& error, const string* outlineCsv)
 {
 	s_maps.assign(floorCount, WallMap());
 	s_versions.assign(floorCount, string());
@@ -134,6 +188,10 @@ bool WallTable::Parse(const string* wallsCsv, const string* versionsCsv, uint32 
 
 	vector<vector<WallBox>> perFloor(floorCount);
 	if (wallsCsv != nullptr && ParseWalls(*wallsCsv, floorCount, OUT perFloor, OUT error) == false)
+		return false;
+
+	vector<vector<OutlinePoint>> outlines(floorCount);
+	if (outlineCsv != nullptr && ParseOutlines(*outlineCsv, floorCount, OUT outlines, OUT error) == false)
 		return false;
 
 	vector<WallMap> maps(floorCount);
@@ -151,15 +209,29 @@ bool WallTable::Parse(const string* wallsCsv, const string* versionsCsv, uint32 
 			error = "walls.csv floor " + to_string(floor) + ": " + buildError;
 			return false;
 		}
+		if (maps[floor].SetOutline(move(outlines[floor]), OUT buildError) == false)
+		{
+			error = "floor_outline.csv floor " + to_string(floor) + ": " + buildError;
+			return false;
+		}
 	}
 
-	// 진입 지점 9 m 안에 벽이 있으면 스폰이 벽에 박힐 수 있다 (Core Rule 15)
+	// 진입 지점 9 m 안에 벽이 있으면 스폰이 벽에 박힐 수 있다 (Core Rule 15). 해안선이 있으면 그 안이어야 한다
 	for (const EntryPoint& e : entries)
 	{
-		if (e.floorId < floorCount && maps[e.floorId].Overlaps(e.x, e.y, ENTRY_CLEAR_RADIUS_CM))
+		if (e.floorId >= floorCount)
+			continue;
+
+		if (maps[e.floorId].Overlaps(e.x, e.y, ENTRY_CLEAR_RADIUS_CM))
 		{
 			error = "entry point " + to_string(e.entryId) + " (floor " + to_string(e.floorId) + ") has a wall within "
 				+ to_string(static_cast<int32>(ENTRY_CLEAR_RADIUS_CM)) + " cm";
+			return false;
+		}
+		if (maps[e.floorId].CoastGap(e.x, e.y) < ENTRY_CLEAR_RADIUS_CM)
+		{
+			error = "entry point " + to_string(e.entryId) + " (floor " + to_string(e.floorId) + ") is not "
+				+ to_string(static_cast<int32>(ENTRY_CLEAR_RADIUS_CM)) + " cm inside the floor's edge";
 			return false;
 		}
 	}
