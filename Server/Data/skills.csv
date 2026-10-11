@@ -70,8 +70,8 @@ skill_id,name_key,power,kind,cast_ms,cooldown_ms,can_move,telegraph_ms,shape,aim
 1070,skill.1070,ap,active,300,10000,0,0,cone,direction,350,0,350,90,0,0,0,,
 1071,skill.1071,ap,active,300,10000,0,0,single,target,800,0,0,0,0,0,0,,
 1072,skill.1072,ap,active,300,10000,0,0,line,direction,800,100,0,0,0,0,0,,
-1073,skill.1073,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,
-1074,skill.1074,none,active,0,20000,0,0,none,none,0,0,0,0,0,0,0,,
+1073,skill.1073,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,staff
+1074,skill.1074,none,active,0,20000,0,0,none,none,0,0,0,0,0,0,0,,staff
 1075,skill.1075,none,active,60,10000,0,0,circle_self,point,600,0,0,0,0,0,0,,
 1076,skill.1076,none,hold,0,15000,0,0,circle_self,self_area,400,0,400,0,0,0,0,,
 1077,skill.1077,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,

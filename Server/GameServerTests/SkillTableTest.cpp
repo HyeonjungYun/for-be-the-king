@@ -67,11 +67,21 @@ TEST(SkillRoster, 갑옷_스킬은_무기_조건을_가진다)
 	EXPECT_EQ(SkillTable::Find(1113)->requiresWeaponTag, "ghost") << "백귀야행은 원혼 스킬이 있는 검";
 	EXPECT_TRUE(SkillTable::Find(1113)->HasHardCc()) << "백귀야행 기절 - 무기 조건부라 갑옷 풀에서 허용";
 
-	// 무기 조건은 갑옷 풀에만 - 다른 스킬에 번지면 안 된다 (조건 없는 스킬은 어느 무기로도 쓴다)
+	// 무기 조건은 갑옷 · 모자 풀에만 - 무기 풀 스킬은 이미 그 무기를 들고 있고, 조건 없는 스킬은 어느 무기로도 쓴다.
+	// 🔸 2026-10-11 사용자 결정 - 오버로드(1073) · 니힐(1074) 를 스태프 풀에서 모자 풀로 옮기며 "스태프를 들고 있을 때만"
 	for (const auto& [id, def] : SkillTable::All())
 	{
 		if (def.requiresWeapon.empty() == false)
-			EXPECT_EQ(PoolsOf(id), vector<string>{ "armor" }) << "skill " << id << " has requires_weapon=" << def.requiresWeapon;
+		{
+			const vector<string> pools = PoolsOf(id);
+			EXPECT_TRUE(pools == vector<string>{ "armor" } || pools == vector<string>{ "helmet" })
+				<< "skill " << id << " has requires_weapon=" << def.requiresWeapon;
+		}
+	}
+	for (uint32 id : { 1073u, 1074u })
+	{
+		EXPECT_EQ(SkillTable::Find(id)->requiresWeapon, "staff") << id;
+		EXPECT_EQ(PoolsOf(id), vector<string>{ "helmet" }) << id;
 	}
 
 	// 2차 로스터 (2026-10-11) - 갑옷 스킬은 전부 "○○을 들고 있을 때만", 바위 날리기(무기) · 천리안(모자)은 조건 없음
