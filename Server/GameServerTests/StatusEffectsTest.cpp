@@ -308,6 +308,22 @@ TEST(StatusBuff, 음수_버프는_그대로_더해진다_광전사의_눈물)
 	EXPECT_FLOAT_EQ(s.BuffSum(SkillBuffStat::Armor), 0.f);
 }
 
+TEST(StatusBuff, 유령_신부의_축복은_param_없는_자기_버프로도_벽을_무시한다)
+{
+	// Room 의 SelfBuff 경로는 param 을 채우지 않는다. 예전 조회 HasBuff(WallPierce, "wall_pierce") 는 그래서 늘 false 였다
+	StatusSet s;
+	EXPECT_FALSE(s.IgnoresWalls());
+
+	s.AddBuff(Buff(1078, SkillBuffStat::WallPierce, 1.f, AtMs(5000)));
+	EXPECT_TRUE(s.IgnoresWalls());
+	EXPECT_FALSE(s.HasBuff(SkillBuffStat::WallPierce, "wall_pierce")) << "예전 조회 - 이것으로 찾으면 안 된다";
+
+	bool buffGone = false;
+	ExpireAll(s, AtMs(5001), buffGone);
+	EXPECT_TRUE(buffGone);
+	EXPECT_FALSE(s.IgnoresWalls());
+}
+
 TEST(StatusDot, 종류별_해제와_마법_연장_째깍째깍)
 {
 	StatusSet s;

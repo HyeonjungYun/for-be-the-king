@@ -388,7 +388,8 @@ TEST(SkillRoster, 패시브는_on_hit_또는_lethal_save_를_가지고_재입력
 	}
 
 	EXPECT_EQ(passives, 11) << "#24 뇌신 · #34 맹수의 본능 · #67 화신 + 모자 #83 #88 #89 #90 #94 #96 #97 + 천리안 1132";
-	EXPECT_EQ(recasts, 3) << "#38 피의 추적 · #45 올가미 · 찌르고 베기 1118";
+	// 낚아채기 #45 는 2026-10-11 스킬 개선에서 재입력이 아니게 됐다 - 맞자마자 끌려온다
+	EXPECT_EQ(recasts, 2) << "#38 피의 추적 · 찌르고 베기 1118";
 }
 
 // 2차 로스터 (2026-10-11) - 새 효과가 서로 맞물리는가. 엔진은 짝이 없으면 조용히 아무 일도 하지 않는다 - 여기서 잡는다
@@ -471,11 +472,92 @@ TEST(SkillRoster, 버프_지속피해_표식_효과는_필수_열이_채워져_�
 				EXPECT_TRUE(markKinds.count(e.param) > 0 && e.durationMs > 0) << "skill " << skillId << " mark";
 				break;
 			case SkillEffectType::Knockback:
-				EXPECT_TRUE(e.distCm > 0.f && e.speedCms > 0.f) << "skill " << skillId << " knockback";
+				// param far (저 멀리 1109) - 거리는 시전자의 시야 반경이라 dist_cm 이 비어 있다. 속도와 벽 충돌 계수는 있어야 한다
+				if (e.param.find("far") != string::npos)
+					EXPECT_TRUE(e.speedCms > 0.f && e.adRatio > 0.f) << "skill " << skillId << " far knockback";
+				else
+					EXPECT_TRUE(e.distCm > 0.f && e.speedCms > 0.f) << "skill " << skillId << " knockback";
 				break;
 			default:
 				break;
 			}
 		}
 	}
+}
+
+// 스킬 개선 (2026-10-11 저녁, 사용자 플레이 피드백) - 데이터가 엔진의 새 경로를 실제로 탄다.
+// 엔진은 짝이 맞지 않으면 예전 경로로 조용히 돌아간다 (예: 열화 장판에 dist_cm 이 없으면 큰 원 3 개) - 여기서 잡는다
+TEST(SkillRoster, 스킬개선_2026_10_11_데이터가_새_경로를_탄다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	auto def = [](uint32 id) { return SkillTable::Find(id); };
+
+	// 오버로드 · 니힐 - 속성 없이 쓰면 "효과가 끝날 때" 기절
+	for (uint32 id : { 1073u, 1074u })
+	{
+		const SkillEffect* selfCc = def(id)->FindEffect(SkillEffectType::SelfCc);
+		ASSERT_NE(selfCc, nullptr) << id;
+		EXPECT_EQ(selfCc->param, "at_end") << id;
+		EXPECT_EQ(selfCc->condition, SkillRequire::NoElement) << id;
+	}
+
+	// 포착 · 약속의 한 발 - 논타겟팅 투사체, 확신의 표식(arrow)으로 유도
+	for (uint32 id : { 1055u, 1057u })
+	{
+		EXPECT_EQ(def(id)->shape, SkillShape::Projectile) << id;
+		EXPECT_EQ(def(id)->aimType, SkillAimType::Direction) << id;
+		EXPECT_TRUE(def(id)->HasTag("homing:arrow")) << id;
+	}
+	EXPECT_NE(def(1055)->FindEffect(SkillEffectType::Volley), nullptr) << "포착 - 여러 발 (그림자 던지기처럼)";
+	EXPECT_EQ(def(1052)->shape, SkillShape::Projectile) << "비장의 한 발 - 논타겟팅 일직선";
+
+	// 저 멀리 - 대상 지정, 평타 사거리, 시야 반경만큼 날리는 넉백
+	EXPECT_EQ(def(1109)->aimType, SkillAimType::Target);
+	EXPECT_FLOAT_EQ(def(1109)->rangeCm, 190.f) << "망치 평타 사거리 (item_types.csv 102)";
+	ASSERT_NE(def(1109)->FindEffect(SkillEffectType::Knockback), nullptr);
+	EXPECT_EQ(def(1109)->FindEffect(SkillEffectType::Knockback)->param, "far");
+
+	// 건곤일척 - 피해 증가는 제자리 한 번 (param ;still)
+	ASSERT_NE(def(1111)->FindEffect(SkillEffectType::DamageMod), nullptr);
+	EXPECT_EQ(def(1111)->FindEffect(SkillEffectType::DamageMod)->param, "tag:hammer;still");
+
+	// 열화 - 지나간 길에만 작은 원 (zone dist_cm = 칠하는 간격)
+	const SkillEffect* firePath = def(1063)->FindEffect(SkillEffectType::Zone);
+	ASSERT_NE(firePath, nullptr);
+	EXPECT_GT(firePath->distCm, 0.f);
+	EXPECT_LT(firePath->radiusCm, 100.f) << "작은 원";
+	EXPECT_TRUE(def(1063)->HasMovement());
+
+	// 네불라 아르카나 - 시전자 앞 부채꼴 장판
+	EXPECT_EQ(def(1069)->shape, SkillShape::Cone);
+	EXPECT_NE(def(1069)->FindEffect(SkillEffectType::Zone), nullptr);
+
+	// 즉발 · 조준 없음
+	EXPECT_EQ(def(1113)->castMs, 0u) << "백귀야행 즉발";
+	EXPECT_EQ(def(1118)->castMs, 0u) << "찌르고 베기 즉발";
+	EXPECT_EQ(def(1118)->aimType, SkillAimType::Facing) << "찌르고 베기 - 누르자마자 바라보는 방향";
+	EXPECT_EQ(def(1108)->castMs, 1500u) << "질풍노도 - 평타 시전(300 ms)의 5 배";
+
+	// 대상 지정으로 바뀐 돌진 (기습 단검 · 일도양단) - 대상 바로 앞까지
+	for (uint32 id : { 1008u, 1035u })
+	{
+		EXPECT_EQ(def(id)->aimType, SkillAimType::Target) << id;
+		ASSERT_NE(def(id)->FindEffect(SkillEffectType::Movement), nullptr) << id;
+		EXPECT_EQ(def(id)->FindEffect(SkillEffectType::Movement)->param, "to_target") << id;
+	}
+
+	// 낙뢰 - 범위 안 점지 표식이 남은 적 전부 (논타겟팅)
+	EXPECT_EQ(def(1022)->shape, SkillShape::CircleSelf);
+	EXPECT_EQ(def(1022)->FindEffect(SkillEffectType::Damage)->condition, SkillRequire::MarkSpear);
+
+	// 염두 - 패시브지만 쿨다운이 클라에 보인다 (skills.csv cooldown_ms)
+	EXPECT_GT(def(1090)->cooldownMs, 0u);
+
+	// 낚아채기 - 재입력이 아니다, 던지는 동안 움직인다, 맞으면 바로 끌려온다
+	EXPECT_EQ(def(1045)->kind, SkillKind::Active);
+	EXPECT_TRUE(def(1045)->canMoveWhileCasting);
+	ASSERT_NE(def(1045)->FindEffect(SkillEffectType::Pull), nullptr);
+	EXPECT_EQ(def(1045)->FindEffect(SkillEffectType::Pull)->condition, SkillRequire::None);
 }

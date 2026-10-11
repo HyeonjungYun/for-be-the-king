@@ -387,6 +387,7 @@ void Room::SendVisionIfChanged(const PlayerRef& viewer, float radiusCm, float ca
 		s->set_remaining_ms(e.untilUs > nowUs ? static_cast<uint32>((e.untilUs - nowUs) / 1000) : 0);
 		s->set_needs_los(e.needsLos);
 		s->set_sees_stealth(e.seesStealth);
+		s->set_kind(e.kind);
 	}
 
 	LOG_LINE << "[FOW] vision char=" << viewer->objectInfo->object_id() << " radius=" << ::lroundf(radiusCm) << " camera=" << cameraScale
@@ -632,4 +633,42 @@ void Room::RevealTo(const PlayerRef& viewer, uint64 subjectId, uint64 untilUs)
 {
 	uint64& until = viewer->fowRevealed[subjectId];
 	until = (std::max)(until, untilUs);
+}
+
+// 안 보이는 적을 맞혔다 - 그 적만 잠깐 보인다 (사용자 결정 2026-10-11 "공격이 적에게 맞으면 암흑 시야에서 적만 잠깐 보였으면").
+// 바로 S_SPAWN 을 보내 아는 집합에 넣는다 - 이 Flush 끝의 S_DAMAGE 가 걸러지지 않고 숫자가 뜬다. 은신은 드러내지 않는다
+void Room::RevealOnHit(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs)
+{
+	constexpr uint64 REVEAL_ON_HIT_US = 1'200'000;
+
+	if (Vision::Enabled() == false || attacker == nullptr || target == nullptr || attacker == target)
+		return;
+	if (attacker->IsPlayer() == false || IsFowSubject(target) == false || target->IsStealthed(nowUs))
+		return;
+
+	PlayerRef viewer = static_pointer_cast<Player>(attacker);
+	const uint64 targetId = target->objectInfo->object_id();
+	RevealTo(viewer, targetId, nowUs + REVEAL_ON_HIT_US);
+
+	if (viewer->fowKnown.find(targetId) != viewer->fowKnown.end())
+		return;		// 이미 화면에 있다 - 공개 시간만 늘렸다
+
+	GameSessionRef session = viewer->session.lock();
+	if (session == nullptr)
+		return;
+
+	viewer->fowKnown.emplace(targetId, nowUs);
+	target->objectInfo->set_hp(target->hp);
+	target->objectInfo->set_max_hp(target->maxHp);
+
+	Protocol::S_SPAWN spawnPkt;
+	spawnPkt.add_players()->CopyFrom(*target->objectInfo);
+	{
+		SEND_PACKET(spawnPkt);
+	}
+
+	vector<CreatureRef> fresh{ target };
+	SendSnapshots(viewer, fresh, nowUs);
+
+	LOG_LINE << "[FOW] reveal on hit viewer=" << viewer->objectInfo->object_id() << " target=" << targetId << '\n';
 }

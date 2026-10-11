@@ -63,6 +63,7 @@ PROTOBUF_CONSTEXPR AttackInfo::AttackInfo(
     /*decltype(_impl_.attacker_id_)*/uint64_t{0u}
   , /*decltype(_impl_.target_id_)*/uint64_t{0u}
   , /*decltype(_impl_.windup_ms_)*/uint64_t{0u}
+  , /*decltype(_impl_.interval_ms_)*/0u
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct AttackInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR AttackInfoDefaultTypeInternal()
@@ -293,6 +294,8 @@ PROTOBUF_CONSTEXPR ZoneInfo::ZoneInfo(
   , /*decltype(_impl_.yaw_)*/0
   , /*decltype(_impl_.half_length_)*/0
   , /*decltype(_impl_.half_thickness_)*/0
+  , /*decltype(_impl_.follow_id_)*/uint64_t{0u}
+  , /*decltype(_impl_.angle_deg_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct ZoneInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR ZoneInfoDefaultTypeInternal()
@@ -341,7 +344,8 @@ struct ItemInstanceDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 ItemInstanceDefaultTypeInternal _ItemInstance_default_instance_;
 PROTOBUF_CONSTEXPR VisionSource::VisionSource(
     ::_pbi::ConstantInitialized): _impl_{
-    /*decltype(_impl_.source_id_)*/uint64_t{0u}
+    /*decltype(_impl_.kind_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.source_id_)*/uint64_t{0u}
   , /*decltype(_impl_.follow_id_)*/uint64_t{0u}
   , /*decltype(_impl_.x_)*/0
   , /*decltype(_impl_.y_)*/0
@@ -399,6 +403,7 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::AttackInfo, _impl_.attacker_id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::AttackInfo, _impl_.target_id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::AttackInfo, _impl_.windup_ms_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::AttackInfo, _impl_.interval_ms_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::DamageInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -551,6 +556,8 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.yaw_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.half_length_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.half_thickness_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.angle_deg_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ZoneInfo, _impl_.follow_id_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::CharacterInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -589,27 +596,28 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.remaining_ms_),
   PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.needs_los_),
   PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.sees_stealth_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _impl_.kind_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::Protocol::PosInfo)},
   { 12, -1, -1, sizeof(::Protocol::ObjectInfo)},
   { 25, -1, -1, sizeof(::Protocol::AttackInfo)},
-  { 34, -1, -1, sizeof(::Protocol::DamageInfo)},
-  { 47, -1, -1, sizeof(::Protocol::CcEventInfo)},
-  { 58, -1, -1, sizeof(::Protocol::KnockbackInfo)},
-  { 70, -1, -1, sizeof(::Protocol::CcSlot)},
-  { 79, -1, -1, sizeof(::Protocol::CcStateInfo)},
-  { 88, -1, -1, sizeof(::Protocol::DiedInfo)},
-  { 97, -1, -1, sizeof(::Protocol::SkillInfo)},
-  { 107, -1, -1, sizeof(::Protocol::SkillCastInfo)},
-  { 115, -1, -1, sizeof(::Protocol::SkillHitInfo)},
-  { 128, -1, -1, sizeof(::Protocol::StatusInfo)},
-  { 141, -1, -1, sizeof(::Protocol::ProjectileInfo)},
-  { 158, -1, -1, sizeof(::Protocol::ProjectileEndInfo)},
-  { 169, -1, -1, sizeof(::Protocol::ZoneInfo)},
-  { 186, -1, -1, sizeof(::Protocol::CharacterInfo)},
-  { 197, -1, -1, sizeof(::Protocol::ItemInstance)},
-  { 210, -1, -1, sizeof(::Protocol::VisionSource)},
+  { 35, -1, -1, sizeof(::Protocol::DamageInfo)},
+  { 48, -1, -1, sizeof(::Protocol::CcEventInfo)},
+  { 59, -1, -1, sizeof(::Protocol::KnockbackInfo)},
+  { 71, -1, -1, sizeof(::Protocol::CcSlot)},
+  { 80, -1, -1, sizeof(::Protocol::CcStateInfo)},
+  { 89, -1, -1, sizeof(::Protocol::DiedInfo)},
+  { 98, -1, -1, sizeof(::Protocol::SkillInfo)},
+  { 108, -1, -1, sizeof(::Protocol::SkillCastInfo)},
+  { 116, -1, -1, sizeof(::Protocol::SkillHitInfo)},
+  { 129, -1, -1, sizeof(::Protocol::StatusInfo)},
+  { 142, -1, -1, sizeof(::Protocol::ProjectileInfo)},
+  { 159, -1, -1, sizeof(::Protocol::ProjectileEndInfo)},
+  { 170, -1, -1, sizeof(::Protocol::ZoneInfo)},
+  { 189, -1, -1, sizeof(::Protocol::CharacterInfo)},
+  { 200, -1, -1, sizeof(::Protocol::ItemInstance)},
+  { 213, -1, -1, sizeof(::Protocol::VisionSource)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -644,72 +652,73 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "\001(\0132\021.Protocol.PosInfo\022-\n\rcreature_type\030"
   "\004 \001(\0162\026.Protocol.CreatureType\022\027\n\017monster"
   "_type_id\030\005 \001(\r\022\n\n\002hp\030\006 \001(\005\022\016\n\006max_hp\030\007 \001"
-  "(\005\"G\n\nAttackInfo\022\023\n\013attacker_id\030\001 \001(\004\022\021\n"
-  "\ttarget_id\030\002 \001(\004\022\021\n\twindup_ms\030\003 \001(\004\"\246\001\n\n"
-  "DamageInfo\022\023\n\013attacker_id\030\001 \001(\004\022\021\n\ttarge"
-  "t_id\030\002 \001(\004\022\016\n\006damage\030\003 \001(\005\022\024\n\014remaining_"
-  "hp\030\004 \001(\005\022\017\n\007is_crit\030\005 \001(\010\022)\n\013damage_type"
-  "\030\006 \001(\0162\024.Protocol.DamageType\022\016\n\006max_hp\030\007"
-  " \001(\005\"\202\001\n\013CcEventInfo\022\021\n\ttarget_id\030\001 \001(\004\022"
-  "\025\n\rinstigator_id\030\002 \001(\004\022!\n\007cc_type\030\003 \001(\0162"
-  "\020.Protocol.CcType\022\023\n\013duration_ms\030\004 \001(\r\022\021"
-  "\n\tmagnitude\030\005 \001(\002\"x\n\rKnockbackInfo\022\021\n\tta"
-  "rget_id\030\001 \001(\004\022\025\n\rinstigator_id\030\002 \001(\004\022\r\n\005"
-  "dir_x\030\003 \001(\002\022\r\n\005dir_y\030\004 \001(\002\022\020\n\010distance\030\005"
-  " \001(\002\022\r\n\005speed\030\006 \001(\002\"T\n\006CcSlot\022!\n\007cc_type"
-  "\030\001 \001(\0162\020.Protocol.CcType\022\024\n\014remaining_ms"
-  "\030\002 \001(\r\022\021\n\tmagnitude\030\003 \001(\002\"V\n\013CcStateInfo"
-  "\022\021\n\ttarget_id\030\001 \001(\004\022\037\n\005slots\030\002 \003(\0132\020.Pro"
-  "tocol.CcSlot\022\023\n\013active_slow\030\003 \001(\002\"Y\n\010Die"
-  "dInfo\022\021\n\tvictim_id\030\001 \001(\004\022\025\n\rinstigator_i"
-  "d\030\002 \001(\004\022#\n\005cause\030\003 \001(\0162\024.Protocol.DeathC"
-  "ause\"\227\001\n\tSkillInfo\022!\n\004slot\030\001 \001(\0162\023.Proto"
-  "col.EquipSlot\022\020\n\010skill_id\030\002 \001(\r\022+\n\nbind_"
-  "state\030\003 \001(\0162\027.Protocol.SlotBindState\022(\n\013"
-  "shadowed_by\030\004 \001(\0162\023.Protocol.EquipSlot\"9"
-  "\n\rSkillCastInfo\022\021\n\tcaster_id\030\001 \001(\004\022\025\n\ris"
-  "_stationary\030\002 \001(\010\"\211\001\n\014SkillHitInfo\022\021\n\tca"
-  "ster_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\ttarg"
-  "et_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impact_"
-  "y\030\005 \001(\002\022\r\n\005aim_x\030\006 \001(\002\022\r\n\005aim_y\030\007 \001(\002\"\242\001"
-  "\n\nStatusInfo\022\021\n\ttarget_id\030\001 \001(\004\022\"\n\004kind\030"
-  "\002 \001(\0162\024.Protocol.StatusKind\022\r\n\005param\030\003 \001"
-  "(\t\022\016\n\006stacks\030\004 \001(\r\022\024\n\014remaining_ms\030\005 \001(\r"
-  "\022\021\n\tmagnitude\030\006 \001(\002\022\025\n\rinstigator_id\030\007 \001"
-  "(\004\"\314\001\n\016ProjectileInfo\022\025\n\rprojectile_id\030\001"
-  " \001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030\003 \001"
-  "(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\r\n\005dir_x\030\006 \001(\002\022"
-  "\r\n\005dir_y\030\007 \001(\002\022\021\n\tspeed_cms\030\010 \001(\002\022\020\n\010ran"
-  "ge_cm\030\t \001(\002\022\021\n\tradius_cm\030\n \001(\002\022\021\n\ttarget"
-  "_id\030\013 \001(\004\"|\n\021ProjectileEndInfo\022\025\n\rprojec"
-  "tile_id\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\'\n\006r"
-  "eason\030\004 \001(\0162\027.Protocol.ProjectileEnd\022\021\n\t"
-  "target_id\030\005 \001(\004\"\310\001\n\010ZoneInfo\022\017\n\007zone_id\030"
-  "\001 \001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030\003 "
-  "\001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\021\n\tradius_cm\030\006"
-  " \001(\002\022\023\n\013duration_ms\030\007 \001(\r\022\r\n\005param\030\010 \001(\t"
-  "\022\013\n\003yaw\030\t \001(\002\022\023\n\013half_length\030\n \001(\002\022\026\n\016ha"
-  "lf_thickness\030\013 \001(\002\"v\n\rCharacterInfo\022)\n\013o"
-  "bject_info\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014"
-  "\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005"
-  "\022\020\n\010floor_id\030\005 \001(\r\"\330\001\n\014ItemInstance\022\023\n\013i"
-  "nstance_id\030\001 \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\""
-  "\n\005grade\030\003 \001(\0162\023.Protocol.ItemGrade\022\r\n\005le"
-  "vel\030\004 \001(\r\022\"\n\005state\030\005 \001(\0162\023.Protocol.Item"
-  "State\022!\n\004slot\030\006 \001(\0162\023.Protocol.EquipSlot"
-  "\022#\n\006skills\030\007 \003(\0132\023.Protocol.SkillInfo\"\234\001"
-  "\n\014VisionSource\022\021\n\tsource_id\030\001 \001(\004\022\021\n\tfol"
-  "low_id\030\002 \001(\004\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tra"
-  "dius_cm\030\005 \001(\002\022\024\n\014remaining_ms\030\006 \001(\r\022\021\n\tn"
-  "eeds_los\030\007 \001(\010\022\024\n\014sees_stealth\030\010 \001(\010b\006pr"
-  "oto3"
+  "(\005\"\\\n\nAttackInfo\022\023\n\013attacker_id\030\001 \001(\004\022\021\n"
+  "\ttarget_id\030\002 \001(\004\022\021\n\twindup_ms\030\003 \001(\004\022\023\n\013i"
+  "nterval_ms\030\004 \001(\r\"\246\001\n\nDamageInfo\022\023\n\013attac"
+  "ker_id\030\001 \001(\004\022\021\n\ttarget_id\030\002 \001(\004\022\016\n\006damag"
+  "e\030\003 \001(\005\022\024\n\014remaining_hp\030\004 \001(\005\022\017\n\007is_crit"
+  "\030\005 \001(\010\022)\n\013damage_type\030\006 \001(\0162\024.Protocol.D"
+  "amageType\022\016\n\006max_hp\030\007 \001(\005\"\202\001\n\013CcEventInf"
+  "o\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\rinstigator_id\030\002 "
+  "\001(\004\022!\n\007cc_type\030\003 \001(\0162\020.Protocol.CcType\022\023"
+  "\n\013duration_ms\030\004 \001(\r\022\021\n\tmagnitude\030\005 \001(\002\"x"
+  "\n\rKnockbackInfo\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\rin"
+  "stigator_id\030\002 \001(\004\022\r\n\005dir_x\030\003 \001(\002\022\r\n\005dir_"
+  "y\030\004 \001(\002\022\020\n\010distance\030\005 \001(\002\022\r\n\005speed\030\006 \001(\002"
+  "\"T\n\006CcSlot\022!\n\007cc_type\030\001 \001(\0162\020.Protocol.C"
+  "cType\022\024\n\014remaining_ms\030\002 \001(\r\022\021\n\tmagnitude"
+  "\030\003 \001(\002\"V\n\013CcStateInfo\022\021\n\ttarget_id\030\001 \001(\004"
+  "\022\037\n\005slots\030\002 \003(\0132\020.Protocol.CcSlot\022\023\n\013act"
+  "ive_slow\030\003 \001(\002\"Y\n\010DiedInfo\022\021\n\tvictim_id\030"
+  "\001 \001(\004\022\025\n\rinstigator_id\030\002 \001(\004\022#\n\005cause\030\003 "
+  "\001(\0162\024.Protocol.DeathCause\"\227\001\n\tSkillInfo\022"
+  "!\n\004slot\030\001 \001(\0162\023.Protocol.EquipSlot\022\020\n\010sk"
+  "ill_id\030\002 \001(\r\022+\n\nbind_state\030\003 \001(\0162\027.Proto"
+  "col.SlotBindState\022(\n\013shadowed_by\030\004 \001(\0162\023"
+  ".Protocol.EquipSlot\"9\n\rSkillCastInfo\022\021\n\t"
+  "caster_id\030\001 \001(\004\022\025\n\ris_stationary\030\002 \001(\010\"\211"
+  "\001\n\014SkillHitInfo\022\021\n\tcaster_id\030\001 \001(\004\022\021\n\tef"
+  "fect_id\030\002 \001(\r\022\021\n\ttarget_id\030\003 \001(\004\022\020\n\010impa"
+  "ct_x\030\004 \001(\002\022\020\n\010impact_y\030\005 \001(\002\022\r\n\005aim_x\030\006 "
+  "\001(\002\022\r\n\005aim_y\030\007 \001(\002\"\242\001\n\nStatusInfo\022\021\n\ttar"
+  "get_id\030\001 \001(\004\022\"\n\004kind\030\002 \001(\0162\024.Protocol.St"
+  "atusKind\022\r\n\005param\030\003 \001(\t\022\016\n\006stacks\030\004 \001(\r\022"
+  "\024\n\014remaining_ms\030\005 \001(\r\022\021\n\tmagnitude\030\006 \001(\002"
+  "\022\025\n\rinstigator_id\030\007 \001(\004\"\314\001\n\016ProjectileIn"
+  "fo\022\025\n\rprojectile_id\030\001 \001(\004\022\021\n\tcaster_id\030\002"
+  " \001(\004\022\021\n\teffect_id\030\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030"
+  "\005 \001(\002\022\r\n\005dir_x\030\006 \001(\002\022\r\n\005dir_y\030\007 \001(\002\022\021\n\ts"
+  "peed_cms\030\010 \001(\002\022\020\n\010range_cm\030\t \001(\002\022\021\n\tradi"
+  "us_cm\030\n \001(\002\022\021\n\ttarget_id\030\013 \001(\004\"|\n\021Projec"
+  "tileEndInfo\022\025\n\rprojectile_id\030\001 \001(\004\022\t\n\001x\030"
+  "\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\'\n\006reason\030\004 \001(\0162\027.Proto"
+  "col.ProjectileEnd\022\021\n\ttarget_id\030\005 \001(\004\"\356\001\n"
+  "\010ZoneInfo\022\017\n\007zone_id\030\001 \001(\004\022\021\n\tcaster_id\030"
+  "\002 \001(\004\022\021\n\teffect_id\030\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y"
+  "\030\005 \001(\002\022\021\n\tradius_cm\030\006 \001(\002\022\023\n\013duration_ms"
+  "\030\007 \001(\r\022\r\n\005param\030\010 \001(\t\022\013\n\003yaw\030\t \001(\002\022\023\n\013ha"
+  "lf_length\030\n \001(\002\022\026\n\016half_thickness\030\013 \001(\002\022"
+  "\021\n\tangle_deg\030\014 \001(\002\022\021\n\tfollow_id\030\r \001(\004\"v\n"
+  "\rCharacterInfo\022)\n\013object_info\030\001 \001(\0132\024.Pr"
+  "otocol.ObjectInfo\022\014\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 "
+  "\001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n\010floor_id\030\005 \001(\r\"\330\001"
+  "\n\014ItemInstance\022\023\n\013instance_id\030\001 \001(\004\022\024\n\014i"
+  "tem_type_id\030\002 \001(\r\022\"\n\005grade\030\003 \001(\0162\023.Proto"
+  "col.ItemGrade\022\r\n\005level\030\004 \001(\r\022\"\n\005state\030\005 "
+  "\001(\0162\023.Protocol.ItemState\022!\n\004slot\030\006 \001(\0162\023"
+  ".Protocol.EquipSlot\022#\n\006skills\030\007 \003(\0132\023.Pr"
+  "otocol.SkillInfo\"\252\001\n\014VisionSource\022\021\n\tsou"
+  "rce_id\030\001 \001(\004\022\021\n\tfollow_id\030\002 \001(\004\022\t\n\001x\030\003 \001"
+  "(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tradius_cm\030\005 \001(\002\022\024\n\014rema"
+  "ining_ms\030\006 \001(\r\022\021\n\tneeds_los\030\007 \001(\010\022\024\n\014see"
+  "s_stealth\030\010 \001(\010\022\014\n\004kind\030\t \001(\tb\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 2684, descriptor_table_protodef_Struct_2eproto,
+    false, false, 2757, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 19,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -1455,12 +1464,13 @@ AttackInfo::AttackInfo(const AttackInfo& from)
       decltype(_impl_.attacker_id_){}
     , decltype(_impl_.target_id_){}
     , decltype(_impl_.windup_ms_){}
+    , decltype(_impl_.interval_ms_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&_impl_.attacker_id_, &from._impl_.attacker_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.windup_ms_) -
-    reinterpret_cast<char*>(&_impl_.attacker_id_)) + sizeof(_impl_.windup_ms_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.interval_ms_) -
+    reinterpret_cast<char*>(&_impl_.attacker_id_)) + sizeof(_impl_.interval_ms_));
   // @@protoc_insertion_point(copy_constructor:Protocol.AttackInfo)
 }
 
@@ -1472,6 +1482,7 @@ inline void AttackInfo::SharedCtor(
       decltype(_impl_.attacker_id_){uint64_t{0u}}
     , decltype(_impl_.target_id_){uint64_t{0u}}
     , decltype(_impl_.windup_ms_){uint64_t{0u}}
+    , decltype(_impl_.interval_ms_){0u}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -1500,8 +1511,8 @@ void AttackInfo::Clear() {
   (void) cached_has_bits;
 
   ::memset(&_impl_.attacker_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.windup_ms_) -
-      reinterpret_cast<char*>(&_impl_.attacker_id_)) + sizeof(_impl_.windup_ms_));
+      reinterpret_cast<char*>(&_impl_.interval_ms_) -
+      reinterpret_cast<char*>(&_impl_.attacker_id_)) + sizeof(_impl_.interval_ms_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -1531,6 +1542,14 @@ const char* AttackInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext* ct
       case 3:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 24)) {
           _impl_.windup_ms_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint32 interval_ms = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 32)) {
+          _impl_.interval_ms_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -1582,6 +1601,12 @@ uint8_t* AttackInfo::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteUInt64ToArray(3, this->_internal_windup_ms(), target);
   }
 
+  // uint32 interval_ms = 4;
+  if (this->_internal_interval_ms() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt32ToArray(4, this->_internal_interval_ms(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1613,6 +1638,11 @@ size_t AttackInfo::ByteSizeLong() const {
     total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_windup_ms());
   }
 
+  // uint32 interval_ms = 4;
+  if (this->_internal_interval_ms() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(this->_internal_interval_ms());
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -1640,6 +1670,9 @@ void AttackInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PRO
   if (from._internal_windup_ms() != 0) {
     _this->_internal_set_windup_ms(from._internal_windup_ms());
   }
+  if (from._internal_interval_ms() != 0) {
+    _this->_internal_set_interval_ms(from._internal_interval_ms());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -1658,8 +1691,8 @@ void AttackInfo::InternalSwap(AttackInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(AttackInfo, _impl_.windup_ms_)
-      + sizeof(AttackInfo::_impl_.windup_ms_)
+      PROTOBUF_FIELD_OFFSET(AttackInfo, _impl_.interval_ms_)
+      + sizeof(AttackInfo::_impl_.interval_ms_)
       - PROTOBUF_FIELD_OFFSET(AttackInfo, _impl_.attacker_id_)>(
           reinterpret_cast<char*>(&_impl_.attacker_id_),
           reinterpret_cast<char*>(&other->_impl_.attacker_id_));
@@ -5483,6 +5516,8 @@ ZoneInfo::ZoneInfo(const ZoneInfo& from)
     , decltype(_impl_.yaw_){}
     , decltype(_impl_.half_length_){}
     , decltype(_impl_.half_thickness_){}
+    , decltype(_impl_.follow_id_){}
+    , decltype(_impl_.angle_deg_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -5495,8 +5530,8 @@ ZoneInfo::ZoneInfo(const ZoneInfo& from)
       _this->GetArenaForAllocation());
   }
   ::memcpy(&_impl_.zone_id_, &from._impl_.zone_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.half_thickness_) -
-    reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.half_thickness_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.angle_deg_) -
+    reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.angle_deg_));
   // @@protoc_insertion_point(copy_constructor:Protocol.ZoneInfo)
 }
 
@@ -5516,6 +5551,8 @@ inline void ZoneInfo::SharedCtor(
     , decltype(_impl_.yaw_){0}
     , decltype(_impl_.half_length_){0}
     , decltype(_impl_.half_thickness_){0}
+    , decltype(_impl_.follow_id_){uint64_t{0u}}
+    , decltype(_impl_.angle_deg_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.param_.InitDefault();
@@ -5550,8 +5587,8 @@ void ZoneInfo::Clear() {
 
   _impl_.param_.ClearToEmpty();
   ::memset(&_impl_.zone_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.half_thickness_) -
-      reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.half_thickness_));
+      reinterpret_cast<char*>(&_impl_.angle_deg_) -
+      reinterpret_cast<char*>(&_impl_.zone_id_)) + sizeof(_impl_.angle_deg_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -5648,6 +5685,22 @@ const char* ZoneInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx)
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 93)) {
           _impl_.half_thickness_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float angle_deg = 12;
+      case 12:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 101)) {
+          _impl_.angle_deg_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 follow_id = 13;
+      case 13:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 104)) {
+          _impl_.follow_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
         } else
           goto handle_unusual;
         continue;
@@ -5774,6 +5827,22 @@ uint8_t* ZoneInfo::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteFloatToArray(11, this->_internal_half_thickness(), target);
   }
 
+  // float angle_deg = 12;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_angle_deg = this->_internal_angle_deg();
+  uint32_t raw_angle_deg;
+  memcpy(&raw_angle_deg, &tmp_angle_deg, sizeof(tmp_angle_deg));
+  if (raw_angle_deg != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(12, this->_internal_angle_deg(), target);
+  }
+
+  // uint64 follow_id = 13;
+  if (this->_internal_follow_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(13, this->_internal_follow_id(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -5871,6 +5940,20 @@ size_t ZoneInfo::ByteSizeLong() const {
     total_size += 1 + 4;
   }
 
+  // uint64 follow_id = 13;
+  if (this->_internal_follow_id() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_follow_id());
+  }
+
+  // float angle_deg = 12;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_angle_deg = this->_internal_angle_deg();
+  uint32_t raw_angle_deg;
+  memcpy(&raw_angle_deg, &tmp_angle_deg, sizeof(tmp_angle_deg));
+  if (raw_angle_deg != 0) {
+    total_size += 1 + 4;
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -5946,6 +6029,16 @@ void ZoneInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTO
   if (raw_half_thickness != 0) {
     _this->_internal_set_half_thickness(from._internal_half_thickness());
   }
+  if (from._internal_follow_id() != 0) {
+    _this->_internal_set_follow_id(from._internal_follow_id());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_angle_deg = from._internal_angle_deg();
+  uint32_t raw_angle_deg;
+  memcpy(&raw_angle_deg, &tmp_angle_deg, sizeof(tmp_angle_deg));
+  if (raw_angle_deg != 0) {
+    _this->_internal_set_angle_deg(from._internal_angle_deg());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -5970,8 +6063,8 @@ void ZoneInfo::InternalSwap(ZoneInfo* other) {
       &other->_impl_.param_, rhs_arena
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(ZoneInfo, _impl_.half_thickness_)
-      + sizeof(ZoneInfo::_impl_.half_thickness_)
+      PROTOBUF_FIELD_OFFSET(ZoneInfo, _impl_.angle_deg_)
+      + sizeof(ZoneInfo::_impl_.angle_deg_)
       - PROTOBUF_FIELD_OFFSET(ZoneInfo, _impl_.zone_id_)>(
           reinterpret_cast<char*>(&_impl_.zone_id_),
           reinterpret_cast<char*>(&other->_impl_.zone_id_));
@@ -6677,7 +6770,8 @@ VisionSource::VisionSource(const VisionSource& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   VisionSource* const _this = this; (void)_this;
   new (&_impl_) Impl_{
-      decltype(_impl_.source_id_){}
+      decltype(_impl_.kind_){}
+    , decltype(_impl_.source_id_){}
     , decltype(_impl_.follow_id_){}
     , decltype(_impl_.x_){}
     , decltype(_impl_.y_){}
@@ -6688,6 +6782,14 @@ VisionSource::VisionSource(const VisionSource& from)
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  _impl_.kind_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.kind_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_kind().empty()) {
+    _this->_impl_.kind_.Set(from._internal_kind(), 
+      _this->GetArenaForAllocation());
+  }
   ::memcpy(&_impl_.source_id_, &from._impl_.source_id_,
     static_cast<size_t>(reinterpret_cast<char*>(&_impl_.sees_stealth_) -
     reinterpret_cast<char*>(&_impl_.source_id_)) + sizeof(_impl_.sees_stealth_));
@@ -6699,7 +6801,8 @@ inline void VisionSource::SharedCtor(
   (void)arena;
   (void)is_message_owned;
   new (&_impl_) Impl_{
-      decltype(_impl_.source_id_){uint64_t{0u}}
+      decltype(_impl_.kind_){}
+    , decltype(_impl_.source_id_){uint64_t{0u}}
     , decltype(_impl_.follow_id_){uint64_t{0u}}
     , decltype(_impl_.x_){0}
     , decltype(_impl_.y_){0}
@@ -6709,6 +6812,10 @@ inline void VisionSource::SharedCtor(
     , decltype(_impl_.sees_stealth_){false}
     , /*decltype(_impl_._cached_size_)*/{}
   };
+  _impl_.kind_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.kind_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
 }
 
 VisionSource::~VisionSource() {
@@ -6722,6 +6829,7 @@ VisionSource::~VisionSource() {
 
 inline void VisionSource::SharedDtor() {
   GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.kind_.Destroy();
 }
 
 void VisionSource::SetCachedSize(int size) const {
@@ -6734,6 +6842,7 @@ void VisionSource::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  _impl_.kind_.ClearToEmpty();
   ::memset(&_impl_.source_id_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&_impl_.sees_stealth_) -
       reinterpret_cast<char*>(&_impl_.source_id_)) + sizeof(_impl_.sees_stealth_));
@@ -6807,6 +6916,16 @@ const char* VisionSource::_InternalParse(const char* ptr, ::_pbi::ParseContext* 
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 64)) {
           _impl_.sees_stealth_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // string kind = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 74)) {
+          auto str = _internal_mutable_kind();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "Protocol.VisionSource.kind"));
         } else
           goto handle_unusual;
         continue;
@@ -6899,6 +7018,16 @@ uint8_t* VisionSource::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteBoolToArray(8, this->_internal_sees_stealth(), target);
   }
 
+  // string kind = 9;
+  if (!this->_internal_kind().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_kind().data(), static_cast<int>(this->_internal_kind().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "Protocol.VisionSource.kind");
+    target = stream->WriteStringMaybeAliased(
+        9, this->_internal_kind(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -6914,6 +7043,13 @@ size_t VisionSource::ByteSizeLong() const {
   uint32_t cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
+
+  // string kind = 9;
+  if (!this->_internal_kind().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_kind());
+  }
 
   // uint64 source_id = 1;
   if (this->_internal_source_id() != 0) {
@@ -6985,6 +7121,9 @@ void VisionSource::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::P
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (!from._internal_kind().empty()) {
+    _this->_internal_set_kind(from._internal_kind());
+  }
   if (from._internal_source_id() != 0) {
     _this->_internal_set_source_id(from._internal_source_id());
   }
@@ -7037,7 +7176,13 @@ bool VisionSource::IsInitialized() const {
 
 void VisionSource::InternalSwap(VisionSource* other) {
   using std::swap;
+  auto* lhs_arena = GetArenaForAllocation();
+  auto* rhs_arena = other->GetArenaForAllocation();
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.kind_, lhs_arena,
+      &other->_impl_.kind_, rhs_arena
+  );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(VisionSource, _impl_.sees_stealth_)
       + sizeof(VisionSource::_impl_.sees_stealth_)

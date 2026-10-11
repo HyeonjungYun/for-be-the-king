@@ -114,6 +114,11 @@ const BuffInstance* StatusSet::FindBuff(SkillBuffStat stat) const
 	return nullptr;
 }
 
+bool StatusSet::IgnoresWalls() const
+{
+	return FindBuff(SkillBuffStat::WallPierce) != nullptr;
+}
+
 bool StatusSet::HasBuff(SkillBuffStat stat, const string& param) const
 {
 	for (const BuffInstance& b : _buffs)
@@ -138,6 +143,19 @@ uint32 StatusSet::RemoveBuffs(uint32 skillId)
 		i++;
 	}
 	return removed;
+}
+
+bool StatusSet::RemoveBuff(uint32 skillId, SkillBuffStat stat)
+{
+	for (size_t i = 0; i < _buffs.size(); i++)
+	{
+		if (_buffs[i].skillId == skillId && _buffs[i].stat == stat)
+		{
+			_buffs.erase(_buffs.begin() + i);
+			return true;
+		}
+	}
+	return false;
 }
 
 uint32 StatusSet::RemoveDots(const string& kind)

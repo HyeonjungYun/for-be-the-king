@@ -13,6 +13,7 @@ namespace SkillKinematics
 {
 	constexpr float	CAPSULE_RADIUS_CM	= 42.f;		// ADR-0006 § ⑦ - 넉백 · 대시 · 블링크 반지름
 	constexpr float	WALL_BACKOFF_CM		= 1.f;		// 벽 면에 딱 붙지 않게 (WallMap 의 "벽 안" 은 열린 집합 - 면은 밖이지만 여유를 둔다)
+	constexpr float	PULL_FREE_STEP_CM	= 10.f;		// 벽을 지나는 끌기 - 끝점이 벽에 걸리면 이 간격으로 빈 자리를 찾는다
 
 	struct PushResult
 	{
@@ -27,7 +28,7 @@ namespace SkillKinematics
 	PushResult	Push(const WallMap& walls, float x, float y, float dirX, float dirY, float distCm);
 
 	// from 을 to 쪽으로 stopCm 앞까지 끈다. 둘 사이 중심선이 벽에 막히면 moved = false · hitWall = true (끌리지 않는다).
-	// 이미 stopCm 안이면 moved = false
+	// 이미 stopCm 안이면 moved = false. ignoreWalls(유령 신부의 축복) 는 벽을 지나되 끝점은 벽 밖 - 시전자 쪽에 자리가 없으면 벽 저편 면까지
 	PushResult	PullToward(const WallMap& walls, float fromX, float fromY, float toX, float toY, float stopCm, bool ignoreWalls = false);
 
 	// 날아가는 시간 (ms) - 넉백 CC 길이. 거리 0 이면 0

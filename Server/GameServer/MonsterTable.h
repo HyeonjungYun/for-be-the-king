@@ -11,13 +11,21 @@
 //
 // 🔴 monster_spawns.csv 가 없거나 층에 행이 없으면 그 층 몬스터 0 - G3 의 켬/끔 비교가 이 파일로 된다.
 
-enum class MonsterTier : uint8 { Field, House, Boss };
+enum class MonsterTier : uint8 { Field, House, Boss, Leader };
+
+// 어그로 방식 (2026-10-11 사용자 지시 "몬스터 개선").
+//   guard    - 예전 몬스터: 집에 서 있다가 감지 · 피격으로 쫓고 끈(leash)이 끊기면 집으로 (집 지키는 병사 · 보스 · 테스트 더미)
+//   detect   - 무리 · 플레이어 탐지형: 순찰하다 둘레의 플레이어를 보면 그 사람만 쫓는다 - 둘 중 하나가 죽을 때까지.
+//              다른 플레이어가 무리를 때리면 그 사람으로 옮긴다
+//   reactive - 무리 · 공격 반응형: 맞기 전엔 아무도 쫓지 않는다. 처음 어그로된 자리를 기억하고 거기서 leash 를 벗어나면 돌아가 순찰을 잇는다
+enum class MonsterAggroKind : uint8 { Guard, Detect, Reactive };
 
 struct MonsterTypeDef
 {
 	uint32		typeId = 0;
 	string		nameKey;
 	MonsterTier	tier = MonsterTier::Field;
+	MonsterAggroKind aggroKind = MonsterAggroKind::Guard;	// monster_types.csv aggro_kind (열이 없으면 guard)
 
 	int32		maxHp = 0;
 	int32		attackPower = 0;
@@ -57,6 +65,31 @@ struct MonsterSpawnDef
 	uint32		respawnSeconds = 0;
 };
 
+// 순찰 길 (patrol_routes.csv) - 닫힌 고리. 마지막 점 → 첫 점이 이어진다. 가로 두 줄(2 ~ 4 m 떨어진)로 만들어 우두머리가 자기 줄을 거슬러 걷지 않게
+struct PatrolRoute
+{
+	uint32						routeId = 0;
+	uint32						floorId = 0;
+	vector<pair<float, float>>	points;
+};
+
+// 무리 (monster_packs.csv) - 우두머리 1 + 기본 member_count. 한 길을 한 줄로 걷는다
+struct MonsterPackDef
+{
+	uint32				packId = 0;
+	uint32				floorId = 0;
+	uint32				routeId = 0;
+	uint32				startSeq = 0;
+	uint32				leaderTypeId = 0;
+	uint32				memberTypeId = 0;
+	uint32				memberCount = 0;
+	float				spacingCm = 0.f;		// 줄 간격 (앞 몸 중심 → 뒷 몸 중심)
+	float				patrolSpeedCms = 0.f;
+	uint32				respawnSeconds = 0;		// 무리가 전멸한 뒤 통째로
+	MonsterAggroKind	kind = MonsterAggroKind::Detect;
+	const PatrolRoute*	route = nullptr;
+};
+
 // 전역 노브 (monster-ai.md § Tuning Knobs). 종류별 값은 CSV 에 있다
 namespace MonsterConfig
 {
@@ -93,6 +126,23 @@ namespace MonsterConfig
 	constexpr uint64	DROP_BAG_LIFETIME_US	= 600'000'000;
 	constexpr float		DROP_FREE_RADIUS_CM		= 60.f;
 	constexpr float		DROP_FREE_SEARCH_CM		= 300.f;
+
+	// ── 무리 · 순찰 (2026-10-11 몬스터 개선) ──
+	constexpr float		TRAIL_STEP_CM			= 25.f;			// 우두머리 발자국 간격 - 뒤따르는 몸이 이 점들을 밟는다
+	constexpr float		WAYPOINT_ARRIVE_CM		= 50.f;			// 순찰 점에 이만큼 다가가면 다음 점 (멈추지 않는다)
+	constexpr float		FOLLOW_GAIN_PER_S		= 2.f;			// 뒤처진 만큼 빨리 (자기 이동 속도까지)
+	constexpr float		COHESION_SLOW_CM		= 300.f;		// 맨 뒤가 이만큼 처지면 우두머리가 반 속도
+	constexpr float		COHESION_STOP_CM		= 600.f;		// 이만큼이면 우두머리가 기다린다
+	constexpr uint64	COHESION_MAX_WAIT_US	= 5'000'000;	// 최대 기다림 - 넘으면 그냥 간다
+	constexpr uint32	PACK_MAX_MEMBERS		= 5;			// 우두머리 뒤 기본 몬스터 최대 수
+	constexpr float		ROUTE_TOWER_MIN_DIST_CM	= 2000.f;		// 순찰 길 ↔ 타워 (집 규칙 35 m 는 안쪽 줄이 지킬 수 없다)
+	constexpr float		ROUTE_CLEARANCE_MARGIN_CM = 20.f;		// 길 검사 반지름 = 가장 큰 몸 + 이만큼
+	constexpr float		PATROL_SPEED_MAX_RATIO	= 0.8f;			// 순찰 속도 ≤ 0.8 × 가장 느린 몸 - 뒤처진 몸이 따라잡을 여유
+	constexpr uint64	PACK_LOS_LOSS_US		= 500'000;
+	constexpr uint64	PACK_STUCK_GIVEUP_US	= 6'000'000;	// 무리 전원이 이만큼 막혀 있으면 돌아간다 (길찾기가 없다 - 벽을 영영 비비지 않게)
+	constexpr uint64	RETURN_HARD_TIMEOUT_US	= 45'000'000;	// 돌아가는 길이 이보다 길면 (아무도 안 보는 때) 제자리로 옮긴다
+	constexpr float		TOWER_NO_GO_CM			= 1200.f;		// 타워 둘레 - 무리는 이 안으로 들어가지 않는다 (목표가 안에 있으면 테두리까지)
+	constexpr uint64	PACK_RETARGET_COOLDOWN_US = 0;			// 다른 사람이 때리면 바로 옮긴다 (사용자 결정 - 최신 공격자)
 }
 
 class MonsterTable
@@ -104,13 +154,22 @@ public:
 	// nullptr = 그 파일이 없다
 	static bool		Parse(const string* typesCsv, const string* spawnsCsv, uint32 floorCount, OUT string& error);
 
+	// 순찰 길 · 무리 (Parse 다음에 - 종류를 본다). 둘 다 없으면 무리 0. 무리 파일만 있으면 거부
+	static bool		ParsePacks(const string* routesCsv, const string* packsCsv, uint32 floorCount, OUT string& error);
+
 	static const MonsterTypeDef*			FindType(uint32 typeId);
 	static const vector<MonsterSpawnDef>&	Spawns() { return s_spawns; }
 	static size_t							TypeCount() { return s_types.size(); }
+	static const vector<MonsterPackDef>&	Packs() { return s_packs; }
+	static const PatrolRoute*				FindRoute(uint32 routeId);
+	static size_t							RouteCount() { return s_routes.size(); }
 
 	static const char*	TierName(MonsterTier tier);
+	static const char*	AggroKindName(MonsterAggroKind kind);
 
 private:
 	static unordered_map<uint32, MonsterTypeDef>	s_types;
 	static vector<MonsterSpawnDef>					s_spawns;
+	static unordered_map<uint32, PatrolRoute>		s_routes;		// 무리가 가리키므로 부팅 뒤 바뀌지 않는다
+	static vector<MonsterPackDef>					s_packs;
 };

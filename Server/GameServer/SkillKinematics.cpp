@@ -73,10 +73,31 @@ namespace SkillKinematics
 
 		if (ignoreWalls)
 		{
-			// 벽을 지나 끌려온다 - 끝점만 벽 밖이면 된다
-			const float len = d - stopCm;
-			r.endX = fromX + dx / d * len;
-			r.endY = fromY + dy / d * len;
+			// 벽을 지나 끌려온다 - 끝점만 벽 밖이면 된다. 시전자가 벽 가까이 서 있으면 "바로 앞" 이 벽 두께 안이라
+			// 몸이 벽에 박힌 채 멈췄다 (2026-10-11 실기동). 시전자 쪽으로 몸이 닿기 전까지 더 당겨 보고, 자리가 없으면
+			// 대상 쪽으로 물린다 - 내 쪽에 몸 하나 들어갈 자리가 없으면 벽 저편 면까지만 끌려온다
+			const float ux = dx / d;
+			const float uy = dy / d;
+			auto freeAt = [&](float l) { return walls.Overlaps(fromX + ux * l, fromY + uy * l, CAPSULE_RADIUS_CM) == false; };
+
+			const float want = d - stopCm;
+			const float bodiesTouch = d - 2.f * CAPSULE_RADIUS_CM;
+			float len = freeAt(want) ? want : -1.f;
+			for (float l = want + PULL_FREE_STEP_CM; len < 0.f && l <= bodiesTouch; l += PULL_FREE_STEP_CM)
+				if (freeAt(l))
+					len = l;
+			for (float l = want - PULL_FREE_STEP_CM; len < 0.f && l >= 1.f; l -= PULL_FREE_STEP_CM)
+				if (freeAt(l))
+					len = l;
+
+			if (len < 1.f)
+			{
+				r.hitWall = true;
+				return r;
+			}
+
+			r.endX = fromX + ux * len;
+			r.endY = fromY + uy * len;
 			r.distCm = len;
 			r.moved = true;
 			return r;

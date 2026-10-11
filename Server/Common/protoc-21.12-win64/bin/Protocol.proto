@@ -67,6 +67,8 @@ message S_MOVE
 message C_ATTACK
 {
 	uint64 target_id = 1;
+	float aim_x = 2;		// cursor point on the ground - non-target basics (sword dash slash 1119, dagger spin 1120). 0,0 = none
+	float aim_y = 3;
 }
 
 message S_ATTACK

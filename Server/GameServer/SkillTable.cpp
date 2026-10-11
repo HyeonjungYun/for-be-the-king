@@ -49,7 +49,7 @@ namespace
 	const vector<pair<const char*, SkillAimType>> AIM_NAMES =
 	{
 		{ "none", SkillAimType::None }, { "self_area", SkillAimType::SelfArea }, { "target", SkillAimType::Target },
-		{ "direction", SkillAimType::Direction }, { "point", SkillAimType::Point },
+		{ "direction", SkillAimType::Direction }, { "point", SkillAimType::Point }, { "facing", SkillAimType::Facing },
 	};
 
 	const vector<pair<const char*, SkillPower>> POWER_NAMES =
@@ -187,16 +187,16 @@ namespace
 			}
 			break;
 		case SkillShape::Line:
-			if (def.rangeCm <= 0.f || def.widthCm <= 0.f || def.aimType != SkillAimType::Direction)
+			if (def.rangeCm <= 0.f || def.widthCm <= 0.f || IsDirectionalAim(def.aimType) == false)
 			{
-				error = where + " line needs range_cm, width_cm > 0 and aim direction";
+				error = where + " line needs range_cm, width_cm > 0 and aim direction / facing";
 				return false;
 			}
 			break;
 		case SkillShape::Cone:
-			if (def.radiusCm <= 0.f || def.angleDeg <= 0.f || def.angleDeg > 360.f || def.aimType != SkillAimType::Direction)
+			if (def.radiusCm <= 0.f || def.angleDeg <= 0.f || def.angleDeg > 360.f || IsDirectionalAim(def.aimType) == false)
 			{
-				error = where + " cone needs radius_cm > 0, angle_deg in (0, 360] and aim direction";
+				error = where + " cone needs radius_cm > 0, angle_deg in (0, 360] and aim direction / facing";
 				return false;
 			}
 			break;
@@ -222,7 +222,7 @@ namespace
 			break;
 		case SkillShape::Projectile:
 			if (def.rangeCm <= 0.f || def.widthCm <= 0.f || def.projectileSpeedCms <= 0.f
-				|| (def.aimType != SkillAimType::Direction && def.aimType != SkillAimType::Target))
+				|| (IsDirectionalAim(def.aimType) == false && def.aimType != SkillAimType::Target))
 			{
 				error = where + " projectile needs range_cm, width_cm, projectile_speed_cms > 0 and aim direction / target";
 				return false;
@@ -307,6 +307,16 @@ namespace
 				break;
 
 			case SkillEffectType::Knockback:
+				// param far (저 멀리 1109, 2026-10-11 사용자) - 거리는 시전자의 시야 반경, 속도만 데이터. 벽에 부딪히면 날아간 거리에 비례한 피해 (ad_ratio / 100 cm)
+				if (e.param.find("far") != string::npos)
+				{
+					if (e.speedCms <= 0.f)
+					{
+						error = ew + " far knockback needs speed_cms";
+						return false;
+					}
+					break;
+				}
 				if (e.distCm <= 0.f || e.distCm > KNOCKBACK_DIST_CAP || e.speedCms < KNOCKBACK_SPEED_MIN || e.speedCms > KNOCKBACK_SPEED_MAX)
 				{
 					error = ew + " needs dist_cm (0, 300] and speed_cms [450, 1360] (S2)";
@@ -333,9 +343,11 @@ namespace
 						error = ew + " speed_cms must be >= dist_cm / 0.4 (dash_duration cap)";
 						return false;
 					}
-					if (instant == false && e.param != "dash" && e.param != "leap" && e.param != "back" && e.param != "forward")
+					// to_target = 대상 바로 앞까지 (기습 · 일도양단) · dash_through = 유닛을 지나간다(벽은 막힌다, 그림자 베기) - 둘 다 클라가 움직인다
+					if (instant == false && e.param != "dash" && e.param != "leap" && e.param != "back" && e.param != "forward"
+						&& e.param != "to_target" && e.param != "dash_through")
 					{
-						error = ew + " param must be dash / leap / back / forward / blink / to_mark:<mark>";
+						error = ew + " param must be dash / leap / back / forward / to_target / dash_through / blink / to_mark:<mark>";
 						return false;
 					}
 				}

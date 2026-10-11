@@ -107,6 +107,8 @@ void Creature::ClearCombatState()
 
 	attackTargetId = 0;
 	attackHitAtUs = 0;
+	attackMode = 0;
+	stillSkillId = 0;
 
 	castEndAtUs = 0;
 	castSkillId = 0;

@@ -27,8 +27,9 @@ message ObjectInfo
 message AttackInfo
 {
 	uint64 attacker_id = 1;
-	uint64 target_id = 2;
+	uint64 target_id = 2;			// 0 = 대상 없는 평타 (일보일검 횡베기 · 난무 사방 베기, 2026-10-11)
 	uint64 windup_ms = 3;
+	uint32 interval_ms = 4;			// 공격자의 평타 간격 (공속 반영) - 우클릭 지속 공격이 이 박자로 보낸다 (2026-10-11)
 }
 
 message DamageInfo
@@ -158,6 +159,8 @@ message ZoneInfo
 	float yaw = 9;				// param wall (지각변동) - 벽 방향 (도). 원 장판은 0
 	float half_length = 10;		// param wall - 벽 반길이 (cm)
 	float half_thickness = 11;	// param wall - 벽 반두께 (cm)
+	float angle_deg = 12;		// 부채꼴 장판 (네불라 아르카나 2026-10-11) - 전체 각(도), 방향은 yaw. 0 = 원
+	uint64 follow_id = 13;		// 따라가는 생물 (ping - 맹수의 탐색 2026-10-11). 클라에 없으면 x, y 고정. 0 = 고정
 }
 
 message CharacterInfo
@@ -191,4 +194,5 @@ message VisionSource
 	uint32 remaining_ms = 6;		// 0 = 따라가는 생물이 있는 동안
 	bool needs_los = 7;			// false = 벽 너머도 본다
 	bool sees_stealth = 8;
+	string kind = 9;			// hawk (종이매 - 클라가 매를 그린다) · clone · detect (2026-10-11)
 }

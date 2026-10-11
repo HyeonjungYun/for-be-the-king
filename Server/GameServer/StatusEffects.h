@@ -72,8 +72,12 @@ public:
 	float	BuffMax(SkillBuffStat stat) const;							// 가장 큰 크기 (없으면 0) - 평타 모드처럼 합치면 안 되는 것
 	const BuffInstance* FindBuff(SkillBuffStat stat) const;				// 그 스탯의 첫 버프 (없으면 nullptr)
 	bool	HasBuff(SkillBuffStat stat, const string& param) const;
+	// 유령 신부의 축복 - wall_pierce 는 자기 버프(SelfBuff)라 param 이 없다. HasBuff(stat, "wall_pierce") 로 찾던 것은
+	// 한 번도 맞지 않아 축복이 아무것도 하지 않았다 (2026-10-11 실기동에서 발견)
+	bool	IgnoresWalls() const;
 	// 한 스킬의 버프를 전부 뺀다 (배수진 해제). 돌려주는 값 = 뺀 수
 	uint32	RemoveBuffs(uint32 skillId);
+	bool	RemoveBuff(uint32 skillId, SkillBuffStat stat);			// 그 스킬의 그 스탯 버프 하나 (건곤일척 - 방어력 감소는 남기고 피해 증가만)
 
 	// 모자 로스터 - 지속 피해 손보기
 	uint32	RemoveDots(const string& kind);									// 그 종류 전부 (빈 kind = 전부)

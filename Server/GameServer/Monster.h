@@ -50,4 +50,8 @@ public:
 	bool					isDummy = false;
 	bool					aiFixed = false;
 	uint64					dummyOwnerId = 0;
+
+	// 무리 (2026-10-11 몬스터 개선) - 0 = 혼자 (예전 두뇌). 아니면 Room::_packs 의 위치 + 1. packIndex = 줄 순서 (0 = 태어날 때의 우두머리)
+	uint32					packSlot = 0;
+	uint8					packIndex = 0;
 };

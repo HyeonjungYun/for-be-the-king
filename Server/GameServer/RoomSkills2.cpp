@@ -266,7 +266,7 @@ void Room::LaunchVolleyShot(const CreatureRef& caster, const SkillDef& def, floa
 	p.dirX = dirX;
 	p.dirY = dirY;
 	p.speedCms = def.projectileSpeedCms;
-	p.radiusCm = SkillTable::Rules().projectileRadiusCm;
+	p.radiusCm = (std::max)(SkillTable::Rules().projectileRadiusCm, def.widthCm * 0.5f);
 	p.remainingCm = def.rangeCm;
 	p.pierce = def.pierce;
 	p.ctx = ctx;
@@ -274,6 +274,17 @@ void Room::LaunchVolleyShot(const CreatureRef& caster, const SkillDef& def, floa
 	p.ctx.originY = p.y;
 	p.ctx.targetsOnly = true;
 	p.lastStepUs = nowUs;
+
+	// 포착 (tags homing:arrow) - 시야 안에 확신의 표식이 남은 적이 있으면 어느 방향으로 쏘든 그 적에게 (가장 가까운 적, 2026-10-11).
+	// 없으면 쏜 방향으로 흩어진다. 날아가는 중 벽에 막힌다 (StepHoming)
+	const string homingMark = HomingMarkOf(def);
+	if (homingMark.empty() == false)
+	{
+		p.homingTargetId = FindHomingMarkTarget(caster, homingMark, p.x, p.y, 0.f, nowUs);
+		if (p.homingTargetId != 0)
+			p.remainingCm = HOMING_SKILL_MAX_CM;
+	}
+
 	LaunchProjectile(move(p));
 }
 
@@ -378,6 +389,7 @@ void Room::SpawnClone(const CreatureRef& caster, const SkillDef& def, const Skil
 	extra.followId = id;
 	extra.radiusCm = e.radiusCm;
 	extra.needsLos = true;
+	extra.kind = "clone";
 	AddVisionExtra(owner, extra);
 
 	PushStatus(true, ctx.casterId, Protocol::STATUS_DECOY, "clone", 1, e.durationMs, 0.f, ctx.casterId);
@@ -482,6 +494,7 @@ void Room::CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillE
 		extra.radiusCm = e.radiusCm;
 		extra.untilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
 		extra.needsLos = false;
+		extra.kind = "hawk";		// 클라가 그 적 머리 위를 맴도는 매를 그린다 (2026-10-11 "종이매가 안 보여")
 		AddVisionExtra(owner, extra);
 		LOG_LINE << "[HAWK] circle char=" << ownerId << " over=" << targetId << " dist=" << ::lroundf(::sqrtf(bestSq)) << " for=" << e.durationMs << "ms" << '\n';
 		return;
@@ -522,10 +535,15 @@ void Room::StartVisionArea(const CreatureRef& caster, const SkillDef& def, const
 	extra.untilUs = nowUs + static_cast<uint64>(e.durationMs) * 1000;
 	extra.needsLos = (e.param.find("walls") == string::npos);
 	extra.seesStealth = (e.param.find("stealth") != string::npos);
+	extra.kind = "detect";
 	AddVisionExtra(owner, extra);
 
 	LOG_LINE << "[DETECT] char=" << owner->objectInfo->object_id() << " skill=" << def.skillId << " r=" << ::lroundf(e.radiusCm)
 		<< " for=" << e.durationMs << "ms walls=" << (extra.needsLos ? 0 : 1) << " stealth=" << (extra.seesStealth ? 1 : 0) << '\n';
+
+	// param ping - 둘레의 적 자리에 표시를 띄운다 (2026-10-11 "적이 있는 위치를 표시해 줬으면")
+	if (e.param.find("ping") != string::npos)
+		SendDetectionPings(owner, def, e.radiusCm, e.durationMs, nowUs);
 }
 
 // ── 그림자 밟기 (1128) ─────────────────────────────────────────────────
@@ -610,6 +628,7 @@ void Room::ApplyBasicProcs(const CreatureRef& attacker, const CreatureRef& targe
 		ctx.targetsOnly = true;
 
 		float shockRadius = 0.f;
+		bool touchedTarget = false;
 		for (uint32 i = 0; i < def->effects.size(); i++)
 		{
 			const SkillEffect& e = def->effects[i];
@@ -619,7 +638,10 @@ void Room::ApplyBasicProcs(const CreatureRef& attacker, const CreatureRef& targe
 			if (e.radiusCm <= 0.f)
 			{
 				if (target->IsAlive())
+				{
 					ApplyTargetEffect(attacker, *def, i, target, ctx, nowUs);
+					touchedTarget = true;
+				}
 				continue;
 			}
 
@@ -645,7 +667,11 @@ void Room::ApplyBasicProcs(const CreatureRef& attacker, const CreatureRef& targe
 		}
 
 		if (shockRadius > 0.f)
-			PushVisualZone(attackerId, def->effectId, target->posInfo->x(), target->posInfo->y(), shockRadius, 350, "shock");
+			PushVisualZone(attackerId, def->effectId, target->posInfo->x(), target->posInfo->y(), shockRadius, 450, "shock");
+
+		// 혼원일체 - 원혼이 덮치는 연출을 맞은 적에게 (2026-10-11 "추가 피해가 안 들어간다" - 들어갔지만 보이지 않았다)
+		if (touchedTarget)
+			PushTargetVisual(attackerId, def->effectId, target);
 
 		LOG_LINE << "[PROC] char=" << attackerId << " skill=" << skillId << " on=" << target->objectInfo->object_id()
 			<< (shockRadius > 0.f ? " shock r=" : "") << (shockRadius > 0.f ? to_string(::lroundf(shockRadius)) : string()) << '\n';
@@ -670,6 +696,8 @@ void Room::ApplyBasicSpin(const CreatureRef& attacker, const CreatureRef& mainTa
 		const float dx = c->posInfo->x() - cx;
 		const float dy = c->posInfo->y() - cy;
 		if (dx * dx + dy * dy > radiusCm * radiusCm)
+			continue;
+		if (HasLineOfAttack(attacker, cx, cy, c) == false)
 			continue;
 
 		bool isCrit = false;

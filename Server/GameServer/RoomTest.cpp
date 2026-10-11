@@ -266,6 +266,9 @@ void Room::TestClearDummies(uint64 playerId)
 		SEND_PACKET_BROADCAST(despawnPkt);
 	}
 
+	// 테스트 무리(/t pack)의 몸도 더미다 - 무리 자리를 비워 둔다 (다음 /t pack 이 다시 쓴다)
+	DropTestPacks(playerId);
+
 	LOG_LINE << "[TEST] dummies cleared char=" << playerId << " n=" << despawnPkt.object_ids_size() << '\n';
 }
 

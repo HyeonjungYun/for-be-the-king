@@ -73,19 +73,20 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "K\020\000\022\020\n\014ITEM_ALREADY\020\001\022\022\n\016ITEM_NOT_FOUND\020"
   "\002\022\026\n\022ITEM_INVALID_STATE\020\003\022\027\n\023ITEM_INVENT"
   "ORY_FULL\020\004\022\024\n\020ITEM_BAD_REQUEST\020\005\022\021\n\rITEM"
-  "_DB_ERROR\020\006*\322\001\n\nStatusKind\022\017\n\013STATUS_NON"
+  "_DB_ERROR\020\006*\347\001\n\nStatusKind\022\017\n\013STATUS_NON"
   "E\020\000\022\016\n\nSTATUS_DOT\020\001\022\017\n\013STATUS_BUFF\020\002\022\017\n\013"
   "STATUS_MARK\020\003\022\021\n\rSTATUS_STANCE\020\004\022\021\n\rSTAT"
   "US_INVULN\020\005\022\022\n\016STATUS_COUNTER\020\006\022\020\n\014STATU"
   "S_PARRY\020\007\022\017\n\013STATUS_HOLD\020\010\022\020\n\014STATUS_DEC"
-  "OY\020\t\022\022\n\016STATUS_STEALTH\020\n*u\n\rProjectileEn"
-  "d\022\032\n\026PROJECTILE_END_EXPIRED\020\000\022\026\n\022PROJECT"
-  "ILE_END_HIT\020\001\022\027\n\023PROJECTILE_END_WALL\020\002\022\027"
-  "\n\023PROJECTILE_END_LOST\020\003b\006proto3"
+  "OY\020\t\022\022\n\016STATUS_STEALTH\020\n\022\023\n\017STATUS_COOLD"
+  "OWN\020\013*u\n\rProjectileEnd\022\032\n\026PROJECTILE_END"
+  "_EXPIRED\020\000\022\026\n\022PROJECTILE_END_HIT\020\001\022\027\n\023PR"
+  "OJECTILE_END_WALL\020\002\022\027\n\023PROJECTILE_END_LO"
+  "ST\020\003b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 2111, descriptor_table_protodef_Enum_2eproto,
+    false, false, 2132, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -367,6 +368,7 @@ bool StatusKind_IsValid(int value) {
     case 8:
     case 9:
     case 10:
+    case 11:
       return true;
     default:
       return false;

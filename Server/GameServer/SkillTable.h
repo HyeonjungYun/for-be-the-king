@@ -35,8 +35,12 @@ enum class SkillAimType : uint8
 	SelfArea,
 	Target,
 	Direction,
-	Point
+	Point,
+	Facing			// 조준 없이 키를 누르는 즉시 바라보는 방향(= 커서 쪽)으로 - 서버에는 Direction 과 같다 (찌르고 베기, 2026-10-11)
 };
+
+// 방향을 갖는 조준인가 - Direction 과 Facing 은 서버 판정이 같다
+inline bool IsDirectionalAim(SkillAimType aim) { return aim == SkillAimType::Direction || aim == SkillAimType::Facing; }
 
 enum class SkillPower : uint8
 {

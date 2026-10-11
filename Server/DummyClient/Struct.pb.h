@@ -679,6 +679,7 @@ class AttackInfo final :
     kAttackerIdFieldNumber = 1,
     kTargetIdFieldNumber = 2,
     kWindupMsFieldNumber = 3,
+    kIntervalMsFieldNumber = 4,
   };
   // uint64 attacker_id = 1;
   void clear_attacker_id();
@@ -707,6 +708,15 @@ class AttackInfo final :
   void _internal_set_windup_ms(uint64_t value);
   public:
 
+  // uint32 interval_ms = 4;
+  void clear_interval_ms();
+  uint32_t interval_ms() const;
+  void set_interval_ms(uint32_t value);
+  private:
+  uint32_t _internal_interval_ms() const;
+  void _internal_set_interval_ms(uint32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.AttackInfo)
  private:
   class _Internal;
@@ -718,6 +728,7 @@ class AttackInfo final :
     uint64_t attacker_id_;
     uint64_t target_id_;
     uint64_t windup_ms_;
+    uint32_t interval_ms_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -3208,6 +3219,8 @@ class ZoneInfo final :
     kYawFieldNumber = 9,
     kHalfLengthFieldNumber = 10,
     kHalfThicknessFieldNumber = 11,
+    kFollowIdFieldNumber = 13,
+    kAngleDegFieldNumber = 12,
   };
   // string param = 8;
   void clear_param();
@@ -3313,6 +3326,24 @@ class ZoneInfo final :
   void _internal_set_half_thickness(float value);
   public:
 
+  // uint64 follow_id = 13;
+  void clear_follow_id();
+  uint64_t follow_id() const;
+  void set_follow_id(uint64_t value);
+  private:
+  uint64_t _internal_follow_id() const;
+  void _internal_set_follow_id(uint64_t value);
+  public:
+
+  // float angle_deg = 12;
+  void clear_angle_deg();
+  float angle_deg() const;
+  void set_angle_deg(float value);
+  private:
+  float _internal_angle_deg() const;
+  void _internal_set_angle_deg(float value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ZoneInfo)
  private:
   class _Internal;
@@ -3332,6 +3363,8 @@ class ZoneInfo final :
     float yaw_;
     float half_length_;
     float half_thickness_;
+    uint64_t follow_id_;
+    float angle_deg_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -3889,6 +3922,7 @@ class VisionSource final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kKindFieldNumber = 9,
     kSourceIdFieldNumber = 1,
     kFollowIdFieldNumber = 2,
     kXFieldNumber = 3,
@@ -3898,6 +3932,20 @@ class VisionSource final :
     kNeedsLosFieldNumber = 7,
     kSeesStealthFieldNumber = 8,
   };
+  // string kind = 9;
+  void clear_kind();
+  const std::string& kind() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_kind(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_kind();
+  PROTOBUF_NODISCARD std::string* release_kind();
+  void set_allocated_kind(std::string* kind);
+  private:
+  const std::string& _internal_kind() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_kind(const std::string& value);
+  std::string* _internal_mutable_kind();
+  public:
+
   // uint64 source_id = 1;
   void clear_source_id();
   uint64_t source_id() const;
@@ -3978,6 +4026,7 @@ class VisionSource final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr kind_;
     uint64_t source_id_;
     uint64_t follow_id_;
     float x_;
@@ -4398,6 +4447,26 @@ inline void AttackInfo::_internal_set_windup_ms(uint64_t value) {
 inline void AttackInfo::set_windup_ms(uint64_t value) {
   _internal_set_windup_ms(value);
   // @@protoc_insertion_point(field_set:Protocol.AttackInfo.windup_ms)
+}
+
+// uint32 interval_ms = 4;
+inline void AttackInfo::clear_interval_ms() {
+  _impl_.interval_ms_ = 0u;
+}
+inline uint32_t AttackInfo::_internal_interval_ms() const {
+  return _impl_.interval_ms_;
+}
+inline uint32_t AttackInfo::interval_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.AttackInfo.interval_ms)
+  return _internal_interval_ms();
+}
+inline void AttackInfo::_internal_set_interval_ms(uint32_t value) {
+  
+  _impl_.interval_ms_ = value;
+}
+inline void AttackInfo::set_interval_ms(uint32_t value) {
+  _internal_set_interval_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.AttackInfo.interval_ms)
 }
 
 // -------------------------------------------------------------------
@@ -6012,6 +6081,46 @@ inline void ZoneInfo::set_half_thickness(float value) {
   // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.half_thickness)
 }
 
+// float angle_deg = 12;
+inline void ZoneInfo::clear_angle_deg() {
+  _impl_.angle_deg_ = 0;
+}
+inline float ZoneInfo::_internal_angle_deg() const {
+  return _impl_.angle_deg_;
+}
+inline float ZoneInfo::angle_deg() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.angle_deg)
+  return _internal_angle_deg();
+}
+inline void ZoneInfo::_internal_set_angle_deg(float value) {
+  
+  _impl_.angle_deg_ = value;
+}
+inline void ZoneInfo::set_angle_deg(float value) {
+  _internal_set_angle_deg(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.angle_deg)
+}
+
+// uint64 follow_id = 13;
+inline void ZoneInfo::clear_follow_id() {
+  _impl_.follow_id_ = uint64_t{0u};
+}
+inline uint64_t ZoneInfo::_internal_follow_id() const {
+  return _impl_.follow_id_;
+}
+inline uint64_t ZoneInfo::follow_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ZoneInfo.follow_id)
+  return _internal_follow_id();
+}
+inline void ZoneInfo::_internal_set_follow_id(uint64_t value) {
+  
+  _impl_.follow_id_ = value;
+}
+inline void ZoneInfo::set_follow_id(uint64_t value) {
+  _internal_set_follow_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ZoneInfo.follow_id)
+}
+
 // -------------------------------------------------------------------
 
 // CharacterInfo
@@ -6542,6 +6651,56 @@ inline void VisionSource::_internal_set_sees_stealth(bool value) {
 inline void VisionSource::set_sees_stealth(bool value) {
   _internal_set_sees_stealth(value);
   // @@protoc_insertion_point(field_set:Protocol.VisionSource.sees_stealth)
+}
+
+// string kind = 9;
+inline void VisionSource::clear_kind() {
+  _impl_.kind_.ClearToEmpty();
+}
+inline const std::string& VisionSource::kind() const {
+  // @@protoc_insertion_point(field_get:Protocol.VisionSource.kind)
+  return _internal_kind();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void VisionSource::set_kind(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.kind_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.VisionSource.kind)
+}
+inline std::string* VisionSource::mutable_kind() {
+  std::string* _s = _internal_mutable_kind();
+  // @@protoc_insertion_point(field_mutable:Protocol.VisionSource.kind)
+  return _s;
+}
+inline const std::string& VisionSource::_internal_kind() const {
+  return _impl_.kind_.Get();
+}
+inline void VisionSource::_internal_set_kind(const std::string& value) {
+  
+  _impl_.kind_.Set(value, GetArenaForAllocation());
+}
+inline std::string* VisionSource::_internal_mutable_kind() {
+  
+  return _impl_.kind_.Mutable(GetArenaForAllocation());
+}
+inline std::string* VisionSource::release_kind() {
+  // @@protoc_insertion_point(field_release:Protocol.VisionSource.kind)
+  return _impl_.kind_.Release();
+}
+inline void VisionSource::set_allocated_kind(std::string* kind) {
+  if (kind != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.kind_.SetAllocated(kind, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.kind_.IsDefault()) {
+    _impl_.kind_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.VisionSource.kind)
 }
 
 #ifdef __GNUC__

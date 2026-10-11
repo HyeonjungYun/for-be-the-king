@@ -150,6 +150,38 @@ TEST(SkillKinematics, 사이에_벽이_있으면_끌리지_않는다)
 	EXPECT_FLOAT_EQ(r.endX, 800.f);
 }
 
+TEST(SkillKinematics, 축복_끌기는_벽을_지나_시전자_앞에_선다)
+{
+	const WallMap map = WallAtX500();
+
+	// 대상 x = 800, 시전자 x = 200 - 바로 앞(x 300)은 벽(475~525) 이쪽이다
+	const PushResult r = PullToward(map, 800.f, 0.f, 200.f, 0.f, 100.f, true);
+
+	EXPECT_TRUE(r.moved);
+	EXPECT_FALSE(r.hitWall);
+	EXPECT_NEAR(r.endX, 300.f, 0.01f);
+	EXPECT_FALSE(map.Overlaps(r.endX, r.endY, CAPSULE_RADIUS_CM));
+}
+
+TEST(SkillKinematics, 축복_끌기의_끝점이_벽_두께_안이면_벽_밖으로_옮긴다)
+{
+	const WallMap map = WallAtX500();
+
+	// 시전자 x = 380 (벽 면 475 에서 95 cm) → 바로 앞 x 480 은 벽 안. 이쪽엔 몸 둘이 들어갈 자리가 없다 (95 - 42 < 84)
+	// → 벽 저편 면(525 + 42 = 567) 밖으로. 2026-10-11 실기동에서 몸이 벽에 박혀 멈췄다
+	const PushResult r = PullToward(map, 800.f, 0.f, 380.f, 0.f, 100.f, true);
+
+	EXPECT_TRUE(r.moved);
+	EXPECT_FALSE(map.Overlaps(r.endX, r.endY, CAPSULE_RADIUS_CM)) << "end x=" << r.endX;
+	EXPECT_GE(r.endX, 525.f + CAPSULE_RADIUS_CM);
+	EXPECT_LT(r.endX, 800.f);
+
+	// 시전자가 벽에서 충분히 떨어져 있으면(몸 둘 + 바로 앞 자리) 이쪽으로 넘어온다
+	const PushResult across = PullToward(map, 800.f, 0.f, 300.f, 0.f, 100.f, true);
+	EXPECT_FALSE(map.Overlaps(across.endX, across.endY, CAPSULE_RADIUS_CM)) << "end x=" << across.endX;
+	EXPECT_LE(across.endX, 475.f - CAPSULE_RADIUS_CM);
+}
+
 TEST(SkillKinematics, 날아가는_시간은_거리_나누기_속도다)
 {
 	EXPECT_EQ(TravelMs(300.f, 800.f), 375u);

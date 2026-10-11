@@ -5,6 +5,7 @@
 #include "WallMap.h"
 #include "Vision.h"
 #include "MonsterBrain.h"
+#include "MonsterPack.h"
 #include "EscapeLogic.h"
 #include "KillBatch.h"
 #include <random>
@@ -45,6 +46,21 @@ struct MonsterSlot
 	uint64					deferStartUs = 0;	// 곁에 플레이어가 있어 리스폰을 미룬 시작 (F9)
 };
 
+// 무리 하나 (2026-10-11 몬스터 개선 · RoomPacks.cpp). 무리 정의 · 길은 복사해 든다 - 테스트 모드 무리(/t pack)는 표에 없다.
+// spawns 는 한 번 잡고 크기를 바꾸지 않는다 (Monster::spawn 이 가리킨다)
+struct PackSlot
+{
+	MonsterPackDef			def;
+	PatrolRoute				route;
+	vector<MonsterSpawnDef>	spawns;
+	PackState				state;
+	uint64					respawnAtUs = 0;	// 전멸 뒤 통째로
+	uint64					deferStartUs = 0;
+	bool					wiped = false;
+	bool					isTest = false;		// /t pack - 리스폰 없음, 주인이 떠나면 치운다
+	uint64					testOwnerId = 0;
+};
+
 struct PendingTelegraph
 {
 	uint64 casterId = 0;
@@ -58,6 +74,7 @@ struct PendingTelegraph
 	float aimY = 0.f;
 	uint32 itemLevel = 0;
 	bool targetsOnly = false;		// 벽력일창 - 도약은 이미 시작했고 내리찍기(대상 효과)만 뒤에
+	float bonusDamageMod = 0.f;		// 건곤일척 - 발동 때 소모한 배율 (예고 뒤에도 그대로)
 };
 
 // 핏자국 (4 단계) - 과다 출혈 중인 적이 남긴다. 주인이 밟으면 이속 버프, 아니면 지속 뒤 사라진다. 클라는 S_ZONE "blood" 로 그린다
@@ -82,6 +99,7 @@ struct PendingHit
 	uint32 effectIndex = 0;
 	uint32 remaining = 0;
 	uint64 nextAtUs = 0;
+	float bonusDamageMod = 0.f;		// 건곤일척 - 첫 타와 같은 배율
 };
 
 // 스킬 효과를 적용할 때의 문맥 - 발동 시점에 고정한 값들
@@ -97,6 +115,7 @@ struct SkillContext
 	bool targetsOnly = false;	// 투사체 적중 - 자기 효과는 발사 때 이미 나갔다, 대상 효과만
 	Protocol::EquipSlot slot = Protocol::SLOT_NONE;		// 시전 슬롯 - 유지형이 끝날 때 쿨다운을 건다
 	uint64 targetId = 0;		// 대상 지정 스킬의 대상 (그림자 밟기 - 등 뒤로)
+	float bonusDamageMod = 0.f;	// 건곤일척 - 제자리에서 쓴 망치 스킬 한 번의 피해 배율 (발동 때 버프를 소모하고 여기 싣는다)
 };
 
 // 장판 (3 단계) - 바닥 원. 틱마다 안에 있는 적에게 틱 피해 · 소프트 CC · (스킬의) 지속 피해 갱신. 겹치면 각각 틱 = 피해 중첩 (사용자 결정)
@@ -119,6 +138,66 @@ struct Zone
 	vector<DotInstance>	dotTemplates;				// 스킬의 dot 효과 - 안에 있는 동안 틱마다 갱신 (중첩 아님)
 	uint32				dotDurationMs = 0;
 	string				param;
+	uint64				groupId = 0;				// 같은 발동이 깐 장판 묶음 (열화 경로) - 한 틱에 한 대상은 묶음에서 한 번만 맞는다. 0 = 혼자
+
+	// 부채꼴 장판 (네불라 아르카나 2026-10-11) - 원점에서 dir 쪽으로 반각 cos 안. 아니면 원
+	bool				cone = false;
+	float				dirX = 1.f;
+	float				dirY = 0.f;
+	float				halfCos = 1.f;
+	float				angleDeg = 0.f;
+
+	bool Contains(float px, float py) const
+	{
+		const float dx = px - x;
+		const float dy = py - y;
+		const float d2 = dx * dx + dy * dy;
+		if (d2 > radiusCm * radiusCm)
+			return false;
+		if (cone == false || d2 < 1.f)
+			return true;
+		return (dx * dirX + dy * dirY) / ::sqrtf(d2) >= halfCos;
+	}
+};
+
+// 효과가 끝날 때 거는 자기 CC (오버로드 · 니힐 "속성 없이 쓰면 끝날 때 기절", 2026-10-11 - 예전엔 즉시 걸렸다)
+struct PendingSelfCc
+{
+	uint64				casterId = 0;
+	uint32				skillId = 0;
+	Protocol::CcType	type = Protocol::CC_TYPE_NONE;
+	uint32				durationMs = 0;
+	float				magnitude = 0.f;
+	uint64				atUs = 0;
+};
+
+// 지나간 길에만 장판 (열화 2026-10-11) - 돌진하는 동안 시전자가 실제로 지나간 자리에 dist_cm 마다 작은 원. 적에 막혀 멈추면 거기까지
+struct PathPainter
+{
+	uint64				casterId = 0;
+	uint32				skillId = 0;
+	uint32				effectIndex = 0;
+	uint64				untilUs = 0;
+	float				lastX = 0.f;
+	float				lastY = 0.f;
+	float				stepCm = 0.f;
+	uint64				groupId = 0;		// 이 경로의 장판 묶음 (Zone::groupId)
+	uint64				tickAtUs = 0;		// 묶음의 첫 틱 - 경로의 장판이 같은 Flush 에 틱해야 묶음 안 중복을 거를 수 있다
+	SkillContext		ctx;
+};
+
+// 저 멀리 (1109, 2026-10-11) - 날아가던 적이 벽에 부딪히는 순간(넉백 시간 뒤) 기절 + 날아간 거리에 비례한 피해
+struct PendingSlam
+{
+	uint64				casterId = 0;
+	uint64				targetId = 0;
+	uint32				skillId = 0;
+	uint64				atUs = 0;
+	float				flownCm = 0.f;
+	float				adPer100Cm = 0.f;		// 넉백 효과의 ad_ratio - 100 cm 날아갈 때마다 이만큼 (합은 3.0 상한)
+	float				bonusDamageMod = 0.f;	// 건곤일척 - 발동 때 소모한 배율
+	float				x = 0.f;				// 부딪힌 자리 (연출)
+	float				y = 0.f;
 };
 
 // 지연 폭발 (전염) - duration 뒤 대상에게 피해 + radius 안으로 스킬의 지속 피해
@@ -138,6 +217,9 @@ struct PendingBurst
 // 평타 투사체(활 · 스태프)는 대상을 쫓아간다(필중) - 날아가는 중 벽에 막히면 끝 (사용자 결정 2026-10-10). FlushCombat 마다 StepProjectiles
 constexpr uint64 PROJECTILE_ID_BASE = 5'000'000'000;
 extern atomic<uint64> GNextProjectileId;
+
+// 유도 스킬 화살 (포착 · 약속의 한 발, 2026-10-11) - 사거리 밖의 보이는 표식 대상까지 날아간다. 끝없이 쫓지 않게 이만큼만
+constexpr float HOMING_SKILL_MAX_CM = 3000.f;
 
 struct Projectile
 {
@@ -171,7 +253,7 @@ public:
 	bool	HandleEnterPlayer(PlayerRef player);
 	bool	HandleLeavePlayer(PlayerRef player);
 	void	HandleMove(Protocol::C_MOVE pkt);
-	void	HandleAttack(uint64 attackerId, uint64 targetId);
+	void	HandleAttack(uint64 attackerId, uint64 targetId, float aimX = 0.f, float aimY = 0.f);	// aim = 커서 지점 (대상 없는 평타만 쓴다)
 	void	HandleSkill(uint64 casterId, Protocol::C_SKILL pkt);
 	void	HandleSkillCancel(uint64 casterId);
 	void	ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, uint32 baseDurationMs, float magnitude);
@@ -220,6 +302,7 @@ public:
 	void	TestResetCooldowns(uint64 playerId);
 	void	TestGod(uint64 playerId, bool on);
 	void	TestFow(uint64 playerId, bool fowOn);			// 내 시야만 - 끄면 거리 · 벽과 상관없이 본다 (은신은 그대로)
+	void	TestSpawnPack(uint64 playerId, bool reactive);	// 무리 하나 - 내 둘레 20 m 네모 길을 돈다 (2026-10-11 몬스터 개선)
 	void	DropOrphanDummies();							// 주인이 층을 떠난 더미를 치운다 (UpdateMonsters 앞)
 
 public:
@@ -269,6 +352,8 @@ private:
 		uint32 skillId = 0;
 		string elem;
 		bool basic = false;
+		float extraMult = 0.f;		// 건곤일척 - 발동 때 소모한 배율 (SkillContext::bonusDamageMod)
+		bool tick = false;			// 지속 피해 · 장판 틱 - 맞은 순간이 아니다 (RevealOnHit 가 보지 않는다)
 	};
 
 	// 모든 피해는 여기를 지난다 - 배율 · 면역 · 첫 타 경감 → 치명상 방어(맹수의 본능) → 체력 차감 → S_DAMAGE → 몬스터 어그로 → 사망. 돌려주는 값 = 남은 체력.
@@ -296,7 +381,8 @@ private:
 
 	// 서버가 옮기는 변위 - 위치를 끝점으로 바로 놓고(S_MOVE) 날아가는 동안 넉백 CC. 클라는 KnockbackInfo 로 같은 끝점까지 밀려간다.
 	// 그동안의 C_MOVE 는 HandleMove 가 무시한다 (서버가 위치를 소유하는 구간). 벽에 닿으면 wallStun 일 때 벽 기절
-	void	PushCreature(const CreatureRef& target, uint64 instigatorId, float dirX, float dirY, float distCm, float speedCms, bool wallStun, uint64 nowUs);
+	void	PushCreature(const CreatureRef& target, uint64 instigatorId, float dirX, float dirY, float distCm, float speedCms, bool wallStun, uint64 nowUs,
+				OUT float* movedCm = nullptr, OUT bool* hitWall = nullptr);		// 실제로 밀린 거리 · 벽에 부딪혔나 (저 멀리)
 	void	PullCreature(const CreatureRef& target, const CreatureRef& caster, float speedCms, uint64 nowUs);
 	void	BlinkCaster(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);
 
@@ -378,6 +464,18 @@ private:
 	void	OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 nowUs);
 	bool	BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs);
 
+	// ── 무리 (2026-10-11 몬스터 개선) - RoomPacks.cpp ──
+	void	InitPacks(uint64 nowUs);
+	void	SpawnPack(uint32 slotIndex, uint64 nowUs);
+	void	UpdatePacks(uint64 nowUs, const LineClearFn& lineClear);		// 판단 (UpdateMonsters 안, 10 Hz)
+	void	StepPacks(uint64 nowUs);										// 걸음 (StepMonsters 안, 30 Hz)
+	void	OnPackMemberDamaged(const MonsterRef& monster, uint64 attackerId, float ax, float ay, uint64 nowUs);
+	void	OnPackMemberDied(const MonsterRef& monster, uint64 nowUs);
+	void	SnapPackMember(const MonsterRef& monster, float x, float y, uint64 nowUs);
+	bool	SeenByAnyone(uint64 objectId) const;							// 누군가의 클라에 스폰돼 있는가 (FoW) - 순간 이동은 아무도 안 볼 때만
+	PackSlot* PackOf(const Monster& monster);
+	void	DropTestPacks(uint64 ownerId);
+
 	// 탈출 (escape-timer.md § Core Rules). UpdateTick 에서 게이지 → 타이머 → (기존) 끊긴 몸 순서
 	void	UpdateEscapeTowers(uint64 nowUs);
 	void	UpdateRunTimers(uint64 nowUs);
@@ -437,6 +535,27 @@ private:
 	void	UpdatePuddle(Zone& z, uint64 nowUs);														// 명경지수 - 주인이 안에 있으면 사거리 버프
 	void	PushVisualZone(uint64 casterId, uint32 effectId, float x, float y, float radiusCm, uint32 durationMs, const char* param);	// 연출만 (충격파 · 사방 베기)
 
+	// ── 스킬 개선 (2026-10-11 저녁, 사용자 플레이 피드백) - RoomSkills3.cpp ──
+	void	ScheduleSelfCcAtEnd(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs);	// 오버로드 · 니힐 - 효과가 끝날 때
+	void	UpdatePendingSelfCcs(uint64 nowUs);
+	void	StartPathPainter(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const SkillContext& ctx, uint64 nowUs);	// 열화
+	void	UpdatePathPainters(uint64 nowUs);
+	void	PlaceConeZone(const CreatureRef& caster, const SkillDef& def, uint32 effectIndex, const SkillContext& ctx, uint64 nowUs);	// 네불라 아르카나
+	uint64	FindHomingMarkTarget(const CreatureRef& caster, const string& markKind, float fromX, float fromY, float maxRangeCm, uint64 nowUs) const;	// 포착 · 약속의 한 발
+	string	HomingMarkOf(const SkillDef& def) const;
+	void	SendDetectionPings(const PlayerRef& owner, const SkillDef& def, float radiusCm, uint32 durationMs, uint64 nowUs);	// 맹수의 탐색 - 적 위치 표시
+	void	NotifyPassiveTrigger(const CreatureRef& owner, uint32 skillId);		// 염두 등 - 쿨다운이 시작됐다고 주인 클라에
+	void	RevealOnHit(const CreatureRef& attacker, const CreatureRef& target, uint64 nowUs);	// 안 보이는 적을 맞혔다 - 잠깐 보이게
+	float	TakeStillBonus(const CreatureRef& caster, const SkillDef& def, uint64 nowUs);		// 건곤일척 - 제자리 망치 스킬이면 배율을 꺼내고 버프를 지운다
+	void	BreakStillBuff(const CreatureRef& caster, const char* why, uint64 nowUs);			// 움직이면 건곤일척 피해 증가가 사라진다
+	void	OnStillBuffApplied(const CreatureRef& caster, uint32 skillId);						// 건곤일척 버프가 걸렸다 - 지금 자리를 기억한다
+	bool	StartSpecialBasic(const CreatureRef& attacker, float aimX, float aimY, uint64 nowUs);	// 일보일검 · 난무 - 대상 없는 평타. false = 그런 버프가 없다
+	void	ResolveSpecialBasic(const CreatureRef& attacker, uint64 nowUs);
+	bool	HasLineOfAttack(const CreatureRef& caster, float fromX, float fromY, const CreatureRef& target) const;	// 스킬도 벽에 막힌다 (유령 신부의 축복 예외)
+	void	ScheduleSlam(const CreatureRef& caster, const CreatureRef& target, const SkillDef& def, const SkillEffect& e, float flownCm, uint32 travelMs, const SkillContext& ctx, uint64 nowUs);	// 저 멀리 - 벽 충돌
+	void	UpdateSlams(uint64 nowUs);
+	void	PushTargetVisual(uint64 casterId, uint32 effectId, const CreatureRef& target);		// 맞은 대상마다 연출 (낙뢰 벼락 · 혼원일체 원혼)
+
 public:
 	uint32								_floorId = 0;
 
@@ -473,6 +592,7 @@ private:
 
 	unordered_map<uint64, MonsterRef>	_monsters;			// 시체 유예 중인 것 포함
 	vector<MonsterSlot>					_monsterSlots;
+	vector<unique_ptr<PackSlot>>		_packs;				// 무리 - 주소가 바뀌지 않게 unique_ptr (Monster::spawn 이 안을 가리킨다)
 	unordered_map<uint64, shared_ptr<MonsterSpawnDef>>	_dummySpawns;	// 테스트 모드 더미의 자리 - Monster::spawn 이 가리킨다. 몬스터를 지울 때 함께
 	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
 
@@ -539,6 +659,10 @@ private:
 	vector<DynamicWall>					_dynWalls;
 	shared_ptr<WallMap>					_wallsWithDynamic;		// 임시 벽이 있을 때만 - 층 벽 + 임시 벽으로 다시 지은 지도
 	vector<shared_ptr<WallMap>>			_retiredWalls;			// 바뀌기 전 지도 - 같은 잡 안에서 Walls() 참조를 쥔 쪽이 있을 수 있어 다음 Flush 까지 살려 둔다
+	vector<PendingSelfCc>				_pendingSelfCcs;		// 끝날 때 거는 자기 CC
+	vector<PathPainter>					_pathPainters;			// 지나간 길 장판
+	vector<PendingSlam>					_pendingSlams;			// 저 멀리 - 벽에 부딪히는 순간
+	unordered_map<uint64, uint64>		_trailBuffPushedUs;		// 핏자국 이속 버프 - 밟는 동안 S_STATUS 를 0.5 s 에 한 번만
 	vector<PendingVolley>				_volleys;
 	unordered_set<uint64>				_clones;
 };

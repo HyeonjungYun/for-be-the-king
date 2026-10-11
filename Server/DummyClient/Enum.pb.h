@@ -475,12 +475,13 @@ enum StatusKind : int {
   STATUS_HOLD = 8,
   STATUS_DECOY = 9,
   STATUS_STEALTH = 10,
+  STATUS_COOLDOWN = 11,
   StatusKind_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   StatusKind_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool StatusKind_IsValid(int value);
 constexpr StatusKind StatusKind_MIN = STATUS_NONE;
-constexpr StatusKind StatusKind_MAX = STATUS_STEALTH;
+constexpr StatusKind StatusKind_MAX = STATUS_COOLDOWN;
 constexpr int StatusKind_ARRAYSIZE = StatusKind_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* StatusKind_descriptor();

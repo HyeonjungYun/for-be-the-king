@@ -117,30 +117,40 @@ namespace
 
 /*-------- 데이터 --------*/
 
-TEST(MonsterTable, 실제_데이터_3종_18자리가_1층_벽_진입_타워_검사를_통과한다_AC_MA_01_02)
+TEST(MonsterTable, 실제_데이터_7종_8자리_무리7개가_1층_벽_진입_타워_검사를_통과한다_AC_MA_01_02)
 {
 	string error;
 	ASSERT_TRUE(LoadLiveWorld(4, OUT error)) << error;
 	ASSERT_TRUE(MonsterTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;
 
-	EXPECT_EQ(MonsterTable::TypeCount(), 3u);
-	EXPECT_EQ(MonsterTable::Spawns().size(), 18u);
+	// 2026-10-11 몬스터 개선 - 들판의 혼자 다니던 들개 10 자리가 무리 7 개(우두머리 1 + 기본 3)로 바뀌었다.
+	// 집 지키는 병사 7 · 보스 1 은 그대로 (guard). 들개(1)는 테스트 더미용으로 종류만 남는다
+	EXPECT_EQ(MonsterTable::TypeCount(), 7u);
+	EXPECT_EQ(MonsterTable::Spawns().size(), 8u);
+	EXPECT_EQ(MonsterTable::Packs().size(), 7u);
 
 	// 몬스터는 플레이어보다 느리다 - 0.9 × 340 (Core Rule 1)
-	for (uint32 id = 1; id <= 3; id++)
+	for (uint32 id = 1; id <= 7; id++)
 	{
 		const MonsterTypeDef* t = MonsterTable::FindType(id);
 		ASSERT_NE(t, nullptr);
 		EXPECT_LE(t->moveSpeedCms, 306.f);
 	}
 
-	// F5 - 주기당 몬스터 드랍 공급 ≤ 상자의 30 % (AC-MA-52). 기대 개수 open 1.3 · house 2.7 (floor-item-pool F1)
+	// F5 - 주기당 몬스터 드랍 공급 ≤ 상자의 30 % (AC-MA-52). 기대 개수 open 1.3 · house 2.7 (floor-item-pool F1).
+	// 무리는 우두머리 + 기본 member_count 를 센다
 	float supply = 0.f;
-	for (const MonsterSpawnDef& s : MonsterTable::Spawns())
+	auto add = [&supply](const MonsterTypeDef* t, float count)
 	{
-		const MonsterTypeDef* t = MonsterTable::FindType(s.typeId);
 		const float perRoll = (t->dropTier == ChestTier::House) ? 2.7f : 1.3f;
-		supply += (t->drops ? 1.f : 0.f) * t->dropChancePct / 100.f * t->dropRolls * perRoll;
+		supply += count * (t->drops ? 1.f : 0.f) * t->dropChancePct / 100.f * t->dropRolls * perRoll;
+	};
+	for (const MonsterSpawnDef& s : MonsterTable::Spawns())
+		add(MonsterTable::FindType(s.typeId), 1.f);
+	for (const MonsterPackDef& p : MonsterTable::Packs())
+	{
+		add(MonsterTable::FindType(p.leaderTypeId), 1.f);
+		add(MonsterTable::FindType(p.memberTypeId), static_cast<float>(p.memberCount));
 	}
 	EXPECT_LE(supply / 48.f, 0.30f) << supply;
 }

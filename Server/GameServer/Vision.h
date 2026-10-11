@@ -30,6 +30,7 @@ struct VisionExtra
 	uint64	untilUs = 0;			// 0 = 따라가는 생물이 방에 있는 동안
 	bool	needsLos = true;		// false = 벽을 넘어 본다 (공중의 종이매 · 땅 울림 탐지)
 	bool	seesStealth = false;	// true = 은신도 보인다 (맹수의 탐색)
+	string	kind;					// hawk · clone · detect - 클라 연출 (종이매는 매를 그린다, 2026-10-11)
 };
 
 namespace Vision

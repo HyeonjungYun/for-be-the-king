@@ -1962,6 +1962,8 @@ class C_ATTACK final :
 
   enum : int {
     kTargetIdFieldNumber = 1,
+    kAimXFieldNumber = 2,
+    kAimYFieldNumber = 3,
   };
   // uint64 target_id = 1;
   void clear_target_id();
@@ -1970,6 +1972,24 @@ class C_ATTACK final :
   private:
   uint64_t _internal_target_id() const;
   void _internal_set_target_id(uint64_t value);
+  public:
+
+  // float aim_x = 2;
+  void clear_aim_x();
+  float aim_x() const;
+  void set_aim_x(float value);
+  private:
+  float _internal_aim_x() const;
+  void _internal_set_aim_x(float value);
+  public:
+
+  // float aim_y = 3;
+  void clear_aim_y();
+  float aim_y() const;
+  void set_aim_y(float value);
+  private:
+  float _internal_aim_y() const;
+  void _internal_set_aim_y(float value);
   public:
 
   // @@protoc_insertion_point(class_scope:Protocol.C_ATTACK)
@@ -1981,6 +2001,8 @@ class C_ATTACK final :
   typedef void DestructorSkippable_;
   struct Impl_ {
     uint64_t target_id_;
+    float aim_x_;
+    float aim_y_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -8035,6 +8057,46 @@ inline void C_ATTACK::_internal_set_target_id(uint64_t value) {
 inline void C_ATTACK::set_target_id(uint64_t value) {
   _internal_set_target_id(value);
   // @@protoc_insertion_point(field_set:Protocol.C_ATTACK.target_id)
+}
+
+// float aim_x = 2;
+inline void C_ATTACK::clear_aim_x() {
+  _impl_.aim_x_ = 0;
+}
+inline float C_ATTACK::_internal_aim_x() const {
+  return _impl_.aim_x_;
+}
+inline float C_ATTACK::aim_x() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_ATTACK.aim_x)
+  return _internal_aim_x();
+}
+inline void C_ATTACK::_internal_set_aim_x(float value) {
+  
+  _impl_.aim_x_ = value;
+}
+inline void C_ATTACK::set_aim_x(float value) {
+  _internal_set_aim_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_ATTACK.aim_x)
+}
+
+// float aim_y = 3;
+inline void C_ATTACK::clear_aim_y() {
+  _impl_.aim_y_ = 0;
+}
+inline float C_ATTACK::_internal_aim_y() const {
+  return _impl_.aim_y_;
+}
+inline float C_ATTACK::aim_y() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_ATTACK.aim_y)
+  return _internal_aim_y();
+}
+inline void C_ATTACK::_internal_set_aim_y(float value) {
+  
+  _impl_.aim_y_ = value;
+}
+inline void C_ATTACK::set_aim_y(float value) {
+  _internal_set_aim_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_ATTACK.aim_y)
 }
 
 // -------------------------------------------------------------------

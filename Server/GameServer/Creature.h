@@ -230,6 +230,16 @@ public:
 	uint64				attackHitAtUs	= 0;
 	uint64				attackReadyAtUs	= 0;
 
+	// 대상 없는 평타 (2026-10-11) - 1 = 일보일검 돌진 횡베기, 2 = 난무 사방 베기. 0 = 보통 평타 (attackTargetId)
+	uint8				attackMode		= 0;
+	float				attackDirX		= 1.f;
+	float				attackDirY		= 0.f;
+
+	// 건곤일척 - 쓸 때 서 있던 자리. 여기서 움직이면 망치 스킬 피해 증가가 사라진다 (0 = 없음)
+	uint32				stillSkillId	= 0;
+	float				stillAnchorX	= 0.f;
+	float				stillAnchorY	= 0.f;
+
 public:
 	uint64				castEndAtUs = 0;
 	uint32				castSkillId = 0;

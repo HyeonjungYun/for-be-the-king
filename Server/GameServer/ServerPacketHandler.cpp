@@ -753,7 +753,8 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt)
 	// 공격자 id는 패킷에서 받지 않는다. 세션에서 가져온다.
 	const uint64 attackerId = player->objectInfo->object_id();
 
-	room->DoAsync(&Room::HandleAttack, attackerId, pkt.target_id());
+	// 조준점 - 대상 없는 평타 (일보일검 · 난무, 2026-10-11). 보통 평타는 쓰지 않는다
+	room->DoAsync(&Room::HandleAttack, attackerId, pkt.target_id(), pkt.aim_x(), pkt.aim_y());
 
 	return true;
 }
@@ -807,6 +808,8 @@ static void HandleTestCommand(const RoomRef& room, uint64 playerId, const string
 		room->DoAsync(&Room::TestGod, playerId, flag != 0);
 	else if (command == "fow" && (in >> flag))
 		room->DoAsync(&Room::TestFow, playerId, flag != 0);
+	else if (command == "pack" && (in >> flag))
+		room->DoAsync(&Room::TestSpawnPack, playerId, flag != 0);		// 0 = 탐지형 · 1 = 반응형 (2026-10-11 몬스터 개선)
 	else if (command == "clear")
 		room->DoAsync(&Room::TestClearDummies, playerId);
 	else if (command == "heal")

@@ -105,6 +105,9 @@
     <ClCompile Include="RoomSkills2.cpp">
       <Filter>Game</Filter>
     </ClCompile>
+    <ClCompile Include="RoomSkills3.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
     <ClCompile Include="RoomTest.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -119,6 +122,12 @@
     </ClCompile>
     <ClCompile Include="MonsterBrain.cpp">
       <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="MonsterPack.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="RoomPacks.cpp">
+      <Filter>Game</Filter>
     </ClCompile>
     <ClCompile Include="EscapeLogic.cpp">
       <Filter>Game\Object</Filter>
@@ -228,6 +237,9 @@
       <Filter>Data</Filter>
     </ClInclude>
     <ClInclude Include="MonsterBrain.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="MonsterPack.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
     <ClInclude Include="EscapeLogic.h">

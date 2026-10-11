@@ -162,6 +162,8 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORIT
 PROTOBUF_CONSTEXPR C_ATTACK::C_ATTACK(
     ::_pbi::ConstantInitialized): _impl_{
     /*decltype(_impl_.target_id_)*/uint64_t{0u}
+  , /*decltype(_impl_.aim_x_)*/0
+  , /*decltype(_impl_.aim_y_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct C_ATTACKDefaultTypeInternal {
   PROTOBUF_CONSTEXPR C_ATTACKDefaultTypeInternal()
@@ -716,6 +718,8 @@ const uint32_t TableStruct_Protocol_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE
   ~0u,  // no _weak_field_map_
   ~0u,  // no _inlined_string_donated_
   PROTOBUF_FIELD_OFFSET(::Protocol::C_ATTACK, _impl_.target_id_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_ATTACK, _impl_.aim_x_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_ATTACK, _impl_.aim_y_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ATTACK, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -987,38 +991,38 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 62, -1, -1, sizeof(::Protocol::C_MOVE)},
   { 70, -1, -1, sizeof(::Protocol::S_MOVE)},
   { 78, -1, -1, sizeof(::Protocol::C_ATTACK)},
-  { 85, -1, -1, sizeof(::Protocol::S_ATTACK)},
-  { 92, -1, -1, sizeof(::Protocol::S_ATTACK_CANCEL)},
-  { 99, -1, -1, sizeof(::Protocol::S_DAMAGE)},
-  { 106, -1, -1, sizeof(::Protocol::S_CC)},
-  { 115, -1, -1, sizeof(::Protocol::S_CC_STATE)},
-  { 122, -1, -1, sizeof(::Protocol::S_DIED)},
-  { 129, -1, -1, sizeof(::Protocol::C_CHAT)},
-  { 136, -1, -1, sizeof(::Protocol::S_CHAT)},
-  { 144, -1, -1, sizeof(::Protocol::C_SKILL)},
-  { 154, -1, -1, sizeof(::Protocol::C_SKILL_CANCEL)},
-  { 160, -1, -1, sizeof(::Protocol::S_SKILL_CAST)},
-  { 167, -1, -1, sizeof(::Protocol::S_SKILL_CANCEL)},
-  { 174, -1, -1, sizeof(::Protocol::S_SKILL_HIT)},
-  { 181, -1, -1, sizeof(::Protocol::S_EQUIP_SYNC)},
-  { 188, -1, -1, sizeof(::Protocol::C_GRANT_REWARD)},
-  { 198, -1, -1, sizeof(::Protocol::S_GRANT_REWARD)},
-  { 207, -1, -1, sizeof(::Protocol::C_EQUIP)},
-  { 216, -1, -1, sizeof(::Protocol::C_UNEQUIP)},
-  { 224, -1, -1, sizeof(::Protocol::C_LOOT)},
-  { 233, -1, -1, sizeof(::Protocol::C_DROP)},
-  { 241, -1, -1, sizeof(::Protocol::S_ITEM_RESULT)},
-  { 250, -1, -1, sizeof(::Protocol::C_STASH)},
-  { 259, -1, -1, sizeof(::Protocol::S_INVENTORY_SYNC)},
-  { 266, -1, -1, sizeof(::Protocol::S_BAG_CONTENTS)},
-  { 275, -1, -1, sizeof(::Protocol::C_BAG_OPEN)},
-  { 282, -1, -1, sizeof(::Protocol::S_ESCAPE_GAUGE)},
-  { 293, -1, -1, sizeof(::Protocol::S_CHEST_STATE)},
-  { 301, -1, -1, sizeof(::Protocol::S_STATUS)},
-  { 309, -1, -1, sizeof(::Protocol::S_PROJECTILE)},
-  { 317, -1, -1, sizeof(::Protocol::S_ZONE)},
-  { 325, -1, -1, sizeof(::Protocol::S_SKILL_REVEAL)},
-  { 334, -1, -1, sizeof(::Protocol::S_VISION)},
+  { 87, -1, -1, sizeof(::Protocol::S_ATTACK)},
+  { 94, -1, -1, sizeof(::Protocol::S_ATTACK_CANCEL)},
+  { 101, -1, -1, sizeof(::Protocol::S_DAMAGE)},
+  { 108, -1, -1, sizeof(::Protocol::S_CC)},
+  { 117, -1, -1, sizeof(::Protocol::S_CC_STATE)},
+  { 124, -1, -1, sizeof(::Protocol::S_DIED)},
+  { 131, -1, -1, sizeof(::Protocol::C_CHAT)},
+  { 138, -1, -1, sizeof(::Protocol::S_CHAT)},
+  { 146, -1, -1, sizeof(::Protocol::C_SKILL)},
+  { 156, -1, -1, sizeof(::Protocol::C_SKILL_CANCEL)},
+  { 162, -1, -1, sizeof(::Protocol::S_SKILL_CAST)},
+  { 169, -1, -1, sizeof(::Protocol::S_SKILL_CANCEL)},
+  { 176, -1, -1, sizeof(::Protocol::S_SKILL_HIT)},
+  { 183, -1, -1, sizeof(::Protocol::S_EQUIP_SYNC)},
+  { 190, -1, -1, sizeof(::Protocol::C_GRANT_REWARD)},
+  { 200, -1, -1, sizeof(::Protocol::S_GRANT_REWARD)},
+  { 209, -1, -1, sizeof(::Protocol::C_EQUIP)},
+  { 218, -1, -1, sizeof(::Protocol::C_UNEQUIP)},
+  { 226, -1, -1, sizeof(::Protocol::C_LOOT)},
+  { 235, -1, -1, sizeof(::Protocol::C_DROP)},
+  { 243, -1, -1, sizeof(::Protocol::S_ITEM_RESULT)},
+  { 252, -1, -1, sizeof(::Protocol::C_STASH)},
+  { 261, -1, -1, sizeof(::Protocol::S_INVENTORY_SYNC)},
+  { 268, -1, -1, sizeof(::Protocol::S_BAG_CONTENTS)},
+  { 277, -1, -1, sizeof(::Protocol::C_BAG_OPEN)},
+  { 284, -1, -1, sizeof(::Protocol::S_ESCAPE_GAUGE)},
+  { 295, -1, -1, sizeof(::Protocol::S_CHEST_STATE)},
+  { 303, -1, -1, sizeof(::Protocol::S_STATUS)},
+  { 311, -1, -1, sizeof(::Protocol::S_PROJECTILE)},
+  { 319, -1, -1, sizeof(::Protocol::S_ZONE)},
+  { 327, -1, -1, sizeof(::Protocol::S_SKILL_REVEAL)},
+  { 336, -1, -1, sizeof(::Protocol::S_VISION)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -1084,63 +1088,63 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "\030\001 \003(\004\"<\n\006C_MOVE\022\037\n\004info\030\001 \001(\0132\021.Protoco"
   "l.PosInfo\022\021\n\tclient_ms\030\002 \001(\004\">\n\006S_MOVE\022 "
   "\n\005infos\030\001 \003(\0132\021.Protocol.PosInfo\022\022\n\ncorr"
-  "ection\030\002 \001(\010\"\035\n\010C_ATTACK\022\021\n\ttarget_id\030\001 "
-  "\001(\004\"1\n\010S_ATTACK\022%\n\007attacks\030\001 \003(\0132\024.Proto"
-  "col.AttackInfo\"\'\n\017S_ATTACK_CANCEL\022\024\n\014att"
-  "acker_ids\030\001 \003(\004\"1\n\010S_DAMAGE\022%\n\007damages\030\001"
-  " \003(\0132\024.Protocol.DamageInfo\"\203\001\n\004S_CC\022&\n\007a"
-  "pplied\030\001 \003(\0132\025.Protocol.CcEventInfo\022&\n\007e"
-  "xpired\030\002 \003(\0132\025.Protocol.CcEventInfo\022+\n\nk"
-  "nockbacks\030\003 \003(\0132\027.Protocol.KnockbackInfo"
-  "\"3\n\nS_CC_STATE\022%\n\006states\030\001 \003(\0132\025.Protoco"
-  "l.CcStateInfo\",\n\006S_DIED\022\"\n\006deaths\030\001 \003(\0132"
-  "\022.Protocol.DiedInfo\"\025\n\006C_CHAT\022\013\n\003msg\030\001 \001"
-  "(\t\"\'\n\006S_CHAT\022\020\n\010playerId\030\001 \001(\004\022\013\n\003msg\030\002 "
-  "\001(\t\"]\n\007C_SKILL\022!\n\004slot\030\001 \001(\0162\023.Protocol."
-  "EquipSlot\022\021\n\ttarget_id\030\002 \001(\004\022\r\n\005aim_x\030\003 "
-  "\001(\002\022\r\n\005aim_y\030\004 \001(\002\"\020\n\016C_SKILL_CANCEL\"6\n\014"
-  "S_SKILL_CAST\022&\n\005casts\030\001 \003(\0132\027.Protocol.S"
-  "killCastInfo\"$\n\016S_SKILL_CANCEL\022\022\n\ncaster"
-  "_ids\030\001 \003(\004\"3\n\013S_SKILL_HIT\022$\n\004hits\030\001 \003(\0132"
-  "\026.Protocol.SkillHitInfo\"3\n\014S_EQUIP_SYNC\022"
-  "#\n\006skills\030\001 \003(\0132\023.Protocol.SkillInfo\"X\n\016"
-  "C_GRANT_REWARD\022\022\n\nrequest_id\030\001 \001(\t\022\024\n\014ch"
-  "aracter_id\030\002 \001(\004\022\014\n\004gold\030\003 \001(\004\022\016\n\006reason"
-  "\030\004 \001(\t\"H\n\016S_GRANT_REWARD\022\022\n\nrequest_id\030\001"
-  " \001(\t\022\016\n\006result\030\002 \001(\r\022\022\n\ngold_after\030\003 \001(\004"
-  "\"U\n\007C_EQUIP\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013insta"
-  "nce_id\030\002 \001(\004\022!\n\004slot\030\003 \001(\0162\023.Protocol.Eq"
-  "uipSlot\"4\n\tC_UNEQUIP\022\022\n\nrequest_id\030\001 \001(\t"
-  "\022\023\n\013instance_id\030\002 \001(\004\"A\n\006C_LOOT\022\022\n\nreque"
-  "st_id\030\001 \001(\t\022\016\n\006bag_id\030\002 \001(\004\022\023\n\013instance_"
-  "id\030\003 \001(\004\"1\n\006C_DROP\022\022\n\nrequest_id\030\001 \001(\t\022\023"
-  "\n\013instance_id\030\002 \001(\004\"r\n\rS_ITEM_RESULT\022\022\n\n"
-  "request_id\030\001 \001(\t\022$\n\006result\030\002 \001(\0162\024.Proto"
-  "col.ItemResult\022\'\n\007changed\030\003 \003(\0132\026.Protoc"
-  "ol.ItemInstance\"D\n\007C_STASH\022\022\n\nrequest_id"
-  "\030\001 \001(\t\022\023\n\013instance_id\030\002 \001(\004\022\020\n\010to_vault\030"
-  "\003 \001(\010\"9\n\020S_INVENTORY_SYNC\022%\n\005items\030\001 \003(\013"
-  "2\026.Protocol.ItemInstance\"]\n\016S_BAG_CONTEN"
-  "TS\022\016\n\006bag_id\030\001 \001(\004\022%\n\005items\030\002 \003(\0132\026.Prot"
-  "ocol.ItemInstance\022\024\n\014remaining_ms\030\003 \001(\004\""
-  "\034\n\nC_BAG_OPEN\022\016\n\006bag_id\030\001 \001(\004\"\222\001\n\016S_ESCA"
-  "PE_GAUGE\022\020\n\010tower_id\030\001 \001(\r\022)\n\005state\030\002 \001("
-  "\0162\032.Protocol.EscapeGaugeState\022\031\n\021progres"
-  "s_permille\030\003 \001(\r\022\022\n\nrate_per_s\030\004 \001(\002\022\024\n\014"
-  "self_in_zone\030\005 \001(\010\"5\n\rS_CHEST_STATE\022\022\n\nl"
-  "ooted_ids\030\001 \003(\004\022\020\n\010snapshot\030\002 \001(\010\"X\n\010S_S"
-  "TATUS\022%\n\007applied\030\001 \003(\0132\024.Protocol.Status"
-  "Info\022%\n\007expired\030\002 \003(\0132\024.Protocol.StatusI"
-  "nfo\"e\n\014S_PROJECTILE\022)\n\007spawned\030\001 \003(\0132\030.P"
-  "rotocol.ProjectileInfo\022*\n\005ended\030\002 \003(\0132\033."
-  "Protocol.ProjectileEndInfo\"<\n\006S_ZONE\022#\n\007"
-  "spawned\030\001 \003(\0132\022.Protocol.ZoneInfo\022\r\n\005end"
-  "ed\030\002 \003(\004\"]\n\016S_SKILL_REVEAL\022\021\n\ttarget_id\030"
-  "\001 \001(\004\022#\n\006skills\030\002 \003(\0132\023.Protocol.SkillIn"
-  "fo\022\023\n\013duration_ms\030\003 \001(\r\"\\\n\010S_VISION\022\021\n\tr"
-  "adius_cm\030\001 \001(\002\022\'\n\007sources\030\002 \003(\0132\026.Protoc"
-  "ol.VisionSource\022\024\n\014camera_scale\030\003 \001(\002b\006p"
-  "roto3"
+  "ection\030\002 \001(\010\";\n\010C_ATTACK\022\021\n\ttarget_id\030\001 "
+  "\001(\004\022\r\n\005aim_x\030\002 \001(\002\022\r\n\005aim_y\030\003 \001(\002\"1\n\010S_A"
+  "TTACK\022%\n\007attacks\030\001 \003(\0132\024.Protocol.Attack"
+  "Info\"\'\n\017S_ATTACK_CANCEL\022\024\n\014attacker_ids\030"
+  "\001 \003(\004\"1\n\010S_DAMAGE\022%\n\007damages\030\001 \003(\0132\024.Pro"
+  "tocol.DamageInfo\"\203\001\n\004S_CC\022&\n\007applied\030\001 \003"
+  "(\0132\025.Protocol.CcEventInfo\022&\n\007expired\030\002 \003"
+  "(\0132\025.Protocol.CcEventInfo\022+\n\nknockbacks\030"
+  "\003 \003(\0132\027.Protocol.KnockbackInfo\"3\n\nS_CC_S"
+  "TATE\022%\n\006states\030\001 \003(\0132\025.Protocol.CcStateI"
+  "nfo\",\n\006S_DIED\022\"\n\006deaths\030\001 \003(\0132\022.Protocol"
+  ".DiedInfo\"\025\n\006C_CHAT\022\013\n\003msg\030\001 \001(\t\"\'\n\006S_CH"
+  "AT\022\020\n\010playerId\030\001 \001(\004\022\013\n\003msg\030\002 \001(\t\"]\n\007C_S"
+  "KILL\022!\n\004slot\030\001 \001(\0162\023.Protocol.EquipSlot\022"
+  "\021\n\ttarget_id\030\002 \001(\004\022\r\n\005aim_x\030\003 \001(\002\022\r\n\005aim"
+  "_y\030\004 \001(\002\"\020\n\016C_SKILL_CANCEL\"6\n\014S_SKILL_CA"
+  "ST\022&\n\005casts\030\001 \003(\0132\027.Protocol.SkillCastIn"
+  "fo\"$\n\016S_SKILL_CANCEL\022\022\n\ncaster_ids\030\001 \003(\004"
+  "\"3\n\013S_SKILL_HIT\022$\n\004hits\030\001 \003(\0132\026.Protocol"
+  ".SkillHitInfo\"3\n\014S_EQUIP_SYNC\022#\n\006skills\030"
+  "\001 \003(\0132\023.Protocol.SkillInfo\"X\n\016C_GRANT_RE"
+  "WARD\022\022\n\nrequest_id\030\001 \001(\t\022\024\n\014character_id"
+  "\030\002 \001(\004\022\014\n\004gold\030\003 \001(\004\022\016\n\006reason\030\004 \001(\t\"H\n\016"
+  "S_GRANT_REWARD\022\022\n\nrequest_id\030\001 \001(\t\022\016\n\006re"
+  "sult\030\002 \001(\r\022\022\n\ngold_after\030\003 \001(\004\"U\n\007C_EQUI"
+  "P\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013instance_id\030\002 \001"
+  "(\004\022!\n\004slot\030\003 \001(\0162\023.Protocol.EquipSlot\"4\n"
+  "\tC_UNEQUIP\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013instan"
+  "ce_id\030\002 \001(\004\"A\n\006C_LOOT\022\022\n\nrequest_id\030\001 \001("
+  "\t\022\016\n\006bag_id\030\002 \001(\004\022\023\n\013instance_id\030\003 \001(\004\"1"
+  "\n\006C_DROP\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013instance"
+  "_id\030\002 \001(\004\"r\n\rS_ITEM_RESULT\022\022\n\nrequest_id"
+  "\030\001 \001(\t\022$\n\006result\030\002 \001(\0162\024.Protocol.ItemRe"
+  "sult\022\'\n\007changed\030\003 \003(\0132\026.Protocol.ItemIns"
+  "tance\"D\n\007C_STASH\022\022\n\nrequest_id\030\001 \001(\t\022\023\n\013"
+  "instance_id\030\002 \001(\004\022\020\n\010to_vault\030\003 \001(\010\"9\n\020S"
+  "_INVENTORY_SYNC\022%\n\005items\030\001 \003(\0132\026.Protoco"
+  "l.ItemInstance\"]\n\016S_BAG_CONTENTS\022\016\n\006bag_"
+  "id\030\001 \001(\004\022%\n\005items\030\002 \003(\0132\026.Protocol.ItemI"
+  "nstance\022\024\n\014remaining_ms\030\003 \001(\004\"\034\n\nC_BAG_O"
+  "PEN\022\016\n\006bag_id\030\001 \001(\004\"\222\001\n\016S_ESCAPE_GAUGE\022\020"
+  "\n\010tower_id\030\001 \001(\r\022)\n\005state\030\002 \001(\0162\032.Protoc"
+  "ol.EscapeGaugeState\022\031\n\021progress_permille"
+  "\030\003 \001(\r\022\022\n\nrate_per_s\030\004 \001(\002\022\024\n\014self_in_zo"
+  "ne\030\005 \001(\010\"5\n\rS_CHEST_STATE\022\022\n\nlooted_ids\030"
+  "\001 \003(\004\022\020\n\010snapshot\030\002 \001(\010\"X\n\010S_STATUS\022%\n\007a"
+  "pplied\030\001 \003(\0132\024.Protocol.StatusInfo\022%\n\007ex"
+  "pired\030\002 \003(\0132\024.Protocol.StatusInfo\"e\n\014S_P"
+  "ROJECTILE\022)\n\007spawned\030\001 \003(\0132\030.Protocol.Pr"
+  "ojectileInfo\022*\n\005ended\030\002 \003(\0132\033.Protocol.P"
+  "rojectileEndInfo\"<\n\006S_ZONE\022#\n\007spawned\030\001 "
+  "\003(\0132\022.Protocol.ZoneInfo\022\r\n\005ended\030\002 \003(\004\"]"
+  "\n\016S_SKILL_REVEAL\022\021\n\ttarget_id\030\001 \001(\004\022#\n\006s"
+  "kills\030\002 \003(\0132\023.Protocol.SkillInfo\022\023\n\013dura"
+  "tion_ms\030\003 \001(\r\"\\\n\010S_VISION\022\021\n\tradius_cm\030\001"
+  " \001(\002\022\'\n\007sources\030\002 \003(\0132\026.Protocol.VisionS"
+  "ource\022\024\n\014camera_scale\030\003 \001(\002b\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -1148,7 +1152,7 @@ static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_de
 };
 static ::_pbi::once_flag descriptor_table_Protocol_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Protocol_2eproto = {
-    false, false, 2885, descriptor_table_protodef_Protocol_2eproto,
+    false, false, 2915, descriptor_table_protodef_Protocol_2eproto,
     "Protocol.proto",
     &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 43,
     schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
@@ -3195,10 +3199,14 @@ C_ATTACK::C_ATTACK(const C_ATTACK& from)
   C_ATTACK* const _this = this; (void)_this;
   new (&_impl_) Impl_{
       decltype(_impl_.target_id_){}
+    , decltype(_impl_.aim_x_){}
+    , decltype(_impl_.aim_y_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-  _this->_impl_.target_id_ = from._impl_.target_id_;
+  ::memcpy(&_impl_.target_id_, &from._impl_.target_id_,
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.aim_y_) -
+    reinterpret_cast<char*>(&_impl_.target_id_)) + sizeof(_impl_.aim_y_));
   // @@protoc_insertion_point(copy_constructor:Protocol.C_ATTACK)
 }
 
@@ -3208,6 +3216,8 @@ inline void C_ATTACK::SharedCtor(
   (void)is_message_owned;
   new (&_impl_) Impl_{
       decltype(_impl_.target_id_){uint64_t{0u}}
+    , decltype(_impl_.aim_x_){0}
+    , decltype(_impl_.aim_y_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -3235,7 +3245,9 @@ void C_ATTACK::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  _impl_.target_id_ = uint64_t{0u};
+  ::memset(&_impl_.target_id_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&_impl_.aim_y_) -
+      reinterpret_cast<char*>(&_impl_.target_id_)) + sizeof(_impl_.aim_y_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -3250,6 +3262,22 @@ const char* C_ATTACK::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx)
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
           _impl_.target_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // float aim_x = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 21)) {
+          _impl_.aim_x_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else
+          goto handle_unusual;
+        continue;
+      // float aim_y = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 29)) {
+          _impl_.aim_y_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
         } else
           goto handle_unusual;
         continue;
@@ -3288,6 +3316,26 @@ uint8_t* C_ATTACK::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteUInt64ToArray(1, this->_internal_target_id(), target);
   }
 
+  // float aim_x = 2;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_x = this->_internal_aim_x();
+  uint32_t raw_aim_x;
+  memcpy(&raw_aim_x, &tmp_aim_x, sizeof(tmp_aim_x));
+  if (raw_aim_x != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(2, this->_internal_aim_x(), target);
+  }
+
+  // float aim_y = 3;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_y = this->_internal_aim_y();
+  uint32_t raw_aim_y;
+  memcpy(&raw_aim_y, &tmp_aim_y, sizeof(tmp_aim_y));
+  if (raw_aim_y != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(3, this->_internal_aim_y(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -3307,6 +3355,24 @@ size_t C_ATTACK::ByteSizeLong() const {
   // uint64 target_id = 1;
   if (this->_internal_target_id() != 0) {
     total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_target_id());
+  }
+
+  // float aim_x = 2;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_x = this->_internal_aim_x();
+  uint32_t raw_aim_x;
+  memcpy(&raw_aim_x, &tmp_aim_x, sizeof(tmp_aim_x));
+  if (raw_aim_x != 0) {
+    total_size += 1 + 4;
+  }
+
+  // float aim_y = 3;
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_y = this->_internal_aim_y();
+  uint32_t raw_aim_y;
+  memcpy(&raw_aim_y, &tmp_aim_y, sizeof(tmp_aim_y));
+  if (raw_aim_y != 0) {
+    total_size += 1 + 4;
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -3330,6 +3396,20 @@ void C_ATTACK::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTO
   if (from._internal_target_id() != 0) {
     _this->_internal_set_target_id(from._internal_target_id());
   }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_x = from._internal_aim_x();
+  uint32_t raw_aim_x;
+  memcpy(&raw_aim_x, &tmp_aim_x, sizeof(tmp_aim_x));
+  if (raw_aim_x != 0) {
+    _this->_internal_set_aim_x(from._internal_aim_x());
+  }
+  static_assert(sizeof(uint32_t) == sizeof(float), "Code assumes uint32_t and float are the same size.");
+  float tmp_aim_y = from._internal_aim_y();
+  uint32_t raw_aim_y;
+  memcpy(&raw_aim_y, &tmp_aim_y, sizeof(tmp_aim_y));
+  if (raw_aim_y != 0) {
+    _this->_internal_set_aim_y(from._internal_aim_y());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -3347,7 +3427,12 @@ bool C_ATTACK::IsInitialized() const {
 void C_ATTACK::InternalSwap(C_ATTACK* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  swap(_impl_.target_id_, other->_impl_.target_id_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(C_ATTACK, _impl_.aim_y_)
+      + sizeof(C_ATTACK::_impl_.aim_y_)
+      - PROTOBUF_FIELD_OFFSET(C_ATTACK, _impl_.target_id_)>(
+          reinterpret_cast<char*>(&_impl_.target_id_),
+          reinterpret_cast<char*>(&other->_impl_.target_id_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata C_ATTACK::GetMetadata() const {
