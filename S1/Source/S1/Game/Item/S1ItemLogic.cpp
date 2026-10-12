@@ -158,15 +158,21 @@ namespace S1ItemLogic
 		return Out;
 	}
 
-	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers)
+	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers, uint32 Level)
 	{
 		const int32 Index = static_cast<int32>(Grade) - 1;
 		const float Multiplier = GradeMultipliers.IsValidIndex(Index) ? GradeMultipliers[Index] : 1.f;
+		const float LevelBonus = Stat.BaseStat * ItemLevelRatePerBase * static_cast<float>(FMath::Min(Level, ItemLevelMax));
 
-		return Stat.FlatFloor + Stat.BaseStat * Multiplier;
+		return Stat.FlatFloor + Stat.BaseStat * Multiplier + LevelBonus;
 	}
 
-	float MoveSpeedBonus(const FS1ItemTypeDef& Type, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers)
+	FText LabelWithLevel(const FText& Name, uint32 Level)
+	{
+		return Level > 0 ? FText::Format(INVTEXT("{0} +{1}"), Name, FText::AsNumber(static_cast<int32>(Level))) : Name;
+	}
+
+	float MoveSpeedBonus(const FS1ItemTypeDef& Type, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers, uint32 Level)
 	{
 		static const FName PercentMs(TEXT("percent_ms_bonus"));
 
@@ -174,13 +180,14 @@ namespace S1ItemLogic
 		for (const FS1ItemStat& Stat : Type.Stats)
 		{
 			if (Stat.Stat == PercentMs)
-				Bonus += StatValue(Stat, Grade, GradeMultipliers);
+				Bonus += StatValue(Stat, Grade, GradeMultipliers, Level);
 		}
 		return FMath::Min(Bonus, MoveSpeedBonusPerItemMax);
 	}
 
 	TArray<FS1StatDelta> StatDeltas(const FS1ItemTypeDef& CandidateType, ES1ItemGrade CandidateGrade,
-		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers)
+		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers,
+		uint32 CandidateLevel, uint32 EquippedLevel)
 	{
 		TArray<FS1StatDelta> Out;
 
@@ -193,10 +200,10 @@ namespace S1ItemLogic
 		{
 			FS1StatDelta Line;
 			Line.Stat = Stat.Stat;
-			Line.After = StatValue(Stat, CandidateGrade, GradeMultipliers);
+			Line.After = StatValue(Stat, CandidateGrade, GradeMultipliers, CandidateLevel);
 
 			if (const FS1ItemStat* Worn = FindStat(EquippedType, Stat.Stat))
-				Line.Before = StatValue(*Worn, EquippedGrade, GradeMultipliers);
+				Line.Before = StatValue(*Worn, EquippedGrade, GradeMultipliers, EquippedLevel);
 
 			Out.Add(Line);
 		}
@@ -211,7 +218,7 @@ namespace S1ItemLogic
 
 				FS1StatDelta Line;
 				Line.Stat = Worn.Stat;
-				Line.Before = StatValue(Worn, EquippedGrade, GradeMultipliers);
+				Line.Before = StatValue(Worn, EquippedGrade, GradeMultipliers, EquippedLevel);
 				Out.Add(Line);
 			}
 		}

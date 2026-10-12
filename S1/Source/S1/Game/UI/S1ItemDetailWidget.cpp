@@ -89,13 +89,20 @@ void US1ItemDetailWidget::ShowItem(const US1ItemSubsystem& Items, const FS1ItemV
 
 	AddItemHeader(Items, Item);
 
+	// 강화 레벨 (item-enhance-2026-10-12 R8) - 0 이어도 보여 준다: "Lv 0 / 16" 이 강화가 있다는 안내다
+	AddLine(Item.Level >= S1ItemLogic::ItemLevelMax
+		? FText::Format(Text(TEXT("label.enhance_max")), FText::AsNumber(static_cast<int32>(Item.Level)))
+		: FText::Format(Text(TEXT("label.enhance_level")), FText::AsNumber(static_cast<int32>(Item.Level)), FText::AsNumber(static_cast<int32>(S1ItemLogic::ItemLevelMax))),
+		FontBody, TextSecondary());
+
 	const bool bIsWorn = Item.State == ES1ItemState::Equipped;
 	const FS1ItemView* Compare = bIsWorn ? nullptr : Worn;
 	const FS1ItemTypeDef* CompareType = Compare != nullptr ? Items.GetCatalog().Find(Compare->ItemTypeId) : nullptr;
 
 	// ── Stats, with the delta against what is worn ──
 	const TArray<FS1StatDelta> Stats = S1ItemLogic::StatDeltas(*Type, Item.Grade,
-		CompareType, Compare != nullptr ? Compare->Grade : ES1ItemGrade::None, Items.GetGradeMultipliers());
+		CompareType, Compare != nullptr ? Compare->Grade : ES1ItemGrade::None, Items.GetGradeMultipliers(),
+		Item.Level, Compare != nullptr ? Compare->Level : 0);
 
 	for (const FS1StatDelta& Stat : Stats)
 	{

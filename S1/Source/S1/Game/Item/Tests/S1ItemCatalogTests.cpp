@@ -307,6 +307,29 @@ bool FS1MoveSpeedBonusTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1ItemLevelTest,
+	"S1.Item.Logic.StatValue_Level16Common_EqualsLegendary0", GS1CatalogTestFlags)
+bool FS1ItemLevelTest::RunTest(const FString& Parameters)
+{
+	// item-enhance-2026-10-12 AC-EN-01 (client mirror of the server EquipStats): per_level_rate = base × 1.2 / 16
+	using S1ItemLogic::StatValue;
+	const TArrayView<const float> GM = MakeArrayView(GGradeMultipliers);
+	const FS1ItemStat Attack{ TEXT("attack_power"), 4.7059f, 0.f };
+	TestEqual(TEXT("level 0 common unchanged"), StatValue(Attack, ES1ItemGrade::Common, GM), 4.7059f, 0.0001f);
+	TestEqual(TEXT("level 16 common = legendary 0"), StatValue(Attack, ES1ItemGrade::Common, GM, 16), StatValue(Attack, ES1ItemGrade::Legendary, GM, 0), 0.0005f);
+	TestEqual(TEXT("level 8 common = +0.6 base"), StatValue(Attack, ES1ItemGrade::Common, GM, 8), 4.7059f * 1.6f, 0.0005f);
+	TestEqual(TEXT("level is capped at 16"), StatValue(Attack, ES1ItemGrade::Common, GM, 99), StatValue(Attack, ES1ItemGrade::Common, GM, 16), 0.0001f);
+	TestEqual(TEXT("label +n"), S1ItemLogic::LabelWithLevel(INVTEXT("검"), 3).ToString(), FString(TEXT("검 +3")));
+	TestEqual(TEXT("label level 0"), S1ItemLogic::LabelWithLevel(INVTEXT("검"), 0).ToString(), FString(TEXT("검")));
+
+	FS1ItemTypeDef Boots;
+	Boots.Id = 501;
+	Boots.EquipSlot = 5;
+	Boots.Stats.Add(FS1ItemStat{ TEXT("percent_ms_bonus"), 0.0441f, 0.f });
+	TestEqual(TEXT("move speed bonus with level 16 = x2.2"), S1ItemLogic::MoveSpeedBonus(Boots, ES1ItemGrade::Common, GM, 16), 0.09702f, 0.0002f);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FS1StatDeltasTest,
 	"S1.Item.Logic.StatDeltas_TwoWeapons_ShowsGainsAndLosses", GS1CatalogTestFlags)
 bool FS1StatDeltasTest::RunTest(const FString& Parameters)

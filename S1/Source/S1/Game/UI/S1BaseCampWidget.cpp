@@ -405,6 +405,15 @@ void US1BaseCampWidget::NativeOnInitialized()
 	if (UVerticalBoxSlot* StarterSlot = Column[2]->AddChildToVerticalBox(StarterNotice))
 		StarterSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 
+	// [강화 +1] - 상세가 보여 주는(마지막으로 올렸던) 아이템의 레벨을 하나 올린다. 재화 없음 (item-enhance-2026-10-12 R8)
+	EnhanceButton = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	EnhanceButton->SetPadding(FMargin(16.f, 8.f));
+	EnhanceButton->SetHorizontalAlignment(HAlign_Center);
+	EnhanceText = MakeText(FontBody, TextPrimary());
+	EnhanceButton->SetContent(EnhanceText);
+	if (UVerticalBoxSlot* EnhanceSlot = Column[2]->AddChildToVerticalBox(EnhanceButton))
+		EnhanceSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 6.f));
+
 	EnterButton = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	EnterButton->SetPadding(FMargin(16.f, 10.f));
 	EnterButton->SetHorizontalAlignment(HAlign_Center);
@@ -556,7 +565,7 @@ void US1BaseCampWidget::RefreshGrid(bool bVault)
 		if (bReady && List.IsValidIndex(i))
 		{
 			const FS1ItemView& Item = *List[i];
-			Cells[i]->SetItem(Item.InstanceId, Item.Grade, ItemName(Catalog.Find(Item.ItemTypeId), Item.ItemTypeId), Items->IsPending(Item.InstanceId));
+			Cells[i]->SetItem(Item.InstanceId, Item.Grade, S1ItemLogic::LabelWithLevel(ItemName(Catalog.Find(Item.ItemTypeId), Item.ItemTypeId), Item.Level), Items->IsPending(Item.InstanceId));
 		}
 		else
 		{
@@ -576,7 +585,7 @@ void US1BaseCampWidget::RefreshStrip()
 		const FS1ItemTypeDef* Type = Worn != nullptr ? Catalog.Find(Worn->ItemTypeId) : nullptr;
 
 		if (Worn != nullptr)
-			StripSlots[i]->SetItem(Worn->InstanceId, Worn->Grade, ItemName(Type, Worn->ItemTypeId), Items->IsPending(Worn->InstanceId));
+			StripSlots[i]->SetItem(Worn->InstanceId, Worn->Grade, S1ItemLogic::LabelWithLevel(ItemName(Type, Worn->ItemTypeId), Worn->Level), Items->IsPending(Worn->InstanceId));
 		else
 			StripSlots[i]->SetEmpty(true);
 
@@ -720,7 +729,7 @@ void US1BaseCampWidget::RefreshTotals()
 			if (Sums.Contains(Stat.Stat) == false)
 				Order.Add(Stat.Stat);
 
-			Sums.FindOrAdd(Stat.Stat) += S1ItemLogic::StatValue(Stat, Worn->Grade, Items->GetGradeMultipliers());
+			Sums.FindOrAdd(Stat.Stat) += S1ItemLogic::StatValue(Stat, Worn->Grade, Items->GetGradeMultipliers(), Worn->Level);
 		}
 	}
 
@@ -782,16 +791,37 @@ void US1BaseCampWidget::RefreshDetail()
 		}
 	}
 
-	const FS1ItemView* Item = HoveredId != 0 ? Items->FindItem(HoveredId) : nullptr;
+	const FS1ItemView* Item = ShownId != 0 ? Items->FindItem(ShownId) : nullptr;
 	if (Item == nullptr)
 	{
 		Detail->Clear();
+		RefreshEnhance();
 		return;
 	}
 
 	const FS1ItemTypeDef* Type = Items->GetCatalog().Find(Item->ItemTypeId);
 	const FS1ItemView* Worn = Type != nullptr ? Items->GetEquipped(Type->EquipSlot) : nullptr;
 	Detail->ShowItem(*Items, *Item, Worn);
+	RefreshEnhance();
+}
+
+void US1BaseCampWidget::RefreshEnhance()
+{
+	if (EnhanceButton == nullptr || EnhanceText == nullptr)
+		return;
+	US1ItemSubsystem* Items = GetItems();
+	const FS1ItemView* Item = (Items != nullptr && ShownId != 0) ? Items->FindItem(ShownId) : nullptr;
+	const bool bMax = Item != nullptr && Item->Level >= S1ItemLogic::ItemLevelMax;
+	const bool bCan = Item != nullptr && bMax == false && Items->IsPending(ShownId) == false && IsLocked() == false;
+
+	if (Item == nullptr)
+		EnhanceText->SetText(Text(TEXT("button.enhance_pick")));
+	else if (bMax)
+		EnhanceText->SetText(FText::Format(Text(TEXT("button.enhance_max")), FText::AsNumber(static_cast<int32>(Item->Level))));
+	else
+		EnhanceText->SetText(FText::Format(Text(TEXT("button.enhance")), FText::AsNumber(static_cast<int32>(Item->Level)), FText::AsNumber(static_cast<int32>(Item->Level + 1))));
+	EnhanceText->SetColorAndOpacity(FSlateColor(bCan ? TextPrimary() : S1ItemUIStyle::TextTertiary()));
+	EnhanceButton->SetBrushColor(bCan ? CellHover() : CellBackground());
 }
 
 // ── Input ────────────────────────────────────────────────────────────────
@@ -817,6 +847,22 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(PartyButton))
 	{
 		OpenPartyPanel();
+		return FReply::Handled();
+	}
+
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnhanceButton))
+	{
+		// [강화 +1] (item-enhance-2026-10-12 R8): 상세가 보여 주는 아이템, 16 이면 아무것도 안 한다. 응답 전엔 pending 으로 흐려진다
+		US1ItemSubsystem* Items = GetItems();
+		const FS1ItemView* Item = (Items != nullptr && ShownId != 0) ? Items->FindItem(ShownId) : nullptr;
+		if (Item == nullptr)
+			ShowNotice(EColumn::Center, Text(TEXT("notice.enhance_pick")), 0);
+		else if (Item->Level < S1ItemLogic::ItemLevelMax && Items->IsPending(ShownId) == false && IsLocked() == false)
+		{
+			CancelConfirm();
+			Items->RequestEnhance(ShownId);
+			Refresh();
+		}
 		return FReply::Handled();
 	}
 
@@ -860,6 +906,8 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 void US1BaseCampWidget::HandleSlotHovered(uint64 InstanceId)
 {
 	HoveredId = InstanceId;
+	if (InstanceId != 0)
+		ShownId = InstanceId;		// sticky - 상세와 [강화] 버튼은 마우스가 떠나도 마지막 아이템을 본다 (item-enhance 2026-10-12)
 	RefreshDetail();
 }
 

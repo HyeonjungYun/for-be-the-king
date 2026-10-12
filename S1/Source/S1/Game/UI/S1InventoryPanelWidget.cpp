@@ -212,7 +212,7 @@ void US1InventoryPanelWidget::Refresh()
 		const int32 Part = StripParts[i];
 
 		if (const FS1ItemView* Worn = Items->GetEquipped(Part))
-			StripSlots[i]->SetItem(Worn->InstanceId, Worn->Grade, ItemName(Catalog.Find(Worn->ItemTypeId), Worn->ItemTypeId), Items->IsPending(Worn->InstanceId));
+			StripSlots[i]->SetItem(Worn->InstanceId, Worn->Grade, S1ItemLogic::LabelWithLevel(ItemName(Catalog.Find(Worn->ItemTypeId), Worn->ItemTypeId), Worn->Level), Items->IsPending(Worn->InstanceId));
 		else
 			StripSlots[i]->SetEmpty(true);
 	}
@@ -259,7 +259,7 @@ void US1InventoryPanelWidget::Refresh()
 		if (Carried.IsValidIndex(i))
 		{
 			const FS1ItemView& Item = *Carried[i];
-			GridSlots[i]->SetItem(Item.InstanceId, Item.Grade, ItemName(Catalog.Find(Item.ItemTypeId), Item.ItemTypeId), Items->IsPending(Item.InstanceId));
+			GridSlots[i]->SetItem(Item.InstanceId, Item.Grade, S1ItemLogic::LabelWithLevel(ItemName(Catalog.Find(Item.ItemTypeId), Item.ItemTypeId), Item.Level), Items->IsPending(Item.InstanceId));
 		}
 		else
 		{

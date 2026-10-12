@@ -56,6 +56,7 @@ enum class ES1ItemAction : uint8
 	Drop,
 	Stash,			// Carried -> Vaulted
 	Unstash,		// Vaulted -> Carried
+	Enhance,		// base camp level + 1 (item-enhance 2026-10-12) - answered with S_ITEM_RESULT like the others
 };
 
 /**

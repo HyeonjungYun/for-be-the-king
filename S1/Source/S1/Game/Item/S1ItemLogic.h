@@ -91,7 +91,15 @@ namespace S1ItemLogic
 	 * flat_floor + base_stat × grade multiplier (GDD D2-b). GradeMultipliers is indexed by
 	 * grade − 1 (Common first). The level term is 🔒T3 — MVP items are level 0.
 	 */
-	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers);
+	/** 강화 레벨 (item-enhance-2026-10-12 · item-equipment-system.md § D2): per_level_rate = base_stat × 1.2 / 16 — 서버 ItemLevel 과 같은 값 */
+	constexpr uint32 ItemLevelMax = 16;
+	constexpr float ItemLevelRatePerBase = 1.2f / 16.f;
+
+	/** flat_floor + base_stat × grade multiplier + base_stat × 0.075 × level — the server's EquipStats line value */
+	float StatValue(const FS1ItemStat& Stat, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers, uint32 Level = 0);
+
+	/** Cell label with the enhance level: "이름 +3" (level 0 = the name alone) */
+	FText LabelWithLevel(const FText& Name, uint32 Level);
 
 	/** Per-item cap on percent_ms_bonus — the server's EquipStats::MS_BONUS_PER_ITEM_MAX (item-equipment-system.md § 합산 표). */
 	inline constexpr float MoveSpeedBonusPerItemMax = 0.15f;
@@ -101,14 +109,15 @@ namespace S1ItemLogic
 	 * applied once: speed = 340 × (1 + Σ) × (1 − slow) — the same order as the server's Player::ComputeMoveSpeed,
 	 * so the client never walks faster than the server's ceiling (a faster client is a rejected move).
 	 */
-	float MoveSpeedBonus(const FS1ItemTypeDef& Type, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers);
+	float MoveSpeedBonus(const FS1ItemTypeDef& Type, ES1ItemGrade Grade, TArrayView<const float> GradeMultipliers, uint32 Level = 0);
 
 	/**
 	 * Before/after per stat for the detail pane — the union of both items' stats, the
 	 * candidate's order first. EquippedType null = nothing worn in that part.
 	 */
 	TArray<FS1StatDelta> StatDeltas(const FS1ItemTypeDef& CandidateType, ES1ItemGrade CandidateGrade,
-		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers);
+		const FS1ItemTypeDef* EquippedType, ES1ItemGrade EquippedGrade, TArrayView<const float> GradeMultipliers,
+		uint32 CandidateLevel = 0, uint32 EquippedLevel = 0);
 }
 
 /**

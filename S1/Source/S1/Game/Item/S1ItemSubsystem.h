@@ -85,6 +85,8 @@ public:
 	void RequestUnequip(uint64 InstanceId);
 	void RequestDrop(uint64 InstanceId);
 	void RequestStash(uint64 InstanceId, bool bToVault);
+	/** 베이스캠프 강화 +1 (C_ENHANCE) — 응답은 S_ITEM_RESULT{changed}, 레벨이 오른 인스턴스로 갱신된다 (item-enhance 2026-10-12) */
+	void RequestEnhance(uint64 InstanceId);
 	void RequestOpenBag(uint64 BagId);
 	void RequestLoot(uint64 BagId, uint64 InstanceId);
 

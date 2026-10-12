@@ -124,7 +124,7 @@ void US1ItemSubsystem::RecomputeMoveSpeedBonus()
 		const FS1ItemView* Worn = GetEquipped(Part);
 		const FS1ItemTypeDef* Type = Worn != nullptr ? Catalog.Find(Worn->ItemTypeId) : nullptr;
 		if (Type != nullptr)
-			Sum += S1ItemLogic::MoveSpeedBonus(*Type, Worn->Grade, GetGradeMultipliers());
+			Sum += S1ItemLogic::MoveSpeedBonus(*Type, Worn->Grade, GetGradeMultipliers(), Worn->Level);
 	}
 
 	if (FMath::IsNearlyEqual(Sum, MoveSpeedBonus) == false)
@@ -363,6 +363,14 @@ void US1ItemSubsystem::RequestStash(uint64 InstanceId, bool bToVault)
 	Pkt.set_request_id(TCHAR_TO_UTF8(*AddPending(Action, InstanceId, 0)));
 	Pkt.set_instance_id(InstanceId);
 	Pkt.set_to_vault(bToVault);
+	SEND_PACKET(Pkt);
+}
+
+void US1ItemSubsystem::RequestEnhance(uint64 InstanceId)
+{
+	Protocol::C_ENHANCE Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*AddPending(ES1ItemAction::Enhance, InstanceId, 0)));
+	Pkt.set_instance_id(InstanceId);
 	SEND_PACKET(Pkt);
 }
 

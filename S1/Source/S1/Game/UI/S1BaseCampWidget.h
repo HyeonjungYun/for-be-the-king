@@ -59,6 +59,7 @@ private:
 	void RefreshAtomic();
 	void RefreshEnter();
 	void RefreshDetail();
+	void RefreshEnhance();		// [강화 +1] 버튼 글자 · 색 (item-enhance 2026-10-12)
 
 	/**
 	 * Which skill each key would get from what is worn — key slot → skill id. In base camp there is
@@ -116,6 +117,8 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock>						StarterNotice;	// above [입장] - "기본 장비 3종을 받고 입장한다"
 	UPROPERTY() TObjectPtr<UBorder>							EnterButton;
 	UPROPERTY() TObjectPtr<UTextBlock>						EnterText;
+	UPROPERTY() TObjectPtr<UBorder>							EnhanceButton;		// 베이스캠프 강화 (item-enhance 2026-10-12)
+	UPROPERTY() TObjectPtr<UTextBlock>						EnhanceText;
 	UPROPERTY() TObjectPtr<US1EntryMapWidget>				EntryMap;
 
 	// PVE (ADR-0014) - mode row above [입장]: [PVP] [PVE 솔로] [PVE 협동] … [파티 n/3]
@@ -135,6 +138,7 @@ private:
 	FString			VaultFilterText;
 	FString			CarriedFilterText;
 	uint64			HoveredId = 0;
+	uint64			ShownId = 0;		// 마지막으로 올렸던 아이템 - 상세 · [강화] 버튼은 마우스가 칸을 떠나도 이것을 본다 (sticky)
 	uint64			ConfirmId = 0;
 	FTimerHandle	ConfirmTimer;
 	FTimerHandle	NoticeTimer;

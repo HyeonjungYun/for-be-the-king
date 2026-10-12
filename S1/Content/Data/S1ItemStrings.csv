@@ -815,3 +815,9 @@ skill.1187.family,신발 계열,
 skill.1188,삼십육계,#187 신발 액티브
 skill.1188.desc,자신에게 남은 모든 표식을 지우고 잠시 동안 이동 속도가 증가한다.,
 skill.1188.family,신발 계열,
+label.enhance_level,강화 Lv {0} / {1},S3 item detail (item-enhance 2026-10-12)
+label.enhance_max,강화 Lv {0} — 최대,S3 item detail
+button.enhance,강화 +1 (Lv {0} → {1}) · 비용 없음,S3 enhance button (item-enhance 2026-10-12)
+button.enhance_max,강화 최대 (Lv {0}),S3 enhance button at 16
+button.enhance_pick,강화 — 아이템 위에 마우스를 올리세요,S3 enhance button with nothing shown
+notice.enhance_pick,강화할 아이템 위에 마우스를 올린 뒤 누르세요,S3 enhance button pressed with nothing shown
