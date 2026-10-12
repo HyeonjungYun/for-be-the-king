@@ -22,6 +22,7 @@ namespace S1PartyLayout
 {
 	constexpr float PanelWidth = 420.f;
 	constexpr double ResultSeconds = 4.0;		// how long the outcome of a request stays
+	constexpr double LeaveArmWindowSec = 3.0;	// [배신하고 나가기] 첫 클릭 뒤 둘째 클릭을 기다리는 창 (party-betrayal § 7)
 
 	UTextBlock* MakeText(UWidgetTree* Tree, int32 Size, const FLinearColor& Color)
 	{
@@ -205,6 +206,7 @@ void US1PartyPanelWidget::NativeOnInitialized()
 
 	UHorizontalBox* Bottom = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 	LeaveButton = MakeButton(WidgetTree, Text(TEXT("party.leave")));
+	LeaveText = Cast<UTextBlock>(LeaveButton->GetContent());
 	CloseButton = MakeButton(WidgetTree, Text(TEXT("party.close")));
 	if (UHorizontalBoxSlot* LeaveSlot = Bottom->AddChildToHorizontalBox(LeaveButton))
 		LeaveSlot->SetPadding(FMargin(0.f, 0.f, 10.f, 0.f));
@@ -241,7 +243,8 @@ void US1PartyPanelWidget::Refresh()
 	if (Party == nullptr || Title == nullptr)
 		return;
 
-	Title->SetText(FText::Format(Text(TEXT("party.title")), FText::AsNumber(Party->Size()), FText::AsNumber(3)));
+	// 베이스캠프의 창은 협동 입장용(ADR-0014), 런 안의 창은 눈앞의 플레이어와 맺는 파티(party-betrayal R10) — 제목으로 구분한다
+	Title->SetText(FText::Format(Text(Party->IsInDungeon() ? TEXT("party.title_run") : TEXT("party.title")), FText::AsNumber(Party->Size()), FText::AsNumber(3)));
 
 	MemberList->ClearChildren();
 	KickButtons.Reset();
@@ -275,7 +278,8 @@ void US1PartyPanelWidget::Refresh()
 			StateSlot->SetPadding(FMargin(8.f, 0.f));
 		}
 
-		if (bLeader && M.CharacterId != Party->GetMyCharacterId())
+		// 던전 파티엔 추방이 없다 (party-betrayal R4) - 버튼 자체를 내지 않는다. 서버도 PARTY_NO_KICK_IN_RUN 으로 거절한다
+		if (bLeader && M.CharacterId != Party->GetMyCharacterId() && Party->IsDungeonParty() == false)
 		{
 			UBorder* Kick = MakeButton(WidgetTree, Text(TEXT("party.kick")));
 			Kick->SetPadding(FMargin(8.f, 2.f));
@@ -289,6 +293,16 @@ void US1PartyPanelWidget::Refresh()
 	}
 
 	LeaveButton->SetVisibility(Party->IsInParty() ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+	// 던전 파티 (party-betrayal R10): 나가기 = 배신. 첫 클릭은 경고 글자로 바꾸고 3 s 안의 두 번째 클릭만 보낸다
+	if (LeaveText != nullptr)
+	{
+		// 혼자 남은 파티(배신당한 쪽 · 수락 전 파티장)를 나가는 건 배신이 아니다 - 서버도 방송하지 않는다 (R5). 그땐 그냥 [파티 나가기]
+		const bool bBetrayLeave = Party->IsDungeonParty() && Party->Size() >= 2;
+		const bool bArmed = LeaveArmedAt > 0.0 && (FPlatformTime::Seconds() - LeaveArmedAt) < LeaveArmWindowSec;
+		LeaveText->SetText(Text(bBetrayLeave ? (bArmed ? TEXT("party.leave_betray_arm") : TEXT("party.leave_betray")) : TEXT("party.leave")));
+		LeaveText->SetColorAndOpacity(FSlateColor(bBetrayLeave ? BetrayerRed() : TextPrimary()));
+	}
 }
 
 void US1PartyPanelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -331,7 +345,20 @@ FReply US1PartyPanelWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 		if (IsUnder(InviteButton, At))
 			SendInvite();
 		else if (IsUnder(LeaveButton, At))
-			Party->Leave();
+		{
+			if (Party->IsDungeonParty() == false || Party->Size() < 2)
+				Party->Leave();		// 베이스캠프 파티 · 혼자 남은 던전 파티 - 배신이 아니니 바로
+			else if (LeaveArmedAt > 0.0 && (FPlatformTime::Seconds() - LeaveArmedAt) < LeaveArmWindowSec)
+			{
+				LeaveArmedAt = 0.0;
+				Party->Leave();		// = 배신 (서버가 방송 · 표식)
+			}
+			else
+			{
+				LeaveArmedAt = FPlatformTime::Seconds();
+				Refresh();
+			}
+		}
 		else if (IsUnder(CloseButton, At))
 			Close();
 		else

@@ -115,6 +115,10 @@ public:
 	void SetAlly(bool bAlly, const FString& Name);
 	bool IsAlly() const { return bIsAlly; }
 	const FString& GetAllyName() const { return AllyName; }
+	/** 던전 파티 배신자 표식 (party-betrayal 2026-10-12 R6) - S_PARTY_BETRAYED 또는 스폰 스냅샷 ObjectInfo.betrayer */
+	void SetBetrayer(bool bInBetrayer, const FString& Name) { bBetrayer = bInBetrayer; if (Name.IsEmpty() == false) BetrayerName = Name; }
+	bool IsBetrayer() const { return bBetrayer; }
+	const FString& GetBetrayerName() const { return BetrayerName; }
 
 public:
 	/**
@@ -409,6 +413,8 @@ protected:
 	/** PVE co-op ally marker (SetAlly). */
 	bool bIsAlly = false;
 	FString AllyName;
+	bool bBetrayer = false;
+	FString BetrayerName;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> AllyDisc = nullptr;

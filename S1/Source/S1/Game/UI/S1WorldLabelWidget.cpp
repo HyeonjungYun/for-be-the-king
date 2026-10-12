@@ -75,6 +75,18 @@ void US1WorldLabelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 			Lift += LineStepPx;
 		}
 
+		// Dungeon-party betrayer - "배신자 name" in warning red, for everyone else until the run ends (party-betrayal R6; no ⚠ - the font has no glyph for it).
+		// Not over my own head - the toast already told me (verifier r1 #4)
+		if (Creature->IsBetrayer() && Creature != PC->GetPawn())
+		{
+			FLabel& Label = Labels.AddDefaulted_GetRef();
+			const FString Name = Creature->GetBetrayerName();
+			Label.Text = FText::FromString(S1ItemUIStyle::Text(TEXT("label.betrayer")).ToString() + (Name.IsEmpty() ? FString() : TEXT(" ") + Name));
+			Label.Anchor = Position - FVector2D(0.f, Lift);
+			Label.Colour = S1ItemUIStyle::BetrayerRed();
+			Lift += LineStepPx;
+		}
+
 		// PVE co-op ally - "★ name" in party blue: the star is the cue, not the colour alone (art bible ⑩)
 		if (Creature->IsAlly())
 		{

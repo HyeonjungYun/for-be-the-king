@@ -84,6 +84,7 @@ void US1RunHudWidget::NativeOnInitialized()
 
 	AlarmText = MakeLine(FontBody);
 	ResultText = MakeLine(FontEmphasis + 3);
+	NoticeText = MakeLine(FontEmphasis);
 
 	SetVisibility(ESlateVisibility::HitTestInvisible);
 }
@@ -122,4 +123,12 @@ void US1RunHudWidget::SetAlarm(const FText& Text, bool bSelf)
 void US1RunHudWidget::SetResult(const FText& Text)
 {
 	SetLine(ResultText, Text);
+}
+
+void US1RunHudWidget::SetNotice(const FText& Text, bool bUrgent)
+{
+	// 토스트는 5 s 뒤 사라지는 한 줄 — 회색(TextSecondary)은 밝은 바닥 위에서 읽히지 않았다 (party-betrayal 실기동 02). 흰색 · 긴급은 붉은색
+	SetLine(NoticeText, Text);
+	if (NoticeText != nullptr)
+		NoticeText->SetColorAndOpacity(FSlateColor(bUrgent ? UrgentColor : TextPrimary()));
 }

@@ -29,6 +29,8 @@ public:
 	void SetGauge(bool bVisible, float Progress, const FText& Label, bool bDraining);
 	void SetAlarm(const FText& Text, bool bSelf);
 	void SetResult(const FText& Text);
+	/** 짧은 알림 줄 (파티 배신 등) - 빈 텍스트로 지운다 (party-betrayal 2026-10-12) */
+	void SetNotice(const FText& Text, bool bUrgent);
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -43,4 +45,5 @@ private:
 	UPROPERTY() TObjectPtr<UProgressBar>	GaugeBar;
 	UPROPERTY() TObjectPtr<UTextBlock>		AlarmText;
 	UPROPERTY() TObjectPtr<UTextBlock>		ResultText;
+	UPROPERTY() TObjectPtr<UTextBlock>		NoticeText;
 };

@@ -104,6 +104,26 @@ void US1EscapeSubsystem::HandleEnterGame(uint32 RunRemainingMs)
 	UE_LOG(LogTemp, Log, TEXT("[ESCAPE] run started - %u ms left"), RunRemainingMs);
 }
 
+void US1EscapeSubsystem::ShowNotice(const FText& Text, float Seconds, bool bUrgent)
+{
+	if (Hud == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] notice dropped - no HUD: %s"), *Text.ToString());
+		return;
+	}
+	Hud->SetNotice(Text, bUrgent);
+	UE_LOG(LogTemp, Log, TEXT("[HUD] notice \"%s\" urgent=%d for %.1fs"), *Text.ToString(), bUrgent ? 1 : 0, Seconds);	// 토스트가 안 보인 적이 있다 (검증 r1 #3) - 경로 추적용
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		TWeakObjectPtr<US1RunHudWidget> WeakHud = Hud;
+		GameInstance->GetTimerManager().SetTimer(NoticeTimer, FTimerDelegate::CreateLambda([WeakHud]()
+			{
+				if (US1RunHudWidget* H = WeakHud.Get())
+					H->SetNotice(FText::GetEmpty(), false);
+			}), FMath::Max(Seconds, 0.5f), false);
+	}
+}
+
 void US1EscapeSubsystem::HandleGauge(const Protocol::S_ESCAPE_GAUGE& Pkt)
 {
 	// tower 0 = alert only: someone started (or stopped) filling a tower nearby — no position, no progress

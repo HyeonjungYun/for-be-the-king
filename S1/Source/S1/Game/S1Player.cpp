@@ -1496,6 +1496,10 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 	if (Info.creature_type() != Protocol::CREATE_TYPE_MONSTER || bIsMonster)
 	{
 		SetWeaponType(Info.weapon_type_id());		// stance from the spawn snapshot (anim, 2026-10-12)
+		if (Info.betrayer())
+			SetBetrayer(true, FString());			// a late viewer learns the mark from the snapshot (party-betrayal R6)
+		else if (bBetrayer)
+			SetBetrayer(false, FString());
 		return;
 	}
 

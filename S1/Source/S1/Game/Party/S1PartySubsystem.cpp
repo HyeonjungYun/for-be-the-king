@@ -3,6 +3,7 @@
 #include "Game/Party/S1PartySubsystem.h"
 #include "Game/UI/S1ItemUIStyle.h"
 #include "Game/UI/S1PartyWidgets.h"
+#include "Game/Escape/S1EscapeSubsystem.h"
 #include "Game/S1Player.h"
 #include "S1.h"
 #include "S1GameInstance.h"
@@ -90,7 +91,7 @@ void US1PartySubsystem::HandleState(const Protocol::S_PARTY_STATE& Pkt)
 
 	if (Pkt.result() != Protocol::PARTY_OK)
 	{
-		LastResultText = ResultText(static_cast<int32>(Pkt.result()), UTF8_TO_TCHAR(Pkt.subject_name().c_str()));
+		LastResultText = ResultText(static_cast<int32>(Pkt.result()), UTF8_TO_TCHAR(Pkt.subject_name().c_str()), bInDungeon);
 		LastResultAt = FPlatformTime::Seconds();
 	}
 	else if (Pkt.subject_name().empty() == false)
@@ -129,6 +130,7 @@ void US1PartySubsystem::HandleInvited(const Protocol::S_PARTY_INVITED& Pkt)
 void US1PartySubsystem::HandleEnterGame(ES1RunMode Mode)
 {
 	RunMode = Mode;
+	bInDungeon = true;
 	RunAllies.Reset();
 	if (Mode == ES1RunMode::PveCoop)
 	{
@@ -144,6 +146,7 @@ void US1PartySubsystem::HandleEnterGame(ES1RunMode Mode)
 
 void US1PartySubsystem::HandleLeftGame()
 {
+	bInDungeon = false;
 	RunMode = ES1RunMode::Pvp;
 	RunAllies.Reset();
 }
@@ -206,7 +209,14 @@ bool US1PartySubsystem::IsLeader() const
 
 bool US1PartySubsystem::IsAlly(uint64 ObjectId) const
 {
-	return RunMode == ES1RunMode::PveCoop && ObjectId != MyCharacterId && RunAllies.Contains(ObjectId);
+	if (ObjectId == MyCharacterId)
+		return false;
+	if (RunMode == ES1RunMode::PveCoop)
+		return RunAllies.Contains(ObjectId);
+	// PvP 층 던전 파티 (party-betrayal R3): 지금 파티원이 아군 - 나가면(배신) 그 순간 S_PARTY_STATE 로 빠진다
+	if (RunMode == ES1RunMode::Pvp && bInDungeon)
+		return Members.ContainsByPredicate([ObjectId](const FS1PartyMemberView& M) { return M.CharacterId == ObjectId; });
+	return false;
 }
 
 FString US1PartySubsystem::NameOf(uint64 CharacterId) const
@@ -221,12 +231,12 @@ FString US1PartySubsystem::NameOf(uint64 CharacterId) const
 	return FString();
 }
 
-FText US1PartySubsystem::ResultText(int32 Result, const FString& Subject)
+FText US1PartySubsystem::ResultText(int32 Result, const FString& Subject, bool bInRun)
 {
 	const TCHAR* Key = nullptr;
 	switch (static_cast<Protocol::PartyResult>(Result))
 	{
-	case Protocol::PARTY_NOT_FOUND:			Key = TEXT("party.result.not_found"); break;
+	case Protocol::PARTY_NOT_FOUND:			Key = bInRun ? TEXT("party.result.not_found_run") : TEXT("party.result.not_found"); break;
 	case Protocol::PARTY_FULL:				Key = TEXT("party.result.full"); break;
 	case Protocol::PARTY_ALREADY_IN_PARTY:	Key = TEXT("party.result.already"); break;
 	case Protocol::PARTY_DECLINED:			Key = TEXT("party.result.declined"); break;
@@ -237,6 +247,8 @@ FText US1PartySubsystem::ResultText(int32 Result, const FString& Subject)
 	case Protocol::PARTY_NO_INSTANCE:		Key = TEXT("party.result.no_instance"); break;
 	case Protocol::PARTY_ALREADY_ENTERED:	Key = TEXT("party.result.already_entered"); break;
 	case Protocol::PARTY_COOP_ONLY:			Key = TEXT("party.result.coop_only"); break;
+	case Protocol::PARTY_NOT_VISIBLE:		Key = TEXT("party.result.not_visible"); break;		// party-betrayal R2: 시야 안의 플레이어만
+	case Protocol::PARTY_NO_KICK_IN_RUN:	Key = TEXT("party.result.no_kick_in_run"); break;	// party-betrayal R4: 던전 안 추방 없음
 	default:								return FText::GetEmpty();
 	}
 	return FText::Format(S1ItemUIStyle::Text(Key), FText::FromString(Subject));
@@ -271,6 +283,33 @@ void US1PartySubsystem::ExpireInvite()
 
 	InvitePartyId = 0;
 	ShowInvitePopup(false);
+	OnPartyChanged.Broadcast();
+}
+
+void US1PartySubsystem::HandleBetrayed(const Protocol::S_PARTY_BETRAYED& Pkt)
+{
+	const FString Name = UTF8_TO_TCHAR(Pkt.betrayer_name().c_str());
+	const FString MyName = NameOf(MyCharacterId);
+	bool bVictim = false;
+	for (const std::string& V : Pkt.victim_names())
+		bVictim |= (UTF8_TO_TCHAR(V.c_str()) == MyName);
+
+	// 표식 - 런이 끝날 때까지 (라벨 "⚠ 배신자 이름"). 늦게 본 사람은 스폰 스냅샷 ObjectInfo.betrayer 로 안다
+	if (US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+	{
+		if (TWeakObjectPtr<AS1Player>* Found = GameInstance->Players.Find(Pkt.betrayer_id()))
+		{
+			if (AS1Player* Actor = Found->Get())
+				Actor->SetBetrayer(true, Name);
+		}
+	}
+
+	// 토스트 - 파티원이었으면 "X 가 배신했다!", 아니면 "X 가 파티를 배신했다" (party-betrayal § 7 토스트 5 s)
+	constexpr float BetrayToastSec = 5.f;
+	if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+		Escape->ShowNotice(FText::Format(S1ItemUIStyle::Text(bVictim ? TEXT("party.betrayed_me") : TEXT("party.betrayed_other")), FText::FromString(Name)), BetrayToastSec, bVictim);
+
+	UE_LOG(LogTemp, Log, TEXT("[PARTY] betrayed by %s (%llu) party=%llu victims=%d me=%d"), *Name, Pkt.betrayer_id(), Pkt.party_id(), Pkt.victim_names_size(), bVictim ? 1 : 0);
 	OnPartyChanged.Broadcast();
 }
 

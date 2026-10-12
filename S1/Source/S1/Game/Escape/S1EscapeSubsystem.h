@@ -43,6 +43,9 @@ public:
 	void HandleGauge(const Protocol::S_ESCAPE_GAUGE& Pkt);
 	void HandleLeftGame(const Protocol::S_LEAVE_GAME& Pkt);
 
+	/** HUD 알림 줄을 Seconds 동안 보인다 (파티 배신 토스트 등, party-betrayal 2026-10-12) */
+	void ShowNotice(const FText& Text, float Seconds, bool bUrgent);
+
 	/** The floor's towers from towers.csv — the radar reads the same list. */
 	const TArray<FS1TowerView>& GetTowers() const { return Towers; }
 
@@ -84,6 +87,7 @@ private:
 	bool						bInitialized = false;
 
 	UPROPERTY() TObjectPtr<US1RunHudWidget> Hud;
+	FTimerHandle NoticeTimer;
 	UPROPERTY() TObjectPtr<US1RadarWidget> Radar;
 	UPROPERTY() TObjectPtr<US1WorldLabelWidget> WorldLabels;
 	UPROPERTY() TObjectPtr<US1BlindOverlayWidget> BlindOverlay;

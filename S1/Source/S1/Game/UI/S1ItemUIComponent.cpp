@@ -3,6 +3,7 @@
 #include "Game/UI/S1ItemUIComponent.h"
 #include "Game/UI/S1ItemHudRootWidget.h"
 #include "Game/UI/S1InventoryPanelWidget.h"
+#include "Game/UI/S1PartyWidgets.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
 #include "Game/S1MyPlayer.h"
 #include "EnhancedInputComponent.h"
@@ -30,11 +31,13 @@ US1ItemUIComponent::US1ItemUIComponent()
 	InventoryAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_ItemInventory"));
 	OpenAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_ItemOpen"));
 	CloseAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_ItemClose"));
+	PartyAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Party"));
 	Context = CreateDefaultSubobject<UInputMappingContext>(TEXT("IMC_ItemUI"));
 
 	Context->MapKey(InventoryAction, EKeys::Tab);
 	Context->MapKey(OpenAction, EKeys::F);
 	Context->MapKey(CloseAction, EKeys::Escape);
+	Context->MapKey(PartyAction, EKeys::P);
 }
 
 void US1ItemUIComponent::SetupInput(UEnhancedInputComponent* Input)
@@ -45,6 +48,7 @@ void US1ItemUIComponent::SetupInput(UEnhancedInputComponent* Input)
 	Input->BindAction(InventoryAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnInventoryKey);
 	Input->BindAction(OpenAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnOpenKey);
 	Input->BindAction(CloseAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnCloseKey);
+	Input->BindAction(PartyAction, ETriggerEvent::Started, this, &US1ItemUIComponent::OnPartyKey);
 }
 
 void US1ItemUIComponent::BeginPlay()
@@ -145,6 +149,25 @@ void US1ItemUIComponent::OnInventoryKey()
 {
 	if (Root != nullptr && CanUseDungeonKeys())
 		Root->SetInventoryOpen(Root->IsInventoryOpen() == false);
+}
+
+void US1ItemUIComponent::OnPartyKey()
+{
+	// 던전 파티 창 (party-betrayal R10): 초대(이름) · 파티원 · [배신하고 나가기]. 베이스캠프에선 S3 의 [파티] 버튼이 연다
+	if (CanUseDungeonKeys() == false)
+		return;
+	if (PartyPanel != nullptr && PartyPanel->IsInViewport())
+	{
+		PartyPanel->Close();
+		return;
+	}
+	APlayerController* PC = GetLocalController();
+	if (PC == nullptr)
+		return;
+	if (PartyPanel == nullptr)
+		PartyPanel = CreateWidget<US1PartyPanelWidget>(PC, US1PartyPanelWidget::StaticClass());
+	if (PartyPanel != nullptr)
+		PartyPanel->AddToViewport(30);
 }
 
 void US1ItemUIComponent::OnOpenKey()

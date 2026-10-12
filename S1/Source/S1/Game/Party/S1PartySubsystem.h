@@ -11,6 +11,7 @@ namespace Protocol
 {
 	class S_PARTY_STATE;
 	class S_PARTY_INVITED;
+	class S_PARTY_BETRAYED;
 }
 
 class US1PartyInviteWidget;
@@ -73,6 +74,8 @@ public:
 	void HandleLogin(uint64 InMyCharacterId);
 	void HandleState(const Protocol::S_PARTY_STATE& Pkt);
 	void HandleInvited(const Protocol::S_PARTY_INVITED& Pkt);
+	/** 던전 파티 배신 방송 (party-betrayal 2026-10-12): 토스트 + 배신자 표식. 파티원 목록은 따로 오는 S_PARTY_STATE 가 바꾼다 */
+	void HandleBetrayed(const Protocol::S_PARTY_BETRAYED& Pkt);
 	void HandleEnterGame(ES1RunMode Mode);
 	void HandleLeftGame();
 
@@ -83,6 +86,9 @@ public:
 	void Kick(uint64 CharacterId);
 
 	bool	IsInParty() const { return PartyId != 0 && Members.Num() > 0; }
+	/** PvP 층 런 안의 파티 = 던전 파티 (베이스캠프 파티는 PvP 에 못 들어온다) - 나가기 = 배신 */
+	bool	IsDungeonParty() const { return RunMode == ES1RunMode::Pvp && bInDungeon && IsInParty(); }
+	bool	IsInDungeon() const { return bInDungeon; }
 	int32	Size() const { return Members.Num(); }
 	bool	IsLeader() const;
 	bool	IsInRun() const { return bInRun; }					// the party's instance is alive - members may join
@@ -101,7 +107,8 @@ public:
 	/** The outcome of my last request, as text ("" when it was OK) and when it came. */
 	const FText&	GetLastResultText() const { return LastResultText; }
 	double			GetLastResultAt() const { return LastResultAt; }
-	static FText	ResultText(int32 Result, const FString& Subject);
+	/** bInRun: inside a PvP run the "not found" / "not visible" wording is about this floor, not the base camp (party-betrayal R2). */
+	static FText	ResultText(int32 Result, const FString& Subject, bool bInRun);
 
 	FOnS1PartyChanged OnPartyChanged;
 
@@ -125,6 +132,7 @@ private:
 	double						LastResultAt = 0.0;
 
 	ES1RunMode					RunMode = ES1RunMode::Pvp;		// of the run I am in (S_ENTER_GAME)
+	bool						bInDungeon = false;				// between S_ENTER_GAME and S_LEAVE_GAME
 	TMap<uint64, FString>		RunAllies;
 
 	UPROPERTY() TObjectPtr<US1PartyInviteWidget>	InvitePopup;

@@ -29,6 +29,9 @@ namespace S1ItemUIStyle
 	/** A Shadowed key — clearly darker than tertiary so it reads as "dead", but never red (EB:539). */
 	FLinearColor TextShadowed();
 
+	/** Betrayer red (#E54B3C) — the dungeon-party betrayer label and [배신하고 나가기] (party-betrayal R6 · R10; art-bible 정정 메모 2026-10-12). */
+	FLinearColor BetrayerRed();
+
 	/**
 	 * GradeColor.* tokens. The outline shape is the primary code (art-bible § 4 ②); color backs it up.
 	 * 🔴 Rare and Epic are TEMP. The art-bible values (#199E70 · #3987E5) are the monster and party

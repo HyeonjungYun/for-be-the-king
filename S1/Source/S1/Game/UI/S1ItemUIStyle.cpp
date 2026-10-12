@@ -15,6 +15,7 @@ namespace S1ItemUIStyle
 	FLinearColor TextSecondary()	{ return FLinearColor(FColor::FromHex(TEXT("C3C2B7FF"))); }
 	FLinearColor TextTertiary()		{ return FLinearColor(FColor::FromHex(TEXT("898781FF"))); }
 	FLinearColor TextShadowed()		{ return FLinearColor(FColor::FromHex(TEXT("55544FFF"))); }
+	FLinearColor BetrayerRed()		{ return FLinearColor(FColor::FromHex(TEXT("E54B3CFF"))); }		// party-betrayal R6 · R10
 
 	FLinearColor GradeColor(ES1ItemGrade Grade)
 	{

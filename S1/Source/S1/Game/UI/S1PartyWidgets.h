@@ -66,6 +66,8 @@ private:
 	UPROPERTY() TObjectPtr<UBorder>				InviteButton;
 	UPROPERTY() TObjectPtr<UTextBlock>			ResultLine;
 	UPROPERTY() TObjectPtr<UBorder>				LeaveButton;
+	UPROPERTY() TObjectPtr<UTextBlock>			LeaveText;
+	double										LeaveArmedAt = 0.0;		// 던전 파티: 첫 클릭은 경고, 3 s 안의 두 번째 클릭이 배신 (party-betrayal R10)
 	UPROPERTY() TObjectPtr<UBorder>				CloseButton;
 	UPROPERTY() TArray<TObjectPtr<UBorder>>		KickButtons;
 	TArray<uint64>								KickIds;		// parallel to KickButtons

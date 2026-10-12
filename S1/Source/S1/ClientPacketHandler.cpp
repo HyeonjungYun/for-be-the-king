@@ -51,6 +51,14 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 	return true;
 }
 
+bool Handle_S_PARTY_BETRAYED(PacketSessionRef& session, Protocol::S_PARTY_BETRAYED& pkt)
+{
+	// 던전 파티 배신 - 방 전체 방송: 토스트 · 배신자 표식 (party-betrayal-2026-10-12 R5 · R6, YOLO 위임)
+	if (US1PartySubsystem* Party = US1PartySubsystem::Get())
+		Party->HandleBetrayed(pkt);
+	return true;
+}
+
 bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pkt)
 {
 	// PVE 협동 파티 전체 + 내 마지막 요청의 결과 (ADR-0014, 2026-10-11 에이전트 - YOLO 세션 위임)

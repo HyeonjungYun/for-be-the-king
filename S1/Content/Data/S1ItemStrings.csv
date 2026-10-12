@@ -821,3 +821,12 @@ button.enhance,강화 +1 (Lv {0} → {1}) · 비용 없음,S3 enhance button (it
 button.enhance_max,강화 최대 (Lv {0}),S3 enhance button at 16
 button.enhance_pick,강화 — 아이템 위에 마우스를 올리세요,S3 enhance button with nothing shown
 notice.enhance_pick,강화할 아이템 위에 마우스를 올린 뒤 누르세요,S3 enhance button pressed with nothing shown
+party.leave_betray,배신하고 나가기,dungeon party window (party-betrayal 2026-10-12)
+party.leave_betray_arm,한 번 더 누르면 배신입니다 — 파티 전원에게 알려집니다,dungeon party window armed
+party.betrayed_me,{0} 가 배신했다!,HUD toast for the party left behind
+party.betrayed_other,{0} 가 파티를 배신했다,HUD toast for everyone else in the room
+label.betrayer,배신자,world label prefix until the run ends (red - the HUD font has no warning glyph)
+party.title_run,파티 ({0}/{1}),party window title inside a PvP run
+party.result.not_found_run,이 층에서 '{0}' 캐릭터를 찾을 수 없습니다,party result - dungeon invite: no such player in this room
+party.result.not_visible,'{0}' 은(는) 지금 시야에 없습니다 - 눈앞의 플레이어만 초대할 수 있습니다,party result - dungeon invite (party-betrayal R2)
+party.result.no_kick_in_run,던전 안에서는 내보낼 수 없습니다 - 떠나는 쪽이 배신자입니다,party result - dungeon kick (party-betrayal R4)

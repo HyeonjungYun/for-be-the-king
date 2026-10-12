@@ -57,6 +57,7 @@ protected:
 private:
 
 	void OnInventoryKey();
+	void OnPartyKey();		// P - 던전 파티 창 (party-betrayal 2026-10-12 R10)
 	void OnOpenKey();
 	void OnCloseKey();
 
@@ -73,6 +74,8 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction>			InventoryAction;
 	UPROPERTY() TObjectPtr<UInputAction>			OpenAction;
 	UPROPERTY() TObjectPtr<UInputAction>			CloseAction;
+	UPROPERTY() TObjectPtr<UInputAction>			PartyAction;
+	UPROPERTY() TObjectPtr<class US1PartyPanelWidget>	PartyPanel;
 	UPROPERTY() TObjectPtr<UInputMappingContext>	Context;
 	UPROPERTY() TObjectPtr<US1ItemHudRootWidget>	Root;
 
