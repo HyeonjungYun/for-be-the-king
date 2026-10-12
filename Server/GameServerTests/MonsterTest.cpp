@@ -9,6 +9,8 @@
 #include "CsvTable.h"
 #include "SkillTable.h"
 #include "Player.h"
+#include "HouseTable.h"
+#include "PatrolRouteGen.h"
 
 // design/gdd/monster-ai.md § Acceptance Criteria - 이름 끝의 AC 번호가 그 행이다.
 // MonsterBrain · MonsterMover · MonsterDrop 은 Room 을 모르는 순수 로직이라 시계 · 플레이어 · 벽을 주입한다.
@@ -117,17 +119,25 @@ namespace
 
 /*-------- 데이터 --------*/
 
-TEST(MonsterTable, 실제_데이터_7종_8자리_무리7개가_1층_벽_진입_타워_검사를_통과한다_AC_MA_01_02)
+TEST(MonsterTable, 실제_데이터_7종_8자리가_1층_벽_진입_타워_검사를_통과하고_무리는_생성된다_AC_MA_01_02)
 {
 	string error;
 	ASSERT_TRUE(LoadLiveWorld(4, OUT error)) << error;
 	ASSERT_TRUE(MonsterTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;
 
-	// 2026-10-11 몬스터 개선 - 들판의 혼자 다니던 들개 10 자리가 무리 7 개(우두머리 1 + 기본 3)로 바뀌었다.
-	// 집 지키는 병사 7 · 보스 1 은 그대로 (guard). 들개(1)는 테스트 더미용으로 종류만 남는다
+	// 2026-10-11 몬스터 개선 - 들판의 혼자 다니던 들개 10 자리가 무리(우두머리 1 + 기본 3)로 바뀌었다.
+	// 집 지키는 병사 7 · 보스 1 은 그대로 (guard). 들개(1)는 테스트 더미용으로 종류만 남는다.
+	// 2026-10-12 부터 1층 무리는 monster_packs.csv 가 아니라 pack_rules.csv 로 생성된다 (RouteGenTest) - CSV 무리 0
 	EXPECT_EQ(MonsterTable::TypeCount(), 7u);
 	EXPECT_EQ(MonsterTable::Spawns().size(), 8u);
-	EXPECT_EQ(MonsterTable::Packs().size(), 7u);
+	EXPECT_EQ(MonsterTable::Packs().size(), 0u);
+	ASSERT_TRUE(HouseTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;
+	ASSERT_TRUE(PackRulesTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;
+	ASSERT_TRUE(MonsterTable::GenerateRouteSets(4, 1, OUT error)) << error;
+	ASSERT_GE(MonsterTable::RouteSetCount(0), 1u);
+	const RouteSet* set = MonsterTable::RouteSetAt(0, 0);
+	ASSERT_NE(set, nullptr);
+	EXPECT_EQ(set->packs.size(), 10u);
 
 	// 몬스터는 플레이어보다 느리다 - 0.9 × 340 (Core Rule 1)
 	for (uint32 id = 1; id <= 7; id++)
@@ -147,12 +157,14 @@ TEST(MonsterTable, 실제_데이터_7종_8자리_무리7개가_1층_벽_진입_�
 	};
 	for (const MonsterSpawnDef& s : MonsterTable::Spawns())
 		add(MonsterTable::FindType(s.typeId), 1.f);
-	for (const MonsterPackDef& p : MonsterTable::Packs())
+	for (const GeneratedPack& gp : set->packs)
 	{
-		add(MonsterTable::FindType(p.leaderTypeId), 1.f);
-		add(MonsterTable::FindType(p.memberTypeId), static_cast<float>(p.memberCount));
+		add(MonsterTable::FindType(gp.def.leaderTypeId), 1.f);
+		add(MonsterTable::FindType(gp.def.memberTypeId), static_cast<float>(gp.def.memberCount));
 	}
-	EXPECT_LE(supply / 48.f, 0.30f) << supply;
+	// 상자 공급 = 개활지 18 × 1.3 + 집 12 × 2.7 = 55.8 (섬 30 개 · level-map Core Rule 10). 공급은 그 30 % 이하 (monster-ai.md F5)
+	EXPECT_LE(supply / 55.8f, 0.30f) << supply;
+	MonsterTable::ClearRouteSets();
 }
 
 TEST(MonsterTable, 종류_범위_밖은_부팅을_거부하고_경계값은_통과한다_AC_MA_01)

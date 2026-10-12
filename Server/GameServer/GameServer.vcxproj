@@ -170,6 +170,8 @@
     <ClCompile Include="MonsterTable.cpp" />
     <ClCompile Include="MonsterBrain.cpp" />
     <ClCompile Include="MonsterPack.cpp" />
+    <ClCompile Include="HouseTable.cpp" />
+    <ClCompile Include="PatrolRouteGen.cpp" />
     <ClCompile Include="PartyBook.cpp" />
     <ClCompile Include="PartyManager.cpp" />
     <ClCompile Include="InstanceManager.cpp" />
@@ -227,6 +229,8 @@
     <ClInclude Include="MonsterTable.h" />
     <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="MonsterPack.h" />
+    <ClInclude Include="HouseTable.h" />
+    <ClInclude Include="PatrolRouteGen.h" />
     <ClInclude Include="PositionHistory.h" />
     <ClInclude Include="PartyBook.h" />
     <ClInclude Include="PartyManager.h" />

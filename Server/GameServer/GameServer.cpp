@@ -20,6 +20,10 @@
 #include "Vision.h"
 #include "TowerTable.h"
 #include "MonsterTable.h"
+#include "HouseTable.h"
+#include "PatrolRouteGen.h"
+#include <filesystem>
+#include <fstream>
 #include "Monster.h"
 #include "EscapeLogic.h"
 #include "Telemetry.h"
@@ -113,7 +117,8 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] skill data loaded - skills=" << SkillTable::All().size() << " dot_tick=" << SkillTable::Rules().dotTickMs
-			<< "ms wall_stun=" << SkillTable::Rules().wallStunMs << "ms\n";
+			<< "ms wall_stun=" << SkillTable::Rules().wallStunMs << "ms motions=" << SkillTable::Motions().size()
+			<< " mapped=" << SkillTable::MappedMotionCount() << "/" << SkillTable::All().size() << '\n';
 
 		if (ItemTable::Load(dataDir, OUT error) == false)
 		{
@@ -221,6 +226,58 @@ int main()
 
 		LOG_LINE << "[BOOT] towers=" << TowerTable::All().size() << " monster types=" << MonsterTable::TypeCount()
 			<< " spawns=" << MonsterTable::Spawns().size() << '\n';
+
+		// 집 볼륨 · 무리 규칙 · 순찰 길 생성 (2026-10-12 pack-routes) - 벽 · 타워 · 진입 지점 · 몬스터 종류 다음.
+		// FBTK_ROUTE_SEED 가 있으면 그 시드(재현), 없으면 부팅 시각 - 부팅마다 다른 동선
+		if (HouseTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] houses invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+		if (PackRulesTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] pack rules invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+		{
+			uint64 routeSeed = Utils::NowMicroseconds();
+			char* raw = nullptr;
+			size_t length = 0;
+			if (_dupenv_s(&raw, &length, "FBTK_ROUTE_SEED") == 0 && raw != nullptr)
+			{
+				routeSeed = ::strtoull(raw, nullptr, 10);
+				::free(raw);
+				LOG_LINE << "[BOOT] FBTK_ROUTE_SEED=" << routeSeed << " - patrol routes are reproducible (TEST ONLY)\n";
+			}
+			if (MonsterTable::GenerateRouteSets(FLOOR_COUNT, routeSeed, OUT error) == false)
+			{
+				LOG_LINE << "[BOOT] patrol routes invalid - " << error << " (dir=" << dataDir << ")\n";
+				return -1;
+			}
+			for (const PackRules& rules : PackRulesTable::All())
+			{
+				const string routeDir = dataDir + "\\..\\Logs\\routes";
+				error_code ec;
+				filesystem::create_directories(routeDir, ec);
+				for (size_t k = 0; k < MonsterTable::RouteSetCount(rules.floorId); k++)
+				{
+					const RouteSet* set = MonsterTable::RouteSetAt(rules.floorId, k);
+					const RouteGenStats& st = set->stats;
+					LOG_LINE << "[ROUTE] floor=" << rules.floorId << " set=" << k << " seed=" << set->seed << " routes=" << st.routes
+						<< " crossings=" << st.crossings << " same_side=" << st.sameSide << " pockets=" << st.pockets << " side=" << st.sideRoutes
+						<< " coverage=" << ::lroundf(st.coveragePct) << "%" << " min_sep=" << ::lroundf(st.minSepCm / 100.f) << "m avg_len=" << ::lroundf(st.avgLengthM)
+						<< "m components=" << st.components << " dropped_cells=" << st.droppedCells << " attempts=" << st.attempts << " retries=" << st.retries
+						<< " took=" << st.elapsedUs / 1000 << "ms\n";
+					// 사람이 보는 사본 (증거 · tools/level/draw_routes.py) - 못 써도 부팅은 계속, 로그만
+					const string routePath = routeDir + "\\routes-floor" + to_string(rules.floorId) + "-set" + to_string(k) + ".csv";
+					ofstream file(routePath, ios::binary | ios::trunc);
+					if (file.is_open())
+						file << PatrolRouteGen::ToCsv(*set);
+					else
+						LOG_LINE << "[ROUTE] export failed - cannot write " << routePath << (ec ? " (" + ec.message() + ")" : string()) << '\n';
+				}
+			}
+		}
 
 		// 탈출 & 체류 타이머 - escape_config.csv, 그다음 FBTK_RUN_LIMIT_S · FBTK_ESCAPE_FILL_S · FBTK_DEBUG_ESCAPE (AC-ET-28)
 		{
@@ -558,6 +615,7 @@ int main()
 		100);
 
 	ASSERT_CRASH(service->Start());
+	LOG_LINE << "[BOOT] listen port=7777 - accepting clients\n";		// 검증 체크리스트 E1 이 찾는 줄 (2026-10-12)
 
 	for (int32 i = 0; i < 5; i++)
 	{

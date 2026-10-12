@@ -241,6 +241,7 @@ struct SkillDef
 	vector<string>			tags;					// skills.csv tags 열 (세미콜론 구분) - damage_mod tag:<태그> 가 본다
 	string					requiresWeapon;			// skills.csv requires_weapon 열 - "hammer" 등 무기 풀 id. 비면 조건 없음 (갑옷 #106 ~ #114)
 	string					requiresWeaponTag;		// "sword:ghost" 의 ghost - 무기 칸 스킬 중 하나가 그 태그를 가져야 한다 (#113)
+	uint32					motionId = 0;			// skill_motions.csv - 몸이 하는 동작(휘두르기 · 질주 · 시전…) 번호. S_SKILL_CAST 로 보는 사람 모두에게 (스킬 id 는 아니다, 2026-10-12)
 
 	bool HasHardCc() const;
 	bool HasMovement() const;
@@ -284,6 +285,14 @@ public:
 	static bool				Load(const string& dataDir, OUT string& error);
 	static bool				Parse(const string& skillsCsv, const string& effectsCsv, const string& rulesCsv, OUT string& error);
 
+	// motions.csv (motion_id,key) + skill_motions.csv (skill_id,motion_key) - 애니메이션 동작 (2026-10-12). 둘 다 없으면 동작 0.
+	// 한쪽만 있거나, 모르는 키 · 모르는 스킬 · 두 번 적힌 스킬이면 거부. Parse 다음에 부른다
+	static bool				ParseMotions(const string* motionsCsv, const string* skillMotionsCsv, OUT string& error);
+	static const unordered_map<uint32, string>&	Motions() { return s_motions; }
+	// 동작 표가 있으면 skills.csv 의 모든 스킬이 skill_motions.csv 에 있어야 한다 (부팅 검사 - Load 가 부른다)
+	static bool				MotionsCoverAllSkills(OUT string& error);
+	static size_t			MappedMotionCount();
+
 	// 🔴 테스트 전용 - 코드에 박힌 작은 픽스처 (1001 · 2001 · 3001 · 9001). 실제 로스터가 아니다.
 	//    GameServerTests 의 아이템 · 롤러 · 장비 테스트가 이 네 id 를 전제로 쓴다. 부팅은 Load 만 쓴다
 	static void				Init();
@@ -301,5 +310,6 @@ public:
 
 private:
 	static unordered_map<uint32, SkillDef> s_defs;
+	static unordered_map<uint32, string>	s_motions;		// motion_id -> key (motions.csv)
 	static SkillRules s_rules;
 };

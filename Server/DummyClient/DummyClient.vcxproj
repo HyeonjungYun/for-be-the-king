@@ -155,6 +155,11 @@
     <ClCompile Include="BotPath.cpp" />
     <ClCompile Include="BotSession.cpp" />
     <ClCompile Include="..\GameServer\WallMap.cpp" />
+    <ClCompile Include="..\BotAI\BotBrain.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BotAiDriver.cpp" />
     <ClCompile Include="ClientPacketHandler.cpp" />
     <ClCompile Include="DummyClient.cpp" />
     <ClCompile Include="Enum.pb.cc">

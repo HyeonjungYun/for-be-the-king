@@ -3,6 +3,7 @@
 #include "CsvTable.h"
 
 unordered_map<uint32, SkillDef> SkillTable::s_defs;
+unordered_map<uint32, string>	SkillTable::s_motions;
 SkillRules SkillTable::s_rules;
 
 namespace
@@ -738,7 +739,121 @@ bool SkillTable::Load(const string& dataDir, OUT string& error)
 		}
 	}
 
-	return Parse(texts[0], texts[1], texts[2], OUT error);
+	if (Parse(texts[0], texts[1], texts[2], OUT error) == false)
+		return false;
+
+	// 애니메이션 동작 (2026-10-12) - 선택 파일. 둘 다 없으면 동작 없음
+	string motions, skillMotions;
+	const bool hasMotions = Csv::ReadFile(dataDir + "\\motions.csv", OUT motions);
+	const bool hasSkillMotions = Csv::ReadFile(dataDir + "\\skill_motions.csv", OUT skillMotions);
+	if (ParseMotions(hasMotions ? &motions : nullptr, hasSkillMotions ? &skillMotions : nullptr, OUT error) == false)
+		return false;
+	// 부팅은 표가 있으면 빠짐을 허락하지 않는다 - 한 줄 지워도 조용히 "동작 없음" 으로 부팅되던 것 (검증자 2026-10-12 수정 4). Parse 단위는 부분 표를 허락한다(테스트)
+	return MotionsCoverAllSkills(OUT error);
+}
+
+bool SkillTable::MotionsCoverAllSkills(OUT string& error)
+{
+	if (s_motions.empty())
+		return true;		// 표가 없는 데이터 폴더 - 동작 0 (테스트 픽스처)
+	uint32 missing = 0;
+	uint32 first = 0;
+	for (const auto& [id, def] : s_defs)
+	{
+		if (def.motionId != 0)
+			continue;
+		if (first == 0)
+			first = id;
+		missing++;
+	}
+	if (missing == 0)
+		return true;
+	error = "skill_motions.csv misses " + to_string(missing) + " skill(s) of skills.csv (first: " + to_string(first) + ") - every skill needs a motion_key (m_none for no motion)";
+	return false;
+}
+
+size_t SkillTable::MappedMotionCount()
+{
+	size_t n = 0;
+	for (const auto& [id, def] : s_defs)
+		n += (def.motionId != 0) ? 1 : 0;
+	return n;
+}
+
+bool SkillTable::ParseMotions(const string* motionsCsv, const string* skillMotionsCsv, OUT string& error)
+{
+	s_motions.clear();
+	for (auto& [id, def] : s_defs)
+		def.motionId = 0;
+
+	if (motionsCsv == nullptr && skillMotionsCsv == nullptr)
+		return true;
+	if (motionsCsv == nullptr || skillMotionsCsv == nullptr)
+	{
+		error = "motions.csv and skill_motions.csv must exist together";
+		return false;
+	}
+
+	CsvTable table;
+	vector<int32> c;
+	if (Csv::Parse(*motionsCsv, "motions.csv", OUT table, OUT error) == false
+		|| Csv::FindColumns(table, "motions.csv", { "motion_id", "key" }, OUT c, OUT error) == false)
+		return false;
+	unordered_map<string, uint32> byKey;
+	for (size_t r = 0; r < table.rows.size(); r++)
+	{
+		const string where = "motions.csv:" + to_string(table.lineNumbers[r]);
+		uint32 id = 0;
+		const string& key = table.rows[r][c[1]];
+		if (Csv::ParseUInt(table.rows[r][c[0]], OUT id) == false || id == 0 || key.empty())
+		{
+			error = where + " motion_id (> 0) and key must be filled";
+			return false;
+		}
+		if (s_motions.count(id) || byKey.count(key))
+		{
+			error = where + " duplicate motion " + key;
+			return false;
+		}
+		s_motions[id] = key;
+		byKey[key] = id;
+	}
+
+	CsvTable sk;
+	vector<int32> sc;
+	if (Csv::Parse(*skillMotionsCsv, "skill_motions.csv", OUT sk, OUT error) == false
+		|| Csv::FindColumns(sk, "skill_motions.csv", { "skill_id", "motion_key" }, OUT sc, OUT error) == false)
+		return false;
+	unordered_set<uint32> seen;
+	for (size_t r = 0; r < sk.rows.size(); r++)
+	{
+		const string where = "skill_motions.csv:" + to_string(sk.lineNumbers[r]);
+		uint32 skillId = 0;
+		if (Csv::ParseUInt(sk.rows[r][sc[0]], OUT skillId) == false)
+		{
+			error = where + " skill_id must be a number";
+			return false;
+		}
+		auto defIt = s_defs.find(skillId);
+		if (defIt == s_defs.end())
+		{
+			error = where + " skill " + to_string(skillId) + " is not in skills.csv";
+			return false;
+		}
+		auto keyIt = byKey.find(sk.rows[r][sc[1]]);
+		if (keyIt == byKey.end())
+		{
+			error = where + " motion_key " + sk.rows[r][sc[1]] + " is not in motions.csv";
+			return false;
+		}
+		if (seen.insert(skillId).second == false)
+		{
+			error = where + " skill " + to_string(skillId) + " is listed twice";
+			return false;
+		}
+		defIt->second.motionId = keyIt->second;
+	}
+	return true;
 }
 
 bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const string& rulesCsv, OUT string& error)

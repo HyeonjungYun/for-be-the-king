@@ -309,3 +309,10 @@ message S_PARTY_STATE
 	PartyResult result = 4;			// outcome of the receiver's last party request (OK otherwise)
 	string subject_name = 5;		// who the result is about (invite target, decliner)
 }
+
+// The equipped weapon of a creature changed inside the room - everyone who sees it swaps stance (anim, 2026-10-12)
+message S_WEAPON_CHANGE
+{
+	uint64 object_id = 1;
+	uint32 weapon_type_id = 2;		// item_types.csv id, 0 = unarmed
+}

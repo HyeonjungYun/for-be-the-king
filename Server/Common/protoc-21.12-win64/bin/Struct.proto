@@ -22,6 +22,7 @@ message ObjectInfo
 	uint32 monster_type_id = 5;			// MONSTER 일 때만 - Server/Data/monster_types.csv 의 id
 	int32 hp = 6;						// 스폰 순간의 체력 (신입 스냅샷). 이후는 S_DAMAGE.remaining_hp
 	int32 max_hp = 7;
+	uint32 weapon_type_id = 8;			// item_types.csv id of the equipped weapon (0 = none). Picks the stance / swing clips (anim, 2026-10-12)
 }
 
 message AttackInfo
@@ -95,6 +96,7 @@ message SkillCastInfo
 {
 	uint64 caster_id = 1;
 	bool is_stationary = 2;
+	uint32 motion_id = 3;				// motions.csv id - what the body does (swing, dash, cast...), never the skill (anim, 2026-10-12)
 }
 
 message SkillHitInfo

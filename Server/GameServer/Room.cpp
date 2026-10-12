@@ -445,6 +445,12 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->ApplyEquipmentStats(true);
 		player->objectInfo->set_hp(player->hp);
 		player->objectInfo->set_max_hp(player->maxHp);
+		// 스냅샷의 무기도 여기서 (anim, 2026-10-12). 아래 RebuildSkillSlotsFromEquipment 는 S_ENTER_GAME 을 보낸 뒤라 내 자신의 입장 스냅샷에는 늦다 -
+		// 실기동에서 내 캐릭터의 자세가 무기와 무관하게 늘 맨손(any) 클립이었다
+		{
+			const ItemEntry& weapon = player->equipped[Protocol::SLOT_WEAPON_PRIMARY - 1];
+			player->objectInfo->set_weapon_type_id(weapon.instanceId != 0 ? weapon.itemTypeId : 0);
+		}
 		LogStats(player, "enter");
 
 		// PVE 인스턴스 (ADR-0014) - 팀은 들어오는 순간 정해지고 그 런 동안 그대로다(D6). 한 캐릭터는 한 인스턴스에 한 번(D3)
@@ -1147,6 +1153,7 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		Protocol::SkillCastInfo& info = _pendingCasts.emplace_back();
 		info.set_caster_id(casterId);
 		info.set_is_stationary(def->canMoveWhileCasting == false);
+		info.set_motion_id(def->motionId);		// 몸의 동작만 - 스킬 id 가 아니다 (anim, 2026-10-12)
 	}
 }
 
@@ -7123,6 +7130,18 @@ void Room::OnEquipmentChanged(const PlayerRef& player, const char* tag)
 		resync.set_max_hp(player->maxHp);
 	}
 
+	// 무기가 바뀌었다 - 보는 사람 모두 자세 · 휘두르기 클립을 바꾼다 (anim, 2026-10-12). 스폰 스냅샷은 ObjectInfo.weapon_type_id
+	{
+		Protocol::S_WEAPON_CHANGE pkt;
+		pkt.set_object_id(player->objectInfo->object_id());
+		pkt.set_weapon_type_id(player->objectInfo->weapon_type_id());
+		const uint64 subjectId = player->objectInfo->object_id();
+		SendVisible(1,
+			[&](const PlayerRef& v) { return (v == player || CanSee(v, subjectId)) ? 1 : 0; },
+			[&]() { return ServerPacketHandler::MakeSendBuffer(pkt); },
+			[&](const PlayerRef&) { return ServerPacketHandler::MakeSendBuffer(pkt); });
+	}
+
 	LogStats(player, tag);
 }
 
@@ -7666,6 +7685,7 @@ bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint
 		Protocol::SkillCastInfo& info = _pendingCasts.emplace_back();
 		info.set_caster_id(id);
 		info.set_is_stationary(def.canMoveWhileCasting == false);
+		info.set_motion_id(def.motionId);
 	}
 
 	monster->brain.skillReadyAtUs = nowUs + static_cast<uint64>(def.castMs + def.cooldownMs) * 1000;

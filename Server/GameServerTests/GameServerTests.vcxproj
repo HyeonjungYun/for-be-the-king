@@ -94,6 +94,13 @@
     <ClCompile Include="VisionTest.cpp" />
     <ClCompile Include="MonsterTest.cpp" />
     <ClCompile Include="MonsterPackTest.cpp" />
+    <ClCompile Include="RouteGenTest.cpp" />
+    <ClCompile Include="SkillMotionsTest.cpp" />
+    <ClCompile Include="BotBrainTest.cpp" />
+    <ClCompile Include="..\BotAI\BotBrain.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="EscapeLogicTest.cpp" />
     <ClCompile Include="EquipStatsTest.cpp" />
     <ClCompile Include="KillBatchTest.cpp" />
@@ -139,6 +146,8 @@
     <ClCompile Include="..\GameServer\MonsterTable.cpp" />
     <ClCompile Include="..\GameServer\MonsterBrain.cpp" />
     <ClCompile Include="..\GameServer\MonsterPack.cpp" />
+    <ClCompile Include="..\GameServer\HouseTable.cpp" />
+    <ClCompile Include="..\GameServer\PatrolRouteGen.cpp" />
     <ClCompile Include="..\GameServer\PartyBook.cpp" />
     <ClCompile Include="..\GameServer\EscapeLogic.cpp" />
     <ClCompile Include="..\GameServer\EquipStats.cpp" />

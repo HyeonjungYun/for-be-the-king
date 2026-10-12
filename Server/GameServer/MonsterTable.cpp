@@ -6,11 +6,14 @@
 #include "EntryPointTable.h"
 #include "WallTable.h"
 #include "TowerTable.h"
+#include "HouseTable.h"
+#include "PatrolRouteGen.h"
 
 unordered_map<uint32, MonsterTypeDef>	MonsterTable::s_types;
 vector<MonsterSpawnDef>					MonsterTable::s_spawns;
 unordered_map<uint32, PatrolRoute>		MonsterTable::s_routes;
 vector<MonsterPackDef>					MonsterTable::s_packs;
+unordered_map<uint32, vector<unique_ptr<RouteSet>>>	MonsterTable::s_routeSets;
 
 namespace
 {
@@ -668,4 +671,91 @@ const char* MonsterTable::TierName(MonsterTier tier)
 	case MonsterTier::Leader:	return "leader";
 	default:					return "?";
 	}
+}
+
+/*-------- 생성 길 묶음 (2026-10-12) --------*/
+
+void MonsterTable::ClearRouteSets()
+{
+	s_routeSets.clear();
+}
+
+vector<MonsterTypeDef> MonsterTable::AllTypes()
+{
+	vector<MonsterTypeDef> out;
+	out.reserve(s_types.size());
+	for (const auto& [id, t] : s_types)
+		out.push_back(t);
+	sort(out.begin(), out.end(), [](const MonsterTypeDef& a, const MonsterTypeDef& b) { return a.typeId < b.typeId; });
+	return out;
+}
+
+bool MonsterTable::GenerateRouteSets(uint32 floorCount, uint64 bootSeed, OUT string& error)
+{
+	s_routeSets.clear();
+	const vector<MonsterTypeDef> types = AllTypes();
+
+	for (const PackRules& rules : PackRulesTable::All())
+	{
+		if (rules.floorId >= floorCount)
+			continue;
+
+		RouteGenWorld world;
+		world.walls = &WallTable::Get(rules.floorId);
+		world.houses = HouseTable::OnFloor(rules.floorId);
+		for (const TowerDef& t : TowerTable::All())
+		{
+			if (t.floorId == rules.floorId)
+				world.towers.emplace_back(t.x, t.y);
+		}
+		for (const EntryPoint& e : EntryPointTable::All())
+		{
+			if (e.floorId == rules.floorId)
+				world.entries.emplace_back(e.x, e.y);
+		}
+		// 벽 쓸기 반지름 = 무리에 쓸 수 있는 가장 큰 몸 + 여유 (부팅 검사 ValidateRouteGeometry 와 같은 식)
+		float biggest = 0.f;
+		for (const MonsterTypeDef& t : types)
+		{
+			if ((t.aggroKind == MonsterAggroKind::Detect || t.aggroKind == MonsterAggroKind::Reactive)
+				&& (t.tier == MonsterTier::Leader || t.tier == MonsterTier::Field))
+				biggest = (std::max)(biggest, t.radiusCm);
+		}
+		world.bodyRadiusCm = biggest + MonsterConfig::ROUTE_CLEARANCE_MARGIN_CM;
+
+		vector<unique_ptr<RouteSet>>& sets = s_routeSets[rules.floorId];
+		for (uint32 k = 0; k < rules.routeSets; k++)
+		{
+			auto set = make_unique<RouteSet>();
+			// 묶음마다 다른 시드 - 같은 부팅 시드면 같은 묶음들 (재현)
+			const uint64 seed = bootSeed * 1000003ull + static_cast<uint64>(rules.floorId) * 1009ull + k;
+			if (PatrolRouteGen::Generate(world, rules, types, seed, OUT *set, OUT error) == false)
+			{
+				s_routeSets.clear();
+				return false;
+			}
+			sets.push_back(move(set));
+		}
+
+		// 이 층의 CSV 무리는 쓰지 않는다 - 둘이 겹쳐 돌면 안 된다
+		const size_t before = s_packs.size();
+		s_packs.erase(remove_if(s_packs.begin(), s_packs.end(), [&](const MonsterPackDef& p) { return p.floorId == rules.floorId; }), s_packs.end());
+		if (before != s_packs.size())
+			LOG_LINE << "[ROUTE] floor=" << rules.floorId << " ignoring " << (before - s_packs.size()) << " monster_packs.csv packs - pack_rules.csv generates them\n";
+	}
+	return true;
+}
+
+size_t MonsterTable::RouteSetCount(uint32 floorId)
+{
+	auto it = s_routeSets.find(floorId);
+	return it == s_routeSets.end() ? 0 : it->second.size();
+}
+
+const RouteSet* MonsterTable::RouteSetAt(uint32 floorId, size_t index)
+{
+	auto it = s_routeSets.find(floorId);
+	if (it == s_routeSets.end() || index >= it->second.size())
+		return nullptr;
+	return it->second[index].get();
 }

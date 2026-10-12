@@ -129,6 +129,9 @@ void Player::RebuildSkillSlotsFromEquipment()
 	if (weapon.instanceId != 0)
 		skillSlots[Protocol::SLOT_WEAPON_SECONDARY - 1].skillId = weapon.skillIdSecondary;
 
+	// 스폰 스냅샷의 무기 - 보는 사람이 자세 · 휘두르기 클립을 고른다 (anim, 2026-10-12). 0 = 맨손
+	objectInfo->set_weapon_type_id(weapon.instanceId != 0 ? weapon.itemTypeId : 0);
+
 	RefreshBindStates();
 }
 

@@ -1,5 +1,72 @@
 ﻿#pragma once
 #include "Session.h"
+#include "../BotAI/BehaviorTree.h"
+#include <set>
+
+// -ai 의 감각 · 기억 (BotAiDriver). itemLock 아래에서만 (패킷 스레드가 쓰고 틱 스레드가 읽는다). path · script · bb 는 틱 스레드 전용
+struct BotAiCreature
+{
+	bool	monster = false;
+	float	x = 0.f;
+	float	y = 0.f;
+	int32	hp = 0;
+	int32	maxHp = 1;
+	bool	ally = false;
+	uint32	monsterTypeId = 0;
+	uint64	lastHitMeUs = 0;
+};
+
+struct BotAiState
+{
+	unordered_map<uint64, BotAiCreature>	creatures;		// S_SPAWN · S_MOVE · S_DAMAGE · S_DIED · S_DESPAWN
+	int32									hp = 500;
+	int32									maxHp = 500;
+	uint64									runEndsAtUs = 0;
+	uint32									gaugePermille = 0;
+	bool									inZone = false;
+	uint64									lastDamagedUs = 0;
+	uint32									weaponTypeId = 0;
+	vector<pair<uint32, uint32>>			skillSlots;		// (slot, skillId) - S_EQUIP_SYNC
+	unordered_map<uint32, uint64>			skillReadyAtUs;
+	set<uint64>								lootTried;
+
+	// 틱 스레드 전용
+	BotAI::Blackboard						bb;
+	vector<pair<float, float>>				path;
+	size_t									pathIndex = 0;
+	float									pathGoalX = 0.f;
+	float									pathGoalY = 0.f;
+	uint64									pathPlannedUs = 0;
+	float									progressX = 0.f;		// 마지막으로 30 cm 넘게 나아간 자리 · 시각 (막힘 판정)
+	float									progressY = 0.f;
+	uint64									progressUs = 0;
+	float									detourX = 0.f;			// 막혔을 때 잠깐 물러서는 지점
+	float									detourY = 0.f;
+	uint64									detourUntilUs = 0;
+	uint32									stuckCount = 0;
+	float									stuckX = 0.f;			// 지난 막힘 자리 - 같은 자리에서 세 번째면 목표를 버린다
+	float									stuckY = 0.f;
+	size_t									scriptIndex = 0;
+	uint64									scriptWaitUntilUs = 0;
+	bool									scriptMoving = false;
+	float									scriptGoalX = 0.f;
+	float									scriptGoalY = 0.f;
+
+	void Reset()
+	{
+		creatures.clear();
+		gaugePermille = 0;
+		inZone = false;
+		lootTried.clear();
+		skillReadyAtUs.clear();
+		path.clear();
+		pathIndex = 0;
+		pathPlannedUs = 0;
+		progressUs = 0;
+		detourUntilUs = 0;
+		stuckCount = 0;
+	}
+};
 
 /*-----------------
 	 BotSession
@@ -84,6 +151,9 @@ public:
 	atomic<bool>									partyInRun = false;
 	atomic<bool>									coopEnterSent = false;
 	atomic<uint64>									nextInviteAtUs = 0;	// 번호 파티장이 빠진 멤버를 다시 초대할 시각. 0 = 초대하지 않는다
+
+	// -ai (BotAiDriver) - 감각 · 기억
+	BotAiState										ai;
 
 	bool			IsPartyMember(uint64 characterId)
 	{

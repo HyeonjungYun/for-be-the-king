@@ -3,6 +3,7 @@
 #include "Player.h"
 #include "Monster.h"
 #include "MonsterTable.h"
+#include "PatrolRouteGen.h"
 #include "TowerTable.h"
 #include "SkillKinematics.h"
 #include "Vision.h"
@@ -37,17 +38,39 @@ void Room::InitPacks(uint64 nowUs)
 {
 	_packs.clear();
 
-	for (const MonsterPackDef& def : MonsterTable::Packs())
+	// 생성 길 묶음이 있는 층 - 방마다 하나를 고른다 (월드 방 · 인스턴스마다 다른 동선, pack-routes spec R14).
+	// 없으면 monster_packs.csv 그대로 (pack_rules.csv 가 없는 층)
+	const size_t sets = MonsterTable::RouteSetCount(_floorId);
+	if (sets > 0)
 	{
-		if (def.floorId != _floorId || def.route == nullptr)
-			continue;
+		const uint64 pick = (nowUs ^ (static_cast<uint64>(_instanceId) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64>(_floorId) << 32)) % sets;
+		const RouteSet* set = MonsterTable::RouteSetAt(_floorId, pick);
+		for (const GeneratedPack& gp : set->packs)
+		{
+			auto slot = make_unique<PackSlot>();
+			slot->def = gp.def;
+			slot->route = gp.route;
+			slot->def.route = &slot->route;
+			_packs.push_back(move(slot));
+			SpawnPack(static_cast<uint32>(_packs.size() - 1), nowUs);
+		}
+		LOG_LINE << "[ROUTE] " << Tag() << " floor=" << _floorId << " set=" << pick << '/' << sets << " seed=" << set->seed
+			<< " packs=" << _packs.size() << " crossings=" << set->stats.crossings << " coverage=" << ::lroundf(set->stats.coveragePct) << "%\n";
+	}
+	else
+	{
+		for (const MonsterPackDef& def : MonsterTable::Packs())
+		{
+			if (def.floorId != _floorId || def.route == nullptr)
+				continue;
 
-		auto slot = make_unique<PackSlot>();
-		slot->def = def;
-		slot->route = *def.route;
-		slot->def.route = &slot->route;
-		_packs.push_back(move(slot));
-		SpawnPack(static_cast<uint32>(_packs.size() - 1), nowUs);
+			auto slot = make_unique<PackSlot>();
+			slot->def = def;
+			slot->route = *def.route;
+			slot->def.route = &slot->route;
+			_packs.push_back(move(slot));
+			SpawnPack(static_cast<uint32>(_packs.size() - 1), nowUs);
+		}
 	}
 
 	if (_packs.empty() == false)

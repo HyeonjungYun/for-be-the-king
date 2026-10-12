@@ -21,4 +21,7 @@ namespace BotPath
 	// (fromX, fromY) → (toX, toY) 의 꺾는 점 목록. 마지막 점이 도착점이다 - 도착점이 벽 안이면(타워 중심 등) 가장 가까운 빈 칸.
 	// 시작점은 넣지 않는다. 길이 없으면 빈 목록
 	vector<pair<float, float>>	Find(float fromX, float fromY, float toX, float toY);
+
+	// 걸을 수 있는 자리인가 - 섬 안(floor_outline.csv) 이고 벽에서 떨어진 칸. 격자가 없으면 늘 참 (BotAI::World::walkable, 2026-10-12)
+	bool	Walkable(float x, float y);
 }

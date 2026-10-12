@@ -1,0 +1,2 @@
+floor_id,pack_count,reactive_pct,member_count,spacing_cm,patrol_speed_cms,respawn_s,route_sets,sep_min_cm,house_min_cm,coast_min_cm,cover_radius_cm,cell_cm,candidates,lane_gap_cm
+0,10,20,3,150,170,1800,3,1200,1500,1000,3000,200,8,300

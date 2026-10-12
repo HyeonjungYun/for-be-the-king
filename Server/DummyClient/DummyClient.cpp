@@ -7,6 +7,7 @@
 #include "ClientPacketHandler.h"
 #include "BotSession.h"
 #include "BotPath.h"
+#include "BotAiDriver.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -487,6 +488,13 @@ static void TickBots(float deltaTime)
 		if (nowUs < bot->hardCcUntilUs.load())
 			continue;
 
+		// -ai: 두뇌가 판단하고 패킷으로 실행한다 (BotAiDriver) - 아래 기존 행동은 쓰지 않는다
+		if (BotAiDriver::GAi.load())
+		{
+			BotAiDriver::Tick(bot, nowUs, deltaTime);
+			continue;
+		}
+
 		// -idleone: 1 번 봇은 같은 자리를 보내기만 한다 - 서버에는 "움직이지 않음"으로 보인다. -idleall: 전원 (FoW 실기동 - 자리가 정해져야 한다)
 		if ((GIdleOne.load() && bot->botIndex == 1) || GIdleAll.load())
 		{
@@ -842,6 +850,20 @@ int main(int argc, char* argv[])
 			GIdleOne.store(true);
 		else if (::strcmp(argv[i], "-idleall") == 0)
 			GIdleAll.store(true);
+		else if (::strcmp(argv[i], "-ai") == 0)
+			BotAiDriver::GAi.store(true);
+		else if (::strcmp(argv[i], "-aitrace") == 0)
+			BotAiDriver::GAiTrace.store(true);
+		else if (::strcmp(argv[i], "-aiscript") == 0 && i + 1 < argc)
+		{
+			string error;
+			if (BotAiDriver::LoadScript(argv[++i], OUT error) == false)
+			{
+				cout << "[AI] script invalid - " << error << '\n';
+				return 1;
+			}
+			BotAiDriver::GAi.store(true);
+		}
 		else if (::strcmp(argv[i], "-swap") == 0)
 			GSwapArmor.store(true);
 		else if (::strcmp(argv[i], "-staydead") == 0)
@@ -860,6 +882,19 @@ int main(int argc, char* argv[])
 	// -tower 는 벽을 돌아간다 - 벽이 있는 층(0층)만 (BotPath.h)
 	if (GTowerMode.load())
 		BotPath::Load(0);
+
+	// -ai 는 벽을 돌아가고(0층) 두뇌 데이터(bot_brain.csv · skills.csv · towers.csv)를 읽는다 - 없으면 시작하지 않는다
+	if (BotAiDriver::GAi.load())
+	{
+		if (BotPath::IsLoaded() == false && BotPath::Load(0) == false)
+			return 1;
+		string error;
+		if (BotAiDriver::Init(OUT error) == false)
+		{
+			LOG_LINE << "[AI] init failed - " << error << '\n';
+			return 1;
+		}
+	}
 
 	// -pathcheck: 0층을 끝에서 끝까지 벽을 돌아 걸으면 몇 초인가 - 계산만 하고 끝낸다.
 	// 섬(2026-10-11)은 서쪽 끝 ↔ 동쪽 끝(직선 약 570 m · 168 s) · 북 ↔ 남(약 280 m · 82 s), 각 끝은 해안선 안쪽 8~13 m.
@@ -910,6 +945,7 @@ int main(int argc, char* argv[])
 		<< (GRunMode.load() == Protocol::RUN_MODE_PVE_SOLO ? " - PVE solo" : GRunMode.load() == Protocol::RUN_MODE_PVE_COOP
 			? " - PVE co-op party=" + to_string(GPartySize.load()) + (GAllyFire.load() ? " ALLY FIRE (negative test)" : "") : string())
 		<< (GTowerMode.load() ? " - tower mode (walk to " + to_string(static_cast<int32>(GTowerX)) + "," + to_string(static_cast<int32>(GTowerY)) + " and stand)" : string())
+		<< (BotAiDriver::GAi.load() ? string(" - AI brain ON") + (BotAiDriver::GAiTrace.load() ? " (trace)" : "") + (BotAiDriver::HasScript() ? " (bot 1 scripted)" : "") : string())
 		<< " - entry=" << GEntryPointId.load() << " gold=" << GRunGold.load() << '\n';
 
 	// 계정 번호 풀. 끊긴 세션의 번호를 다음 세션이 그대로 물려 받는다
@@ -1009,6 +1045,16 @@ int main(int argc, char* argv[])
 			if (GTowerMode.load())
 			{
 				LOG_LINE << "[BOT RUN] escaped total = " << GLeaveEscaped.load() << "   expired total = " << GLeaveExpired.load() << '\n';
+			}
+
+			if (BotAiDriver::GAi.load())
+			{
+				LOG_LINE << "[BOT AI] decisions = " << BotAiDriver::GAiDecisions.exchange(0) / sec << "/s"
+					<< "   branch changes = " << BotAiDriver::GAiBranchChanges.exchange(0) / sec << "/s"
+					<< "   attacks = " << BotAiDriver::GAiAttacks.exchange(0) / sec << "/s"
+					<< "   skills = " << BotAiDriver::GAiSkills.exchange(0) / sec << "/s"
+					<< "   opens = " << BotAiDriver::GAiLootOpens.exchange(0) / sec << "/s"
+					<< "   escaped total = " << GLeaveEscaped.load() << "   expired total = " << GLeaveExpired.load() << '\n';
 			}
 
 			if (GItemBehavior.load())

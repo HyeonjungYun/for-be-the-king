@@ -140,13 +140,51 @@ bool BotPath::Load(uint32 floorId)
 		return false;
 	}
 
+	// 해안선 (floor_outline.csv: floor_id,seq,x,y) - 바다는 막힌 칸. 없으면 사각형 그대로 (2026-10-12 bot-ai: 두뇌의 탐색 지점이 바다로 가 bounds 거부 941 건)
+	{
+		ifstream of(DataDir() + "\\floor_outline.csv");
+		vector<pair<uint32, OutlinePoint>> rows;
+		if (of.is_open())
+		{
+			getline(of, line);		// floor_id,seq,x,y
+			while (getline(of, line))
+			{
+				if (line.empty() == false && line.back() == '\r')
+					line.pop_back();
+				if (line.empty())
+					continue;
+				string f[4];
+				stringstream ss(line);
+				for (string& field : f)
+					getline(ss, field, ',');
+				if (static_cast<uint32>(::strtoul(f[0].c_str(), nullptr, 10)) != floorId)
+					continue;
+				OutlinePoint p;
+				p.x = static_cast<float>(::atof(f[2].c_str()));
+				p.y = static_cast<float>(::atof(f[3].c_str()));
+				rows.emplace_back(static_cast<uint32>(::strtoul(f[1].c_str(), nullptr, 10)), p);
+			}
+		}
+		if (rows.size() >= 3)
+		{
+			sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+			vector<OutlinePoint> points;
+			for (const auto& [seq, p] : rows)
+				points.push_back(p);
+			if (s_map.SetOutline(move(points), OUT error) == false)
+				LOG_LINE << "[BOT PATH] outline rejected: " << error << " - square floor\n";
+		}
+	}
+
 	s_blocked.assign(GRID * GRID, 0);
 	int32 blocked = 0;
 	for (int32 cy = 0; cy < GRID; cy++)
 	{
 		for (int32 cx = 0; cx < GRID; cx++)
 		{
-			if (s_map.Overlaps(CenterOf(cx), CenterOf(cy), CLEARANCE_CM))
+			const float x = CenterOf(cx);
+			const float y = CenterOf(cy);
+			if (s_map.InsideFloor(x, y) == false || s_map.CoastGap(x, y) < CLEARANCE_CM || s_map.Overlaps(x, y, CLEARANCE_CM))
 			{
 				s_blocked[Index(cx, cy)] = 1;
 				blocked++;
@@ -163,6 +201,15 @@ bool BotPath::Load(uint32 floorId)
 bool BotPath::IsLoaded()
 {
 	return s_loaded;
+}
+
+bool BotPath::Walkable(float x, float y)
+{
+	if (s_loaded == false)
+		return true;
+	if (std::isfinite(x) == false || std::isfinite(y) == false || std::fabs(x) >= HALF_CM || std::fabs(y) >= HALF_CM)
+		return false;
+	return s_blocked[Index(CellOf(x), CellOf(y))] == 0;
 }
 
 uint32 BotPath::LoadedFloor()

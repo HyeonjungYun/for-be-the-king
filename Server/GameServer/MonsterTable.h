@@ -145,11 +145,21 @@ namespace MonsterConfig
 	constexpr uint64	PACK_RETARGET_COOLDOWN_US = 0;			// 다른 사람이 때리면 바로 옮긴다 (사용자 결정 - 최신 공격자)
 }
 
+struct RouteSet;		// PatrolRouteGen.h - 생성된 길 묶음
+
 class MonsterTable
 {
 public:
 	// 두 파일 모두 없어도 된다(몬스터 0). 자리 파일만 있으면 거부. 하나라도 잘못이면 이유를 error 에 남기고 false
 	static bool		Load(const string& dataDir, uint32 floorCount, OUT string& error);
+
+	// 생성 길 묶음 (2026-10-12 pack_rules.csv · PatrolRouteGen) - 규칙이 있는 층마다 route_sets 개를 만든다.
+	// 그 층의 CSV 무리(monster_packs.csv)는 버린다 (로그). 집 · 규칙 · 벽 · 타워 · 진입 지점 · 종류를 먼저 읽어야 한다
+	static bool		GenerateRouteSets(uint32 floorCount, uint64 bootSeed, OUT string& error);
+	static size_t	RouteSetCount(uint32 floorId);
+	static const RouteSet*	RouteSetAt(uint32 floorId, size_t index);
+	static void		ClearRouteSets();
+	static vector<MonsterTypeDef>	AllTypes();
 
 	// nullptr = 그 파일이 없다
 	static bool		Parse(const string* typesCsv, const string* spawnsCsv, uint32 floorCount, OUT string& error);
@@ -172,4 +182,5 @@ private:
 	static vector<MonsterSpawnDef>					s_spawns;
 	static unordered_map<uint32, PatrolRoute>		s_routes;		// 무리가 가리키므로 부팅 뒤 바뀌지 않는다
 	static vector<MonsterPackDef>					s_packs;
+	static unordered_map<uint32, vector<unique_ptr<RouteSet>>>	s_routeSets;	// 층 → 묶음들. 방이 가리키지 않고 복사한다
 };

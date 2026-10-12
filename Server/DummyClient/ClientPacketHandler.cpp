@@ -2,6 +2,7 @@
 #include "ClientPacketHandler.h"
 #include "BufferReader.h"
 #include "BotSession.h"
+#include "BotAiDriver.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
 
@@ -155,6 +156,19 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	bot->objectId.store(pkt.player().object_id());
 	bot->replanPath.store(true);
 
+	// -ai 감각 - 새 판: 내 체력 · 런 시간 · 무기, 본 것은 잊는다
+	if (BotAiDriver::GAi.load())
+	{
+		lock_guard<mutex> guard(bot->itemLock);
+		bot->ai.Reset();
+		bot->ai.hp = pkt.player().hp() > 0 ? pkt.player().hp() : 500;
+		bot->ai.maxHp = pkt.player().max_hp() > 0 ? pkt.player().max_hp() : 500;
+		bot->ai.runEndsAtUs = pkt.run_remaining_ms() > 0 ? Utils::NowMicroseconds() + static_cast<uint64>(pkt.run_remaining_ms()) * 1000 : 0;
+		bot->ai.weaponTypeId = pkt.player().weapon_type_id();
+		bot->ai.bb = BotAI::Blackboard();
+		bot->ai.bb.seed = static_cast<uint32>(pkt.player().object_id() * 2654435761u + 1u);
+	}
+
 	if (GItemBehavior.load())
 	{
 		lock_guard<mutex> guard(bot->itemLock);
@@ -227,7 +241,8 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 {
-	if (GItemBehavior.load() == false && GMonsterPull.load() == false)
+	const bool ai = BotAiDriver::GAi.load();
+	if (GItemBehavior.load() == false && GMonsterPull.load() == false && ai == false)
 		return true;
 
 	auto bot = static_pointer_cast<BotSession>(session);
@@ -235,7 +250,19 @@ bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 
 	for (const Protocol::ObjectInfo& info : pkt.players())
 	{
-		if (info.object_type() == Protocol::OBJECT_TYPE_BAG && GItemBehavior.load())
+		// -ai 감각 - 생물은 전부 (가방은 아래 bags 에)
+		if (ai && info.object_type() != Protocol::OBJECT_TYPE_BAG && info.object_id() != bot->objectId.load())
+		{
+			BotAiCreature& c = bot->ai.creatures[info.object_id()];
+			c.monster = (info.creature_type() == Protocol::CREATE_TYPE_MONSTER);
+			c.x = info.pos_info().x();
+			c.y = info.pos_info().y();
+			c.hp = info.hp();
+			c.maxHp = (std::max)(1, info.max_hp());
+			c.monsterTypeId = info.monster_type_id();
+			c.ally = (c.monster == false && GRunMode.load() != Protocol::RUN_MODE_PVP);		// PVE 의 다른 플레이어 = 파티원
+		}
+		if (info.object_type() == Protocol::OBJECT_TYPE_BAG && (GItemBehavior.load() || ai))
 			bot->bags[info.object_id()] = { info.pos_info().x(), info.pos_info().y() };
 		else if (info.creature_type() == Protocol::CREATE_TYPE_MONSTER && GMonsterPull.load())
 			bot->monsters[info.object_id()] = { info.pos_info().x(), info.pos_info().y() };
@@ -246,7 +273,7 @@ bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 
 bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 {
-	if (GItemBehavior.load() == false && GMonsterPull.load() == false)
+	if (GItemBehavior.load() == false && GMonsterPull.load() == false && BotAiDriver::GAi.load() == false)
 		return true;
 
 	auto bot = static_pointer_cast<BotSession>(session);
@@ -256,6 +283,7 @@ bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 	{
 		bot->bags.erase(id);
 		bot->monsters.erase(id);
+		bot->ai.creatures.erase(id);
 		if (bot->openBagId == id)
 			bot->openBagId = 0;
 	}
@@ -276,6 +304,20 @@ bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
 			auto it = bot->monsters.find(info.object_id());
 			if (it != bot->monsters.end())
 				it->second = { info.x(), info.y() };
+		}
+	}
+	// -ai 감각 - 아는 생물의 자리
+	if (BotAiDriver::GAi.load() && pkt.correction() == false)
+	{
+		lock_guard<mutex> guard(bot->itemLock);
+		for (const Protocol::PosInfo& info : pkt.infos())
+		{
+			auto it = bot->ai.creatures.find(info.object_id());
+			if (it != bot->ai.creatures.end())
+			{
+				it->second.x = info.x();
+				it->second.y = info.y();
+			}
 		}
 	}
 
@@ -315,6 +357,38 @@ bool Handle_S_DAMAGE(PacketSessionRef& session, Protocol::S_DAMAGE& pkt)
 	static atomic<int32> logged = 0;
 
 	auto bot = static_pointer_cast<BotSession>(session);
+	if (BotAiDriver::GAi.load())
+	{
+		// -ai 감각 - 체력 · 나를 때린 적
+		const uint64 nowUs = Utils::NowMicroseconds();
+		lock_guard<mutex> guard(bot->itemLock);
+		for (const Protocol::DamageInfo& info : pkt.damages())
+		{
+			if (info.target_id() == bot->objectId.load())
+			{
+				bot->ai.hp = info.remaining_hp();
+				if (info.max_hp() > 0)
+					bot->ai.maxHp = info.max_hp();
+				if (info.damage() > 0)
+				{
+					bot->ai.lastDamagedUs = nowUs;
+					auto it = bot->ai.creatures.find(info.attacker_id());
+					if (it != bot->ai.creatures.end())
+						it->second.lastHitMeUs = nowUs;
+				}
+			}
+			else
+			{
+				auto it = bot->ai.creatures.find(info.target_id());
+				if (it != bot->ai.creatures.end())
+				{
+					it->second.hp = info.remaining_hp();
+					if (info.max_hp() > 0)
+						it->second.maxHp = info.max_hp();
+				}
+			}
+		}
+	}
 	for (const Protocol::DamageInfo& info : pkt.damages())
 	{
 		// 남의 최대 체력 변화 - 던전 안 장비 교체를 방 안의 다른 사람도 받는지 (DamageInfo.max_hp, 2026-10-08)
@@ -433,6 +507,13 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 	for (const Protocol::DiedInfo& info : pkt.deaths())
 	{
+		if (BotAiDriver::GAi.load())
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+			bot->ai.creatures.erase(info.victim_id());
+			if (info.victim_id() == bot->objectId.load())
+				bot->ai.hp = 0;
+		}
 		if (GMonsterPull.load())
 		{
 			lock_guard<mutex> guard(bot->itemLock);
@@ -466,6 +547,13 @@ bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt)
 // 봇은 게이지 · 상자 상태를 그리지 않는다 - 받아서 로그만 (escape-timer.md · radar.md 패킷)
 bool Handle_S_ESCAPE_GAUGE(PacketSessionRef& session, Protocol::S_ESCAPE_GAUGE& pkt)
 {
+	if (BotAiDriver::GAi.load())
+	{
+		auto bot = static_pointer_cast<BotSession>(session);
+		lock_guard<mutex> guard(bot->itemLock);
+		bot->ai.gaugePermille = pkt.progress_permille();
+		bot->ai.inZone = pkt.self_in_zone();
+	}
 	if (GTowerMode.load())
 	{
 		auto bot = static_pointer_cast<BotSession>(session);
@@ -524,6 +612,12 @@ bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& 
 	return true;
 }
 
+bool Handle_S_WEAPON_CHANGE(PacketSessionRef& session, Protocol::S_WEAPON_CHANGE& pkt)
+{
+	// 무기 교체 (anim, 2026-10-12) - 봇은 그리지 않는다
+	return true;
+}
+
 bool Handle_S_VISION(PacketSessionRef& session, Protocol::S_VISION& pkt)
 {
 	// FoW 시야 (2026-10-11) - 봇은 그리지 않는다. 추가 시야원이 생길 때만 로그 (분신 · 종이매 · 탐지 확인용)
@@ -571,7 +665,19 @@ bool Handle_S_PROJECTILE(PacketSessionRef& session, Protocol::S_PROJECTILE& pkt)
 
 bool Handle_S_EQUIP_SYNC(PacketSessionRef& session, Protocol::S_EQUIP_SYNC& pkt)
 {
-	return false;
+	// -ai 감각 - 내 스킬 칸 (장비가 바뀔 때마다 전체)
+	if (BotAiDriver::GAi.load())
+	{
+		auto bot = static_pointer_cast<BotSession>(session);
+		lock_guard<mutex> guard(bot->itemLock);
+		bot->ai.skillSlots.clear();
+		for (const Protocol::SkillInfo& info : pkt.skills())
+		{
+			if (info.skill_id() != 0 && info.bind_state() == Protocol::BIND_BOUND)
+				bot->ai.skillSlots.emplace_back(static_cast<uint32>(info.slot()), info.skill_id());
+		}
+	}
+	return true;
 }
 
 bool Handle_S_GRANT_REWARD(PacketSessionRef& session, Protocol::S_GRANT_REWARD& pkt)
@@ -632,7 +738,7 @@ bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SY
 	if (GHoldOnReject.load() && bot->inGame.load() == false)
 		LOG_LINE << "[BOT BASECAMP SYNC] char=" << bot->characterId.load() << " items=" << pkt.items_size() << '\n';
 
-	if (GItemBehavior.load() == false && GSwapArmor.load() == false)
+	if (GItemBehavior.load() == false && GSwapArmor.load() == false && BotAiDriver::GAi.load() == false)
 		return true;
 
 	// 던전 동기화는 소지 · 착용 전체다. 베이스캠프 동기화에는 보관도 있지만 봇은 보관을 쓰지 않는다
@@ -650,7 +756,7 @@ bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SY
 
 bool Handle_S_BAG_CONTENTS(PacketSessionRef& session, Protocol::S_BAG_CONTENTS& pkt)
 {
-	if (GItemBehavior.load() == false)
+	if (GItemBehavior.load() == false && BotAiDriver::GAi.load() == false)
 		return true;
 
 	// 내가 연 가방의 첫 내용에만 반응한다. 열어 둔 동안 남이 가져갈 때마다 다시 오는 갱신은 흘려보낸다
