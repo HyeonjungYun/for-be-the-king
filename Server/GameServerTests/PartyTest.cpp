@@ -206,3 +206,51 @@ TEST(InstanceRules, 인스턴스_가방_층은_1000_이상이다)
 	EXPECT_FALSE(InstanceRules::IsInstanceBagFloor(3));
 	EXPECT_TRUE(InstanceRules::IsInstanceBagFloor(InstanceRules::INSTANCE_BAG_FLOOR_BASE + 0));
 }
+
+// 던전 파티 (party-betrayal-2026-10-12 AC-PB-03 · 05): 방 키를 기억하고, 한 명이 나가도 남은 파티에 남는다. 새 결과 값은 와이어와 같다 (PartyManager static_assert)
+TEST(PartyBook, 던전_파티는_방_키를_기억하고_나가도_남은_파티에_남는다_AC_PB_03)
+{
+	PartyBook book;
+	uint64 pid = 0;
+	EXPECT_EQ(book.Invite(1, "a", 2, 0, OUT pid), PartyBookResult::Ok);
+	uint64 inviter = 0;
+	EXPECT_EQ(book.Respond(2, "b", pid, true, 0, OUT inviter), PartyBookResult::Ok);
+	book.BindDungeonRoom(pid, 777);
+	ASSERT_NE(book.Find(pid), nullptr);
+	EXPECT_EQ(book.Find(pid)->dungeonRoom, 777u);
+	uint64 left = 0;
+	EXPECT_EQ(book.Leave(2, 2, OUT left), PartyBookResult::Ok);
+	EXPECT_EQ(left, pid);
+	ASSERT_NE(book.Find(pid), nullptr);
+	EXPECT_EQ(book.Find(pid)->dungeonRoom, 777u);
+	EXPECT_EQ(book.SizeOf(1), 1u);
+	EXPECT_EQ(book.SizeOf(2), 0u);
+	EXPECT_EQ(static_cast<int32>(PartyBookResult::NotVisible), 12);
+	EXPECT_EQ(static_cast<int32>(PartyBookResult::NoKickInRun), 13);
+}
+
+// 혼자 남은 던전 파티 (R5 · 검증 r1 수정 1): 2 명이면 나가기 = 배신 대상, 1 명이면 아니다. 베이스캠프 파티는 인원과 무관하게 아니다
+TEST(PartyBook, 혼자_남은_던전_파티만_IsSoloDungeonParty_가_참이다_R5)
+{
+	PartyBook book;
+	uint64 pid = 0;
+	EXPECT_EQ(book.Invite(1, "a", 2, 0, OUT pid), PartyBookResult::Ok);
+	uint64 inviter = 0;
+	EXPECT_EQ(book.Respond(2, "b", pid, true, 0, OUT inviter), PartyBookResult::Ok);
+	EXPECT_FALSE(book.IsSoloDungeonParty(1));		// 베이스캠프 파티 2 명
+	book.BindDungeonRoom(pid, 777);
+	EXPECT_FALSE(book.IsSoloDungeonParty(1));		// 던전 파티 2 명 - 나가면 배신
+	EXPECT_FALSE(book.IsSoloDungeonParty(2));
+	uint64 left = 0;
+	EXPECT_EQ(book.Leave(2, 2, OUT left), PartyBookResult::Ok);
+	EXPECT_TRUE(book.IsSoloDungeonParty(1));		// 배신당해 혼자 남았다 - 나가도 배신이 아니다
+	EXPECT_FALSE(book.IsSoloDungeonParty(2));		// 파티 없음
+	EXPECT_FALSE(book.IsSoloDungeonParty(3));		// 처음부터 없음
+
+	// 초대만 보내고 수락 전인 파티장 (파티 1 명)
+	uint64 pid2 = 0;
+	EXPECT_EQ(book.Invite(5, "e", 6, 0, OUT pid2), PartyBookResult::Ok);
+	EXPECT_FALSE(book.IsSoloDungeonParty(5));		// 베이스캠프 파티는 아니다
+	book.BindDungeonRoom(pid2, 777);
+	EXPECT_TRUE(book.IsSoloDungeonParty(5));
+}

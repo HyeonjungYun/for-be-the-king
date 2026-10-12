@@ -183,6 +183,8 @@ enum PartyResult
 	PARTY_NO_INSTANCE = 9;			// join asked while the party has no running instance
 	PARTY_ALREADY_ENTERED = 10;		// this character already entered this instance once
 	PARTY_COOP_ONLY = 11;			// a party of 2 or more may only enter PVE co-op
+	PARTY_NOT_VISIBLE = 12;			// dungeon invite: the target is not in my room or not in my sight (party-betrayal 2026-10-12)
+	PARTY_NO_KICK_IN_RUN = 13;		// dungeon party: no kicking - only leaving (= betrayal)
 }
 
 enum PartyMemberState

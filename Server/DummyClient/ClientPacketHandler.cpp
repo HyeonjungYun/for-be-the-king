@@ -78,6 +78,14 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 	return true;
 }
 
+bool Handle_S_PARTY_BETRAYED(PacketSessionRef& session, Protocol::S_PARTY_BETRAYED& pkt)
+{
+	auto bot = static_pointer_cast<BotSession>(session);
+	LOG_LINE << "[BOT PARTY] betrayed-broadcast seen by char=" << bot->characterId.load() << " betrayer=" << pkt.betrayer_id() << " name=" << pkt.betrayer_name()
+		<< " party=" << pkt.party_id() << " victims=" << pkt.victim_names_size() << '\n';
+	return true;
+}
+
 bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);
@@ -99,7 +107,8 @@ bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pk
 	const bool wasInRun = bot->partyInRun.exchange(pkt.in_run());
 
 	if (pkt.result() != Protocol::PARTY_OK)
-		LOG_LINE << "[BOT PARTY] idx=" << bot->botIndex << " result=" << Protocol::PartyResult_Name(pkt.result()) << " subject=" << pkt.subject_name() << '\n';
+		LOG_LINE << "[BOT PARTY] idx=" << bot->botIndex << " result=" << Protocol::PartyResult_Name(pkt.result()) << " subject=" << pkt.subject_name()
+			<< " party=" << pkt.party_id() << " members=" << pkt.members_size() << '\n';		// 거절 뒤에도 파티가 그대로인지 (party-betrayal AC-PB-05)
 
 	// 파티 인스턴스가 닫혔다 - 다음 판을 열 수 있다
 	if (wasInRun && pkt.in_run() == false)
@@ -162,6 +171,9 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	bot->objectId.store(pkt.player().object_id());
 	bot->replanPath.store(true);
+	bot->enteredAtUs = Utils::NowMicroseconds();
+	bot->pvpInviteSent = false;
+	bot->betraySent = false;
 
 	// -ai 감각 - 새 판: 내 체력 · 런 시간 · 무기, 본 것은 잊는다
 	if (BotAiDriver::GAi.load())
@@ -769,6 +781,8 @@ bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SY
 				req.set_request_id("enh" + to_string(k) + "-" + bot->NextRequestId());
 				req.set_instance_id(first.instance_id());
 				bot->Send(ClientPacketHandler::MakeSendBuffer(req));
+				if (k == 0 && GEnhanceDup.load())		// -enhancedup: 같은 request_id 재전송 - 서버가 ITEM_ALREADY 로 막아야 한다 (TR-item-027)
+					bot->Send(ClientPacketHandler::MakeSendBuffer(req));
 			}
 			LOG_LINE << "[BOT ENHANCE] char=" << bot->characterId.load() << " sent=" << (n > 0 ? n : 1) << " item=" << first.instance_id() << " level_before=" << first.level()
 				<< (inDungeon ? " (in dungeon - expect reject)" : " (base camp)") << '\n';

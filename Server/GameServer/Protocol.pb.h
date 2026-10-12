@@ -162,6 +162,9 @@ extern S_LOGINDefaultTypeInternal _S_LOGIN_default_instance_;
 class S_MOVE;
 struct S_MOVEDefaultTypeInternal;
 extern S_MOVEDefaultTypeInternal _S_MOVE_default_instance_;
+class S_PARTY_BETRAYED;
+struct S_PARTY_BETRAYEDDefaultTypeInternal;
+extern S_PARTY_BETRAYEDDefaultTypeInternal _S_PARTY_BETRAYED_default_instance_;
 class S_PARTY_INVITED;
 struct S_PARTY_INVITEDDefaultTypeInternal;
 extern S_PARTY_INVITEDDefaultTypeInternal _S_PARTY_INVITED_default_instance_;
@@ -238,6 +241,7 @@ template<> ::Protocol::S_ITEM_RESULT* Arena::CreateMaybeMessage<::Protocol::S_IT
 template<> ::Protocol::S_LEAVE_GAME* Arena::CreateMaybeMessage<::Protocol::S_LEAVE_GAME>(Arena*);
 template<> ::Protocol::S_LOGIN* Arena::CreateMaybeMessage<::Protocol::S_LOGIN>(Arena*);
 template<> ::Protocol::S_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MOVE>(Arena*);
+template<> ::Protocol::S_PARTY_BETRAYED* Arena::CreateMaybeMessage<::Protocol::S_PARTY_BETRAYED>(Arena*);
 template<> ::Protocol::S_PARTY_INVITED* Arena::CreateMaybeMessage<::Protocol::S_PARTY_INVITED>(Arena*);
 template<> ::Protocol::S_PARTY_STATE* Arena::CreateMaybeMessage<::Protocol::S_PARTY_STATE>(Arena*);
 template<> ::Protocol::S_PROJECTILE* Arena::CreateMaybeMessage<::Protocol::S_PROJECTILE>(Arena*);
@@ -8604,6 +8608,207 @@ class C_ENHANCE final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_PARTY_BETRAYED final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_PARTY_BETRAYED) */ {
+ public:
+  inline S_PARTY_BETRAYED() : S_PARTY_BETRAYED(nullptr) {}
+  ~S_PARTY_BETRAYED() override;
+  explicit PROTOBUF_CONSTEXPR S_PARTY_BETRAYED(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_PARTY_BETRAYED(const S_PARTY_BETRAYED& from);
+  S_PARTY_BETRAYED(S_PARTY_BETRAYED&& from) noexcept
+    : S_PARTY_BETRAYED() {
+    *this = ::std::move(from);
+  }
+
+  inline S_PARTY_BETRAYED& operator=(const S_PARTY_BETRAYED& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_PARTY_BETRAYED& operator=(S_PARTY_BETRAYED&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_PARTY_BETRAYED& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_PARTY_BETRAYED* internal_default_instance() {
+    return reinterpret_cast<const S_PARTY_BETRAYED*>(
+               &_S_PARTY_BETRAYED_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    50;
+
+  friend void swap(S_PARTY_BETRAYED& a, S_PARTY_BETRAYED& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_PARTY_BETRAYED* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_PARTY_BETRAYED* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_PARTY_BETRAYED* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_PARTY_BETRAYED>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_PARTY_BETRAYED& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_PARTY_BETRAYED& from) {
+    S_PARTY_BETRAYED::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_PARTY_BETRAYED* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_PARTY_BETRAYED";
+  }
+  protected:
+  explicit S_PARTY_BETRAYED(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kVictimNamesFieldNumber = 4,
+    kBetrayerNameFieldNumber = 2,
+    kBetrayerIdFieldNumber = 1,
+    kPartyIdFieldNumber = 3,
+  };
+  // repeated string victim_names = 4;
+  int victim_names_size() const;
+  private:
+  int _internal_victim_names_size() const;
+  public:
+  void clear_victim_names();
+  const std::string& victim_names(int index) const;
+  std::string* mutable_victim_names(int index);
+  void set_victim_names(int index, const std::string& value);
+  void set_victim_names(int index, std::string&& value);
+  void set_victim_names(int index, const char* value);
+  void set_victim_names(int index, const char* value, size_t size);
+  std::string* add_victim_names();
+  void add_victim_names(const std::string& value);
+  void add_victim_names(std::string&& value);
+  void add_victim_names(const char* value);
+  void add_victim_names(const char* value, size_t size);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>& victim_names() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>* mutable_victim_names();
+  private:
+  const std::string& _internal_victim_names(int index) const;
+  std::string* _internal_add_victim_names();
+  public:
+
+  // string betrayer_name = 2;
+  void clear_betrayer_name();
+  const std::string& betrayer_name() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_betrayer_name(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_betrayer_name();
+  PROTOBUF_NODISCARD std::string* release_betrayer_name();
+  void set_allocated_betrayer_name(std::string* betrayer_name);
+  private:
+  const std::string& _internal_betrayer_name() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_betrayer_name(const std::string& value);
+  std::string* _internal_mutable_betrayer_name();
+  public:
+
+  // uint64 betrayer_id = 1;
+  void clear_betrayer_id();
+  uint64_t betrayer_id() const;
+  void set_betrayer_id(uint64_t value);
+  private:
+  uint64_t _internal_betrayer_id() const;
+  void _internal_set_betrayer_id(uint64_t value);
+  public:
+
+  // uint64 party_id = 3;
+  void clear_party_id();
+  uint64_t party_id() const;
+  void set_party_id(uint64_t value);
+  private:
+  uint64_t _internal_party_id() const;
+  void _internal_set_party_id(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_PARTY_BETRAYED)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string> victim_names_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr betrayer_name_;
+    uint64_t betrayer_id_;
+    uint64_t party_id_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -12064,9 +12269,180 @@ inline void C_ENHANCE::set_instance_id(uint64_t value) {
   // @@protoc_insertion_point(field_set:Protocol.C_ENHANCE.instance_id)
 }
 
+// -------------------------------------------------------------------
+
+// S_PARTY_BETRAYED
+
+// uint64 betrayer_id = 1;
+inline void S_PARTY_BETRAYED::clear_betrayer_id() {
+  _impl_.betrayer_id_ = uint64_t{0u};
+}
+inline uint64_t S_PARTY_BETRAYED::_internal_betrayer_id() const {
+  return _impl_.betrayer_id_;
+}
+inline uint64_t S_PARTY_BETRAYED::betrayer_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_PARTY_BETRAYED.betrayer_id)
+  return _internal_betrayer_id();
+}
+inline void S_PARTY_BETRAYED::_internal_set_betrayer_id(uint64_t value) {
+  
+  _impl_.betrayer_id_ = value;
+}
+inline void S_PARTY_BETRAYED::set_betrayer_id(uint64_t value) {
+  _internal_set_betrayer_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_PARTY_BETRAYED.betrayer_id)
+}
+
+// string betrayer_name = 2;
+inline void S_PARTY_BETRAYED::clear_betrayer_name() {
+  _impl_.betrayer_name_.ClearToEmpty();
+}
+inline const std::string& S_PARTY_BETRAYED::betrayer_name() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_PARTY_BETRAYED.betrayer_name)
+  return _internal_betrayer_name();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void S_PARTY_BETRAYED::set_betrayer_name(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.betrayer_name_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.S_PARTY_BETRAYED.betrayer_name)
+}
+inline std::string* S_PARTY_BETRAYED::mutable_betrayer_name() {
+  std::string* _s = _internal_mutable_betrayer_name();
+  // @@protoc_insertion_point(field_mutable:Protocol.S_PARTY_BETRAYED.betrayer_name)
+  return _s;
+}
+inline const std::string& S_PARTY_BETRAYED::_internal_betrayer_name() const {
+  return _impl_.betrayer_name_.Get();
+}
+inline void S_PARTY_BETRAYED::_internal_set_betrayer_name(const std::string& value) {
+  
+  _impl_.betrayer_name_.Set(value, GetArenaForAllocation());
+}
+inline std::string* S_PARTY_BETRAYED::_internal_mutable_betrayer_name() {
+  
+  return _impl_.betrayer_name_.Mutable(GetArenaForAllocation());
+}
+inline std::string* S_PARTY_BETRAYED::release_betrayer_name() {
+  // @@protoc_insertion_point(field_release:Protocol.S_PARTY_BETRAYED.betrayer_name)
+  return _impl_.betrayer_name_.Release();
+}
+inline void S_PARTY_BETRAYED::set_allocated_betrayer_name(std::string* betrayer_name) {
+  if (betrayer_name != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.betrayer_name_.SetAllocated(betrayer_name, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.betrayer_name_.IsDefault()) {
+    _impl_.betrayer_name_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.S_PARTY_BETRAYED.betrayer_name)
+}
+
+// uint64 party_id = 3;
+inline void S_PARTY_BETRAYED::clear_party_id() {
+  _impl_.party_id_ = uint64_t{0u};
+}
+inline uint64_t S_PARTY_BETRAYED::_internal_party_id() const {
+  return _impl_.party_id_;
+}
+inline uint64_t S_PARTY_BETRAYED::party_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_PARTY_BETRAYED.party_id)
+  return _internal_party_id();
+}
+inline void S_PARTY_BETRAYED::_internal_set_party_id(uint64_t value) {
+  
+  _impl_.party_id_ = value;
+}
+inline void S_PARTY_BETRAYED::set_party_id(uint64_t value) {
+  _internal_set_party_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_PARTY_BETRAYED.party_id)
+}
+
+// repeated string victim_names = 4;
+inline int S_PARTY_BETRAYED::_internal_victim_names_size() const {
+  return _impl_.victim_names_.size();
+}
+inline int S_PARTY_BETRAYED::victim_names_size() const {
+  return _internal_victim_names_size();
+}
+inline void S_PARTY_BETRAYED::clear_victim_names() {
+  _impl_.victim_names_.Clear();
+}
+inline std::string* S_PARTY_BETRAYED::add_victim_names() {
+  std::string* _s = _internal_add_victim_names();
+  // @@protoc_insertion_point(field_add_mutable:Protocol.S_PARTY_BETRAYED.victim_names)
+  return _s;
+}
+inline const std::string& S_PARTY_BETRAYED::_internal_victim_names(int index) const {
+  return _impl_.victim_names_.Get(index);
+}
+inline const std::string& S_PARTY_BETRAYED::victim_names(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_PARTY_BETRAYED.victim_names)
+  return _internal_victim_names(index);
+}
+inline std::string* S_PARTY_BETRAYED::mutable_victim_names(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_PARTY_BETRAYED.victim_names)
+  return _impl_.victim_names_.Mutable(index);
+}
+inline void S_PARTY_BETRAYED::set_victim_names(int index, const std::string& value) {
+  _impl_.victim_names_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline void S_PARTY_BETRAYED::set_victim_names(int index, std::string&& value) {
+  _impl_.victim_names_.Mutable(index)->assign(std::move(value));
+  // @@protoc_insertion_point(field_set:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline void S_PARTY_BETRAYED::set_victim_names(int index, const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  _impl_.victim_names_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline void S_PARTY_BETRAYED::set_victim_names(int index, const char* value, size_t size) {
+  _impl_.victim_names_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline std::string* S_PARTY_BETRAYED::_internal_add_victim_names() {
+  return _impl_.victim_names_.Add();
+}
+inline void S_PARTY_BETRAYED::add_victim_names(const std::string& value) {
+  _impl_.victim_names_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline void S_PARTY_BETRAYED::add_victim_names(std::string&& value) {
+  _impl_.victim_names_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline void S_PARTY_BETRAYED::add_victim_names(const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  _impl_.victim_names_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline void S_PARTY_BETRAYED::add_victim_names(const char* value, size_t size) {
+  _impl_.victim_names_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:Protocol.S_PARTY_BETRAYED.victim_names)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>&
+S_PARTY_BETRAYED::victim_names() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_PARTY_BETRAYED.victim_names)
+  return _impl_.victim_names_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>*
+S_PARTY_BETRAYED::mutable_victim_names() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_PARTY_BETRAYED.victim_names)
+  return &_impl_.victim_names_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

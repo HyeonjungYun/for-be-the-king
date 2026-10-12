@@ -32,6 +32,9 @@ public:
 	// 한 사람에게만 결과 안내 (S_PARTY_STATE.result) - 입장 거절 사유 등
 	void	SendNotice(uint64 characterId, Protocol::PartyResult result, const string& subject = string());
 
+	// 던전 파티 (party-betrayal-2026-10-12): Invite 가 PvP 층 방의 상대를 찾으면 Room::CheckPartyInvite 에 넘기고, 방 잡이 시야 · 생존을 본 뒤 여기로 돌아온다
+	void	FinishDungeonInvite(uint64 fromId, uint64 toId, bool visible, uint64 roomKey);
+
 	// C_ENTER_GAME mode=PVE_COOP. 파티장이면 인스턴스를 만들고(없으면) 베이스캠프의 멤버를 함께 데려간다 (각자 입장 예약을 쥔다).
 	// 인스턴스가 살아 있으면 합류. room == nullptr 이면 result 가 거절 이유
 	struct CoopEnter

@@ -112,6 +112,12 @@ PartyBookResult PartyBook::Leave(uint64 by, uint64 who, OUT uint64& outPartyId)
 	return PartyBookResult::Ok;
 }
 
+bool PartyBook::IsSoloDungeonParty(uint64 who) const
+{
+	const PartyEntry* party = PartyOf(who);
+	return party != nullptr && party->dungeonRoom != 0 && party->members.size() == 1;
+}
+
 uint64 PartyBook::EnsureParty(uint64 who, const string& name)
 {
 	if (const PartyEntry* party = PartyOf(who))
@@ -187,6 +193,13 @@ void PartyBook::BindInstance(uint64 partyId, uint64 instanceId)
 {
 	if (auto it = _parties.find(partyId); it != _parties.end())
 		it->second.instanceId = instanceId;
+}
+
+void PartyBook::BindDungeonRoom(uint64 partyId, uint64 roomKey)
+{
+	auto it = _parties.find(partyId);
+	if (it != _parties.end())
+		it->second.dungeonRoom = roomKey;
 }
 
 bool PartyBook::OnInstanceClosed(uint64 partyId, uint64 instanceId)

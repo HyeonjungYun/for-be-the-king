@@ -564,12 +564,14 @@ enum PartyResult : int {
   PARTY_NO_INSTANCE = 9,
   PARTY_ALREADY_ENTERED = 10,
   PARTY_COOP_ONLY = 11,
+  PARTY_NOT_VISIBLE = 12,
+  PARTY_NO_KICK_IN_RUN = 13,
   PartyResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   PartyResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool PartyResult_IsValid(int value);
 constexpr PartyResult PartyResult_MIN = PARTY_OK;
-constexpr PartyResult PartyResult_MAX = PARTY_COOP_ONLY;
+constexpr PartyResult PartyResult_MAX = PARTY_NO_KICK_IN_RUN;
 constexpr int PartyResult_ARRAYSIZE = PartyResult_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyResult_descriptor();

@@ -465,6 +465,7 @@ class ObjectInfo final :
     kHpFieldNumber = 6,
     kMaxHpFieldNumber = 7,
     kWeaponTypeIdFieldNumber = 8,
+    kBetrayerFieldNumber = 9,
   };
   // .Protocol.PosInfo pos_info = 3;
   bool has_pos_info() const;
@@ -547,6 +548,15 @@ class ObjectInfo final :
   void _internal_set_weapon_type_id(uint32_t value);
   public:
 
+  // bool betrayer = 9;
+  void clear_betrayer();
+  bool betrayer() const;
+  void set_betrayer(bool value);
+  private:
+  bool _internal_betrayer() const;
+  void _internal_set_betrayer(bool value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ObjectInfo)
  private:
   class _Internal;
@@ -563,6 +573,7 @@ class ObjectInfo final :
     int32_t hp_;
     int32_t max_hp_;
     uint32_t weapon_type_id_;
+    bool betrayer_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -4615,6 +4626,26 @@ inline void ObjectInfo::_internal_set_weapon_type_id(uint32_t value) {
 inline void ObjectInfo::set_weapon_type_id(uint32_t value) {
   _internal_set_weapon_type_id(value);
   // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.weapon_type_id)
+}
+
+// bool betrayer = 9;
+inline void ObjectInfo::clear_betrayer() {
+  _impl_.betrayer_ = false;
+}
+inline bool ObjectInfo::_internal_betrayer() const {
+  return _impl_.betrayer_;
+}
+inline bool ObjectInfo::betrayer() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.betrayer)
+  return _internal_betrayer();
+}
+inline void ObjectInfo::_internal_set_betrayer(bool value) {
+  
+  _impl_.betrayer_ = value;
+}
+inline void ObjectInfo::set_betrayer(bool value) {
+  _internal_set_betrayer(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.betrayer)
 }
 
 // -------------------------------------------------------------------

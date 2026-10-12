@@ -1405,6 +1405,12 @@ bool Handle_C_ENHANCE(PacketSessionRef& session, Protocol::C_ENHANCE& pkt)
 		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_BAD_REQUEST);
 		return true;
 	}
+	// 같은 request_id 재전송은 한 번만 - 증가형 op 라 상태 지정 op 처럼 저절로 멱등이 아니다 (ADR-0003 · TR-item-027, 형제 op 5 종과 같은 가드)
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
 	if (gameSession->place.load() != SessionPlace::BaseCamp)
 	{
 		LOG_LINE << "[BASECAMP] enhance rejected - not in base camp. item=" << pkt.instance_id() << '\n';

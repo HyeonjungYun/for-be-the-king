@@ -28,6 +28,8 @@ enum class PartyBookResult : uint8
 	NoInstance = 9,
 	AlreadyEntered = 10,
 	CoopOnly = 11,
+	NotVisible = 12,		// 던전 초대 - 같은 방이 아니거나 시야 밖 (party-betrayal 2026-10-12)
+	NoKickInRun = 13,		// 던전 파티는 추방이 없다 - 나가는 것만 (= 배신)
 };
 
 struct PartyMemberEntry
@@ -44,6 +46,7 @@ struct PartyEntry
 	uint64						leaderId = 0;
 	vector<PartyMemberEntry>	members;			// 들어온 순서 - 파티장 이어받기 순서
 	uint64						instanceId = 0;		// 살아 있는 파티 인스턴스 (0 = 없음)
+	uint64						dungeonRoom = 0;	// PvP 층 방 안에서 맺은 던전 파티 (Room::Key) - 0 = 베이스캠프 파티 (party-betrayal 2026-10-12)
 
 	const PartyMemberEntry*	Member(uint64 characterId) const;
 	PartyMemberEntry*		Member(uint64 characterId);
@@ -85,6 +88,9 @@ public:
 
 	void			SetInRun(uint64 who, bool inRun);
 	void			BindInstance(uint64 partyId, uint64 instanceId);
+	void			BindDungeonRoom(uint64 partyId, uint64 roomKey);	// 던전 파티 표시 - 나가면 배신, 런이 끝나면 조용히 빠진다
+	// 던전 파티인데 혼자 남았다 (배신당한 쪽 · 수락 전 파티장) - 나가도 피해자가 없으니 배신이 아니다 (R5 "1 명이면 해산")
+	bool			IsSoloDungeonParty(uint64 who) const;
 	// 인스턴스가 닫혔다 - 묶음을 풀고 모두 베이스캠프로, 접속 끊김은 뺀다. 파티가 남아 있으면 true
 	bool			OnInstanceClosed(uint64 partyId, uint64 instanceId);
 

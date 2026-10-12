@@ -441,6 +441,10 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->testGod = false;
 		player->testSeeAll = false;
 
+		// 배신 표식은 런 안에서만 (party-betrayal R6) - 새 런은 깨끗하게
+		player->betrayer = false;
+		player->objectInfo->set_betrayer(false);
+
 		// 장비 스탯 - 입장 체력은 새 최대치로 가득. S_ENTER_GAME · 스폰 스냅샷이 이 체력을 싣는다 (TR-combat-026)
 		player->ApplyEquipmentStats(true);
 		player->objectInfo->set_hp(player->hp);
@@ -8088,4 +8092,61 @@ void Room::WriteRunTelemetry(const PlayerRef& player, const char* reason, uint64
 	row.killerId = killerId;
 
 	GTelemetry.AppendRun(row);
+}
+
+/*-------- 던전 파티 · 배신 (party-betrayal-2026-10-12) --------*/
+
+// 던전 초대의 시야 · 생존 검사 (R2) - 결과는 PartyManager::FinishDungeonInvite 로
+void Room::CheckPartyInvite(uint64 fromId, uint64 toId)
+{
+	JOB_TAG();
+	auto fromIt = _objects.find(fromId);
+	auto toIt = _objects.find(toId);
+	PlayerRef from = fromIt != _objects.end() ? dynamic_pointer_cast<Player>(fromIt->second) : nullptr;
+	PlayerRef to = toIt != _objects.end() ? dynamic_pointer_cast<Player>(toIt->second) : nullptr;
+	const bool ok = _kind == RoomKind::World && from != nullptr && to != nullptr && from->IsAlive() && to->IsAlive() && CanSee(from, toId);
+	LOG_LINE << "[PARTY] dungeon invite check " << Tag() << " from=" << fromId << " to=" << toId << " visible=" << (ok ? 1 : 0) << '\n';
+	GParties.FinishDungeonInvite(fromId, toId, ok, Key());
+}
+
+// 파티원 전원 = 같은 팀 (R3) - 평타 · 스킬 · 범위 · CC · 피해에서 서로 빠지고(InstanceRules::Allied) 시야를 나눈다(RoomVision)
+void Room::SetPartyTeam(uint64 partyId, vector<uint64> memberIds)
+{
+	JOB_TAG();
+	if (_kind != RoomKind::World)
+		return;
+	uint32 n = 0;
+	for (uint64 id : memberIds)
+	{
+		auto it = _objects.find(id);
+		PlayerRef player = it != _objects.end() ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+		if (player == nullptr)
+			continue;
+		player->teamId = partyId;
+		n++;
+	}
+	LOG_LINE << "[PARTY] team " << Tag() << " party=" << partyId << " members=" << n << "/" << memberIds.size() << '\n';
+}
+
+// 배신 (R5 · R6): 나간 즉시 모두의 적, 런이 끝날 때까지 표식, 방 전체에 방송 - 시스템은 막지도 벌하지도 않는다 (P3), 모두가 안다 (P4)
+void Room::PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector<string> victimNames)
+{
+	JOB_TAG();
+	auto it = _objects.find(who);
+	PlayerRef player = it != _objects.end() ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	if (player == nullptr)
+		return;
+	player->teamId = 0;
+	player->betrayer = true;
+	player->objectInfo->set_betrayer(true);
+
+	Protocol::S_PARTY_BETRAYED pkt;
+	pkt.set_betrayer_id(who);
+	pkt.set_betrayer_name(betrayerName);
+	pkt.set_party_id(partyId);
+	for (const string& v : victimNames)
+		pkt.add_victim_names(v);
+	SEND_PACKET_DECLARATION(pkt);
+	Broadcast(sendBuffer, 0);
+	LOG_LINE << "[PARTY] betray " << Tag() << " char=" << who << " name=" << betrayerName << " party=" << partyId << " left=" << victimNames.size() << '\n';
 }

@@ -276,6 +276,12 @@ public:
 
 	// PVE 인스턴스 (ADR-0014) - InstanceManager::Create 가 부른다. 레벨 · 몬스터 · 상자 · 타워를 그 층 그대로 들고, 4 루프를 돌린다
 	void	InitInstance();
+
+	// 던전 파티 · 배신 (party-betrayal-2026-10-12) - PartyManager 가 DoAsync 로 부른다. Key = 이 방의 식별자 (World 방은 서버가 사는 동안 산다)
+	uint64	Key() const { return reinterpret_cast<uint64>(this); }
+	void	CheckPartyInvite(uint64 fromId, uint64 toId);
+	void	SetPartyTeam(uint64 partyId, vector<uint64> memberIds);
+	void	PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector<string> victimNames);
 	void	StartLoops();
 	bool	IsInstance() const { return _instanceId != 0; }
 	Protocol::RunMode RunModeOf() const;

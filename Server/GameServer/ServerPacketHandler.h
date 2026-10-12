@@ -60,6 +60,7 @@ enum : uint16
 	PKT_S_PARTY_STATE = 1047,
 	PKT_S_WEAPON_CHANGE = 1048,
 	PKT_C_ENHANCE = 1049,
+	PKT_S_PARTY_BETRAYED = 1050,
 };
 
 // Custom Handlers
@@ -148,6 +149,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_PARTY_INVITED& pkt) { return MakeSendBuffer(pkt, PKT_S_PARTY_INVITED); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_PARTY_STATE& pkt) { return MakeSendBuffer(pkt, PKT_S_PARTY_STATE); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_WEAPON_CHANGE& pkt) { return MakeSendBuffer(pkt, PKT_S_WEAPON_CHANGE); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_PARTY_BETRAYED& pkt) { return MakeSendBuffer(pkt, PKT_S_PARTY_BETRAYED); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

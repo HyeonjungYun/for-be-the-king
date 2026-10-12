@@ -16,6 +16,10 @@ vector<BotSessionRef> GBots;
 vector<uint32> GFreeBotIndices;
 std::atomic<uint64> GSentThisWindow{ 0 };
 atomic<int32> GEnhance = 0;
+atomic<int32> GPvpParty = 0;
+atomic<uint64> GBetrayAfterUs = 0;
+atomic<uint64> GKickAfterUs = 0;
+atomic<bool> GEnhanceDup = false;
 
 atomic<bool> GItemBehavior = false;
 atomic<bool> GNoClientMs = false;
@@ -449,6 +453,51 @@ static void TickBots(float deltaTime)
 			}
 		}
 
+		// -pvpparty N: 1 번 봇이 입장 3 s 뒤 같은 진입 지점의 bot_2..bot_N 을 이름으로 초대 (party-betrayal R2) · -betrayafter s: 2 번 봇이 s 초 뒤 나간다 (= 배신, R5)
+		if (bot->inGame.load() && bot->enteredAtUs != 0)
+		{
+			const int32 pvpParty = GPvpParty.load();
+			if (pvpParty > 1 && bot->botIndex == 1 && bot->pvpInviteSent == false && nowUs >= bot->enteredAtUs + 3'000'000)
+			{
+				bot->pvpInviteSent = true;
+				for (int32 k = 2; k <= pvpParty; k++)
+				{
+					Protocol::C_PARTY_INVITE invite;
+					invite.set_target_name("bot_" + to_string(k));
+					bot->Send(ClientPacketHandler::MakeSendBuffer(invite));
+				}
+				LOG_LINE << "[BOT PARTY] pvp invites sent by idx=1 to bot_2..bot_" << pvpParty << '\n';
+			}
+			const uint64 betrayAfter = GBetrayAfterUs.load();
+			if (betrayAfter > 0 && bot->botIndex == 2 && bot->betraySent == false && nowUs >= bot->enteredAtUs + betrayAfter)
+			{
+				bot->betraySent = true;
+				Protocol::C_PARTY_LEAVE leave;
+				leave.set_character_id(bot->characterId.load());
+				bot->Send(ClientPacketHandler::MakeSendBuffer(leave));
+				LOG_LINE << "[BOT PARTY] idx=2 leaves the party inside the dungeon (betrayal) char=" << bot->characterId.load() << '\n';
+			}
+			// -kickafter s: 1 번 봇(파티장)이 s 초 뒤 첫 파티원을 내보내려 한다 - 던전 파티는 PARTY_NO_KICK_IN_RUN 으로 거절돼야 하고 파티는 그대로여야 한다 (R4 · AC-PB-05)
+			const uint64 kickAfter = GKickAfterUs.load();
+			if (kickAfter > 0 && bot->botIndex == 1 && bot->kickSent == false && nowUs >= bot->enteredAtUs + kickAfter)
+			{
+				uint64 victim = 0;
+				{
+					lock_guard<mutex> guard(bot->partyLock);
+					for (const uint64 id : bot->partyMembers)
+						if (id != bot->characterId.load()) { victim = id; break; }
+				}
+				if (victim != 0)
+				{
+					bot->kickSent = true;
+					Protocol::C_PARTY_LEAVE kick;
+					kick.set_character_id(victim);
+					bot->Send(ClientPacketHandler::MakeSendBuffer(kick));
+					LOG_LINE << "[BOT PARTY] idx=1 kicks char=" << victim << " inside the dungeon (expect PARTY_NO_KICK_IN_RUN)\n";
+				}
+			}
+		}
+
 		// 탈출해 베이스캠프에 있는 봇 - 잠깐 뒤 같은 층으로 다시 들어간다 (협동은 파티장이 파티 상태를 보고 연다)
 		const uint64 reenterAt = bot->reenterAtUs.load();
 		if (reenterAt != 0 && nowUs >= reenterAt && bot->inGame.load() == false && bot->alive.load())
@@ -819,6 +868,12 @@ int main(int argc, char* argv[])
 			GTowerCount.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-enhance") == 0)
 			GEnhance.store(::atoi(argv[i + 1]));
+		else if (::strcmp(argv[i], "-pvpparty") == 0)
+			GPvpParty.store(::atoi(argv[i + 1]));
+		else if (::strcmp(argv[i], "-betrayafter") == 0)
+			GBetrayAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
+		else if (::strcmp(argv[i], "-kickafter") == 0)
+			GKickAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-floor") == 0)
 			GForceFloor.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-mode") == 0)
@@ -853,6 +908,8 @@ int main(int argc, char* argv[])
 			GIdleOne.store(true);
 		else if (::strcmp(argv[i], "-idleall") == 0)
 			GIdleAll.store(true);
+		else if (::strcmp(argv[i], "-enhancedup") == 0)
+			GEnhanceDup.store(true);
 		else if (::strcmp(argv[i], "-ai") == 0)
 			BotAiDriver::GAi.store(true);
 		else if (::strcmp(argv[i], "-aitrace") == 0)

@@ -323,3 +323,12 @@ message C_ENHANCE
 	string request_id = 1;
 	uint64 instance_id = 2;
 }
+
+// Someone left a dungeon (PvP room) party - broadcast to the whole room, the leaver is marked for the rest of the run (party-betrayal 2026-10-12)
+message S_PARTY_BETRAYED
+{
+	uint64 betrayer_id = 1;
+	string betrayer_name = 2;
+	uint64 party_id = 3;
+	repeated string victim_names = 4;	// the members left behind
+}

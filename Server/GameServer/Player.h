@@ -113,6 +113,7 @@ public:
 	float							visionRadiusCm = 0.f;	// 이번 갱신의 내 시야 반경 (실명 · 천리안 반영) - 이벤트 필터가 거리로 쓴다
 	string							visionSent;			// 마지막으로 보낸 S_VISION 의 요약 - 바뀌면 다시 보낸다
 	bool							testSeeAll = false;	// 테스트 모드 /t fow 0 - 이 사람만 거리 · 벽과 상관없이 본다 (은신은 그대로 숨는다). 입장마다 끈다
+	bool							betrayer = false;	// 이 런에서 던전 파티를 나갔다 - 스냅샷 ObjectInfo.betrayer (party-betrayal 2026-10-12)
 
 	void	ResetVision() { fowKnown.clear(); fowRevealed.clear(); visionExtras.clear(); visionSent.clear(); }
 

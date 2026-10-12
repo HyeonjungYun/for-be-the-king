@@ -155,6 +155,10 @@ public:
 	// -ai (BotAiDriver) - 감각 · 기억
 	BotAiState										ai;
 	bool											enhanceSent = false;	// -enhance: 한 세션에 한 번
+	uint64											enteredAtUs = 0;		// S_ENTER_GAME 시각 (-pvpparty · -betrayafter 타이머)
+	bool											pvpInviteSent = false;
+	bool											betraySent = false;
+	bool											kickSent = false;		// -kickafter: 파티장이 한 번만 시도한다
 
 	bool			IsPartyMember(uint64 characterId)
 	{
@@ -188,7 +192,11 @@ extern atomic<bool> GItemBehavior;
 
 // -noclientms: C_MOVE.client_ms 를 비운다(예전 이동 검증과 비교용) · -burst: 이동을 주기적으로 쥐었다 몰아 보낸다
 extern atomic<bool> GNoClientMs;
-extern atomic<int32> GEnhance;		// -enhance N: 베이스캠프에서 첫 소지/보관 아이템에 C_ENHANCE 를 N 번. -1 = 입장 뒤 1 번(거절 확인). 0 = 끔 (item-enhance 2026-10-12)
+extern atomic<int32> GEnhance;
+extern atomic<int32> GPvpParty;		// -pvpparty N: 1 번 봇이 입장 3 s 뒤 bot_2..bot_N 을 이름으로 초대 (던전 파티, party-betrayal 2026-10-12)
+extern atomic<bool> GEnhanceDup;		// -enhancedup: 첫 C_ENHANCE 를 같은 request_id 로 한 번 더 보낸다 - 두 번째는 ITEM_ALREADY 여야 한다 (TR-item-027 멱등)
+extern atomic<uint64> GKickAfterUs;	// -kickafter s: 1 번 봇(파티장)이 입장 s 초 뒤 첫 파티원을 내보내려 한다 - 던전 파티는 거절돼야 한다 (R4)
+extern atomic<uint64> GBetrayAfterUs;	// -betrayafter s: 2 번 봇이 입장 s 초 뒤 파티를 나간다 (= 배신)		// -enhance N: 베이스캠프에서 첫 소지/보관 아이템에 C_ENHANCE 를 N 번. -1 = 입장 뒤 1 번(거절 확인). 0 = 끔 (item-enhance 2026-10-12)
 extern atomic<bool> GBurst;
 
 // -monsterpull: 봇이 다른 봇 대신 가장 가까운 몬스터를 쫓아 때린다 (monster-ai.md AC-MA-70 · 71)
