@@ -2,6 +2,12 @@
 
 
 #include "Game/S1Player.h"
+#include "Game/Anim/S1AnimCatalog.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Animation/Skeleton.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -126,6 +132,8 @@ void AS1Player::Tick(float DeltaTime)
 
 	if (IsMyPlayer() == false)
 		TickRemotePlayer(DeltaTime);
+
+	TickAnimation(DeltaTime);
 }
 
 void AS1Player::TickRemotePlayer(float DeltaTime)
@@ -228,6 +236,7 @@ void AS1Player::OnDamaged(int32 Damage, int32 RemainingHp, bool bIsCrit, int32 N
 	}
 
 	CurrentHp = RemainingHp;
+	OnAnimDamaged(Damage, RemainingHp);
 
 	// Death ends every status; the server does not send expiries for them (Room::OnCreatureKilled)
 	if (RemainingHp <= 0)
@@ -837,6 +846,197 @@ void AS1Player::OnSkillCastStarted(bool bStationary)
 	bCastMarkerStationary = bStationary;
 }
 
+// ── Animation (2026-10-12) ──────────────────────────────────────────────────────────────────
+
+void AS1Player::SetWeaponType(uint32 ItemTypeId)
+{
+	WeaponTypeId = ItemTypeId;
+	AnimWeaponKey = bIsMonster ? FName(TEXT("monster")) : FS1AnimCatalog::WeaponKeyOf(ItemTypeId);
+
+	// A new run reuses my pawn (escape → re-entry) - the corpse pose must not carry over
+	if (bAnimDead && CurrentHp > 0)
+	{
+		bAnimDead = false;
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+			MeshComp->bPauseAnims = false;
+		ActiveLayer = ES1AnimLayer::None;
+		ActiveClipKey.Reset();
+	}
+	// Stance changes with the weapon - restart locomotion on the next tick
+	if (ActiveLayer == ES1AnimLayer::Locomotion)
+		ActiveClipKey.Reset();
+}
+
+namespace
+{
+	// Animation driver thresholds - design/quick-specs/animation-2026-10-12.md § 7 (named after the verifier asked, 2026-10-12)
+	constexpr float ANIM_MOVE_THRESHOLD_CMS = 20.f;		// faster than this = "run"
+	constexpr float ANIM_IDLE_DEBOUNCE_SEC = 0.25f;		// keep "run" this long after the last fast sample (remotes step at 30 Hz)
+	constexpr float ANIM_RUN_RATE_MIN = 0.6f;			// run clip rate = speed / 340, clamped
+	constexpr float ANIM_RUN_RATE_MAX = 1.4f;
+	constexpr float ANIM_LOCO_BLEND_SEC = 0.2f;			// idle <-> run blend
+	constexpr float ANIM_ATTACK_RATE_MIN = 0.5f;		// strike frame aligned to the server windup, clamped
+	constexpr float ANIM_ATTACK_RATE_MAX = 2.5f;
+	constexpr float ANIM_SKILL_RATE_MAX = 3.f;			// my own cast aligned to cast_ms, clamped
+	constexpr float ANIM_CHANNEL_DEFAULT_SEC = 1.5f;	// a looping motion with unknown cast time holds this long
+	constexpr float ANIM_HIT_RATE = 1.2f;				// flinch plays a little fast
+	constexpr float ANIM_HIT_REPEAT_GUARD_SEC = 0.2f;	// no new flinch unless the current one is almost over (multi-hit)
+}
+
+bool AS1Player::PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1AnimLayer Layer, float BlendIn, float BlendOut)
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	UAnimInstance* Anim = MeshComp != nullptr ? MeshComp->GetAnimInstance() : nullptr;
+	if (Anim == nullptr)
+		return false;
+
+	FS1AnimCatalog& Catalog = FS1AnimCatalog::Get();
+	const FS1AnimClip* Clip = Catalog.Find(Key, AnimWeaponKey);
+	UAnimSequenceBase* Sequence = Clip != nullptr ? Catalog.Load(*Clip, MeshComp->GetSkeletalMeshAsset() ? MeshComp->GetSkeletalMeshAsset()->GetSkeleton() : nullptr) : nullptr;
+	if (Sequence == nullptr)
+		return false;
+
+	const float PlayRate = (Rate > 0.f) ? Rate : Clip->Rate;
+	// Loops get a very large count - the driver restarts them anyway when the key changes
+	const int32 LoopCount = bLoop ? 100000 : 1;
+	ActiveMontage = Anim->PlaySlotAnimationAsDynamicMontage(Sequence, TEXT("DefaultSlot"), BlendIn, BlendOut, PlayRate, LoopCount);
+	if (ActiveMontage == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ANIM] play failed key=%s weapon=%s asset=%s - no DefaultSlot in the anim blueprint?"), *Key, *AnimWeaponKey.ToString(), *Sequence->GetName());
+		return false;
+	}
+	// One line per clip change (locomotion changes are rare, one-shots are a few per second at most) - the live-check evidence reads these
+	UE_LOG(LogTemp, Log, TEXT("[ANIM] play %s key=%s weapon=%s asset=%s rate=%.2f loop=%d len=%.2fs"), *GetName(), *Key, *AnimWeaponKey.ToString(), *Sequence->GetName(), PlayRate, bLoop ? 1 : 0, Sequence->GetPlayLength());
+
+	ActiveClipKey = Key;
+	ActiveLayer = Layer;
+	LocoRate = PlayRate;
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	OneShotEndsAt = bLoop ? 0.f : Now + Sequence->GetPlayLength() / FMath::Max(PlayRate, 0.01f);
+	return true;
+}
+
+void AS1Player::PlayLocomotionClip(bool bMoving, float SpeedCms)
+{
+	// The server moves everyone at 340 cm/s (less under a slow) - the run clip is stretched to the real speed
+	const FString Key = bMoving ? TEXT("run") : TEXT("idle");
+	const float Rate = bMoving ? FMath::Clamp(SpeedCms / BaseWalkSpeed, ANIM_RUN_RATE_MIN, ANIM_RUN_RATE_MAX) : 1.f;
+	if (ActiveLayer == ES1AnimLayer::Locomotion && ActiveClipKey == Key)
+	{
+		// Same clip - only the speed changes (a slow landed / ended)
+		UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+		if (Anim != nullptr && ActiveMontage != nullptr && Anim->Montage_IsPlaying(ActiveMontage))
+		{
+			if (FMath::Abs(Rate - LocoRate) > 0.05f)
+			{
+				Anim->Montage_SetPlayRate(ActiveMontage, Rate);
+				LocoRate = Rate;
+			}
+			return;
+		}
+	}
+	if (PlayAnimClip(Key, Rate, true, ES1AnimLayer::Locomotion, ANIM_LOCO_BLEND_SEC, ANIM_LOCO_BLEND_SEC) == false)
+	{
+		ActiveLayer = ES1AnimLayer::None;		// no clip for this weapon - the template ABP keeps walking
+		ActiveClipKey.Reset();
+	}
+}
+
+void AS1Player::TickAnimation(float DeltaTime)
+{
+	if (bAnimDead)
+	{
+		// Hold the last frame of the death clip until the corpse despawns
+		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		if (OneShotEndsAt > 0.f && Now >= OneShotEndsAt - 0.05f && GetMesh() != nullptr && GetMesh()->bPauseAnims == false)
+			GetMesh()->bPauseAnims = true;
+		return;
+	}
+	if (FS1AnimCatalog::Get().IsLoaded() == false)
+		return;
+
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (ActiveLayer == ES1AnimLayer::Attack || ActiveLayer == ES1AnimLayer::Skill || ActiveLayer == ES1AnimLayer::Hit)
+	{
+		if (Now < OneShotEndsAt)
+			return;
+	}
+
+	// Remote players and monsters move in 30 Hz server steps, so their velocity flickers around zero between packets -
+	// keep "run" for 0.25 s after the last fast sample instead of restarting idle/run every frame (live check 2026-10-12: a passing pack restarted 2,000+ times)
+	const float Speed = GetCharacterMovement() ? GetCharacterMovement()->Velocity.Size2D() : 0.f;
+	if (Speed > ANIM_MOVE_THRESHOLD_CMS)
+	{
+		LastMovingTime = Now;
+		LastMoveSpeed = Speed;
+	}
+	const bool bMoving = (Now - LastMovingTime) < ANIM_IDLE_DEBOUNCE_SEC;
+	PlayLocomotionClip(bMoving, bMoving ? LastMoveSpeed : 0.f);
+}
+
+void AS1Player::OnAttackStarted(uint32 WindupMs)
+{
+	if (bAnimDead)
+		return;
+	const FS1AnimClip* Clip = FS1AnimCatalog::Get().Find(TEXT("attack"), AnimWeaponKey);
+	float Rate = 1.f;
+	if (Clip != nullptr && WindupMs > 0)
+	{
+		// The strike (hit_pct of the clip) lands when the server says the hit resolves
+		USkeletalMeshComponent* MeshComp = GetMesh();
+		UAnimSequenceBase* Sequence = FS1AnimCatalog::Get().Load(*Clip, MeshComp && MeshComp->GetSkeletalMeshAsset() ? MeshComp->GetSkeletalMeshAsset()->GetSkeleton() : nullptr);
+		if (Sequence != nullptr)
+		{
+			const float HitAt = Sequence->GetPlayLength() * Clip->HitPct / 100.f;
+			Rate = FMath::Clamp(HitAt / (WindupMs / 1000.f), ANIM_ATTACK_RATE_MIN, ANIM_ATTACK_RATE_MAX);
+		}
+	}
+	// Alternate the two swings so a sustained attack does not stutter on one clip
+	static int32 Swing = 0;
+	const TCHAR* Key = ((Swing++ & 1) == 0) ? TEXT("attack") : TEXT("attack2");
+	PlayAnimClip(Key, Rate, false, ES1AnimLayer::Attack, 0.1f, 0.15f);
+}
+
+void AS1Player::OnSkillMotion(uint32 MotionId, bool bStationary, uint32 CastMs)
+{
+	if (bAnimDead)
+		return;
+	FS1AnimCatalog& Catalog = FS1AnimCatalog::Get();
+	const FS1AnimClip* Clip = Catalog.FindMotion(MotionId, AnimWeaponKey);
+	if (Clip == nullptr)
+		return;		// m_none / unknown - nothing to show
+	float Rate = 0.f;
+	if (CastMs > 0 && Clip->bLoop == false)
+	{
+		USkeletalMeshComponent* MeshComp = GetMesh();
+		UAnimSequenceBase* Sequence = Catalog.Load(*Clip, MeshComp && MeshComp->GetSkeletalMeshAsset() ? MeshComp->GetSkeletalMeshAsset()->GetSkeleton() : nullptr);
+		if (Sequence != nullptr)
+			Rate = FMath::Clamp(Sequence->GetPlayLength() * Clip->HitPct / 100.f / (CastMs / 1000.f), ANIM_ATTACK_RATE_MIN, ANIM_SKILL_RATE_MAX);
+	}
+	PlayAnimClip(Clip->Key, Rate, Clip->bLoop, ES1AnimLayer::Skill, 0.1f, 0.15f);
+	if (Clip->bLoop)
+		OneShotEndsAt = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) + (CastMs > 0 ? CastMs / 1000.f : ANIM_CHANNEL_DEFAULT_SEC);	// a channel holds for the cast, then locomotion resumes
+}
+
+void AS1Player::OnAnimDamaged(int32 Damage, int32 RemainingHp)
+{
+	if (bAnimDead)
+		return;
+	if (RemainingHp <= 0)
+	{
+		bAnimDead = true;
+		if (PlayAnimClip(TEXT("death"), 0.f, false, ES1AnimLayer::Dead, 0.1f, 0.f) == false)
+			OneShotEndsAt = 0.f;
+		return;
+	}
+	if (Damage <= 0 || ActiveLayer == ES1AnimLayer::Attack || ActiveLayer == ES1AnimLayer::Skill)
+		return;		// a swing is not interrupted by a flinch; a damage-0 resync is not a hit
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (ActiveLayer == ES1AnimLayer::Hit && Now < OneShotEndsAt - ANIM_HIT_REPEAT_GUARD_SEC)
+		return;		// one flinch at a time (multi-hit skills)
+	PlayAnimClip(TEXT("hit"), ANIM_HIT_RATE, false, ES1AnimLayer::Hit, 0.05f, 0.15f);
+}
+
 void AS1Player::OnSkillCastEnded()
 {
 	bCastMarkerVisible = false;
@@ -1294,10 +1494,14 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 	}
 
 	if (Info.creature_type() != Protocol::CREATE_TYPE_MONSTER || bIsMonster)
+	{
+		SetWeaponType(Info.weapon_type_id());		// stance from the spawn snapshot (anim, 2026-10-12)
 		return;
+	}
 
 	bIsMonster = true;
 	MonsterTypeId = Info.monster_type_id();
+	SetWeaponType(0);								// "monster" clips
 
 	const FS1MonsterTypeDef* Def = FS1MonsterCatalog::Get().Find(MonsterTypeId);
 

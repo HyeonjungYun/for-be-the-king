@@ -231,6 +231,29 @@ public:
 	/** The cast ended — completed, cancelled, or interrupted. Observers cannot tell which. */
 	void OnSkillCastEnded();
 
+	// ── Animation (2026-10-12 · design/quick-specs/animation-2026-10-12.md) ──
+	// One mannequin + ABP_Unarmed for everyone. Weapon stance, swings, casts, hits and death are clips from the Fab packs played
+	// through the ABP's DefaultSlot as dynamic montages (FS1AnimCatalog). The server tells the weapon (ObjectInfo.weapon_type_id,
+	// S_WEAPON_CHANGE) and the motion of a cast (SkillCastInfo.motion_id) — never the skill.
+
+	/** The weapon this character holds (item_types.csv id, 0 = none). From the spawn snapshot and S_WEAPON_CHANGE. Monsters ignore it. */
+	void SetWeaponType(uint32 ItemTypeId);
+	uint32 GetWeaponTypeId() const { return WeaponTypeId; }
+	FName GetAnimWeaponKey() const { return AnimWeaponKey; }
+
+	/** S_ATTACK for this character — the weapon's swing, stretched so its strike meets the server windup. */
+	void OnAttackStarted(uint32 WindupMs);
+
+	/**
+	 * S_SKILL_CAST — the body does MotionId (motions.csv). CastMs is what the owner knows about its own skill (0 for observers
+	 * — B2a sends no cast time, so they see the clip at its natural speed).
+	 */
+	void OnSkillMotion(uint32 MotionId, bool bStationary, uint32 CastMs);
+
+	/** The clip key playing now ("idle", "run", "attack", "m_dash", ...) — tests and the debug readout. Empty = template ABP pose. */
+	const FString& GetAnimClipKey() const { return ActiveClipKey; }
+	bool IsAnimDead() const { return bAnimDead; }
+
 	/**
 	 * Plays the visual for a skill that landed.
 	 *
@@ -359,6 +382,26 @@ protected:
 	/** Set by SetCreatureInfo from ObjectInfo.creature_type. */
 	bool bIsMonster = false;
 	uint32 MonsterTypeId = 0;
+
+	// ── Animation driver state ──
+	enum class ES1AnimLayer : uint8 { None, Locomotion, Attack, Skill, Hit, Dead };
+	void TickAnimation(float DeltaTime);
+	/** Plays a catalog clip in DefaultSlot. Rate 0 = the clip's own. Returns false when there is no clip (template pose stays). */
+	bool PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1AnimLayer Layer, float BlendIn = 0.15f, float BlendOut = 0.15f);
+	void PlayLocomotionClip(bool bMoving, float SpeedCms);
+	void OnAnimDamaged(int32 Damage, int32 RemainingHp);
+
+	uint32 WeaponTypeId = 0;
+	FName AnimWeaponKey = TEXT("any");
+	FString ActiveClipKey;
+	ES1AnimLayer ActiveLayer = ES1AnimLayer::None;
+	float OneShotEndsAt = 0.f;				// world seconds when the current one-shot clip (attack/skill/hit/death) finishes
+	float LocoRate = 1.f;
+	float LastMovingTime = -10.f;			// world seconds when the speed was last above the run threshold (remotes step at 30 Hz - debounce before idle)
+	float LastMoveSpeed = 0.f;
+	bool bAnimDead = false;
+	UPROPERTY(Transient)
+	TObjectPtr<class UAnimMontage> ActiveMontage = nullptr;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> MonsterDisc = nullptr;

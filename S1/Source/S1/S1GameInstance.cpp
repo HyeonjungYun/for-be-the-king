@@ -476,11 +476,45 @@ void US1GameInstance::HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt)
 {
 	for (const Protocol::SkillCastInfo& Info : CastPkt.casts())
 	{
+		AS1Player* Caster = nullptr;
 		if (TWeakObjectPtr<AS1Player>* Found = Players.Find(Info.caster_id()))
+			Caster = Found->Get();
+		else if (MyPlayer.IsValid() && MyPlayer->GetPlayerInfo() != nullptr && MyPlayer->GetPlayerInfo()->object_id() == Info.caster_id())
+			Caster = MyPlayer.Get();
+		if (Caster != nullptr)
 		{
-			if (AS1Player* Caster = Found->Get())
-				Caster->OnSkillCastStarted(Info.is_stationary());
+			Caster->OnSkillCastStarted(Info.is_stationary());
+			// The motion (never the skill). Only my own cast knows its cast time - observers see the clip at natural speed (B2a)
+			uint32 CastMs = 0;
+			if (AS1MyPlayer* Me = Cast<AS1MyPlayer>(Caster))
+				CastMs = Me->CastMsOfLastSkill();
+			Caster->OnSkillMotion(Info.motion_id(), Info.is_stationary(), CastMs);
 		}
+	}
+}
+
+void US1GameInstance::HandleWeaponChange(const Protocol::S_WEAPON_CHANGE& WeaponPkt)
+{
+	if (TWeakObjectPtr<AS1Player>* Found = Players.Find(WeaponPkt.object_id()))
+	{
+		if (AS1Player* Player = Found->Get())
+			Player->SetWeaponType(WeaponPkt.weapon_type_id());
+	}
+	else if (MyPlayer.IsValid() && MyPlayer->GetPlayerInfo() != nullptr && MyPlayer->GetPlayerInfo()->object_id() == WeaponPkt.object_id())
+		MyPlayer->SetWeaponType(WeaponPkt.weapon_type_id());
+}
+
+void US1GameInstance::HandleAttackAnim(const Protocol::S_ATTACK& AttackPkt)
+{
+	for (const Protocol::AttackInfo& Info : AttackPkt.attacks())
+	{
+		AS1Player* Attacker = nullptr;
+		if (TWeakObjectPtr<AS1Player>* Found = Players.Find(Info.attacker_id()))
+			Attacker = Found->Get();
+		else if (MyPlayer.IsValid() && MyPlayer->GetPlayerInfo() != nullptr && MyPlayer->GetPlayerInfo()->object_id() == Info.attacker_id())
+			Attacker = MyPlayer.Get();
+		if (Attacker != nullptr)
+			Attacker->OnAttackStarted(static_cast<uint32>(Info.windup_ms()));
 	}
 }
 

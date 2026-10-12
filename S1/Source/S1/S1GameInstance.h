@@ -65,6 +65,10 @@ public:
 	void HandleDamage(const Protocol::S_DAMAGE& DamagePkt);
 	void HandleEquipSync(const Protocol::S_EQUIP_SYNC& EquipPkt);
 	void HandleSkillCast(const Protocol::S_SKILL_CAST& CastPkt);
+	/** S_WEAPON_CHANGE — someone swapped weapons inside the room; their stance / swing clips follow (anim, 2026-10-12). */
+	void HandleWeaponChange(const Protocol::S_WEAPON_CHANGE& WeaponPkt);
+	/** S_ATTACK — every attacker plays its swing (the owner also re-times its attack beat elsewhere). */
+	void HandleAttackAnim(const Protocol::S_ATTACK& AttackPkt);
 	void HandleSkillCancel(const Protocol::S_SKILL_CANCEL& CancelPkt);
 	void HandleSkillHit(const Protocol::S_SKILL_HIT& HitPkt);
 	void HandleBagContents(const Protocol::S_BAG_CONTENTS BagPkt);

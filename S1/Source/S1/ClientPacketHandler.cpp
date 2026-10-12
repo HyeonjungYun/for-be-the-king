@@ -183,6 +183,9 @@ bool Handle_S_ATTACK(PacketSessionRef& session, Protocol::S_ATTACK& pkt)
 		if (Me != nullptr && Me->GetPlayerInfo() != nullptr && Info.attacker_id() == Me->GetPlayerInfo()->object_id())
 			Me->OnMyAttackAccepted(static_cast<uint32>(Info.windup_ms()), Info.interval_ms());
 	}
+	// 휘두르기 애니메이션 - 공격하는 모두 (anim, 2026-10-12)
+	if (GameInstance != nullptr)
+		GameInstance->HandleAttackAnim(pkt);
 	return true;
 }
 
@@ -212,6 +215,14 @@ bool Handle_S_SKILL_REVEAL(PacketSessionRef& session, Protocol::S_SKILL_REVEAL& 
 	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
 		GameInstance->HandleSkillReveal(pkt);
 
+	return true;
+}
+
+bool Handle_S_WEAPON_CHANGE(PacketSessionRef& session, Protocol::S_WEAPON_CHANGE& pkt)
+{
+	// 무기 교체 - 보는 사람의 자세 · 휘두르기 클립 (anim, 2026-10-12 에이전트 - YOLO 세션 위임)
+	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
+		GameInstance->HandleWeaponChange(pkt);
 	return true;
 }
 

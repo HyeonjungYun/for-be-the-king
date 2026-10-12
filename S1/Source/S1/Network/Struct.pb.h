@@ -464,6 +464,7 @@ class ObjectInfo final :
     kMonsterTypeIdFieldNumber = 5,
     kHpFieldNumber = 6,
     kMaxHpFieldNumber = 7,
+    kWeaponTypeIdFieldNumber = 8,
   };
   // .Protocol.PosInfo pos_info = 3;
   bool has_pos_info() const;
@@ -537,6 +538,15 @@ class ObjectInfo final :
   void _internal_set_max_hp(int32_t value);
   public:
 
+  // uint32 weapon_type_id = 8;
+  void clear_weapon_type_id();
+  uint32_t weapon_type_id() const;
+  void set_weapon_type_id(uint32_t value);
+  private:
+  uint32_t _internal_weapon_type_id() const;
+  void _internal_set_weapon_type_id(uint32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ObjectInfo)
  private:
   class _Internal;
@@ -552,6 +562,7 @@ class ObjectInfo final :
     uint32_t monster_type_id_;
     int32_t hp_;
     int32_t max_hp_;
+    uint32_t weapon_type_id_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -2172,6 +2183,7 @@ class SkillCastInfo final :
   enum : int {
     kCasterIdFieldNumber = 1,
     kIsStationaryFieldNumber = 2,
+    kMotionIdFieldNumber = 3,
   };
   // uint64 caster_id = 1;
   void clear_caster_id();
@@ -2191,6 +2203,15 @@ class SkillCastInfo final :
   void _internal_set_is_stationary(bool value);
   public:
 
+  // uint32 motion_id = 3;
+  void clear_motion_id();
+  uint32_t motion_id() const;
+  void set_motion_id(uint32_t value);
+  private:
+  uint32_t _internal_motion_id() const;
+  void _internal_set_motion_id(uint32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.SkillCastInfo)
  private:
   class _Internal;
@@ -2201,6 +2222,7 @@ class SkillCastInfo final :
   struct Impl_ {
     uint64_t caster_id_;
     bool is_stationary_;
+    uint32_t motion_id_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -4575,6 +4597,26 @@ inline void ObjectInfo::set_max_hp(int32_t value) {
   // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.max_hp)
 }
 
+// uint32 weapon_type_id = 8;
+inline void ObjectInfo::clear_weapon_type_id() {
+  _impl_.weapon_type_id_ = 0u;
+}
+inline uint32_t ObjectInfo::_internal_weapon_type_id() const {
+  return _impl_.weapon_type_id_;
+}
+inline uint32_t ObjectInfo::weapon_type_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.weapon_type_id)
+  return _internal_weapon_type_id();
+}
+inline void ObjectInfo::_internal_set_weapon_type_id(uint32_t value) {
+  
+  _impl_.weapon_type_id_ = value;
+}
+inline void ObjectInfo::set_weapon_type_id(uint32_t value) {
+  _internal_set_weapon_type_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.weapon_type_id)
+}
+
 // -------------------------------------------------------------------
 
 // AttackInfo
@@ -5369,6 +5411,26 @@ inline void SkillCastInfo::_internal_set_is_stationary(bool value) {
 inline void SkillCastInfo::set_is_stationary(bool value) {
   _internal_set_is_stationary(value);
   // @@protoc_insertion_point(field_set:Protocol.SkillCastInfo.is_stationary)
+}
+
+// uint32 motion_id = 3;
+inline void SkillCastInfo::clear_motion_id() {
+  _impl_.motion_id_ = 0u;
+}
+inline uint32_t SkillCastInfo::_internal_motion_id() const {
+  return _impl_.motion_id_;
+}
+inline uint32_t SkillCastInfo::motion_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.SkillCastInfo.motion_id)
+  return _internal_motion_id();
+}
+inline void SkillCastInfo::_internal_set_motion_id(uint32_t value) {
+  
+  _impl_.motion_id_ = value;
+}
+inline void SkillCastInfo::set_motion_id(uint32_t value) {
+  _internal_set_motion_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.SkillCastInfo.motion_id)
 }
 
 // -------------------------------------------------------------------

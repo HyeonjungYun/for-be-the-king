@@ -295,6 +295,10 @@ public:
 	 */
 	void StartCooldownForSkill(uint32 SkillId, uint32 CooldownMs);
 
+	/** cast_ms of the skill in the slot of my last C_SKILL (skills.csv via the equip sync), 0 if unknown — the cast clip is stretched to it (anim, 2026-10-12). */
+	uint32 CastMsOfLastSkill() const;
+	uint32 LastSentSkillSlot = 0;
+
 	/**
 	 * S_ATTACK for one of my own swings — the server's windup and attack interval (attack speed applied). The sustained
 	 * attack sends on that beat instead of a fixed 1 s, which left fast weapons idling and slow ones refused (2026-10-11

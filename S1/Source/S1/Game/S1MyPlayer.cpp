@@ -755,6 +755,7 @@ void AS1MyPlayer::FireRecast()
 
 	Protocol::C_SKILL SkillPkt;
 	SkillPkt.set_slot(static_cast<Protocol::EquipSlot>(SlotValue));
+	LastSentSkillSlot = static_cast<uint32>(SlotValue);
 	SkillPkt.set_target_id(TargetId);
 	SkillPkt.set_aim_x(static_cast<float>(Aim.X));
 	SkillPkt.set_aim_y(static_cast<float>(Aim.Y));
@@ -874,6 +875,7 @@ void AS1MyPlayer::FireAimedSkill()
 
 	Protocol::C_SKILL SkillPkt;
 	SkillPkt.set_slot(static_cast<Protocol::EquipSlot>(AimingSlot));
+	LastSentSkillSlot = static_cast<uint32>(AimingSlot);
 
 	// Target and aim always travel together. Which one matters is decided server-side from
 	// the skill's shape, so the client never needs to know what shape it just fired — and
@@ -1661,4 +1663,19 @@ void AS1MyPlayer::DebugCameraFootprint()
 			UE_LOG(LogTemp, Warning, TEXT("[CAMERA] a %4.1f m object never reaches the top edge"), HeightM);
 		}
 	}
+}
+
+uint32 AS1MyPlayer::CastMsOfLastSkill() const
+{
+	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
+	if (GameInstance == nullptr || LastSentSkillSlot == 0)
+		return 0;
+	for (const Protocol::SkillInfo& Info : GameInstance->SkillSlots)
+	{
+		if (static_cast<uint32>(Info.slot()) != LastSentSkillSlot)
+			continue;
+		if (const FS1SkillDef* Def = FS1SkillTable::Find(Info.skill_id()))
+			return Def->CastMs;
+	}
+	return 0;
 }
