@@ -51,7 +51,42 @@ namespace
 		"3,1.7\n"
 		"4,2.2\n";
 
-	bool Load(const string& stats = STATS, const string& grades = GRADES, string* outError = nullptr)
+	bool Load(const string& stats = STATS, const string& grades = GRADES, string* outError = nullptr);
+}
+
+// 강화 레벨 항 (item-enhance-2026-10-12 AC-EN-01 · item-equipment-system.md § D2): 레벨 16 일반 = 레벨 0 전설, 레벨 0 은 예전 그대로
+TEST(EquipStats, 레벨_16_일반은_레벨_0_전설과_같고_레벨_0_은_그대로다_AC_EN_01)
+{
+	ASSERT_TRUE(Load());
+	const vector<WornItem> commonMax = { { 101, Protocol::ITEM_GRADE_COMMON, ItemLevel::LEVEL_MAX }, { 401, Protocol::ITEM_GRADE_COMMON, ItemLevel::LEVEL_MAX } };
+	const vector<WornItem> legendary0 = { { 101, Protocol::ITEM_GRADE_LEGENDARY, 0 }, { 401, Protocol::ITEM_GRADE_LEGENDARY, 0 } };
+	const vector<WornItem> common0 = { { 101, Protocol::ITEM_GRADE_COMMON, 0 }, { 401, Protocol::ITEM_GRADE_COMMON, 0 } };
+	const vector<WornItem> commonNoLevel = { { 101, Protocol::ITEM_GRADE_COMMON }, { 401, Protocol::ITEM_GRADE_COMMON } };
+
+	const EquipStatTotals a = EquipStats::Compute(commonMax, 500);
+	const EquipStatTotals b = EquipStats::Compute(legendary0, 500);
+	EXPECT_NEAR(a.attackPower, b.attackPower, 1);
+	EXPECT_NEAR(a.maxHp, b.maxHp, 1);
+	EXPECT_NEAR(a.armor, b.armor, 1);
+	EXPECT_NEAR(a.magicResist, b.magicResist, 1);
+
+	const EquipStatTotals c = EquipStats::Compute(common0, 500);
+	const EquipStatTotals d = EquipStats::Compute(commonNoLevel, 500);
+	EXPECT_EQ(c.attackPower, d.attackPower);
+	EXPECT_EQ(c.maxHp, d.maxHp);
+	EXPECT_LT(c.attackPower, a.attackPower);
+
+	// 레벨은 16 에서 멈춘다 - 그 위는 16 과 같다
+	const vector<WornItem> over = { { 101, Protocol::ITEM_GRADE_COMMON, 99 } };
+	const vector<WornItem> at = { { 101, Protocol::ITEM_GRADE_COMMON, 16 } };
+	EXPECT_EQ(EquipStats::Compute(over, 500).attackPower, EquipStats::Compute(at, 500).attackPower);
+	EXPECT_TRUE(ItemLevel::CanEnhance(15));
+	EXPECT_FALSE(ItemLevel::CanEnhance(16));
+}
+
+namespace
+{
+	bool Load(const string& stats, const string& grades, string* outError)
 	{
 		SkillTable::Init();
 

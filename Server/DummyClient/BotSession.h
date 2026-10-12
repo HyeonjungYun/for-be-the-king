@@ -154,6 +154,7 @@ public:
 
 	// -ai (BotAiDriver) - 감각 · 기억
 	BotAiState										ai;
+	bool											enhanceSent = false;	// -enhance: 한 세션에 한 번
 
 	bool			IsPartyMember(uint64 characterId)
 	{
@@ -187,6 +188,7 @@ extern atomic<bool> GItemBehavior;
 
 // -noclientms: C_MOVE.client_ms 를 비운다(예전 이동 검증과 비교용) · -burst: 이동을 주기적으로 쥐었다 몰아 보낸다
 extern atomic<bool> GNoClientMs;
+extern atomic<int32> GEnhance;		// -enhance N: 베이스캠프에서 첫 소지/보관 아이템에 C_ENHANCE 를 N 번. -1 = 입장 뒤 1 번(거절 확인). 0 = 끔 (item-enhance 2026-10-12)
 extern atomic<bool> GBurst;
 
 // -monsterpull: 봇이 다른 봇 대신 가장 가까운 몬스터를 쫓아 때린다 (monster-ai.md AC-MA-70 · 71)

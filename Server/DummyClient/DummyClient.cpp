@@ -15,6 +15,7 @@ mutex GBotsLock;
 vector<BotSessionRef> GBots;
 vector<uint32> GFreeBotIndices;
 std::atomic<uint64> GSentThisWindow{ 0 };
+atomic<int32> GEnhance = 0;
 
 atomic<bool> GItemBehavior = false;
 atomic<bool> GNoClientMs = false;
@@ -816,6 +817,8 @@ int main(int argc, char* argv[])
 			GChatAfterMs.store(static_cast<uint32>(::atoi(argv[i + 1])));
 		else if (::strcmp(argv[i], "-towercount") == 0)
 			GTowerCount.store(::atoi(argv[i + 1]));
+		else if (::strcmp(argv[i], "-enhance") == 0)
+			GEnhance.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-floor") == 0)
 			GForceFloor.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-mode") == 0)

@@ -51,7 +51,7 @@ bool Player::ApplyEquipmentStats(bool refill)
 	for (const ItemEntry& e : equipped)
 	{
 		if (e.instanceId != 0)
-			worn.push_back({ e.itemTypeId, e.grade });
+			worn.push_back({ e.itemTypeId, e.grade, e.level });
 	}
 
 	equipTotals = EquipStats::Compute(worn, nakedMaxHp);

@@ -316,3 +316,10 @@ message S_WEAPON_CHANGE
 	uint64 object_id = 1;
 	uint32 weapon_type_id = 2;		// item_types.csv id, 0 = unarmed
 }
+
+// Base camp enhance: level + 1 for one owned item, no currency yet (item-enhance 2026-10-12). Answered with S_ITEM_RESULT{changed}
+message C_ENHANCE
+{
+	string request_id = 1;
+	uint64 instance_id = 2;
+}

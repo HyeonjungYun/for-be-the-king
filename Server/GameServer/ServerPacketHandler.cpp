@@ -118,7 +118,7 @@ namespace
 		return true;
 	}
 
-	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy, Equip, Unequip };
+	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy, Equip, Unequip, Enhance };
 
 	const int32 VAULT_SLOT_COUNT = 25;
 
@@ -130,6 +130,7 @@ namespace
 		case BaseCampOp::ToCarried: return "unvault";
 		case BaseCampOp::Equip: return "equip";
 		case BaseCampOp::Unequip: return "unequip";
+		case BaseCampOp::Enhance: return "enhance";
 		default: return "destroy";
 		}
 	}
@@ -326,6 +327,16 @@ namespace
 			break;
 		}
 
+		case BaseCampOp::Enhance:
+		{
+			// 강화 (item-enhance-2026-10-12 R4): 베이스캠프의 내 것이면 상태 불문, 16 이면 거절. 재화 없음 - 사용자 결정. 상태 · 슬롯은 그대로
+			target = static_cast<Protocol::ItemState>(state);
+			targetSlot = slot;
+			if (ItemLevel::CanEnhance(e.level) == false)
+				result = Protocol::ITEM_INVALID_STATE;
+			break;
+		}
+
 		case BaseCampOp::Unequip:
 		{
 			target = Protocol::ITEM_STATE_CARRIED;
@@ -362,6 +373,11 @@ namespace
 		{
 			if (op == BaseCampOp::Destroy)
 				::snprintf(query, sizeof(query), "DELETE FROM item_instances WHERE instance_id = %llu", instanceId);
+			else if (op == BaseCampOp::Enhance)
+			{
+				e.level += 1;
+				::snprintf(query, sizeof(query), "UPDATE item_instances SET level = %u WHERE instance_id = %llu", e.level, instanceId);
+			}
 			else
 				::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = %d WHERE instance_id = %llu",
 					static_cast<int32>(target), targetSlot, instanceId);
@@ -1377,6 +1393,25 @@ bool Handle_C_DROP(PacketSessionRef& session, Protocol::C_DROP& pkt)
 	}
 	room->DoAsync(&Room::HandleDrop, gameSession, pkt.request_id(), pkt.instance_id());
 
+	return true;
+}
+
+// 베이스캠프 강화 - 버튼 한 번 = 레벨 +1 (item-enhance-2026-10-12 R4 · R5). 던전에서는 거절, 응답은 S_ITEM_RESULT{changed=[레벨 오른 인스턴스]}
+bool Handle_C_ENHANCE(PacketSessionRef& session, Protocol::C_ENHANCE& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	if (gameSession->accountId.load() == 0 || pkt.instance_id() == 0)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_BAD_REQUEST);
+		return true;
+	}
+	if (gameSession->place.load() != SessionPlace::BaseCamp)
+	{
+		LOG_LINE << "[BASECAMP] enhance rejected - not in base camp. item=" << pkt.instance_id() << '\n';
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_BAD_REQUEST);
+		return true;
+	}
+	PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(), BaseCampOp::Enhance);
 	return true;
 }
 

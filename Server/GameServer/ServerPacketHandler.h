@@ -59,6 +59,7 @@ enum : uint16
 	PKT_C_PARTY_LEAVE = 1046,
 	PKT_S_PARTY_STATE = 1047,
 	PKT_S_WEAPON_CHANGE = 1048,
+	PKT_C_ENHANCE = 1049,
 };
 
 // Custom Handlers
@@ -81,6 +82,7 @@ bool Handle_C_BAG_OPEN(PacketSessionRef& session, Protocol::C_BAG_OPEN& pkt);
 bool Handle_C_PARTY_INVITE(PacketSessionRef& session, Protocol::C_PARTY_INVITE& pkt);
 bool Handle_C_PARTY_RESPONSE(PacketSessionRef& session, Protocol::C_PARTY_RESPONSE& pkt);
 bool Handle_C_PARTY_LEAVE(PacketSessionRef& session, Protocol::C_PARTY_LEAVE& pkt);
+bool Handle_C_ENHANCE(PacketSessionRef& session, Protocol::C_ENHANCE& pkt);
 
 class ServerPacketHandler
 {
@@ -107,6 +109,7 @@ public:
 		GPacketHandler[PKT_C_PARTY_INVITE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_PARTY_INVITE>(Handle_C_PARTY_INVITE, session, buffer, len); };
 		GPacketHandler[PKT_C_PARTY_RESPONSE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_PARTY_RESPONSE>(Handle_C_PARTY_RESPONSE, session, buffer, len); };
 		GPacketHandler[PKT_C_PARTY_LEAVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_PARTY_LEAVE>(Handle_C_PARTY_LEAVE, session, buffer, len); };
+		GPacketHandler[PKT_C_ENHANCE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_ENHANCE>(Handle_C_ENHANCE, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

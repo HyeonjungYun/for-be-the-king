@@ -13,7 +13,19 @@ struct WornItem
 {
 	uint32				typeId = 0;
 	Protocol::ItemGrade	grade = Protocol::ITEM_GRADE_NONE;
+	uint32				level = 0;		// 강화 레벨 0..ItemLevel::LEVEL_MAX (item-enhance-2026-10-12 R1)
 };
+
+// 아이템 강화 레벨 (design/quick-specs/item-enhance-2026-10-12.md · item-equipment-system.md § D2, 2026-10-12)
+namespace ItemLevel
+{
+	constexpr uint32	LEVEL_MAX = 16;
+	// per_level_rate = base_stat × (GM_전설 2.2 − GM_일반 1.0) / 16 - "만렙 일반템 = 갓 나온 전설템"
+	constexpr float		LEVEL_RATE_PER_BASE = 1.2f / 16.f;
+
+	inline bool			CanEnhance(uint32 level) { return level < LEVEL_MAX; }
+	inline float		Bonus(float baseStat, uint32 level) { return baseStat * LEVEL_RATE_PER_BASE * static_cast<float>(level < LEVEL_MAX ? level : LEVEL_MAX); }		// (std::min) 는 Windows 매크로와 충돌
+}
 
 struct EquipStatTotals
 {

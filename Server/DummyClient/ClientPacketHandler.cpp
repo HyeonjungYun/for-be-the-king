@@ -52,6 +52,13 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 		enterPkt.set_floor_id(0);
 	}
 
+	// -enhance N (N > 0): 베이스캠프에 남아 강화만 보낸다 (item-enhance AC-EN-02) - 입장하지 않는다
+	if (GEnhance.load() > 0)
+	{
+		LOG_LINE << "[BOT ENHANCE] char=" << bot->characterId.load() << " staying in base camp for the enhance test\n";
+		return true;
+	}
+
 	bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
 
 	return true;
@@ -705,6 +712,15 @@ namespace
 
 bool Handle_S_ITEM_RESULT(PacketSessionRef& session, Protocol::S_ITEM_RESULT& pkt)
 {
+	// -enhance: 결과를 그대로 남긴다 (item-enhance AC-EN-02 · 03)
+	if (GEnhance.load() != 0 && pkt.request_id().rfind("enh", 0) == 0)
+	{
+		auto bot = static_pointer_cast<BotSession>(session);
+		LOG_LINE << "[BOT ENHANCE] char=" << bot->characterId.load() << " req=" << pkt.request_id() << " result=" << Protocol::ItemResult_Name(pkt.result());
+		for (const Protocol::ItemInstance& item : pkt.changed())
+			LOG_LINE << " item=" << item.instance_id() << " level=" << item.level() << " state=" << item.state();
+		LOG_LINE << '\n';
+	}
 	if (GItemBehavior.load() == false && GSwapArmor.load() == false)
 		return true;
 
@@ -737,6 +753,27 @@ bool Handle_S_INVENTORY_SYNC(PacketSessionRef& session, Protocol::S_INVENTORY_SY
 	// 베이스캠프에서 받은 동기화 - 사망 저장이 끝나기 전 상태인지(소지 · 착용이 남았는지) 서버 로그와 맞춰 본다
 	if (GHoldOnReject.load() && bot->inGame.load() == false)
 		LOG_LINE << "[BOT BASECAMP SYNC] char=" << bot->characterId.load() << " items=" << pkt.items_size() << '\n';
+
+	// -enhance N: 베이스캠프 동기화(입장 전)에서 첫 소지/보관 아이템에 N 번. 입장 뒤 동기화면 -1 일 때만 1 번(거절 확인). 한 세션에 한 번
+	if (GEnhance.load() != 0 && bot->enhanceSent == false && pkt.items_size() > 0)
+	{
+		const bool inDungeon = bot->inGame.load();
+		const int32 n = GEnhance.load();
+		if ((n > 0 && inDungeon == false) || (n < 0 && inDungeon))
+		{
+			bot->enhanceSent = true;
+			const Protocol::ItemInstance& first = pkt.items(0);
+			for (int32 k = 0; k < (n > 0 ? n : 1); k++)
+			{
+				Protocol::C_ENHANCE req;
+				req.set_request_id("enh" + to_string(k) + "-" + bot->NextRequestId());
+				req.set_instance_id(first.instance_id());
+				bot->Send(ClientPacketHandler::MakeSendBuffer(req));
+			}
+			LOG_LINE << "[BOT ENHANCE] char=" << bot->characterId.load() << " sent=" << (n > 0 ? n : 1) << " item=" << first.instance_id() << " level_before=" << first.level()
+				<< (inDungeon ? " (in dungeon - expect reject)" : " (base camp)") << '\n';
+		}
+	}
 
 	if (GItemBehavior.load() == false && GSwapArmor.load() == false && BotAiDriver::GAi.load() == false)
 		return true;

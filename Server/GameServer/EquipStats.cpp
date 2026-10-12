@@ -27,7 +27,7 @@ EquipStatTotals EquipStats::Compute(const vector<WornItem>& worn, int32 nakedMax
 
 		for (const ItemStatLine& line : def->stats)
 		{
-			float value = line.flatFloor + line.baseStat * gradeMultiplier;
+			float value = line.flatFloor + line.baseStat * gradeMultiplier + ItemLevel::Bonus(line.baseStat, item.level);		// D2 레벨 항 (2026-10-12)
 
 			if (line.stat == ItemStat::PercentAsBonus)
 				value = min(value, AS_BONUS_PER_ITEM_MAX);
