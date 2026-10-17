@@ -684,14 +684,43 @@ int main()
 
 	LOG_LINE << "[DB] connected — " << DB_THREAD_COUNT << " connections" << '\n';
 
+	// 바인드 주소 · 포트 (2026-10-18 플레이테스트 접속 환경) - 기본은 이 PC 만(127.0.0.1:7777). 같은 공간 LAN 플레이테스트는
+	// 호스트가 FBTK_BIND_ADDRESS=0.0.0.0 으로 켠다 (tools/playtest-host.ps1 · docs/playtest-network.md)
+	wstring bindAddress = L"127.0.0.1";
+	uint16 port = 7777;
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+		if (_dupenv_s(&raw, &length, "FBTK_BIND_ADDRESS") == 0 && raw != nullptr)
+		{
+			bindAddress.clear();
+			for (const char* c = raw; *c != '\0'; ++c)
+				bindAddress.push_back(static_cast<wchar_t>(*c));
+			::free(raw);
+		}
+		raw = nullptr;
+		if (_dupenv_s(&raw, &length, "FBTK_PORT") == 0 && raw != nullptr)
+		{
+			const int32 value = ::atoi(raw);
+			if (value > 0 && value < 65536)
+				port = static_cast<uint16>(value);
+			::free(raw);
+		}
+	}
+
 	ServerServiceRef service = make_shared<ServerService>(
-		NetAddress(L"127.0.0.1", 7777),
+		NetAddress(bindAddress, port),
 		make_shared<IocpCore>(),
 		[=]() { return make_shared<GameSession>(); }, // TODO : SessionManager 등
 		100);
 
 	ASSERT_CRASH(service->Start());
-	LOG_LINE << "[BOOT] listen port=7777 - accepting clients\n";		// 검증 체크리스트 E1 이 찾는 줄 (2026-10-12)
+	{
+		string narrow;
+		for (wchar_t c : bindAddress)
+			narrow.push_back(static_cast<char>(c < 128 ? c : '?'));
+		LOG_LINE << "[BOOT] listen port=" << port << " - accepting clients (bind=" << narrow << ")\n";		// 검증 체크리스트 E1 이 찾는 줄 (2026-10-12)
+	}
 
 	for (int32 i = 0; i < 5; i++)
 	{
