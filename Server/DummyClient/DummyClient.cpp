@@ -20,6 +20,9 @@ atomic<int32> GEnhance = 0;
 atomic<int32> GPvpParty = 0;
 atomic<uint64> GBetrayAfterUs = 0;
 atomic<uint64> GKickAfterUs = 0;
+atomic<uint64> GLateInviteAfterUs = 0;
+atomic<uint64> GDropAfterUs = 0;
+atomic<bool> GDropDone = false;
 atomic<bool> GEnhanceDup = false;
 
 atomic<bool> GItemBehavior = false;
@@ -503,6 +506,28 @@ static void TickBots(float deltaTime)
 					LOG_LINE << "[BOT PARTY] idx=1 kicks char=" << victim << " inside the dungeon (expect PARTY_NO_KICK_IN_RUN)\n";
 				}
 			}
+
+			// -lateinvite s (D5): 협동 판 안의 파티장이 베이스캠프의 다음 묶음 첫 봇(bot_<내 번호 + 묶음 크기>)을 초대한다
+			const uint64 lateAfter = GLateInviteAfterUs.load();
+			if (lateAfter > 0 && runMode == Protocol::RUN_MODE_PVE_COOP && bot->partyLeader.load() && bot->lateInviteSent == false
+				&& nowUs >= bot->enteredAtUs + lateAfter)
+			{
+				bot->lateInviteSent = true;
+				const int32 size = (std::max)(2, (std::min)(3, GPartySize.load()));
+				Protocol::C_PARTY_INVITE invite;
+				invite.set_target_name("bot_" + to_string(bot->botIndex + size));
+				bot->Send(ClientPacketHandler::MakeSendBuffer(invite));
+				LOG_LINE << "[BOT PARTY] idx=" << bot->botIndex << " invites bot_" << (bot->botIndex + size) << " from inside the co-op run (D5)\n";
+			}
+
+			// -dropafter s (R13): 협동 판의 2 번 봇이 한 번 끊는다 - 접속 보충(refill)이 같은 번호로 다시 붙여 [합류] 한다
+			const uint64 dropAfter = GDropAfterUs.load();
+			if (dropAfter > 0 && runMode == Protocol::RUN_MODE_PVE_COOP && bot->botIndex == 2 && nowUs >= bot->enteredAtUs + dropAfter
+				&& GDropDone.exchange(true) == false)
+			{
+				LOG_LINE << "[BOT PARTY] idx=2 char=" << bot->characterId.load() << " drops the connection inside the co-op run (R13)\n";
+				bot->Disconnect(L"R13 drop test");
+			}
 		}
 
 		// -mode camp -campenter s: 베이스캠프 맵에서 s 초 놀다가 PVE 솔로로 들어간다 - 서버가 캠프 몸을 빼는지 (basecamp-map AC-BC-07)
@@ -959,6 +984,10 @@ int main(int argc, char* argv[])
 			GCampEnterAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-kickafter") == 0)
 			GKickAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
+		else if (::strcmp(argv[i], "-lateinvite") == 0)
+			GLateInviteAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
+		else if (::strcmp(argv[i], "-dropafter") == 0)
+			GDropAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-rawwalk") == 0)
 			GRawWalk = (::atoi(argv[i + 1]) != 0);
 		else if (::strcmp(argv[i], "-botbase") == 0)

@@ -168,6 +168,7 @@ public:
 	bool											betraySent = false;
 	bool											kickSent = false;		// -kickafter: 파티장이 한 번만 시도한다
 	bool											campEnterSent = false;	// -campenter: 한 번만
+	bool											lateInviteSent = false;	// -lateinvite: 파티장이 한 번만
 
 	bool			IsPartyMember(uint64 characterId)
 	{
@@ -237,6 +238,11 @@ extern atomic<int32> GRunMode;		// 0 PvP · 1 솔로 · 2 협동 · 3 베이스�
 extern atomic<uint64> GCampEnterAfterUs;	// -campenter s: 베이스캠프 맵에서 s 초 뒤 PVE 솔로로 들어간다 (basecamp-map 2026-10-17 - 캠프 몸이 빠지는지)
 extern atomic<int32> GPartySize;
 extern atomic<bool> GAllyFire;
+// 2026-10-18 pve-modes 미실측 2 건 - -lateinvite s: 협동 판에 들어간 파티장이 s 초 뒤 베이스캠프의 다음 번호 봇을 초대 (D5 "내 판에 초대") ·
+// -dropafter s: 협동 판의 2 번 봇이 s 초 뒤 한 번 끊고 다시 붙는다 (R13). 둘 중 하나라도 켜지면 판이 열린 파티의 비파티장 봇이 스스로 [합류]
+extern atomic<uint64> GLateInviteAfterUs;
+extern atomic<uint64> GDropAfterUs;
+extern atomic<bool> GDropDone;
 extern atomic<uint64> GLeaveEscaped;
 extern atomic<uint64> GLeaveExpired;
 

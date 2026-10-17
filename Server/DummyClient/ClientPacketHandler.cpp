@@ -129,6 +129,20 @@ bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pk
 		bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
 		LOG_LINE << "[BOT PARTY] leader idx=" << bot->botIndex << " enters co-op with " << pkt.members_size() << " members\n";
 	}
+
+	// [합류] (2026-10-18 -lateinvite · -dropafter): 판이 열린 파티의 비파티장이 베이스캠프에 있다 - 나중에 초대받았거나 끊겼다 다시 붙었다.
+	// 서버 BeginCoopEnter 가 살아 있는 판에 넣는다 (끊긴 몸이 남았으면 그 몸에 붙는다)
+	if ((GLateInviteAfterUs.load() > 0 || GDropAfterUs.load() > 0) && GRunMode.load() == Protocol::RUN_MODE_PVE_COOP
+		&& leader == false && pkt.in_run() && bot->inGame.load() == false && bot->coopEnterSent.exchange(true) == false)
+	{
+		Protocol::C_ENTER_GAME enterPkt;
+		enterPkt.set_playerindex(0);
+		enterPkt.set_floor_id(0);
+		enterPkt.set_entry_point_id(GEntryPointId.load());
+		enterPkt.set_mode(Protocol::RUN_MODE_PVE_COOP);
+		bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
+		LOG_LINE << "[BOT PARTY] member idx=" << bot->botIndex << " joins the running co-op instance\n";
+	}
 	return true;
 }
 
