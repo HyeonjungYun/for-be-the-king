@@ -4852,6 +4852,30 @@ void Room::PushCreature(const CreatureRef& target, uint64 instigatorId, float di
 		distCm *= (1.f - target->CcResistOf("knockback"));
 		if (distCm <= 0.f)
 			return;
+
+		// displace_immune 몬스터 (보스 · 허수아비) - 변위만 무시하고 CC 시간은 받는다 (monster-ai.md monster_types 표 · 2026-10-18 아키텍처 리뷰가
+		// 찾았다: 값은 읽었지만 아무도 보지 않아 보스가 밀렸다). 클라에는 거리 0 넉백으로 알린다 (벽에 붙어 못 밀린 것과 같은 연출)
+		if (target->IsMonster())
+		{
+			const MonsterRef monster = static_pointer_cast<Monster>(target);
+			if (monster->type != nullptr && monster->type->displaceImmune)
+			{
+				const uint32 holdMs = SkillKinematics::TravelMs(distCm, speedCms);
+				if (holdMs > 0)
+					ApplyCcRaw(target, instigatorId, Protocol::CC_TYPE_KNOCKBACK, holdMs, 0.f, nowUs);
+
+				Protocol::KnockbackInfo& info = _pendingKnockbacks.emplace_back();
+				info.set_target_id(targetId);
+				info.set_instigator_id(instigatorId);
+				info.set_dir_x(dirX);
+				info.set_dir_y(dirY);
+				info.set_distance(0.f);
+				info.set_speed(speedCms);
+
+				LOG_LINE << "[PUSH] target=" << targetId << " by=" << instigatorId << " blocked=displace_immune cc_ms=" << holdMs << '\n';
+				return;
+			}
+		}
 	}
 
 	const float len = ::sqrtf(dirX * dirX + dirY * dirY);
@@ -4916,6 +4940,17 @@ void Room::PullCreature(const CreatureRef& target, const CreatureRef& caster, fl
 	{
 		LOG_LINE << "[PULL] target=" << targetId << " by=" << casterId << " blocked=unmovable" << '\n';
 		return;
+	}
+
+	// displace_immune 몬스터 (보스 · 허수아비) - 끌려가지도 않는다 (2026-10-18)
+	if (target->IsMonster())
+	{
+		const MonsterRef monster = static_pointer_cast<Monster>(target);
+		if (monster->type != nullptr && monster->type->displaceImmune)
+		{
+			LOG_LINE << "[PULL] target=" << targetId << " by=" << casterId << " blocked=displace_immune" << '\n';
+			return;
+		}
 	}
 
 	const float startX = target->posInfo->x();
