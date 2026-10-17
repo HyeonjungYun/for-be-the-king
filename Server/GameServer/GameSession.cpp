@@ -10,7 +10,17 @@
 void GameSession::OnConnected()
 {
 	connectedAtUs.store(Utils::NowMicroseconds());
-	GSessionManager.Add(static_pointer_cast<GameSession>(shared_from_this()));
+
+	// IP 당 연결 수 (2026-10-18) - 한 곳에서 연결을 쏟아부어 Accept 슬롯 · 세션 메모리(640 KB/개)를 다 쓰지 못하게
+	string ip;
+	for (wchar_t c : GetAddress().GetIpAddress())
+		ip.push_back(static_cast<char>(c < 128 ? c : '?'));
+
+	if (GSessionManager.Add(static_pointer_cast<GameSession>(shared_from_this()), ip) == false)
+	{
+		LOG_LINE << "[RATE] too many connections from " << ip << " - refused\n";
+		Disconnect(L"too many connections from this address");
+	}
 }
 
 bool GameSession::TokenBucket::Take(double ratePerSec, double burst, uint64 nowUs)

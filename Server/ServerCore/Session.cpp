@@ -49,7 +49,8 @@ void Session::Send(SendBufferRef sendBuffer)
 	bool registerSend = false;
 	bool overflow = false;
 
-	// 현재 RegisterSend가 걸리지 않은 상태라면, 걸어준다
+	// 큐에 넣는 것만 락 안에서. WSASend 는 락 밖에서 (TD-007, 2026-10-18) - 예전엔 락을 쥔 채 커널 호출을 해
+	// 같은 세션에 방송하는 방 스레드들이 그동안 기다렸다. 송신 등록은 _sendRegistered 를 먼저 잡은 한 스레드만 한다
 	{
 		WRITE_LOCK;
 
@@ -62,17 +63,18 @@ void Session::Send(SendBufferRef sendBuffer)
 		else
 		{
 			_sendQueue.push(std::move(sendBuffer));
-
-			if (_sendRegistered.exchange(true) == false)
-				registerSend = true;
-
-			if (registerSend)
-				RegisterSend();
+			registerSend = (_sendRegistered.exchange(true) == false);
 		}
 	}
 
 	if (overflow)
+	{
 		Disconnect(L"send queue full");
+		return;
+	}
+
+	if (registerSend)
+		RegisterSend();
 }
 
 bool Session::Connect()
@@ -196,18 +198,25 @@ void Session::RegisterRecv()
 
 void Session::RegisterSend()
 {
+	// 🔴 호출자는 _sendRegistered 를 true 로 잡은 한 스레드다 (Send · ProcessSend) - _sendEvent 는 이 스레드만 만진다.
+	// 락은 큐를 비우는 동안만 잡는다. WSASend 는 락 밖 (TD-007)
 	if (IsConnected() == false)
+	{
+		_sendRegistered.store(false);
 		return;
+	}
 
 	_sendEvent.Init();
 	_sendEvent.owner = shared_from_this(); // ADD_REF
 
-	// 보낼 데이터를 sendEvent에 등록
-	// 호출자(Send · ProcessSend)가 락을 잡고 있다. 옮긴다 - 참조 카운트를 올렸다 내리지 않는다
-	while (_sendQueue.empty() == false)
+	// 보낼 데이터를 sendEvent에 등록 - 옮긴다 (참조 카운트를 올렸다 내리지 않는다)
 	{
-		_sendEvent.sendBuffers.push_back(std::move(_sendQueue.front()));
-		_sendQueue.pop();
+		WRITE_LOCK;
+		while (_sendQueue.empty() == false)
+		{
+			_sendEvent.sendBuffers.push_back(std::move(_sendQueue.front()));
+			_sendQueue.pop();
+		}
 	}
 
 	// Scatter-Gather (흩어져 있는 데이터들을 모아서 한 방에 보낸다)
@@ -309,13 +318,20 @@ void Session::ProcessSend(int32 numOfBytes)
 	// 컨텐츠 코드에서 재정의
 	OnSend(numOfBytes);
 
-	WRITE_LOCK;
+	bool more = false;
+	{
+		WRITE_LOCK;
 
-	_pendingSendBytes -= completedBytes;		// 보낸 만큼 내린다 (Send 가 올렸다)
+		_pendingSendBytes -= completedBytes;		// 보낸 만큼 내린다 (Send 가 올렸다)
 
-	if (_sendQueue.empty())
-		_sendRegistered.store(false);
-	else
+		// 비었으면 깃발을 락 안에서 내린다 - 락 밖에서 내리면 그 사이 Send 가 넣은 것을 아무도 안 보낸다
+		if (_sendQueue.empty())
+			_sendRegistered.store(false);
+		else
+			more = true;
+	}
+
+	if (more)
 		RegisterSend();
 }
 

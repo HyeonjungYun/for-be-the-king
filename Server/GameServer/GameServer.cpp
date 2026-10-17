@@ -718,6 +718,9 @@ int main()
 		GStats.Dump(service->GetCurrentSessionCount());
 		GMonsterStats.Dump(10);
 
+		// 자원 고갈 등으로 포기했던 Accept 슬롯을 다시 건다 (TD-014) - 예전엔 그 슬롯을 영영 잃었다
+		service->RetryLostAccepts();
+
 		// 로그인하지 않은 채 붙어 있는 연결 (2026-10-17 사용자 결정 - 10 초)
 		if (const int32 dropped = GSessionManager.DropUnauthenticated(Utils::NowMicroseconds(), GameSession::LOGIN_TIMEOUT_US); dropped > 0)
 			LOG_LINE << "[RATE] login timeout - dropped " << dropped << " unauthenticated connection(s)\n";

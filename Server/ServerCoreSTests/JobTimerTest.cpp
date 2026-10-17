@@ -71,6 +71,9 @@ TEST(JobTimer, 기한이_지나면_배분한다)
 	// Reserve 는 GetTickCount64() 기준으로 기한을 잡으므로 넉넉히 앞선 시각을 준다
 	timer.Distribute(::GetTickCount64() + 1000);
 
+	// TD-008 (2026-10-18) - 배분하는 스레드가 그 자리에서 돌지 않는다. GlobalQueue 로 넘겼다가 워커(여기선 Drain)가 돈다
+	EXPECT_EQ(queue->executed.load(), 0);
+	DrainGlobalQueue();
 	EXPECT_EQ(queue->executed.load(), 1);
 }
 
@@ -86,6 +89,7 @@ TEST(JobTimer, 기한이_지난_것만_배분한다)
 	timer.Reserve(100000, queue, MakeCountingJob(queue));
 
 	timer.Distribute(::GetTickCount64() + 1000);
+	DrainGlobalQueue();
 
 	// 먼 미래로 예약한 하나는 남아 있어야 한다
 	EXPECT_EQ(queue->executed.load(), 2);
@@ -109,6 +113,7 @@ TEST(JobTimer, 같은_배분에서_기한이_이른_것부터_실행된다)
 	timer.Reserve(300, queue, make_shared<Job>([&order]() { order.push_back(300); }));
 
 	timer.Distribute(::GetTickCount64() + 1000);
+	DrainGlobalQueue();
 
 	ASSERT_EQ(order.size(), 3u);
 	EXPECT_EQ(order[0], 100);

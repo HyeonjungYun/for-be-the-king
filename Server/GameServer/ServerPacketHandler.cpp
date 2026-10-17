@@ -1337,6 +1337,24 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 		return true;
 	}
 
+	// 켜져 있어도 이 PC 에서 온 연결만 (2026-10-18 보안 - 끝점에 인증이 없었다). 시험 도구(DummyClient -grant)는 루프백으로 붙는다.
+	// 밖에서 온 요청은 응답 없이 버리고 한 번만 남긴다
+	{
+		const wstring wip = gameSession->GetAddress().GetIpAddress();
+		const bool local = (wip.rfind(L"127.", 0) == 0 || wip == L"::1");
+		if (local == false)
+		{
+			static atomic<bool> warned{ false };
+			if (warned.exchange(true) == false)
+				LOG_LINE << "[GRANT] refused a grant from a non-loopback address (account=" << gameSession->accountId.load() << ") - the endpoint is local-only\n";
+			return true;
+		}
+	}
+
+	// 감사 기록 - 누가(계정) 누구에게 얼마를 왜. 결과는 SendGrantResult 쪽 로그가 남긴다
+	LOG_LINE << "[GRANT AUDIT] account=" << gameSession->accountId.load() << " request=" << requestId << " char=" << characterId
+		<< " gold=" << gold << " reason=" << reason << '\n';
+
 	GDBQueue.Push([gameSession, requestId, characterId, gold, reason](DBConnection* conn)
 		{
 			const string safeRequestId = conn->Escape(requestId);

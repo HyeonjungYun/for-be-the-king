@@ -78,6 +78,9 @@ public:
 	virtual bool	Start() override;
 	virtual void	CloseService() override;
 
+	// 포기한 Accept 슬롯을 다시 건다 (TD-014) - 서버 주 루프가 주기적으로 부른다
+	int32			RetryLostAccepts();
+
 private:
 	ListenerRef		_listener = nullptr;
 };

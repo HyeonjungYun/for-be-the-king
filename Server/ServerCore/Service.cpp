@@ -93,9 +93,17 @@ bool ServerService::Start()
 	return true;
 }
 
+int32 ServerService::RetryLostAccepts()
+{
+	return (_listener != nullptr) ? _listener->RetryLostAccepts() : 0;
+}
+
 void ServerService::CloseService()
 {
-	// TODO
+	// 리슨 소켓을 닫는다 (2026-10-18) - 예전엔 비어 있어(TODO) 포트를 계속 쥐고 있었다. 같은 포트로 다시 연 서비스(SO_REUSEADDR)에
+	// 들어온 연결을 아무도 Dispatch 하지 않는 옛 리스너가 받아 갔다 (Session 스트레스 테스트 반복에서 발견)
+	if (_listener != nullptr)
+		_listener->CloseSocket();
 
 	Service::CloseService();
 }

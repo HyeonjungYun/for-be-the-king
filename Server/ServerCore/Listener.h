@@ -20,6 +20,10 @@ public:
 	bool StartAccept(ServerServiceRef service);
 	void CloseSocket();
 
+	// RegisterAccept 가 포기한 슬롯을 다시 건다 (TD-014, 2026-10-18). 서버 주 루프가 10 초마다 부른다. 돌려주는 값 = 다시 건 슬롯 수
+	int32 RetryLostAccepts();
+	int32 LostAcceptCount();
+
 public:
 	/* 인터페이스 구현 */
 	virtual HANDLE GetHandle() override;
@@ -34,5 +38,8 @@ protected:
 	SOCKET _socket = INVALID_SOCKET;
 	vector<AcceptEvent*> _acceptEvents;
 	ServerServiceRef _service;
+
+	USE_LOCK;
+	vector<AcceptEvent*> _lostAccepts;		// 8 번 연속 실패한 슬롯 - 예전엔 영영 잃었다 (자원 고갈이 풀리면 다시 건다)
 };
 

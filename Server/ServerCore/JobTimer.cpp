@@ -38,10 +38,12 @@ void JobTimer::Distribute(uint64 now)
 		}
 	}
 
+	// pushOnly - 이 스레드가 방 잡을 줄줄이 직접 돌지 않는다 (TD-008, 2026-10-18). 예전엔 첫 잡을 넣은 이 스레드가
+	// 그 방의 Flush 를 그 자리에서 돌고, 다음 방, 그다음 방… 이 끝나야 다음 타이머를 나눴다. 이제 GlobalQueue 에 넘겨 노는 워커가 나눠 든다
 	for (TimerItem& item : items)
 	{
 		if (JobQueueRef owner = item.jobData->owner.lock())
-			owner->Push(std::move(item.jobData->job));
+			owner->Push(std::move(item.jobData->job), /*pushOnly*/ true);
 
 		delete item.jobData;		
 	}

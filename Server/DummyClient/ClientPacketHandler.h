@@ -172,7 +172,9 @@ private:
 	{
 		PacketType pkt;
 		if (pkt.ParseFromArray(buffer + sizeof(PacketHeader), len - sizeof(PacketHeader)) == false)
+		{
 			return false;
+		}
 
 		return func(session, pkt);
 	}

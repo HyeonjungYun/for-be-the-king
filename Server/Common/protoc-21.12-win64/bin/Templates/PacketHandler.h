@@ -51,7 +51,14 @@ private:
 	{
 		PacketType pkt;
 		if (pkt.ParseFromArray(buffer + sizeof(PacketHeader), len - sizeof(PacketHeader)) == false)
+		{
+{%- if output == 'ServerPacketHandler' %}
+			// A packet that does not parse = a broken or tampered client - drop it (TD-002, 2026-10-18).
+			// A handler returning false (a race, e.g. C_MOVE after leaving the room) does not disconnect. ASCII only - GenPackets writes cp949
+			session->Disconnect(L"malformed packet");
+{%- endif %}
 			return false;
+		}
 
 		return func(session, pkt);
 	}

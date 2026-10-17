@@ -95,7 +95,34 @@ void Listener::RegisterAccept(AcceptEvent* acceptEvent)
 			return;
 	}
 
-	LOG_LINE << "[ACCEPT] giving up on an accept slot after " << MAX_ATTEMPTS << " attempts\n";
+	// 이번엔 포기하지만 슬롯은 잃지 않는다 - 서버 주 루프가 RetryLostAccepts 로 다시 건다 (TD-014, 2026-10-18)
+	{
+		WRITE_LOCK;
+		_lostAccepts.push_back(acceptEvent);
+	}
+	LOG_LINE << "[ACCEPT] accept slot failed " << MAX_ATTEMPTS << " times - parked for retry\n";
+}
+
+int32 Listener::RetryLostAccepts()
+{
+	vector<AcceptEvent*> lost;
+	{
+		WRITE_LOCK;
+		lost.swap(_lostAccepts);
+	}
+
+	for (AcceptEvent* acceptEvent : lost)
+		RegisterAccept(acceptEvent);		// 또 실패하면 다시 목록으로
+
+	if (lost.empty() == false)
+		LOG_LINE << "[ACCEPT] retried " << lost.size() << " parked accept slot(s), still parked=" << LostAcceptCount() << '\n';
+	return static_cast<int32>(lost.size());
+}
+
+int32 Listener::LostAcceptCount()
+{
+	WRITE_LOCK;
+	return static_cast<int32>(_lostAccepts.size());
 }
 
 void Listener::ProcessAccept(AcceptEvent* acceptEvent)

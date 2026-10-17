@@ -4,16 +4,69 @@
 
 GameSessionManager GSessionManager;
 
-void GameSessionManager::Add(GameSessionRef session)
+namespace
+{
+	int32 MaxConnPerIp()
+	{
+		static const int32 limit = []()
+		{
+			char* raw = nullptr;
+			size_t length = 0;
+			int32 value = GameSessionManager::MAX_CONN_PER_IP_DEFAULT;
+			if (_dupenv_s(&raw, &length, "FBTK_MAX_CONN_PER_IP") == 0 && raw != nullptr)
+			{
+				value = ::atoi(raw);
+				::free(raw);
+			}
+			return value;
+		}();
+		return limit;
+	}
+
+	bool IsLoopback(const string& ip)
+	{
+		return ip.rfind("127.", 0) == 0 || ip == "::1";
+	}
+}
+
+bool GameSessionManager::Add(GameSessionRef session, const string& ip)
 {
 	WRITE_LOCK;
+
+	const int32 limit = MaxConnPerIp();
+	if (limit > 0 && ip.empty() == false && IsLoopback(ip) == false)
+	{
+		int32& count = _perIp[ip];
+		if (count >= limit)
+			return false;
+		count++;
+		_ipOf[session.get()] = ip;
+	}
+
 	_sessions.insert(session);
+	return true;
 }
 
 void GameSessionManager::Remove(GameSessionRef session)
 {
 	WRITE_LOCK;
 	_sessions.erase(session);
+
+	auto it = _ipOf.find(session.get());
+	if (it != _ipOf.end())
+	{
+		auto countIt = _perIp.find(it->second);
+		if (countIt != _perIp.end() && --countIt->second <= 0)
+			_perIp.erase(countIt);
+		_ipOf.erase(it);
+	}
+}
+
+int32 GameSessionManager::ConnectionsFrom(const string& ip)
+{
+	WRITE_LOCK;
+	auto it = _perIp.find(ip);
+	return (it != _perIp.end()) ? it->second : 0;
 }
 
 int32 GameSessionManager::DropUnauthenticated(uint64 nowUs, uint64 timeoutUs)
