@@ -80,7 +80,7 @@ public:
 	void RemoveDynamicWall(uint64 Id);
 	int32 NumDynamicWalls() const { return DynamicWalls.Num(); }
 
-private:
+	/** A sight-blocking box (the server's 2D wall). Public so the ray tests can build their own sets. */
 	struct FWall
 	{
 		FVector2D Centre = FVector2D::ZeroVector;
@@ -90,6 +90,17 @@ private:
 		float BoundRadius = 0.f;
 	};
 
+	/**
+	 * CastRays over a given wall set. Everything that depends only on the origin and the wall (its frame offset, the
+	 * distance to its bound) is computed once per wall instead of once per ray x wall (TD-009, 2026-10-18) — the same
+	 * expressions in the same order, so the distances are bit-identical to CastRaysReference.
+	 */
+	static void CastRaysOver(TArrayView<const FWall> Near, const FVector2D& Origin, float MaxCm, int32 NumRays, TArray<float>& OutDistances);
+
+	/** The old per-ray path (RayDistanceIn for every ray) — kept only as the bit-identical reference for the tests. */
+	static void CastRaysReference(TArrayView<const FWall> Near, const FVector2D& Origin, float MaxCm, int32 NumRays, TArray<float>& OutDistances);
+
+private:
 	void LoadRules();
 	static float RayDistanceIn(TArrayView<const FWall> Set, const FVector2D& Origin, const FVector2D& Dir, float MaxCm);
 

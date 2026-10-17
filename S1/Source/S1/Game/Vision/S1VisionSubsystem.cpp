@@ -286,9 +286,87 @@ void US1VisionSubsystem::CastRays(const FVector2D& Origin, float MaxCm, int32 Nu
 			Near.Add(Pair.Value);
 	}
 
+	CastRaysOver(Near, Origin, MaxCm, NumRays, OutDistances);
+}
+
+void US1VisionSubsystem::CastRaysReference(TArrayView<const FWall> Near, const FVector2D& Origin, float MaxCm, int32 NumRays, TArray<float>& OutDistances)
+{
+	OutDistances.SetNumUninitialized(NumRays);
 	for (int32 i = 0; i < NumRays; i++)
 	{
 		const float Angle = 2.f * PI * static_cast<float>(i) / static_cast<float>(NumRays);
 		OutDistances[i] = RayDistanceIn(Near, Origin, FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)), MaxCm);
+	}
+}
+
+void US1VisionSubsystem::CastRaysOver(TArrayView<const FWall> Near, const FVector2D& Origin, float MaxCm, int32 NumRays, TArray<float>& OutDistances)
+{
+	OutDistances.SetNumUninitialized(NumRays);
+
+	// Per wall, once: the parts of RayDistanceIn that do not depend on the ray direction (TD-009, 2026-10-18).
+	// 240 rays + 120 per extra source x every near wall used to redo these for every ray. Same expressions -> same bits
+	struct FPrepared
+	{
+		double RelSize;
+		float BoundRadius;
+		FVector2D Axis;
+		FVector2D Perp;
+		double Px;
+		double Py;
+		float HalfLength;
+		float HalfThickness;
+	};
+	TArray<FPrepared, TInlineAllocator<128>> Prepared;
+	Prepared.Reserve(Near.Num());
+	for (const FWall& Wall : Near)
+	{
+		const FVector2D Rel = Origin - Wall.Centre;
+		const FVector2D Perp(-Wall.Axis.Y, Wall.Axis.X);
+		Prepared.Add({ Rel.Size(), Wall.BoundRadius, Wall.Axis, Perp,
+			FVector2D::DotProduct(Rel, Wall.Axis), FVector2D::DotProduct(Rel, Perp), Wall.HalfLength, Wall.HalfThickness });
+	}
+
+	for (int32 i = 0; i < NumRays; i++)
+	{
+		const float Angle = 2.f * PI * static_cast<float>(i) / static_cast<float>(NumRays);
+		const FVector2D Dir(FMath::Cos(Angle), FMath::Sin(Angle));
+		float Best = MaxCm;
+
+		for (const FPrepared& W : Prepared)
+		{
+			if (W.RelSize - W.BoundRadius > Best)
+				continue;
+
+			const double Dx = FVector2D::DotProduct(Dir, W.Axis);
+			const double Dy = FVector2D::DotProduct(Dir, W.Perp);
+
+			double Lo = 0.0;
+			double Hi = Best;
+			bool bMiss = false;
+
+			auto Clip = [&](double Pos, double D, double Half)
+				{
+					if (FMath::Abs(D) < 1e-9)
+					{
+						if (FMath::Abs(Pos) >= Half)
+							bMiss = true;		// parallel and outside (touching a face does not block - same as the server)
+						return;
+					}
+					double T0 = (-Half - Pos) / D;
+					double T1 = (Half - Pos) / D;
+					if (T0 > T1)
+						Swap(T0, T1);
+					Lo = FMath::Max(Lo, T0);
+					Hi = FMath::Min(Hi, T1);
+				};
+
+			Clip(W.Px, Dx, W.HalfLength);
+			Clip(W.Py, Dy, W.HalfThickness);
+
+			if (bMiss == false && Lo < Hi && Lo < Best)
+				Best = static_cast<float>(Lo);
+		}
+
+		OutDistances[i] = Best;
 	}
 }
