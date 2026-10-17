@@ -65,7 +65,21 @@ void US1EscapeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	FFileHelper::LoadFileToString(Config, *FPaths::Combine(Directory, TEXT("escape_config.csv")));
 	Warnings = S1EscapeLogic::ParseWarnings(Config);
 
-	UE_LOG(LogTemp, Log, TEXT("[ESCAPE] towers=%d warnings=%d %s"), Towers.Num(), Warnings.Num(), *Error);
+	// The ring drawn on the ground is the server's own entry radius (was a hard-coded 1000 - 2026-10-17 the zone became 667)
+	TArray<FString> Lines;
+	Config.ParseIntoArrayLines(Lines);
+	for (const FString& Line : Lines)
+	{
+		FString Key, Value;
+		if (Line.TrimStartAndEnd().Split(TEXT(","), &Key, &Value) && Key == TEXT("zone_enter_radius_cm"))
+		{
+			const float Parsed = FCString::Atof(*Value);
+			if (Parsed > 0.f)
+				ZoneRadiusCm = Parsed;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[ESCAPE] towers=%d warnings=%d zone=%.0fcm %s"), Towers.Num(), Warnings.Num(), ZoneRadiusCm, *Error);
 	bInitialized = true;
 }
 

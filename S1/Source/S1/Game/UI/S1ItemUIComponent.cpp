@@ -139,6 +139,14 @@ bool US1ItemUIComponent::CanUseDungeonKeys() const
 	return BaseCamp == nullptr || (BaseCamp->GetPlace() == ES1Place::Dungeon && BaseCamp->IsLocalDead() == false);
 }
 
+bool US1ItemUIComponent::IsOnCampMap() const
+{
+	const UWorld* World = GetWorld();
+	const US1BaseCampSubsystem* BaseCamp = World != nullptr && World->GetGameInstance() != nullptr
+		? World->GetGameInstance()->GetSubsystem<US1BaseCampSubsystem>() : nullptr;
+	return BaseCamp != nullptr && BaseCamp->IsOnCampMap();
+}
+
 void US1ItemUIComponent::HandlePlaceChanged(ES1Place Place)
 {
 	// Leaving the dungeon any way at all shuts S1 and S2 (§ Entry & Exit).
@@ -155,7 +163,9 @@ void US1ItemUIComponent::HandleLocalDeath()
 
 void US1ItemUIComponent::OnInventoryKey()
 {
-	if (Root != nullptr && CanUseDungeonKeys())
+	// The camp map opens the inventory too (2026-10-17 user decision: Tab only - F7 test panel and P party stay dungeon-only;
+	// the camp has its own party button). Equip / unequip there go through the server's base-camp item path like the S3 window
+	if (Root != nullptr && (CanUseDungeonKeys() || IsOnCampMap()))
 		Root->SetInventoryOpen(Root->IsInventoryOpen() == false);
 }
 

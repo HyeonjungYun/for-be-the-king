@@ -63,6 +63,9 @@ private:
 
 	/** Tab and F belong to the dungeon. Not in base camp, not while we lie dead. */
 	bool CanUseDungeonKeys() const;
+
+	/** Walking around the base-camp map (not a panel, not the dungeon) - Tab opens the inventory there too. */
+	bool IsOnCampMap() const;
 	void HandlePlaceChanged(ES1Place Place);
 	void HandleLocalDeath();
 
