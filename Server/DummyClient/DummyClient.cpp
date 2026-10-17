@@ -15,6 +15,7 @@ mutex GBotsLock;
 vector<BotSessionRef> GBots;
 vector<uint32> GFreeBotIndices;
 std::atomic<uint64> GSentThisWindow{ 0 };
+std::atomic<uint64> GDetoursThisWindow{ 0 };		// 하네스 걸음이 벽 · 바다를 만나 길을 구한 수 (2026-10-18)
 atomic<int32> GEnhance = 0;
 atomic<int32> GPvpParty = 0;
 atomic<uint64> GBetrayAfterUs = 0;
@@ -32,7 +33,8 @@ atomic<bool> GTowerMode = false;
 atomic<bool> GIdleOne = false;
 atomic<bool> GIdleAll = false;
 atomic<int32> GForceFloor = -1;
-int32 GBotBase = 0;		// -botbase N: bot_{N+1} 부터 쓴다 - 두 하네스를 함께 돌릴 때 계정이 겹치지 않게 (2026-10-18 PVE 40 판 + PvP 120)
+int32 GBotBase = 0;
+bool GRawWalk = false;	// -rawwalk 1: 하네스 걸음이 벽을 모르던 예전 방식 (비교용, 2026-10-18)		// -botbase N: bot_{N+1} 부터 쓴다 - 두 하네스를 함께 돌릴 때 계정이 겹치지 않게 (2026-10-18 PVE 40 판 + PvP 120)
 float GTowerX = 0.f;
 float GTowerY = 0.f;
 atomic<uint64> GRunGold = 0;
@@ -77,6 +79,9 @@ namespace
 	constexpr float ATTACK_RANGE_SQ = ATTACK_RANGE * ATTACK_RANGE;
 	constexpr float BOT_STOP_DISTANCE = 120.f;
 	constexpr float WAYPOINT_REACHED_CM = 5.f;	// -tower 길찾기 - 이 안이면 다음 꺾는 점으로 (한 틱 이동은 이 점에서 멈춘다)
+	constexpr float DETOUR_REACHED_CM = 30.f;	// 하네스 걸음 우회 - 꺾는 점 이 안이면 다음 점 (2026-10-18)
+	constexpr float DETOUR_GOAL_SLACK_CM = 300.f;	// 목표가 이만큼 움직이면 우회 길을 버린다
+	constexpr uint64 DETOUR_REPLAN_US = 1'000'000;	// 우회 길을 다시 구하는 간격 (봇마다)
 	constexpr uint64 ATTACK_INTERVAL_US = 1'000'000;
 	constexpr uint64 REFILL_INTERVAL_US = 1'000'000;
 
@@ -680,6 +685,42 @@ static void TickBots(float deltaTime)
 			bot->destY = target->y;
 		}
 
+		// 우회 중이면 목표 대신 꺾는 점 (2026-10-18). 목표가 3 m 넘게 바뀌었으면 버린다 - 아래 벽 검사가 필요하면 다시 구한다
+		const bool pathWorld = (GTowerMode.load() == false) && BotPath::IsLoaded() && bot->floorId == BotPath::LoadedFloor();
+		const float goalX = bot->destX;
+		const float goalY = bot->destY;
+		if (pathWorld && bot->detour.empty() == false)
+		{
+			const float gx = goalX - bot->detourGoalX;
+			const float gy = goalY - bot->detourGoalY;
+			if (gx * gx + gy * gy > DETOUR_GOAL_SLACK_CM * DETOUR_GOAL_SLACK_CM)
+			{
+				bot->detour.clear();
+			}
+			else
+			{
+				while (bot->detourIndex < bot->detour.size())
+				{
+					const float wx = bot->detour[bot->detourIndex].first - bot->x;
+					const float wy = bot->detour[bot->detourIndex].second - bot->y;
+					if (wx * wx + wy * wy > DETOUR_REACHED_CM * DETOUR_REACHED_CM)
+						break;
+					bot->detourIndex++;
+				}
+				if (bot->detourIndex >= bot->detour.size())
+				{
+					bot->detour.clear();
+				}
+				else
+				{
+					bot->destX = bot->detour[bot->detourIndex].first;
+					bot->destY = bot->detour[bot->detourIndex].second;
+				}
+			}
+		}
+		const float stepFromX = bot->x;
+		const float stepFromY = bot->y;
+
 		const float dx = bot->destX - bot->x;
 		const float dy = bot->destY - bot->y;
 		const float dist = ::sqrtf(dx * dx + dy * dy);
@@ -733,6 +774,32 @@ static void TickBots(float deltaTime)
 
 			bot->x += dx * ratio;
 			bot->y += dy * ratio;
+		}
+
+		// 하네스 걸음도 벽 · 바다를 안다 (2026-10-18) - 내딛은 자리가 걸을 수 없으면 되돌린다. 배회면 다른 곳을, 쫓는 중이면
+		// 목표까지 BotPath 길을 구해(1 초에 한 번) 다음 틱부터 꺾는 점을 따른다. 대시는 그 자리에서 멈춘다
+		if (pathWorld && (bot->x != stepFromX || bot->y != stepFromY) && BotPath::Walkable(bot->x, bot->y) == false)
+		{
+			bot->x = stepFromX;
+			bot->y = stepFromY;
+			if (dashing)
+			{
+				bot->dashUntilUs.store(0);
+			}
+			else if (target == nullptr && monsterId == 0)
+			{
+				bot->destX = bot->x + Utils::GetRandom(-WANDER_RADIUS, WANDER_RADIUS);
+				bot->destY = bot->y + Utils::GetRandom(-WANDER_RADIUS, WANDER_RADIUS);
+			}
+			else if (nowUs >= bot->nextDetourUs)
+			{
+				bot->nextDetourUs = nowUs + DETOUR_REPLAN_US;
+				bot->detour = BotPath::Find(bot->x, bot->y, goalX, goalY);
+				bot->detourIndex = 0;
+				bot->detourGoalX = goalX;
+				bot->detourGoalY = goalY;
+				++GDetoursThisWindow;
+			}
 		}
 
 		{
@@ -892,6 +959,8 @@ int main(int argc, char* argv[])
 			GCampEnterAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-kickafter") == 0)
 			GKickAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
+		else if (::strcmp(argv[i], "-rawwalk") == 0)
+			GRawWalk = (::atoi(argv[i + 1]) != 0);
 		else if (::strcmp(argv[i], "-botbase") == 0)
 			GBotBase = (std::max)(0, ::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-floor") == 0)
@@ -960,8 +1029,9 @@ int main(int argc, char* argv[])
 	if (botCount < 1)
 		botCount = 1;
 
-	// -tower 는 벽을 돌아간다 - 벽이 있는 층(0층)만 (BotPath.h)
-	if (GTowerMode.load())
+	// -tower 는 벽을 돌아간다 - 벽이 있는 층(0층)만 (BotPath.h).
+	// 2026-10-18 부터 다른 하네스 걸음(-items · -monsterpull · 봇끼리)도 벽 · 바다를 안다 - -rawwalk 면 예전처럼 직선 (비교용)
+	if (GTowerMode.load() || GRawWalk == false)
 		BotPath::Load(0);
 
 	// -ai 는 벽을 돌아가고(0층) 두뇌 데이터(bot_brain.csv · skills.csv · towers.csv)를 읽는다 - 없으면 시작하지 않는다
@@ -1115,7 +1185,8 @@ int main(int argc, char* argv[])
 				<< (botCount > 0 ? sent / sec / botCount : 0.0)
 				<< " Hz/bot  (target 30)"
 				<< "   attacks = " << (attacks / sec) << "/s"
-				<< "   skills = " << (skills / sec) << "/s" << '\n';
+				<< "   skills = " << (skills / sec) << "/s"
+				<< "   detours = " << GDetoursThisWindow.exchange(0) << '\n';
 
 			if (GMonsterPull.load())
 			{

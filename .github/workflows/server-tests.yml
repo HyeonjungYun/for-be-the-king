@@ -59,8 +59,30 @@ jobs:
         run: Server\Binaries\Debug\GameServerTests.exe --gtest_output=xml:gameserver-test-results.xml
 
       # SV-4 — 스트레스만 100회 반복. 데이터 레이스는 한 번에 드러나지 않는다
+      #    2026-10-18: Session 동시 Send (루프백 실 소켓) 가 들어왔다 - 반복마다 다른 포트를 쓴다
       - name: Stress tests × 100
         run: Server\Binaries\Debug\ServerCoreSTests.exe --gtest_filter=Stress.* --gtest_repeat=100
+
+      # 커버리지 게이트 (technical-preferences § Testing - ServerCore 라인 70 %, 2026-10-18 CI 에 넣음).
+      # 제외는 문서와 같은 둘(SocketUtils · DBConnection.cpp) + 테스트 자신. 로컬 실측 2026-10-18 77.5 % (894/1154)
+      - name: Install OpenCppCoverage
+        run: choco install opencppcoverage -y --no-progress
+
+      - name: Coverage (ServerCore >= 70 %)
+        shell: pwsh
+        run: |
+          & "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" `
+            --sources "$env:GITHUB_WORKSPACE\Server\ServerCore" `
+            --excluded_sources "ServerCoreSTests" `
+            --excluded_sources "SocketUtils" `
+            --excluded_sources "DBConnection.cpp" `
+            --export_type "cobertura:coverage.xml" `
+            --quiet `
+            -- "$env:GITHUB_WORKSPACE\Server\Binaries\Debug\ServerCoreSTests.exe"
+          [xml]$c = Get-Content coverage.xml
+          $rate = [double]$c.coverage.'line-rate'
+          Write-Host ("ServerCore line coverage {0:P1} ({1}/{2})" -f $rate, $c.coverage.'lines-covered', $c.coverage.'lines-valid')
+          if ($rate -lt 0.70) { Write-Error "coverage below 70 %"; exit 1 }
 
       - name: Upload test results
         if: always()
@@ -70,3 +92,26 @@ jobs:
           path: |
             test-results.xml
             gameserver-test-results.xml
+            coverage.xml
+
+  # UE 자동화 테스트 (S1.*, 2026-10-18 로컬 59/59). GitHub 호스트 러너에는 UE 5.8 이 없다 -
+  # UE 가 설치된 셀프 호스트 러너(라벨 ue58)를 붙이고 저장소 변수 UE_RUNNER=true 를 켜면 돈다. 꺼져 있으면 건너뛴다
+  ue-automation:
+    if: vars.UE_RUNNER == 'true'
+    runs-on: [self-hosted, windows, ue58]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build S1Editor
+        run: '& "C:\Unreal5.8\UE_5.8\Engine\Build\BatchFiles\Build.bat" S1Editor Win64 Development -Project="$env:GITHUB_WORKSPACE\S1\S1.uproject" -WaitMutex'
+
+      - name: Automation RunTests S1 (-nullrhi)
+        shell: pwsh
+        run: |
+          & "C:\Unreal5.8\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$env:GITHUB_WORKSPACE\S1\S1.uproject" `
+            -ExecCmds="Automation RunTests S1; Quit" -unattended -nullrhi -nosplash -nosound -NoP4 -log="ci-automation.log"
+          $log = Get-Content "$env:GITHUB_WORKSPACE\S1\Saved\Logs\ci-automation.log"
+          $ok = @($log | Select-String 'Result=\{Success\}').Count
+          $fail = @($log | Select-String 'Result=\{Fail').Count
+          Write-Host "UE automation: success=$ok fail=$fail"
+          if ($fail -gt 0 -or $ok -eq 0) { $log | Select-String 'Result=\{Fail' | ForEach-Object { Write-Host $_.Line }; exit 1 }

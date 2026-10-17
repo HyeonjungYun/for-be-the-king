@@ -143,6 +143,14 @@ public:
 	vector<pair<float, float>>						path;
 	size_t											pathIndex = 0;
 
+	// 하네스 걸음의 우회 (2026-10-18) - 다음 걸음이 벽 · 바다면 BotPath 로 목표까지 길을 구해 따른다 (-items · -monsterpull · 봇끼리).
+	// 예전엔 벽을 몰라 서버가 이동을 수천 번 거부했다 (bot-ai 스펙 미실측 표). 틱 스레드 전용
+	vector<pair<float, float>>						detour;
+	size_t											detourIndex = 0;
+	float											detourGoalX = 0.f;
+	float											detourGoalY = 0.f;
+	uint64											nextDetourUs = 0;
+
 	// -mode coop (PVE 협동, ADR-0014) - 파티 상태 (S_PARTY_STATE). 번호로 나눈 첫 봇이 나머지를 초대하고, 서버가 말하는 파티장이 입장한다
 	mutex											partyLock;
 	vector<uint64>									partyMembers;		// 내 파티의 캐릭터 id (나 포함)

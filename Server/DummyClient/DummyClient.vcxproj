@@ -121,9 +121,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\;</AdditionalLibraryDirectories>
     </Link>
-    <PreBuildEvent>
-      <Command>call "$(SolutionDir)\Common\protoc-21.12-win64\bin\GenPackets.bat"</Command>
-    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -147,10 +144,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)Libraries\Libs\;</AdditionalLibraryDirectories>
     </Link>
-    <PreBuildEvent>
-      <Command>call "$(SolutionDir)\Common\protoc-21.12-win64\bin\GenPackets.bat"</Command>
-    </PreBuildEvent>
   </ItemDefinitionGroup>
+  <!-- GenPackets 는 GameServer 의 빌드 전 이벤트 하나만 돈다 (2026-10-18). 한 번이 GameServer · DummyClient · S1 세 곳에 복사하고
+       끝에서 *.pb.* 를 지운다 - 둘이 병렬(/m)로 돌면 서로의 파일을 지웠다. Server.sln 에서 DummyClient 가 GameServer 뒤에 빌드된다 -->
   <ItemGroup>
     <ClCompile Include="BotPath.cpp" />
     <ClCompile Include="BotSession.cpp" />
