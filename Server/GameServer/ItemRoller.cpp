@@ -3,6 +3,7 @@
 #include "CsvTable.h"
 #include "SkillTable.h"
 #include "Player.h"
+#include "LonePath.h"
 #include <algorithm>
 #include <tuple>
 
@@ -357,6 +358,9 @@ ItemEntry ItemRoller::RollItem(const ChestPool& pool, mt19937& rng, const Instan
 	e.level = 0;
 	e.isNew = true;		// 방금 만들었다 - DB 행은 탈출 · 사망 커밋이 INSERT 한다 (S-4)
 	RollSkills(*type, rng, OUT e.skillIdPrimary, OUT e.skillIdSecondary);
+
+	// 고독한 길 (2026-10-17) - 낮은 확률의 옵션. rng 를 더 꺼내지 않는다(같은 시드의 나머지 결과가 그대로) - 고유 번호의 해시로 굴린다
+	e.lonePath = LonePath::Rolls(LonePath::RollOf(e.instanceId), LonePathRules::Get());
 
 	return e;
 }

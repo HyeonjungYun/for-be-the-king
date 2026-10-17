@@ -266,7 +266,8 @@ struct Projectile
 };
 
 // 방 종류 (ADR-0014) - World = GRooms 의 층 방 (PvP). PVE 는 런마다 · 파티마다 새 인스턴스 (InstanceManager)
-enum class RoomKind : uint8 { World = 0, PveSolo = 1, PveCoop = 2 };
+// BaseCamp = 플레이어 한 명의 베이스캠프 맵 (2026-10-17, basecamp-map) - 런이 아니다: 세션 place 는 BaseCamp 그대로, 죽지 않는다
+enum class RoomKind : uint8 { World = 0, PveSolo = 1, PveCoop = 2, BaseCamp = 3 };
 
 class Room : public JobQueue
 {
@@ -323,6 +324,11 @@ public:
 
 	void	HandleDisconnect(PlayerRef player);
 	void	HandleReattach(GameSessionRef session, PlayerRef body);
+
+	// 베이스캠프 방 (2026-10-17, design/quick-specs/basecamp-map-2026-10-17.md)
+	bool	IsBaseCamp() const { return _kind == RoomKind::BaseCamp; }
+	void	DropBaseCampBody(PlayerRef player);										// 조용히 뺀다 - 던전 입장 · 끊김 · 다시 요청 (패킷 없음)
+	void	BaseCampApplyItems(PlayerRef player, vector<Protocol::ItemInstance> changed);	// 베이스캠프 DB 조작 결과를 몸에 (착용 · 강화 · 창고)
 
 	// 부팅 때 한 번 - MonsterTable 의 이 층 자리를 전부 만피 Idle 로 낳는다 (monster-ai.md Core Rule 22)
 	void	InitMonsters();
@@ -402,6 +408,7 @@ private:
 
 	// ── 모자 로스터 #78 ~ #104 (2026-10-10) ──
 	int32	ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& target, int32 damage, const DamageSource& src, uint64 nowUs);	// 일편단심 · damage_mod · 면역 · 염두
+	int32	CountEnemiesNear(const CreatureRef& who, float radiusCm);		// 고독한 길 - 이 반경 안의 살아 있는 적(다른 팀 생물) 수
 	bool	HasImmunity(const CreatureRef& creature, const string& elem, uint64 nowUs) const;		// 패시브(피뢰 · 방염) + 버프(만독불침)
 	string	ElementOf(const string& param) const;														// 효과 param → 속성 이름
 	bool	IgnoresWalls(const CreatureRef& creature) const;										// 유령 신부의 축복
@@ -486,6 +493,8 @@ private:
 
 	// 던전 안에서 착용이 바뀌었다 - 슬롯 · 전투 스탯을 다시 만들고, 체력이 바뀌었으면 S_DAMAGE 0 으로 알린다
 	void	OnEquipmentChanged(const PlayerRef& player, const char* tag);
+	void	SpawnPracticeDummy();											// 베이스캠프 허수아비 (InitInstance)
+	void	HealPracticeDummy(const MonsterRef& m, uint64 nowUs);			// 맞고 잠깐 뒤 만피 (UpdateMonsters)
 
 	// 사망 처리 공용 - S_DIED · 원인(가해자 기준) · 시전 취소, 그다음 몬스터면 드랍 · 플레이어면 사망 커밋
 	void	OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
@@ -555,7 +564,8 @@ private:
 	void	SendListVisible(const vector<TItem>& items, AddFn&& add, KeepFn&& keep, uint16 statId = 0);
 
 	// ── 2차 로스터 (게임 ID 1115 ~ 1137 · FoW 의존 기존 스킬, 2026-10-11) - RoomSkills2.cpp ──
-	const WallMap&	Walls() const;																			// 층 벽 + 지각변동 같은 임시 벽 (있으면 합친 지도)
+	const WallMap&	BaseWalls() const;		// 임시 벽 없는 바탕 - 층 벽 (베이스캠프 방이면 캠프 벽)
+	const WallMap&	Walls() const;																		// 층 벽 + 지각변동 같은 임시 벽 (있으면 합친 지도)
 	void	RaiseWall(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs);	// 지각변동
 	void	UpdateDynamicWalls(uint64 nowUs);
 	void	RebuildWalls();

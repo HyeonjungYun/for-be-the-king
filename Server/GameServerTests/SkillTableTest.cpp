@@ -587,6 +587,69 @@ TEST(SkillRoster, 버프_지속피해_표식_효과는_필수_열이_채워져_�
 
 // 스킬 개선 (2026-10-11 저녁, 사용자 플레이 피드백) - 데이터가 엔진의 새 경로를 실제로 탄다.
 // 엔진은 짝이 맞지 않으면 예전 경로로 조용히 돌아간다 (예: 열화 장판에 dist_cm 이 없으면 큰 원 3 개) - 여기서 잡는다
+// 2026-10-15 사용자 - 맹수의 어금니 · 맹수의 앞발은 고른 적에게 도약하는 단일기, 피해는 착지 때 (move leap_target)
+TEST(SkillRoster, 맹수의_어금니와_앞발은_고른_적에게_도약하는_단일기다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	for (uint32 id : { 1030u, 1031u })
+	{
+		const SkillDef* def = SkillTable::Find(id);
+		ASSERT_NE(def, nullptr) << id;
+		EXPECT_EQ(def->shape, SkillShape::Single) << id;
+		EXPECT_EQ(def->aimType, SkillAimType::Target) << id;
+		const SkillEffect* move = def->FindEffect(SkillEffectType::Movement);
+		ASSERT_NE(move, nullptr) << id;
+		EXPECT_EQ(move->param, "leap_target") << id;
+		EXPECT_EQ(def->FindEffect(SkillEffectType::FallOnHit), nullptr) << id << " - 도약 중 맞아도 떨어지지 않는다";
+	}
+	// 어금니는 착지하고 telegraph_ms 뒤에 친다 (애니메이션이 끝나기 0.1 초 전) - 앞발은 착지 때
+	EXPECT_GT(SkillTable::Find(1030)->telegraphMs, 0u);
+	EXPECT_EQ(SkillTable::Find(1031)->telegraphMs, 0u);
+}
+
+// 2026-10-15 사용자 - 후딜: 스킬이 나간 뒤 애니메이션이 끝날 때까지 이동 · 평타 · 다른 스킬이 막힌다. 버프 · 순수 이동기는 없다
+TEST(SkillRoster, 후딜_표는_버프와_이동기만_비우고_나머지는_채운다)
+{
+	string error;
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;
+
+	EXPECT_GT(SkillTable::Find(1004)->recoveryMs, 0u) << "휘두르기 - 클립이 있는 스킬";
+	EXPECT_GT(SkillTable::Find(1022)->recoveryMs, 0u) << "클립 없는 스킬은 기본값";
+	EXPECT_EQ(SkillTable::Find(1002)->recoveryMs, 0u) << "순수 이동기";
+	uint32 locked = 0;
+	for (const auto& [id, def] : SkillTable::All())
+	{
+		if (def.kind == SkillKind::Passive || def.kind == SkillKind::Hold)
+			EXPECT_EQ(def.recoveryMs, 0u) << id;
+		locked += def.recoveryMs > 0 ? 1 : 0;
+	}
+	EXPECT_GT(locked, 50u);
+
+	// 모르는 스킬 · 숫자 아님은 거부한다
+	EXPECT_FALSE(SkillTable::ParseRecovery("skill_id,recovery_ms\n999999,300\n", OUT error));
+	EXPECT_NE(error.find("unknown skill"), string::npos) << error;
+	EXPECT_FALSE(SkillTable::ParseRecovery("skill_id,recovery_ms\n1004,-1\n", OUT error));
+	ASSERT_TRUE(LoadRealData(OUT error)) << error;		// 다음 테스트를 위해 되돌린다
+}
+
+TEST(SkillTable, 이동_param_은_아는_것만_받는다)
+{
+	const string header = "skill_id,name_key,power,kind,cast_ms,cooldown_ms,can_move,telegraph_ms,shape,aim,range_cm,width_cm,radius_cm,angle_deg,allowed_slot,projectile_speed_cms,pierce\n";
+	const string eheader = "skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,duration_ms,magnitude,dist_cm,speed_cms,ignores_walls,stat,per_level,radius_cm,param\n";
+	const string rules = "key,value\ndot_tick_ms,500\ndot_max_stacks,5\nwall_stun_ms,750\nrecast_window_ms,2000\nexecute_hp_pct,15\nblind_view_scale,0.5\n"
+		"pull_stop_cm,100\npull_speed_cms,1600\ndecoy_hp,1\nprojectile_radius_cm,40\nbasic_projectile_speed_cms,2400\nconfront_range_cm,400\n"
+		"mark_spear_basic_bonus,0.5\nchain_radius_cm,300\ndelayed_burst_ms,1500\nspin_max_ms,3000\nhold_max_ms,0\nbuff_per_level_default,0.03\ntrail_buff_ms,2000\ntrail_pickup_cm,80\ntaunt_speed_cms,150\ntaunt_stop_cm,100\nlong_range_cm,500\nbasic_dash_speed_cms,1200\n";
+	const string skill = header + "1,skill.1,ad,active,60,8000,0,0,single,target,400,0,0,0,0,0,0\n";
+	string error;
+
+	EXPECT_TRUE(SkillTable::Parse(skill, eheader + "1,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,leap_target\n"
+		"1,2,damage,target,none,1,0,1,0,none,0,0,0,0,0,none,0,0,none\n", rules, OUT error)) << error;
+	EXPECT_FALSE(SkillTable::Parse(skill, eheader + "1,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,leap_to\n", rules, OUT error));
+	EXPECT_NE(error.find("leap_target"), string::npos) << error;
+}
+
 TEST(SkillRoster, 스킬개선_2026_10_11_데이터가_새_경로를_탄다)
 {
 	string error;

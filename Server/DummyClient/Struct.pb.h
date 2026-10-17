@@ -3743,6 +3743,7 @@ class ItemInstance final :
     kLevelFieldNumber = 4,
     kStateFieldNumber = 5,
     kSlotFieldNumber = 6,
+    kLonePathFieldNumber = 8,
   };
   // repeated .Protocol.SkillInfo skills = 7;
   int skills_size() const;
@@ -3816,6 +3817,15 @@ class ItemInstance final :
   void _internal_set_slot(::Protocol::EquipSlot value);
   public:
 
+  // bool lone_path = 8;
+  void clear_lone_path();
+  bool lone_path() const;
+  void set_lone_path(bool value);
+  private:
+  bool _internal_lone_path() const;
+  void _internal_set_lone_path(bool value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ItemInstance)
  private:
   class _Internal;
@@ -3831,6 +3841,7 @@ class ItemInstance final :
     uint32_t level_;
     int state_;
     int slot_;
+    bool lone_path_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -6770,6 +6781,26 @@ inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::SkillInfo >&
 ItemInstance::skills() const {
   // @@protoc_insertion_point(field_list:Protocol.ItemInstance.skills)
   return _impl_.skills_;
+}
+
+// bool lone_path = 8;
+inline void ItemInstance::clear_lone_path() {
+  _impl_.lone_path_ = false;
+}
+inline bool ItemInstance::_internal_lone_path() const {
+  return _impl_.lone_path_;
+}
+inline bool ItemInstance::lone_path() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.lone_path)
+  return _internal_lone_path();
+}
+inline void ItemInstance::_internal_set_lone_path(bool value) {
+  
+  _impl_.lone_path_ = value;
+}
+inline void ItemInstance::set_lone_path(bool value) {
+  _internal_set_lone_path(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.lone_path)
 }
 
 // -------------------------------------------------------------------

@@ -41,7 +41,8 @@ TEST(SkillMotions, 실제_데이터는_모든_스킬에_동작이_있고_동작_
 	}
 	EXPECT_EQ(withMotion, total) << "every skill in skills.csv needs a row in skill_motions.csv";
 	EXPECT_GT(none, 0u) << "passives map to m_none";
-	EXPECT_LT(none, total / 2) << "most skills show a motion";
+	// 2026-10-15 사용자 요청으로 스킬 동작을 전부 뺐다(전 스킬 m_none) - "대부분의 스킬에 동작이 있다" 는 더 이상 요구가 아니다.
+	// 동작을 다시 붙이면 skill_motions.csv 만 고치면 된다 (위 두 조건 · 아래 패시브 조건은 그대로 유효)
 	// 패시브는 전부 동작 없음
 	for (const auto& [id, def] : SkillTable::All())
 	{

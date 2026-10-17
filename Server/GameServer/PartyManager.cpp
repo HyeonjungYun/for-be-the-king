@@ -46,6 +46,12 @@ namespace
 		return session->characters[0].name();
 	}
 
+	// 고독한 길 (2026-10-17) - 옵션 아이템을 하나라도 착용 중이면 파티를 맺을 수 없다 (벗으면 다시 된다)
+	bool WearsLonePath(const GameSessionRef& session)
+	{
+		return session != nullptr && session->lonePieces.load() > 0;
+	}
+
 	// 런 종료 커밋 중 · 끊긴 몸이 던전에 남았다 - 베이스캠프 화면이어도 아직 자유롭지 않다
 	bool IsBusy(uint64 characterId)
 	{
@@ -103,6 +109,8 @@ void PartyManager::Invite(const GameSessionRef& from, const string& targetName)
 			early = Protocol::PARTY_SELF;
 		else if (WorldRoomOf(target) != room)
 			early = Protocol::PARTY_NOT_VISIBLE;
+		else if (WearsLonePath(from) || WearsLonePath(target))
+			early = Protocol::PARTY_LONE_PATH;
 		if (early != Protocol::PARTY_OK)
 		{
 			LOG_LINE << "[PARTY] dungeon invite from=" << fromId << " to='" << targetName << "' (" << toId << ") result=" << Protocol::PartyResult_Name(early) << '\n';
@@ -133,6 +141,8 @@ void PartyManager::Invite(const GameSessionRef& from, const string& targetName)
 			result = Protocol::PARTY_SELF;
 		else if (target->place.load() != SessionPlace::BaseCamp || IsBusy(toId))
 			result = Protocol::PARTY_BUSY;
+		else if (WearsLonePath(from) || WearsLonePath(target))
+			result = Protocol::PARTY_LONE_PATH;
 		else
 			result = ToWire(_book.Invite(fromId, NameOf(from), toId, Utils::NowMicroseconds(), OUT partyId));
 
@@ -231,6 +241,13 @@ void PartyManager::Respond(const GameSessionRef& to, uint64 partyId, bool accept
 			uint64 ignored = 0;
 			_book.Respond(toId, NameOf(to), partyId, false, Utils::NowMicroseconds(), OUT ignored);
 			result = Protocol::PARTY_BUSY;
+		}
+		else if (accept && WearsLonePath(to))
+		{
+			// 고독한 길 - 초대 뒤에 낀 경우 (2026-10-17). 초대는 지운다. 초대한 쪽은 파티에 든 채라 끼는 것 자체가 막힌다
+			uint64 ignored = 0;
+			_book.Respond(toId, NameOf(to), partyId, false, Utils::NowMicroseconds(), OUT ignored);
+			result = Protocol::PARTY_LONE_PATH;
 		}
 		else
 		{

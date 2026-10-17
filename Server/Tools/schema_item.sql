@@ -18,7 +18,10 @@ CREATE TABLE IF NOT EXISTS item_instances
     skill_id_primary    INT UNSIGNED    NOT NULL DEFAULT 0,
     skill_id_secondary  INT UNSIGNED    NOT NULL DEFAULT 0,
 
-    created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 고독한 길 옵션 (2026-10-17) - 하나라도 착용하면 파티 불가, 착용 수만큼 다구대일 방어. migrate_lone_path.sql
+    lone_path           TINYINT UNSIGNED NOT NULL DEFAULT 0,
+
+    created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
                                         ON UPDATE CURRENT_TIMESTAMP,
 

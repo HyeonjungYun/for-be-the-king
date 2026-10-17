@@ -159,6 +159,7 @@ public:
 	bool											pvpInviteSent = false;
 	bool											betraySent = false;
 	bool											kickSent = false;		// -kickafter: 파티장이 한 번만 시도한다
+	bool											campEnterSent = false;	// -campenter: 한 번만
 
 	bool			IsPartyMember(uint64 characterId)
 	{
@@ -224,7 +225,8 @@ extern atomic<bool> GHoldOnReject;	// -holdonreject - 입장 거절에 끊지 �
 
 // PVE (ADR-0014) - -mode pvp|solo|coop · -party N (협동 파티 크기 2~3, 기본 3) · -allyfire (일부러 파티원을 때린다 - 서버 거부 시험)
 // PVE 에서는 봇끼리 싸우지 않고 몬스터를 쫓는다 (-monsterpull 과 같다)
-extern atomic<int32> GRunMode;		// 0 PvP · 1 솔로 · 2 협동 (Protocol::RunMode 값)
+extern atomic<int32> GRunMode;		// 0 PvP · 1 솔로 · 2 협동 · 3 베이스캠프 맵 (Protocol::RunMode 값)
+extern atomic<uint64> GCampEnterAfterUs;	// -campenter s: 베이스캠프 맵에서 s 초 뒤 PVE 솔로로 들어간다 (basecamp-map 2026-10-17 - 캠프 몸이 빠지는지)
 extern atomic<int32> GPartySize;
 extern atomic<bool> GAllyFire;
 extern atomic<uint64> GLeaveEscaped;

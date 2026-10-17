@@ -102,6 +102,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="EscapeLogicTest.cpp" />
+    <ClCompile Include="LonePathTest.cpp" />
+    <ClCompile Include="BaseCampTableTest.cpp" />
     <ClCompile Include="EquipStatsTest.cpp" />
     <ClCompile Include="KillBatchTest.cpp" />
     <ClCompile Include="CommitRetryTest.cpp" />
@@ -150,6 +152,8 @@
     <ClCompile Include="..\GameServer\PatrolRouteGen.cpp" />
     <ClCompile Include="..\GameServer\PartyBook.cpp" />
     <ClCompile Include="..\GameServer\EscapeLogic.cpp" />
+    <ClCompile Include="..\GameServer\LonePath.cpp" />
+    <ClCompile Include="..\GameServer\BaseCampTable.cpp" />
     <ClCompile Include="..\GameServer\EquipStats.cpp" />
     <ClCompile Include="..\GameServer\CommitRetry.cpp" />
     <ClCompile Include="..\GameServer\CommitJournal.cpp" />

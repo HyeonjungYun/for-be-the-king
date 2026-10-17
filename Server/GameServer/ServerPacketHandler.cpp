@@ -12,6 +12,7 @@
 #include "GameSessionManager.h"
 #include "InstanceManager.h"
 #include "PartyManager.h"
+#include "BaseCampTable.h"
 #include <sstream>
 #include <thread>
 
@@ -63,7 +64,7 @@ namespace
 
 		::snprintf(query, sizeof(query),
 			"SELECT instance_id, item_type_id, grade, level, state, slot, "
-			"skill_id_primary, skill_id_secondary FROM item_instances "
+			"skill_id_primary, skill_id_secondary, lone_path FROM item_instances "
 			"WHERE owner_character_id = %llu",
 			characterId);
 
@@ -75,7 +76,7 @@ namespace
 			return false;
 		}
 
-		enum { COL_ID = 0, COL_TYPE, COL_GRADE, COL_LEVEL, COL_STATE, COL_SLOT, COL_SKILL1, COL_SKILL2, COL_COUNT };
+		enum { COL_ID = 0, COL_TYPE, COL_GRADE, COL_LEVEL, COL_STATE, COL_SLOT, COL_SKILL1, COL_SKILL2, COL_LONE, COL_COUNT };
 
 		if (::mysql_num_fields(res) < COL_COUNT)
 		{
@@ -96,6 +97,7 @@ namespace
 			e.level = static_cast<uint32>(::atoi(row[COL_LEVEL]));
 			e.skillIdPrimary = static_cast<uint32>(::atoi(row[COL_SKILL1]));
 			e.skillIdSecondary = static_cast<uint32>(::atoi(row[COL_SKILL2]));
+			e.lonePath = ::atoi(row[COL_LONE]) != 0;
 
 			const int32 state = ::atoi(row[COL_STATE]);
 			const int32 slot = ::atoi(row[COL_SLOT]);
@@ -139,7 +141,7 @@ namespace
 	bool LockItemRow(DBConnection* conn, const string& where, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
 	{
 		const string query =
-			"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary "
+			"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path "
 			"FROM item_instances WHERE " + where + " FOR UPDATE";
 
 		MYSQL_RES* res = conn->Query(query.c_str());
@@ -157,6 +159,7 @@ namespace
 			slot = ::atoi(row[5]);
 			e.skillIdPrimary = static_cast<uint32>(::atoi(row[6]));
 			e.skillIdSecondary = static_cast<uint32>(::atoi(row[7]));
+			e.lonePath = ::atoi(row[8]) != 0;
 			found = true;
 		}
 		conn->FreeResult(res);
@@ -311,6 +314,13 @@ namespace
 				break;
 			}
 
+			// 고독한 길 (2026-10-17) - 파티 중엔 낄 수 없다 (Room::HandleEquip 과 같다)
+			if (e.lonePath && GParties.PartyOf(ownerId) != 0)
+			{
+				result = Protocol::ITEM_LONE_PATH_IN_PARTY;
+				break;
+			}
+
 			// 슬롯에 이미 있으면 자동 교체 - 밀려난 것은 이 아이템이 비운 소지 칸으로 간다.
 			// 소지 개수가 그대로라 25/25에서도 성공한다.
 			int32 outState = 0;
@@ -394,6 +404,20 @@ namespace
 		changed.push_back(e.ToProto(target, static_cast<Protocol::EquipSlot>(targetSlot)));
 		if (outgoing.instanceId != 0)
 			changed.push_back(outgoing.ToProto(Protocol::ITEM_STATE_CARRIED));
+
+		// 고독한 길 (2026-10-17) - 착용이 바뀌었으면 세션의 착용 수를 맞춘다 (파티 검사가 본다)
+		if (op == BaseCampOp::Equip || op == BaseCampOp::Unequip)
+		{
+			::snprintf(query, sizeof(query),
+				"SELECT COUNT(*) FROM item_instances WHERE owner_character_id = %llu AND state = %d AND lone_path = 1",
+				ownerId, static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED));
+			if (MYSQL_RES* loneRes = conn->Query(query))
+			{
+				if (MYSQL_ROW row = ::mysql_fetch_row(loneRes))
+					session->lonePieces.store(::atoi(row[0]));
+				conn->FreeResult(loneRes);
+			}
+		}
 		return Protocol::ITEM_OK;
 
 	}
@@ -408,6 +432,16 @@ namespace
 				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " item=" << instanceId << " slot=" << slot << " result=" << result << " changed=" << changed.size() <<'\n';
 
 				session->SendItemResult(requestId, result, changed);
+
+				// 베이스캠프 맵의 몸 (2026-10-17) - 착용 · 강화가 허수아비 앞의 스킬 · 스탯에 바로 보이게
+				if (result == Protocol::ITEM_OK && changed.empty() == false)
+				{
+					if (PlayerRef body = session->player.load())
+					{
+						if (RoomRef room = body->room.load().lock(); room != nullptr && room->IsBaseCamp())
+							room->DoAsync(&Room::BaseCampApplyItems, body, changed);
+					}
+				}
 			});
 	}
 }
@@ -607,6 +641,68 @@ namespace
 			GParties.SendNotice(characterId, notice);
 	}
 
+	// 베이스캠프 맵의 몸을 조용히 뺀다 (2026-10-17) - 던전으로 들어갈 때 · 베이스캠프를 다시 요청할 때. 없으면 아무것도 안 한다
+	void DropCampBody(const GameSessionRef& session)
+	{
+		PlayerRef old = session->player.load();
+		if (old == nullptr)
+			return;
+		if (RoomRef room = old->room.load().lock(); room != nullptr && room->IsBaseCamp())
+			room->DoAsync(&Room::DropBaseCampBody, old);
+	}
+
+	// 베이스캠프 맵 입장 (2026-10-17, design/quick-specs/basecamp-map-2026-10-17.md) - C_ENTER_GAME{mode=BASECAMP}.
+	// 런이 아니다: place 는 BaseCamp 그대로, 개인 방(RoomKind::BaseCamp)에 몸 하나. 봇 · 예전 클라는 요청하지 않으니 그대로다
+	void EnterBaseCamp(const GameSessionRef& session, const Protocol::CharacterInfo& character)
+	{
+		const uint64 characterId = character.object_info().object_id();
+
+		auto reject = [&](const char* why)
+			{
+				LOG_LINE << "[CAMP] enter rejected - " << why << " char=" << characterId << '\n';
+				Protocol::S_ENTER_GAME rejectPkt;
+				rejectPkt.set_success(false);
+				rejectPkt.set_mode(Protocol::RUN_MODE_BASECAMP);
+				SEND_PACKET_DECLARATION(rejectPkt);
+				session->Send(sendBuffer);
+			};
+
+		if (BaseCampTable::Loaded() == false)
+			return reject("no basecamp map");
+		if (session->place.load() != SessionPlace::BaseCamp)
+			return reject("not in base camp");
+
+		// 이미 몸이 있으면 (클라가 다시 요청 - 재로딩 · 거절 뒤 재시도) 빼고 새로 만든다
+		DropCampBody(session);
+
+		RoomRef room = GInstances.Create(RoomKind::BaseCamp, 0, 0, 0);
+		PlayerRef player = ObjectUtils::CreatePlayer(session, characterId);
+		player->nakedMaxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
+		player->maxHp = player->nakedMaxHp;
+		player->hp = player->maxHp;
+
+		const BaseCampPoint& spawn = BaseCampTable::Spawn();
+		player->posInfo->set_x(spawn.x);
+		player->posInfo->set_y(spawn.y);
+		player->posInfo->set_z(100.f);
+		player->posInfo->set_yaw(spawn.yaw);
+
+		LOG_LINE << "[CAMP] enter char=" << characterId << " room=" << room->Tag() << '\n';
+
+		GDBQueue.Push([session, player, room](DBConnection* conn)
+			{
+				// 기본 장비는 주지 않는다 - 던전 입장이 준다 (여기서 주면 베이스캠프 동기화가 그 행을 모른다)
+				int32 ownedRows = 0;
+				if (LoadPlayerItems(conn, player, OUT ownedRows) == false)
+				{
+					LOG_LINE << "[CAMP] item load failed - char=" << player->objectInfo->object_id() << '\n';
+					GInstances.ReleaseJoin(room->_instanceId);
+					return;
+				}
+				room->DoAsync(&Room::HandleEnterPlayer, player);
+			});
+	}
+
 	// 몸을 만들고 DB 에서 장비를 실어 방에 넣는다 (예전 Handle_C_ENTER_GAME 본문). 세션은 이미 Entering 이다.
 	// 인스턴스면 입장 예약을 쥔 채 들어온다 - 방이 HandleEnterPlayer 에서, 적재가 실패하면 여기서 놓는다
 	void QueueEnter(const GameSessionRef& gameSession, const Protocol::CharacterInfo& character, RoomRef room, uint32 floorId, uint32 entryPointId)
@@ -720,6 +816,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 
 		Protocol::S_ENTER_GAME rejectPkt;
 		rejectPkt.set_success(false);
+		rejectPkt.set_mode(pkt.mode());		// 클라가 어느 요청의 거절인지 안다 (베이스캠프 맵 요청은 다시 묻는다, 2026-10-17)
 		SEND_PACKET_DECLARATION(rejectPkt);
 		gameSession->Send(sendBuffer);
 		
@@ -739,6 +836,13 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 	const uint64 characterId = character.object_info().object_id();
 	const uint32 floorId = pkt.floor_id();
 
+	// 베이스캠프 맵 (2026-10-17) - 런이 아니라 개인 방. 끊긴 몸 · 사망 커밋은 위에서 먼저 걸렀다
+	if (pkt.mode() == Protocol::RUN_MODE_BASECAMP)
+	{
+		EnterBaseCamp(gameSession, character);
+		return true;
+	}
+
 	// 베이스캠프에서만 입장한다 - 예전엔 결과를 버려 두 번째 C_ENTER_GAME 이 몸을 하나 더 만들었다.
 	// 인스턴스가 생기며 "두 방에 두 몸" 이 되어 캐릭터 단위 전역(GDeathCommits · GDetachedBodies)이 깨진다 (ADR-0014)
 	SessionPlace expected = SessionPlace::BaseCamp;
@@ -752,6 +856,9 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 		gameSession->Send(sendBuffer);
 		return true;
 	}
+
+	// 베이스캠프 맵의 몸은 여기서 뺀다 - 입장이 거절되면 클라가 베이스캠프를 다시 요청한다
+	DropCampBody(gameSession);
 
 	if (floorId >= FLOOR_COUNT)
 	{
@@ -822,6 +929,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 			continue;
 		}
 
+		DropCampBody(member);
 		QueueEnter(member, member->characters[0], room, floorId, entryPointId);
 	}
 

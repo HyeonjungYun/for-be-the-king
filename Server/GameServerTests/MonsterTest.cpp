@@ -128,7 +128,10 @@ TEST(MonsterTable, 실제_데이터_7종_8자리가_1층_벽_진입_타워_검�
 	// 2026-10-11 몬스터 개선 - 들판의 혼자 다니던 들개 10 자리가 무리(우두머리 1 + 기본 3)로 바뀌었다.
 	// 집 지키는 병사 7 · 보스 1 은 그대로 (guard). 들개(1)는 테스트 더미용으로 종류만 남는다.
 	// 2026-10-12 부터 1층 무리는 monster_packs.csv 가 아니라 pack_rules.csv 로 생성된다 (RouteGenTest) - CSV 무리 0
-	EXPECT_EQ(MonsterTable::TypeCount(), 7u);
+	// 2026-10-17 베이스캠프 허수아비(90) - 자리 없이 종류만 (basecamp.csv 의 dummy 가 쓴다)
+	EXPECT_EQ(MonsterTable::TypeCount(), 8u);
+	ASSERT_NE(MonsterTable::FindType(90), nullptr);
+	EXPECT_EQ(MonsterTable::FindType(90)->attackPower, 0);
 	EXPECT_EQ(MonsterTable::Spawns().size(), 8u);
 	EXPECT_EQ(MonsterTable::Packs().size(), 0u);
 	ASSERT_TRUE(HouseTable::Load(ItemTable::DefaultDataDir(), 4, OUT error)) << error;

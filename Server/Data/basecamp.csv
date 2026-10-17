@@ -1,0 +1,11 @@
+kind,id,x,y,yaw,half_x,half_y
+area,camp,-24000,0,0,1500,1500
+spawn,player,-25000,0,0,0,0
+dummy,90,-24300,900,180,0,0
+npc,stash,-23300,-1000,180,70,70
+npc,enhance,-23300,-200,180,70,70
+npc,gate,-22750,700,180,70,70
+prop,anvil,-23300,150,0,60,40
+prop,chest_stack,-23300,-1350,0,90,60
+prop,gate_post_w,-22600,400,0,40,40
+prop,gate_post_e,-22600,1000,0,40,40

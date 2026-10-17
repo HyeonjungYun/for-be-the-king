@@ -17,6 +17,9 @@ struct ItemEntry
 	uint32				skillIdPrimary = 0;
 	uint32				skillIdSecondary = 0;
 
+	// 고독한 길 (2026-10-17) - 낮은 확률로 붙는 옵션. 하나라도 착용하면 파티 불가, 착용 수만큼 다구대일 방어 (LonePath.h)
+	bool				lonePath = false;
+
 	// 이번 런에 서버가 만들었다(상자 · 롤) - DB 행이 아직 없다. 탈출 · 사망 커밋이 UPDATE 대신 INSERT 한다.
 	// 커밋으로 행이 생기면 false 로 돌린다. 메모리 전용이라 클라로 보내지 않는다.
 	bool				isNew = false;
@@ -60,6 +63,7 @@ public:
 
 public:
 	weak_ptr<GameSession>	session;
+	int32					lonePieces = 0;			// 고독한 길 - 착용한 옵션 아이템 수 (ApplyEquipmentStats)
 	
 public:
 	uint64					lastMoveUs = 0;
@@ -113,7 +117,7 @@ public:
 	float							visionRadiusCm = 0.f;	// 이번 갱신의 내 시야 반경 (실명 · 천리안 반영) - 이벤트 필터가 거리로 쓴다
 	string							visionSent;			// 마지막으로 보낸 S_VISION 의 요약 - 바뀌면 다시 보낸다
 	bool							testSeeAll = false;	// 테스트 모드 /t fow 0 - 이 사람만 거리 · 벽과 상관없이 본다 (은신은 그대로 숨는다). 입장마다 끈다
-	bool							betrayer = false;	// 이 런에서 던전 파티를 나갔다 - 스냅샷 ObjectInfo.betrayer (party-betrayal 2026-10-12)
+	bool							betrayer = false;	// 이 런에서 던전 파티를 나갔다 (party-betrayal 2026-10-12). 스냅샷에는 싣지 않는다 - 표식은 피해자 클라만 1 분 (2026-10-13)
 
 	void	ResetVision() { fowKnown.clear(); fowRevealed.clear(); visionExtras.clear(); visionSent.clear(); }
 

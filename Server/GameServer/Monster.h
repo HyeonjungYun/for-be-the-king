@@ -51,6 +51,9 @@ public:
 	bool					aiFixed = false;
 	uint64					dummyOwnerId = 0;
 
+	// 베이스캠프 허수아비 (2026-10-17) - 주인 없음(주인 없는 더미 청소에서 빠진다) · 죽지 않음 · 맞고 잠깐 뒤 만피
+	bool					practice = false;
+
 	// 무리 (2026-10-11 몬스터 개선) - 0 = 혼자 (예전 두뇌). 아니면 Room::_packs 의 위치 + 1. packIndex = 줄 순서 (0 = 태어날 때의 우두머리)
 	uint32					packSlot = 0;
 	uint8					packIndex = 0;

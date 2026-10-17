@@ -26,6 +26,8 @@
 #include <fstream>
 #include "Monster.h"
 #include "EscapeLogic.h"
+#include "LonePath.h"
+#include "BaseCampTable.h"
 #include "Telemetry.h"
 #include "Bag.h"
 #include "DBJobQueue.h"
@@ -130,6 +132,15 @@ int main()
 			<< " stat_lines=" << ItemTable::StatLineCount() << " grade_x=" << ItemTable::GradeMultiplier(Protocol::ITEM_GRADE_COMMON)
 			<< "/" << ItemTable::GradeMultiplier(Protocol::ITEM_GRADE_LEGENDARY) << '\n';
 
+		// 고독한 길 (2026-10-17) - 옵션 확률 · 다구대일 효과. 파일이 없으면 기본값
+		if (LonePathRules::Get().Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] lone_path invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+		LOG_LINE << "[BOOT] lone path - roll=" << LonePathRules::Get().rollPct << "% max_pieces=" << LonePathRules::Get().maxPieces
+			<< " outnumber=" << LonePathRules::Get().outnumberEnemies << "@" << LonePathRules::Get().outnumberRadiusCm << "cm\n";
+
 		// 층 아이템 풀 - ItemTable 다음이어야 한다. 부위 · 물리/마법 행에 뽑을 종류가 있는지 ItemTable 로 검사한다.
 		if (FloorItemPool::Load(dataDir, OUT error) == false)
 		{
@@ -226,6 +237,20 @@ int main()
 
 		LOG_LINE << "[BOOT] towers=" << TowerTable::All().size() << " monster types=" << MonsterTable::TypeCount()
 			<< " spawns=" << MonsterTable::Spawns().size() << '\n';
+
+		// 베이스캠프 맵 (2026-10-17) - 개인 방의 배치. 섬 밖이어야 하고 허수아비 종류가 있어야 한다. 파일이 없으면 맵 없음 (UI 베이스캠프만)
+		if (BaseCampTable::Load(dataDir, OUT error) == false || BaseCampTable::CheckClearOf(WallTable::Get(0), OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] basecamp invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+		if (BaseCampTable::Loaded() && BaseCampTable::DummyTypeId() != 0 && MonsterTable::FindType(BaseCampTable::DummyTypeId()) == nullptr)
+		{
+			LOG_LINE << "[BOOT] basecamp invalid - dummy monster type " << BaseCampTable::DummyTypeId() << " is not in monster_types.csv\n";
+			return -1;
+		}
+		LOG_LINE << "[BOOT] basecamp " << (BaseCampTable::Loaded() ? "map" : "off (no basecamp.csv)") << " npcs=" << BaseCampTable::Npcs().size()
+			<< " blockers=" << BaseCampTable::Walls().Count() << " dummy=" << BaseCampTable::DummyTypeId() << '\n';
 
 		// 집 볼륨 · 무리 규칙 · 순찰 길 생성 (2026-10-12 pack-routes) - 벽 · 타워 · 진입 지점 · 몬스터 종류 다음.
 		// FBTK_ROUTE_SEED 가 있으면 그 시드(재현), 없으면 부팅 시각 - 부팅마다 다른 동선

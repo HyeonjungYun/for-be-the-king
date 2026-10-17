@@ -184,6 +184,7 @@ message ItemInstance
 	ItemState state = 5;
 	EquipSlot slot = 6;
 	repeated SkillInfo skills = 7;
+	bool lone_path = 8;		// the lone path option: worn = no party, more worn = stronger against many (2026-10-17)
 }
 
 // FoW 추가 시야원 하나 (design/gdd/fog-of-war.md, 2026-10-11) - 그림자 분신 · 종이매 · 맹수의 탐색. 주인에게만 S_VISION 으로

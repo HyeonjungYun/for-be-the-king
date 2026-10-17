@@ -41,6 +41,7 @@ atomic<bool> GSwapArmor = false;
 atomic<bool> GStayDead = false;
 atomic<bool> GHoldOnReject = false;
 atomic<int32> GRunMode = 0;
+atomic<uint64> GCampEnterAfterUs = 0;
 atomic<int32> GPartySize = 3;
 atomic<bool> GAllyFire = false;
 atomic<int32> GTowerCount = 0;
@@ -498,6 +499,20 @@ static void TickBots(float deltaTime)
 			}
 		}
 
+		// -mode camp -campenter s: 베이스캠프 맵에서 s 초 놀다가 PVE 솔로로 들어간다 - 서버가 캠프 몸을 빼는지 (basecamp-map AC-BC-07)
+		if (runMode == Protocol::RUN_MODE_BASECAMP && GCampEnterAfterUs.load() > 0 && bot->inGame.load() && bot->campEnterSent == false
+			&& bot->enteredAtUs != 0 && nowUs >= bot->enteredAtUs + GCampEnterAfterUs.load())
+		{
+			bot->campEnterSent = true;
+			Protocol::C_ENTER_GAME enterPkt;
+			enterPkt.set_playerindex(0);
+			enterPkt.set_floor_id(0);
+			enterPkt.set_entry_point_id(GEntryPointId.load());
+			enterPkt.set_mode(Protocol::RUN_MODE_PVE_SOLO);
+			bot->Send(ClientPacketHandler::MakeSendBuffer(enterPkt));
+			LOG_LINE << "[BOT CAMP] idx=" << bot->botIndex << " leaves the camp for PVE solo\n";
+		}
+
 		// 탈출해 베이스캠프에 있는 봇 - 잠깐 뒤 같은 층으로 다시 들어간다 (협동은 파티장이 파티 상태를 보고 연다)
 		const uint64 reenterAt = bot->reenterAtUs.load();
 		if (reenterAt != 0 && nowUs >= reenterAt && bot->inGame.load() == false && bot->alive.load())
@@ -872,6 +887,8 @@ int main(int argc, char* argv[])
 			GPvpParty.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-betrayafter") == 0)
 			GBetrayAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
+		else if (::strcmp(argv[i], "-campenter") == 0)
+			GCampEnterAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-kickafter") == 0)
 			GKickAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-floor") == 0)
@@ -879,7 +896,8 @@ int main(int argc, char* argv[])
 		else if (::strcmp(argv[i], "-mode") == 0)
 		{
 			const string mode = argv[i + 1];
-			GRunMode.store(mode == "solo" ? Protocol::RUN_MODE_PVE_SOLO : mode == "coop" ? Protocol::RUN_MODE_PVE_COOP : Protocol::RUN_MODE_PVP);
+			GRunMode.store(mode == "solo" ? Protocol::RUN_MODE_PVE_SOLO : mode == "coop" ? Protocol::RUN_MODE_PVE_COOP
+				: mode == "camp" ? Protocol::RUN_MODE_BASECAMP : Protocol::RUN_MODE_PVP);
 		}
 		else if (::strcmp(argv[i], "-party") == 0)
 			GPartySize.store(::atoi(argv[i + 1]));

@@ -4,6 +4,7 @@
 #include "SkillTable.h"
 #include "ItemTable.h"
 #include "ItemRoller.h"
+#include "LonePath.h"
 #include "ServerStats.h"
 #include "ObjectUtils.h"
 #include "Bag.h"
@@ -92,7 +93,8 @@ namespace
 			<< " crit=" << player->critChance << " critx=" << player->critMultiplier
 			<< " as=" << player->percentAsBonus << " ms=" << player->percentMsBonus
 			<< " res=" << player->resistance << " range=" << player->attackRange
-			<< " type=" << (player->autoAttackType == Protocol::DAMAGE_TYPE_MAGIC ? "magic" : "physical") << '\n';
+			<< " type=" << (player->autoAttackType == Protocol::DAMAGE_TYPE_MAGIC ? "magic" : "physical")
+			<< " lone=" << player->lonePieces << '\n';		// 고독한 길 착용 수 (2026-10-17)
 	}
 
 	bool IsInAttackRange(const CreatureRef& attacker, const CreatureRef& target)
@@ -225,6 +227,15 @@ Room::~Room()
 void Room::InitInstance()
 {
 	JOB_TAG();
+
+	// 베이스캠프 방 (2026-10-17) - 타워 · 몬스터 · 상자 없이 허수아비 하나
+	if (IsBaseCamp())
+	{
+		SpawnPracticeDummy();
+		LOG_LINE << "[CAMP] create " << Tag() << " objects=" << _objects.size() << " live=" << GInstances.LiveCount() << '\n';
+		return;
+	}
+
 	InitEscape();
 	if (GMonstersOn.load())
 		InitMonsters();
@@ -257,12 +268,15 @@ Protocol::RunMode Room::RunModeOf() const
 	{
 	case RoomKind::PveSolo:	return Protocol::RUN_MODE_PVE_SOLO;
 	case RoomKind::PveCoop:	return Protocol::RUN_MODE_PVE_COOP;
+	case RoomKind::BaseCamp:	return Protocol::RUN_MODE_BASECAMP;
 	default:				return Protocol::RUN_MODE_PVP;
 	}
 }
 
 string Room::Tag() const
 {
+	if (IsBaseCamp())
+		return "b" + to_string(_instanceId);
 	return IsInstance() ? "i" + to_string(_instanceId) : "w" + to_string(_floorId);
 }
 
@@ -441,6 +455,13 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		player->testGod = false;
 		player->testSeeAll = false;
 
+		// 베이스캠프 (2026-10-17) - 죽지 않고(허수아비 연습 · 자기 피해 스킬) 안개도 없다 (S_VISION 반경 0 = 클라 안개 끔)
+		if (IsBaseCamp())
+		{
+			player->testGod = true;
+			player->testSeeAll = true;
+		}
+
 		// 배신 표식은 런 안에서만 (party-betrayal R6) - 새 런은 깨끗하게
 		player->betrayer = false;
 		player->objectInfo->set_betrayer(false);
@@ -464,8 +485,16 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			_enteredOnce.insert(player->objectInfo->object_id());
 		}
 
+		// 베이스캠프는 런이 아니다 - 체류 타이머 · 진입 무적 · 텔레메트리 없음
+		if (success && IsBaseCamp())
+		{
+			player->runStartUs = enterUs;
+			player->runDeadlineUs = 0;
+			player->spawnInvulnUntilUs = 0;
+		}
+
 		// 체류 타이머는 방에 놓인 순간부터 - DB 적재 지연이 30 분을 깎지 않는다 (escape-timer.md Core Rule 13)
-		if (success)
+		if (success && IsBaseCamp() == false)
 		{
 			player->runStartUs = enterUs;
 			player->runDeadlineUs = enterUs + EscapeConfig::Get().runLimitUs;
@@ -489,7 +518,8 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		}
 
 
-		if (auto session = player->session.lock())
+		// 베이스캠프 방은 세션 place 를 건드리지 않는다 - BaseCamp 그대로라 창고 · 강화 · 착용 · 입장이 예전처럼 돈다
+		if (auto session = player->session.lock(); session != nullptr && IsBaseCamp() == false)
 		{
 			if (success)
 			{
@@ -507,7 +537,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(success);
 		enterGamePkt.set_mode(RunModeOf());
-		if (success)
+		if (success && IsBaseCamp() == false)
 			enterGamePkt.set_run_remaining_ms(static_cast<uint32>(EscapeConfig::Get().runLimitUs / 1000));
 
 		Protocol::ObjectInfo* playerInfo = new Protocol::ObjectInfo();
@@ -519,7 +549,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		if (auto session = player->session.lock())
 			session->Send(sendBuffer);
 
-		if (success)
+		if (success && IsBaseCamp() == false)
 		{
 			SendChestSnapshot(player);
 			SendDynamicWalls(player, enterUs);		// 지각변동 벽이 서 있으면 - 지형이라 보이든 말든 안다
@@ -530,7 +560,9 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			LogSlots(player, "enter");
 
 			SendEquipSync(player);
-			SendInventorySync(player);
+			// 베이스캠프는 창고까지 담긴 베이스캠프 동기화(SendBaseCampInventory)가 이미 갔다 - 소지만 담긴 던전 동기화로 덮지 않는다
+			if (IsBaseCamp() == false)
+				SendInventorySync(player);
 		}
 
 		// 협동 - 파티원 화면의 상태(던전)를 바꾼다
@@ -616,6 +648,13 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 		return false;
 	}
 
+	// 베이스캠프 몸 - 적재하는 사이 던전으로 들어갔거나(Entering) 다시 요청해 새 몸이 생겼으면 이 몸은 버린다 (패킷 없이)
+	if (IsBaseCamp() && (session->place.load() != SessionPlace::BaseCamp || session->player.load() != player || _closing))
+	{
+		LOG_LINE << "[CAMP] enter skipped - superseded. char=" << player->objectInfo->object_id() << " room=" << Tag() << '\n';
+		return false;
+	}
+
 	if (IsInstance())
 	{
 		if (_closing)
@@ -691,10 +730,19 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 	if (blockCheckUs < player->knockbackEndUs || blockCheckUs < player->tauntEndUs)
 		return;
 
-	if (player->CanMove(blockCheckUs) == false)
+	// 후딜 (2026-10-15) - 스킬 동작이 끝나기 전엔 자리를 옮길 수 없다. 제자리 회전(같은 좌표)은 통과하고,
+	// 그 스킬 자신의 돌진 · 도약 창(moveExceptionEndUs) 안의 이동은 평소처럼 검증한다
+	const bool inOwnDash = player->moveExceptionEndUs != 0 && blockCheckUs < player->moveExceptionEndUs;
+	const float lockDx = pkt.info().x() - player->posInfo->x();
+	const float lockDy = pkt.info().y() - player->posInfo->y();
+	const bool lockedMove = player->IsSkillLocked(blockCheckUs) && inOwnDash == false && (lockDx * lockDx + lockDy * lockDy) > CAST_MOVE_EPSILON_SQ;
+
+	if (player->CanMove(blockCheckUs) == false || lockedMove)
 	{
 		uint64 remainMs = 0;
-		const char* reason = PickHardCcReason(*player, blockCheckUs, OUT remainMs);
+		const char* reason = lockedMove ? "recovery" : PickHardCcReason(*player, blockCheckUs, OUT remainMs);
+		if (lockedMove)
+			remainMs = (player->skillLockUntilUs - blockCheckUs) / 1000;
 
 		GStats.AddMoveBlocked();
 
@@ -916,6 +964,10 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 	if (attacker->IsCasting())
 		return;
 
+	// 후딜 - 스킬 동작이 끝나기 전엔 평타도 없다 (2026-10-15)
+	if (attacker->IsSkillLocked(Utils::NowMicroseconds()))
+		return;
+
 	// 전력 질주 (1169) - "그동안 공격과 스킬을 사용할 수 없다" (스킬은 유지 중이라 이미 막힌다)
 	if (IsSprinting(attacker))
 		return;
@@ -1077,6 +1129,14 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	if (caster->IsCasting())
 		return;
 
+	// 후딜 - 앞 스킬의 동작이 끝나기 전엔 다른 스킬을 쓸 수 없다 (2026-10-15). 재입력은 위에서 이미 갈라졌다
+	if (caster->IsSkillLocked(nowUs))
+	{
+		LOG_LINE << "[SKILL REJECT] caster=" << casterId << " skill=" << def->skillId << " reason=recovery left="
+			<< (caster->skillLockUntilUs - nowUs) / 1000 << "ms" << '\n';
+		return;
+	}
+
 	// 외로운 외침 - 반경 안에 아무도 없을 때만 쓸 수 있다 (requires alone). 벽 차기 - 벽에 붙어 있을 때만 (requires near_wall, 2026-10-11)
 	for (const SkillEffect& e : def->effects)
 	{
@@ -1152,7 +1212,11 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	caster->castEndAtUs = nowUs + static_cast<uint64>(def->castMs) * 1000;
 	_casters.insert(casterId);
 
-	if (def->castMs > 0)
+	// 즉발 스킬도 동작이 있으면 알린다 (2026-10-15 원혼들의 몸부림 1014 - cast 0 이라 동작이 안 나갔다).
+	// 캐스트 표식은 같은 발동의 S_SKILL_HIT 가 지운다 - 보내는 순서가 cast 먼저라 길어야 한 틱
+	const auto motionIt = SkillTable::Motions().find(def->motionId);
+	const bool hasMotion = motionIt != SkillTable::Motions().end() && motionIt->second != "m_none";
+	if (def->castMs > 0 || hasMotion)
 	{
 		Protocol::SkillCastInfo& info = _pendingCasts.emplace_back();
 		info.set_caster_id(casterId);
@@ -1211,11 +1275,42 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 		baseDurationMs = static_cast<uint32>(baseDurationMs * (1.f - target->CcResistOf("slow")));
 	}
 
+	// 고독한 길 (2026-10-17) - 착용 수만큼, 적에게 둘러싸였을 때만 CC 가 짧아진다 (자기 CC 는 그대로)
+	if (instigatorId != targetId && target->IsPlayer())
+	{
+		const int32 lone = static_pointer_cast<Player>(target)->lonePieces;
+		if (lone > 0)
+		{
+			const LonePathRules& rules = LonePathRules::Get();
+			baseDurationMs = static_cast<uint32>(baseDurationMs * LonePath::CcDurationMult(lone, CountEnemiesNear(target, rules.outnumberRadiusCm), rules));
+		}
+	}
+
 	const uint32 effectiveMs = target->ComputeCcDurationMs(baseDurationMs);
 	if (effectiveMs == 0)
 		return;
 
 	ApplyCcRaw(target, instigatorId, type, effectiveMs, magnitude, nowUs);
+}
+
+int32 Room::CountEnemiesNear(const CreatureRef& who, float radiusCm)
+{
+	if (who == nullptr)
+		return 0;
+
+	const float r2 = radiusCm * radiusCm;
+	int32 n = 0;
+	for (const auto& [id, obj] : _objects)
+	{
+		CreatureRef c = dynamic_pointer_cast<Creature>(obj);
+		if (c == nullptr || c == who || c->IsAlive() == false || SameTeam(c, who))
+			continue;
+		const float dx = c->posInfo->x() - who->posInfo->x();
+		const float dy = c->posInfo->y() - who->posInfo->y();
+		if (dx * dx + dy * dy <= r2)
+			n++;
+	}
+	return n;
 }
 
 // 저항 계산 없이 그 길이 그대로 - 넉백 CC(날아가는 시간)는 거리가 이미 저항으로 줄었다 (공식 C6)
@@ -1524,10 +1619,45 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 
 	// 벽력일창 (fall_on_hit) - 도약은 지금, 내리찍기(대상 효과)는 도약이 끝나는 때. 그사이 맞으면 추락 = 예고 취소 (4 단계)
 	const SkillEffect* fall = (recast == false) ? def.FindEffect(SkillEffectType::FallOnHit) : nullptr;
-	const SkillEffect* leap = (fall != nullptr) ? def.FindEffect(SkillEffectType::Movement) : nullptr;
-	const uint32 leapMs = (leap != nullptr) ? SkillKinematics::TravelMs(leap->distCm, leap->speedCms) : 0;
+	// 맹수의 어금니 · 맹수의 앞발 (move leap_target, 2026-10-15) - 고른 적 바로 앞으로 도약하고, 대상 효과(피해 · CC)는 착지 때.
+	// 벽력일창과 같은 예약 경로를 쓰되 도약 중 맞아도 떨어지지 않는다 (fall_on_hit 없음)
+	const SkillEffect* moveEffect = (recast == false) ? def.FindEffect(SkillEffectType::Movement) : nullptr;
+	const bool leapToTarget = moveEffect != nullptr && moveEffect->param == "leap_target" && castTargetId != 0;
+	const SkillEffect* leap = (fall != nullptr || leapToTarget) ? moveEffect : nullptr;
+	uint32 leapMs = (leap != nullptr) ? SkillKinematics::TravelMs(leap->distCm, leap->speedCms) : 0;
+	if (leapToTarget && leap != nullptr)
+	{
+		constexpr float LEAP_TARGET_STOP_CM = 90.f;		// RoomSkills4 ON_ARRIVE_STOP_CM 와 같다
+		// 착지 = 대상 바로 앞 (클라 to_target 과 같은 계산 - S1MyPlayer StopShortCm)
+		leapMs = 0;
+		auto targetIt = _objects.find(castTargetId);
+		if (targetIt != _objects.end())
+		{
+			const float dx = targetIt->second->posInfo->x() - caster->posInfo->x();
+			const float dy = targetIt->second->posInfo->y() - caster->posInfo->y();
+			const float dist = (std::clamp)(::sqrtf(dx * dx + dy * dy) - LEAP_TARGET_STOP_CM, 0.f, leap->distCm * MoveDistScale(caster));
+			leapMs = SkillKinematics::TravelMs(dist, leap->speedCms);
+		}
+	}
 
-	if (fall != nullptr && leapMs > 0)
+	// 후딜 (2026-10-15 사용자) - 치는 때(돌진 · 도약 · 착지 뒤 지연 포함)부터 recovery_ms(애니메이션이 끝날 때까지) 동안
+	// 이동 · 평타 · 다른 스킬을 막는다. 클라는 자기 스킬에 같은 계산으로 입력을 막는다 - 서버는 지연 몫만큼 일찍 풀어
+	// 클라가 먼저 움직여 되돌림을 받는 일이 없게 한다
+	if (caster->IsPlayer() && def.recoveryMs > 0)
+	{
+		constexpr uint32 RECOVERY_LATENCY_GRACE_MS = 100;
+		uint32 strikeDelayMs = 0;
+		if (leap != nullptr)
+			strikeDelayMs = leapMs + (leapToTarget ? def.telegraphMs : 0);
+		else if (const SkillEffect* m = def.FindEffect(SkillEffectType::Movement); m != nullptr && m->speedCms > 0.f && m->param != "blink")
+			strikeDelayMs = SkillKinematics::TravelMs(m->distCm * MoveDistScale(caster), m->speedCms);
+		const uint32 lockMs = strikeDelayMs + def.recoveryMs;
+		const uint32 heldMs = lockMs > RECOVERY_LATENCY_GRACE_MS ? lockMs - RECOVERY_LATENCY_GRACE_MS : 0;
+		caster->skillLockUntilUs = max(caster->skillLockUntilUs, nowUs + static_cast<uint64>(heldMs) * 1000);
+		LOG_LINE << "[RECOVERY] char=" << casterId << " skill=" << def.skillId << " lock=" << lockMs << "ms" << '\n';
+	}
+
+	if (leap != nullptr && (leapMs > 0 || leapToTarget))		// leap_target 은 붙어 있어도(0 ms) 착지 뒤 지연을 지킨다
 	{
 		SkillContext ctx;
 		ctx.casterId = casterId;
@@ -1543,13 +1673,19 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		vector<CreatureRef> none;
 		ApplySkillEffects(caster, def, none, ctx, nowUs);		// 자기 효과(도약)만
 
-		caster->leapUntilUs = nowUs + static_cast<uint64>(leapMs) * 1000;
-		caster->leapSkillId = def.skillId;
+		// 도약 중 맞으면 떨어지는 건 벽력일창(fall_on_hit) 만
+		if (fall != nullptr)
+		{
+			caster->leapUntilUs = nowUs + static_cast<uint64>(leapMs) * 1000;
+			caster->leapSkillId = def.skillId;
+		}
 
+		// leap_target 은 착지 뒤 telegraph_ms 를 더 기다려 친다 (맹수의 어금니 - 애니메이션이 끝날 무렵, 2026-10-15)
+		const uint32 afterLandingMs = leapToTarget ? def.telegraphMs : 0;
 		PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
 		pending.casterId = casterId;
 		pending.skillId = def.skillId;
-		pending.fireAtUs = caster->leapUntilUs;
+		pending.fireAtUs = nowUs + static_cast<uint64>(leapMs + afterLandingMs) * 1000;
 		pending.targetId = castTargetId;
 		pending.originX = originX;
 		pending.originY = originY;
@@ -1559,7 +1695,7 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		pending.targetsOnly = true;
 		pending.bonusDamageMod = stillBonus;
 
-		LOG_LINE << "[LEAP] char=" << casterId << " skill=" << def.skillId << " lands in=" << leapMs << "ms" << '\n';
+		LOG_LINE << "[LEAP] char=" << casterId << " skill=" << def.skillId << " lands in=" << leapMs << "ms hit +" << afterLandingMs << "ms" << '\n';
 	}
 	else if (def.telegraphMs == 0 || recast)
 	{
@@ -1914,6 +2050,14 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 	if (ItemTable::CanEquip(found->itemTypeId, slot) == false)
 	{
 		session->SendItemResult(requestId, Protocol::ITEM_BAD_REQUEST, {});
+		return;
+	}
+
+	// 고독한 길 (2026-10-17) - 파티 중엔 낄 수 없다 (착용 중엔 파티를 못 맺는 것과 짝)
+	if (found->lonePath && GParties.PartyOf(player->objectInfo->object_id()) != 0)
+	{
+		LOG_LINE << "[ITEM] equip rejected - lone path in a party. char=" << player->objectInfo->object_id() << " item=" << instanceId << '\n';
+		session->SendItemResult(requestId, Protocol::ITEM_LONE_PATH_IN_PARTY, {});
 		return;
 	}
 
@@ -2504,6 +2648,13 @@ void Room::HandleDisconnect(PlayerRef player)
 {
 	JOB_TAG();
 	const uint64 playerId = player->objectInfo->object_id();
+
+	// 베이스캠프 몸은 남기지 않는다 - 런이 아니다 (다시 접속하면 새 베이스캠프 방)
+	if (IsBaseCamp())
+	{
+		DropBaseCampBody(player);
+		return;
+	}
 
 	// 방에 없거나 이미 죽었으면 남길 몸이 없다
 	if (_objects.find(playerId) == _objects.end() || player->IsAlive() == false)
@@ -6159,6 +6310,17 @@ int32 Room::ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& targ
 	if (attacker != target)
 		damage = static_cast<int32>(::lroundf(damage * IncomingDamageMult(attacker, target)));
 
+	// 고독한 길 (2026-10-17) - 착용 수만큼, 적에게 둘러싸였을 때만 받는 피해가 준다
+	if (attacker != target && target->IsPlayer())
+	{
+		const int32 lone = static_pointer_cast<Player>(target)->lonePieces;
+		if (lone > 0)
+		{
+			const LonePathRules& rules = LonePathRules::Get();
+			damage = static_cast<int32>(::lroundf(damage * LonePath::DamageTakenMult(lone, CountEnemiesNear(target, rules.outnumberRadiusCm), rules)));
+		}
+	}
+
 	// 면역 (피뢰 · 방염 · 만독불침)
 	if (HasImmunity(target, src.elem, nowUs))
 	{
@@ -6986,6 +7148,10 @@ void Room::SavePlayer(PlayerRef player)
 	if (characterId == 0)
 		return;
 
+	// 베이스캠프 좌표 · 체력은 런 상태가 아니다 - 저장하지 않는다 (저장 좌표 입장 FBTK_ENTRY_FROM_DB 가 바다에서 시작하지 않게)
+	if (IsBaseCamp())
+		return;
+
 	const int32 hp = player->hp;
 	const float x = player->posInfo->x();
 	const float y = player->posInfo->y();
@@ -7388,6 +7554,8 @@ void Room::UpdateMonsters(uint64 nowUs)
 		if (m->aiFixed)
 		{
 			m->decision = BrainOutput();
+			if (m->practice)
+				HealPracticeDummy(m, nowUs);
 			continue;
 		}
 
@@ -8128,7 +8296,9 @@ void Room::SetPartyTeam(uint64 partyId, vector<uint64> memberIds)
 	LOG_LINE << "[PARTY] team " << Tag() << " party=" << partyId << " members=" << n << "/" << memberIds.size() << '\n';
 }
 
-// 배신 (R5 · R6): 나간 즉시 모두의 적, 런이 끝날 때까지 표식, 방 전체에 방송 - 시스템은 막지도 벌하지도 않는다 (P3), 모두가 안다 (P4)
+// 배신 (R5 · R6): 나간 즉시 모두의 적, 방 전체에 방송 - 시스템은 막지도 벌하지도 않는다 (P3).
+// 표식은 배신당한 파티원의 클라에만 1 분 (2026-10-13 사용자 결정 · art-bible 배신자 표식 규칙) - 방송의 victim_names 로 클라가 정한다.
+// 그래서 모두가 받는 스폰 스냅샷 ObjectInfo.betrayer 는 켜지 않는다 (제3자에게 표식이 새지 않게)
 void Room::PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector<string> victimNames)
 {
 	JOB_TAG();
@@ -8138,7 +8308,6 @@ void Room::PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector
 		return;
 	player->teamId = 0;
 	player->betrayer = true;
-	player->objectInfo->set_betrayer(true);
 
 	Protocol::S_PARTY_BETRAYED pkt;
 	pkt.set_betrayer_id(who);

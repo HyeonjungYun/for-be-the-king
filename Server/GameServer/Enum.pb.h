@@ -441,12 +441,13 @@ enum ItemResult : int {
   ITEM_INVENTORY_FULL = 4,
   ITEM_BAD_REQUEST = 5,
   ITEM_DB_ERROR = 6,
+  ITEM_LONE_PATH_IN_PARTY = 7,
   ItemResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   ItemResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool ItemResult_IsValid(int value);
 constexpr ItemResult ItemResult_MIN = ITEM_OK;
-constexpr ItemResult ItemResult_MAX = ITEM_DB_ERROR;
+constexpr ItemResult ItemResult_MAX = ITEM_LONE_PATH_IN_PARTY;
 constexpr int ItemResult_ARRAYSIZE = ItemResult_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor();
@@ -529,12 +530,13 @@ enum RunMode : int {
   RUN_MODE_PVP = 0,
   RUN_MODE_PVE_SOLO = 1,
   RUN_MODE_PVE_COOP = 2,
+  RUN_MODE_BASECAMP = 3,
   RunMode_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   RunMode_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool RunMode_IsValid(int value);
 constexpr RunMode RunMode_MIN = RUN_MODE_PVP;
-constexpr RunMode RunMode_MAX = RUN_MODE_PVE_COOP;
+constexpr RunMode RunMode_MAX = RUN_MODE_BASECAMP;
 constexpr int RunMode_ARRAYSIZE = RunMode_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunMode_descriptor();
@@ -566,12 +568,13 @@ enum PartyResult : int {
   PARTY_COOP_ONLY = 11,
   PARTY_NOT_VISIBLE = 12,
   PARTY_NO_KICK_IN_RUN = 13,
+  PARTY_LONE_PATH = 14,
   PartyResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   PartyResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool PartyResult_IsValid(int value);
 constexpr PartyResult PartyResult_MIN = PARTY_OK;
-constexpr PartyResult PartyResult_MAX = PARTY_NO_KICK_IN_RUN;
+constexpr PartyResult PartyResult_MAX = PARTY_LONE_PATH;
 constexpr int PartyResult_ARRAYSIZE = PartyResult_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyResult_descriptor();

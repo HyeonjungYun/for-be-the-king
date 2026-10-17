@@ -5,8 +5,9 @@ skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,dura
 1005,1,damage,target,none,2.0,0,1,0,none,0,0,0,0,0,none,0,0,none
 1006,1,damage,target,none,1.2,0,1,0,none,0,0,0,0,0,none,0,0,none
 1006,2,knockback,target,none,0,0,0,0,knockback,0,0,300,800,0,none,0,0,none
-1007,1,damage,target,none,2.5,0,1,0,none,0,0,0,0,0,none,0,0,none
-1007,2,hard_cc,target,none,0,0,0,0,stun,1000,0,0,0,0,none,0,0,none
+1007,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,to_target
+1007,2,damage,target,none,2.5,0,1,0,none,0,0,0,0,0,none,0,0,none
+1007,3,hard_cc,target,none,0,0,0,0,stun,1000,0,0,0,0,none,0,0,none
 1008,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,to_target
 1008,2,damage,target,none,1.5,0,1,0,none,0,0,0,0,0,none,0,0,none
 1009,1,damage,target,none,1.0,1.0,1,0,none,0,0,0,0,0,none,0,0,none
@@ -44,12 +45,12 @@ skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,dura
 1028,3,self_cc,self,wall,0,0,0,0,stun,1000,0,0,0,0,none,0,0,none
 1028,4,soft_cc,target,wall,0,0,0,0,slow,1500,0.3,0,0,0,none,0,300,none
 1029,1,soft_cc,target,none,0,0,0,0,slow,1500,0.3,0,0,0,none,0,0,none
-1030,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,dash
+1030,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,leap_target
 1030,2,damage,target,none,2.5,0,1,0,none,0,0,0,0,0,none,0,0,none
 1030,3,hard_cc,target,none,0,0,0,0,stun,1000,0,0,0,0,none,0,0,none
 1030,4,soft_cc,target,none,0,0,0,0,slow,1500,0.3,0,0,0,none,0,300,none
 1030,5,execute,target,none,0,0,0,0,none,0,15,0,0,0,none,0,0,none
-1031,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,dash
+1031,1,move,self,none,0,0,0,0,none,0,0,400,1200,0,none,0,0,leap_target
 1031,2,damage,target,none,1.5,0,1,0,none,0,0,0,0,0,none,0,0,none
 1031,3,hard_cc,target,none,0,0,0,0,launch,800,0,0,0,0,none,0,0,none
 1031,4,soft_cc,target,none,0,0,0,0,slow,1500,0.3,0,0,0,none,0,300,none

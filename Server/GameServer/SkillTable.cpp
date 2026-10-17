@@ -362,11 +362,12 @@ namespace
 						error = ew + " speed_cms must be >= dist_cm / 0.4 (dash_duration cap)";
 						return false;
 					}
-					// to_target = 대상 바로 앞까지 (기습 · 일도양단) · dash_through = 유닛을 지나간다(벽은 막힌다, 그림자 베기) - 둘 다 클라가 움직인다
+					// to_target = 대상 바로 앞까지 (기습 · 일도양단) · dash_through = 유닛을 지나간다(벽은 막힌다, 그림자 베기) - 둘 다 클라가 움직인다.
+					// leap_target = 고른 적 바로 앞으로 도약, 대상 효과는 착지 때 (맹수의 어금니 · 맹수의 앞발, 2026-10-15)
 					if (instant == false && e.param != "dash" && e.param != "leap" && e.param != "back" && e.param != "forward"
-						&& e.param != "to_target" && e.param != "dash_through" && e.param != "slide" && e.param != "off_wall")
+						&& e.param != "to_target" && e.param != "leap_target" && e.param != "dash_through" && e.param != "slide" && e.param != "off_wall")
 					{
-						error = ew + " param must be dash / leap / back / forward / to_target / dash_through / slide / off_wall / blink / to_mark:<mark> / to_anchor / rewind";
+						error = ew + " param must be dash / leap / back / forward / to_target / leap_target / dash_through / slide / off_wall / blink / to_mark:<mark> / to_anchor / rewind";
 						return false;
 					}
 					if (e.param == "rewind" && e.durationMs == 0)
@@ -748,8 +749,43 @@ bool SkillTable::Load(const string& dataDir, OUT string& error)
 	const bool hasSkillMotions = Csv::ReadFile(dataDir + "\\skill_motions.csv", OUT skillMotions);
 	if (ParseMotions(hasMotions ? &motions : nullptr, hasSkillMotions ? &skillMotions : nullptr, OUT error) == false)
 		return false;
+	// 후딜 (2026-10-15) - 선택 파일. 없으면 모두 0
+	string recovery;
+	if (Csv::ReadFile(dataDir + "\\skill_recovery.csv", OUT recovery) && ParseRecovery(recovery, OUT error) == false)
+		return false;
 	// 부팅은 표가 있으면 빠짐을 허락하지 않는다 - 한 줄 지워도 조용히 "동작 없음" 으로 부팅되던 것 (검증자 2026-10-12 수정 4). Parse 단위는 부분 표를 허락한다(테스트)
 	return MotionsCoverAllSkills(OUT error);
+}
+
+bool SkillTable::ParseRecovery(const string& recoveryCsv, OUT string& error)
+{
+	for (auto& [id, def] : s_defs)
+		def.recoveryMs = 0;
+
+	CsvTable table;
+	vector<int32> c;
+	if (Csv::Parse(recoveryCsv, "skill_recovery.csv", OUT table, OUT error) == false
+		|| Csv::FindColumns(table, "skill_recovery.csv", { "skill_id", "recovery_ms" }, OUT c, OUT error) == false)
+		return false;
+	for (size_t r = 0; r < table.rows.size(); r++)
+	{
+		const string where = "skill_recovery.csv:" + to_string(table.lineNumbers[r]);
+		uint32 skillId = 0;
+		uint32 ms = 0;
+		if (Csv::ParseUInt(table.rows[r][c[0]], OUT skillId) == false || Csv::ParseUInt(table.rows[r][c[1]], OUT ms) == false)
+		{
+			error = where + " skill_id and recovery_ms must be numbers >= 0";
+			return false;
+		}
+		auto it = s_defs.find(skillId);
+		if (it == s_defs.end())
+		{
+			error = where + " unknown skill " + to_string(skillId);
+			return false;
+		}
+		it->second.recoveryMs = ms;
+	}
+	return true;
 }
 
 bool SkillTable::MotionsCoverAllSkills(OUT string& error)

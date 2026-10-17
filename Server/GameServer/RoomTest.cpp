@@ -352,7 +352,7 @@ void Room::DropOrphanDummies()
 	vector<uint64> owners;
 	for (const auto& [id, m] : _monsters)
 	{
-		if (m->isDummy && _objects.find(m->dummyOwnerId) == _objects.end()
+		if (m->isDummy && m->practice == false && _objects.find(m->dummyOwnerId) == _objects.end()
 			&& find(owners.begin(), owners.end(), m->dummyOwnerId) == owners.end())
 			owners.push_back(m->dummyOwnerId);
 	}

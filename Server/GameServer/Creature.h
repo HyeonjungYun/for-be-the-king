@@ -209,6 +209,11 @@ public:
 	bool IsInvulnerable(uint64 nowUs) const { return nowUs < invulnUntilUs; }
 	bool IsLeaping(uint64 nowUs) const { return nowUs < leapUntilUs; }
 
+	// ── 후딜 (2026-10-15 사용자) - 스킬이 나간 뒤 애니메이션이 끝날 때까지 이동 · 평타 · 다른 스킬이 막힌다 ──
+	// 그 스킬 자신의 돌진 · 도약 창 안의 이동은 막지 않는다 (Room::HandleMove). 재입력의 두 번째 입력도 막지 않는다
+	uint64				skillLockUntilUs = 0;
+	bool IsSkillLocked(uint64 nowUs) const { return nowUs < skillLockUntilUs; }
+
 	// ── FoW (2026-10-11) ──
 	// 은신 (그림자 감추기 · 니힐) - 다른 플레이어에게 보내지 않는다 (탐지 시야원만 본다). 대상으로 지정할 수 없고 몬스터가 놓친다.
 	// 공격 · 스킬을 쓰면 풀린다. stealthBreaksOnDamage 면 피해를 받아도 풀린다 (그림자 감추기 - 사용자 결정)

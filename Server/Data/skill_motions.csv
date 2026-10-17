@@ -1,178 +1,178 @@
 skill_id,motion_key,note
-1002,m_dash,
-1003,m_dash,
-1004,m_slash,
-1005,m_slam,
-1006,m_slash,
-1007,m_thrust,
-1008,m_attack,접근 후 단칼
-1009,m_slash,검기 투사체
-1010,m_buff,
-1011,m_cast,무기 빛 반사 콘
-1012,m_counter,앉아 기다렸다 반격
-1013,m_summon,원혼을 불러내 끌어당김
-1014,m_spin,
-1015,m_attack,
-1016,m_spin,
-1017,m_cast,창으로 가리켜 표식
-1018,m_thrust,
-1019,m_leap,도약 후 내리꽂기
-1020,m_slam,찍어 올려 내리꽂기
-1021,m_thrust,
-1022,m_cast,하늘에서 벼락 호출
-1023,m_ultimate,
+1002,m_none,
+1003,m_none,
+1004,m_sk_1004,src/skill list
+1005,m_sk_1005,src/skill list
+1006,m_sk_1006,src/skill list
+1007,m_sk_1007,src/skill list
+1008,m_sk_1008,src/skill list
+1009,m_sk_1009,src/skill list
+1010,m_none,
+1011,m_none,무기 빛 반사 콘
+1012,m_none,앉아 기다렸다 반격
+1013,m_none,원혼을 불러내 끌어당김
+1014,m_sk_1014,src/skill list
+1015,m_none,
+1016,m_none,
+1017,m_none,창으로 가리켜 표식
+1018,m_none,
+1019,m_none,도약 후 내리꽂기
+1020,m_none,찍어 올려 내리꽂기
+1021,m_none,
+1022,m_none,하늘에서 벼락 호출
+1023,m_none,
 1024,m_none,
-1025,m_cast,원혼의 저주
-1026,m_slam,
-1027,m_cast,번개 섬광 분출
-1028,m_channel,회전 유지 루프
-1029,m_shout,
-1030,m_leap,도약 후 내리침
-1031,m_dash,질주 후 올려침
-1032,m_ground,땅을 가볍게 내리침
-1033,m_shout,
+1025,m_none,원혼의 저주
+1026,m_none,
+1027,m_none,번개 섬광 분출
+1028,m_none,회전 유지 루프
+1029,m_none,
+1030,m_sk_1030,src/skill list
+1031,m_sk_1031,src/skill list
+1032,m_none,땅을 가볍게 내리침
+1033,m_none,
 1034,m_none,
-1035,m_combo,도약 후 3연타
-1036,m_thrust,
-1037,m_dash,질주하며 베기
-1038,m_thrust,첫 사용: 찌른 뒤 후방 도약
-1039,m_spin,
-1040,m_cast,독 지대 방출
-1041,m_buff,단검에 독 바름
-1042,m_throw,단검 투척
-1043,m_execute,
-1044,m_thrust,독 주입 찌르기
-1045,m_throw,밧줄 단검 투척
-1046,m_shoot,
-1047,m_buff,공속 버프 (연사 아님)
-1048,m_shoot_multi,
-1049,m_shoot,
-1050,m_throw,작살 투척
-1051,m_summon,
-1052,m_shoot_charge,
-1053,m_shoot,한 걸음 물러나 1발
-1054,m_shoot,한 걸음 나아가 1발
-1055,m_shoot_multi,
-1056,m_shoot_multi,하늘로 쏘아 올림
-1057,m_shoot_charge,
-1058,m_thrust,주먹 지르기
-1059,m_counter,받아넘김
-1060,m_throw,붙잡아 던짐
-1061,m_dash,
-1062,m_cast,불 기운 방출
-1063,m_dash,
-1064,m_attack,불 기운 주입 일격
-1065,m_dash,
-1066,m_execute,
+1035,m_none,도약 후 3연타
+1036,m_none,
+1037,m_none,질주하며 베기
+1038,m_none,첫 사용: 찌른 뒤 후방 도약
+1039,m_none,
+1040,m_none,독 지대 방출
+1041,m_none,단검에 독 바름
+1042,m_none,단검 투척
+1043,m_none,
+1044,m_none,독 주입 찌르기
+1045,m_none,밧줄 단검 투척
+1046,m_none,
+1047,m_none,공속 버프 (연사 아님)
+1048,m_none,
+1049,m_none,
+1050,m_none,작살 투척
+1051,m_none,
+1052,m_none,
+1053,m_none,한 걸음 물러나 1발
+1054,m_none,한 걸음 나아가 1발
+1055,m_none,
+1056,m_none,하늘로 쏘아 올림
+1057,m_none,
+1058,m_none,주먹 지르기
+1059,m_none,받아넘김
+1060,m_none,붙잡아 던짐
+1061,m_none,
+1062,m_none,불 기운 방출
+1063,m_none,
+1064,m_none,불 기운 주입 일격
+1065,m_none,
+1066,m_none,
 1067,m_none,
-1068,m_shoot,
-1069,m_cast,
-1070,m_cast,
-1071,m_shoot,
-1072,m_ground,바닥에 광선
-1073,m_buff,
-1074,m_buff,무적 은신 버프
-1075,m_blink,
-1076,m_channel,
-1077,m_buff,
-1078,m_buff,
-1079,m_buff,
-1080,m_buff,
-1081,m_cast,표식 남김
-1082,m_shout,
+1068,m_none,
+1069,m_none,
+1070,m_none,
+1071,m_none,
+1072,m_none,바닥에 광선
+1073,m_none,
+1074,m_none,무적 은신 버프
+1075,m_none,
+1076,m_none,
+1077,m_none,
+1078,m_none,
+1079,m_none,
+1080,m_none,
+1081,m_none,표식 남김
+1082,m_none,
 1083,m_none,
-1084,m_buff,
-1085,m_dash,표식 대상에게 접근
-1086,m_shout,마력 발산 침묵
-1087,m_shout,
+1084,m_none,
+1085,m_none,표식 대상에게 접근
+1086,m_none,마력 발산 침묵
+1087,m_none,
 1088,m_none,
 1089,m_none,
 1090,m_none,
-1091,m_cast,적 스킬 구성 간파
-1092,m_buff,
-1093,m_buff,
+1091,m_none,적 스킬 구성 간파
+1092,m_none,
+1093,m_none,
 1094,m_none,
-1095,m_buff,
+1095,m_none,
 1096,m_none,
 1097,m_none,
-1098,m_buff,
-1099,m_buff,
-1100,m_buff,
-1101,m_buff,
-1102,m_buff,
-1103,m_cast,마력 폭발
-1104,m_cast,
-1105,m_cast,
-1106,m_combo,
-1107,m_counter,
-1108,m_spin,휘두르다 날아감
-1109,m_slash,한 명 크게 쳐 날림
-1110,m_kick,
-1111,m_buff,발을 딛는 자세
-1112,m_slash,검기 투사체
-1113,m_cast,원혼 방출 콘
-1114,m_slash,
-1115,m_buff,원혼을 받아들임
-1116,m_buff,
-1117,m_buff,스스로 베임
-1118,m_thrust,첫 사용: 찌르기
-1119,m_buff,
-1120,m_buff,기본공격 사방베기 전환
-1121,m_buff,가시 모피
-1122,m_slam,
-1123,m_throw,
-1124,m_buff,은신 (피격 시 해제)
-1125,m_throw,부채꼴 다중 투척
-1126,m_summon,분신 보냄
-1127,m_throw,연달아 투척
-1128,m_blink,
-1129,m_buff,체취를 바름
-1130,m_ground,물 뿌려 웅덩이
-1131,m_buff,
+1098,m_none,
+1099,m_none,
+1100,m_none,
+1101,m_none,
+1102,m_none,
+1103,m_none,마력 폭발
+1104,m_none,
+1105,m_none,
+1106,m_none,
+1107,m_none,
+1108,m_none,휘두르다 날아감
+1109,m_none,한 명 크게 쳐 날림
+1110,m_none,
+1111,m_none,발을 딛는 자세
+1112,m_none,검기 투사체
+1113,m_none,원혼 방출 콘
+1114,m_none,
+1115,m_none,원혼을 받아들임
+1116,m_none,
+1117,m_none,스스로 베임
+1118,m_none,첫 사용: 찌르기
+1119,m_none,
+1120,m_none,기본공격 사방베기 전환
+1121,m_none,가시 모피
+1122,m_none,
+1123,m_none,
+1124,m_none,은신 (피격 시 해제)
+1125,m_none,부채꼴 다중 투척
+1126,m_none,분신 보냄
+1127,m_none,연달아 투척
+1128,m_none,
+1129,m_none,체취를 바름
+1130,m_none,물 뿌려 웅덩이
+1131,m_none,
 1132,m_none,
-1133,m_buff,
-1134,m_buff,칼을 꺼내 듦
-1135,m_summon,
-1136,m_shoot_multi,돌진 후 사방 난사
-1137,m_shoot,
-1138,m_throw,첫 사용: 창 투척
-1139,m_combo,창 연속 찌르기
-1140,m_thrust,찌르며 후퇴
-1141,m_dash,
-1142,m_ground,번개 기둥 내리꽂기
+1133,m_none,
+1134,m_none,칼을 꺼내 듦
+1135,m_none,
+1136,m_none,돌진 후 사방 난사
+1137,m_none,
+1138,m_none,첫 사용: 창 투척
+1139,m_none,창 연속 찌르기
+1140,m_none,찌르며 후퇴
+1141,m_none,
+1142,m_none,번개 기둥 내리꽂기
 1143,m_none,
-1144,m_buff,창을 길게 고쳐 쥠
-1145,m_buff,창을 짧게 고쳐 쥠
-1146,m_counter,창 돌려 투사체 쳐냄
-1147,m_block,
-1148,m_cast,
-1149,m_block,
-1150,m_ground,첫 사용: 문 새김
+1144,m_none,창을 길게 고쳐 쥠
+1145,m_none,창을 짧게 고쳐 쥠
+1146,m_none,창 돌려 투사체 쳐냄
+1147,m_none,
+1148,m_none,
+1149,m_none,
+1150,m_none,첫 사용: 문 새김
 1151,m_none,
-1152,m_buff,시간 되감기
-1153,m_cast,
-1154,m_cast,
-1156,m_ground,바닥에 마법진
-1157,m_cast,
-1158,m_buff,
-1159,m_dash,
-1160,m_dash,
-1161,m_dash_back,
-1162,m_roll,
-1163,m_leap,벽을 박차고 뜀
-1164,m_dash,
-1165,m_dash,
-1166,m_leap,
-1167,m_blink,
-1168,m_dash,허상을 남김
-1169,m_channel,달리기 유지 (토글)
-1170,m_dash,미끄러지는 활주
-1171,m_buff,
-1172,m_buff,
-1173,m_buff,
-1174,m_buff,주머니를 벗음
-1175,m_buff,
-1176,m_buff,
+1152,m_none,시간 되감기
+1153,m_none,
+1154,m_none,
+1156,m_none,바닥에 마법진
+1157,m_none,
+1158,m_none,
+1159,m_none,
+1160,m_none,
+1161,m_none,
+1162,m_none,
+1163,m_none,벽을 박차고 뜀
+1164,m_none,
+1165,m_none,
+1166,m_none,
+1167,m_none,
+1168,m_none,허상을 남김
+1169,m_none,달리기 유지 (토글)
+1170,m_none,미끄러지는 활주
+1171,m_none,
+1172,m_none,
+1173,m_none,
+1174,m_none,주머니를 벗음
+1175,m_none,
+1176,m_none,
 1177,m_none,
 1178,m_none,
 1179,m_none,
@@ -181,9 +181,9 @@ skill_id,motion_key,note
 1182,m_none,
 1183,m_none,
 1184,m_none,
-1185,m_buff,
-1186,m_ground,
-1187,m_buff,발자국 시야 유틸
-1188,m_buff,
-1189,m_ground,자리에 연막
-9001,m_slam,보스 몬스터 스킬
+1185,m_none,
+1186,m_none,
+1187,m_none,발자국 시야 유틸
+1188,m_none,
+1189,m_none,자리에 연막
+9001,m_none,보스 몬스터 스킬

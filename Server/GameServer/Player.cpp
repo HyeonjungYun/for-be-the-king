@@ -1,6 +1,8 @@
 ﻿#include "pch.h"
 #include "Player.h"
 #include "EquipStats.h"
+#include "GameSession.h"
+#include "LonePath.h"
 
 namespace
 {
@@ -48,11 +50,19 @@ float Player::ComputeMoveSpeed(float slow) const
 bool Player::ApplyEquipmentStats(bool refill)
 {
 	vector<WornItem> worn;
+	vector<uint64> loneIds;		// 보조 무기 칸이 주무기와 같은 아이템이어도 한 번만 센다
 	for (const ItemEntry& e : equipped)
 	{
 		if (e.instanceId != 0)
 			worn.push_back({ e.itemTypeId, e.grade, e.level });
+		if (e.instanceId != 0 && e.lonePath && find(loneIds.begin(), loneIds.end(), e.instanceId) == loneIds.end())
+			loneIds.push_back(e.instanceId);
 	}
+
+	// 고독한 길 (2026-10-17) - 착용 수. 파티 검사는 세션에서 본다 (PartyManager)
+	lonePieces = static_cast<int32>(loneIds.size());
+	if (shared_ptr<GameSession> s = session.lock())
+		s->lonePieces.store(lonePieces);
 
 	equipTotals = EquipStats::Compute(worn, nakedMaxHp);
 
@@ -74,8 +84,10 @@ void Player::RebuildCombatStats()
 	auto pct = [&](SkillBuffStat stat) { return status.BuffSum(stat); };
 	auto scaled = [](int32 base, float bonus) { return static_cast<int32>(::lroundf(base * (1.f + bonus))); };
 
-	attackPower		= scaled(t.attackPower, pct(SkillBuffStat::AttackPower));
-	magicPower		= scaled(t.magicPower, pct(SkillBuffStat::MagicPower));
+	// 고독한 길 - 착용 수만큼 공격력 · 마력 (상황 무관, 버프와 같은 합에)
+	const float lone = LonePath::AttackBonus(lonePieces, LonePathRules::Get());
+	attackPower		= scaled(t.attackPower, pct(SkillBuffStat::AttackPower) + lone);
+	magicPower		= scaled(t.magicPower, pct(SkillBuffStat::MagicPower) + lone);
 	armor			= scaled(t.armor, pct(SkillBuffStat::Armor));
 	magicResist		= scaled(t.magicResist, pct(SkillBuffStat::MagicResist));
 	critChance		= min(EquipStats::CRIT_CHANCE_MAX, t.critChance + pct(SkillBuffStat::CritChance));
@@ -155,6 +167,7 @@ Protocol::ItemInstance ItemEntry::ToProto(Protocol::ItemState state, Protocol::E
 	item.set_level(level);
 	item.set_state(state);
 	item.set_slot(slot);
+	item.set_lone_path(lonePath);
 
 	if (skillIdPrimary != 0)
 		item.add_skills()->set_skill_id(skillIdPrimary);

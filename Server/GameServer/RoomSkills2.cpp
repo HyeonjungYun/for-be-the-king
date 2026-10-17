@@ -6,6 +6,7 @@
 #include "SkillTable.h"
 #include "SkillKinematics.h"
 #include "WallTable.h"
+#include "BaseCampTable.h"
 #include "Vision.h"
 #include "GameSession.h"
 
@@ -43,7 +44,13 @@ namespace
 
 const WallMap& Room::Walls() const
 {
-	return (_wallsWithDynamic != nullptr) ? *_wallsWithDynamic : WallTable::Get(_floorId);
+	return (_wallsWithDynamic != nullptr) ? *_wallsWithDynamic : BaseWalls();
+}
+
+const WallMap& Room::BaseWalls() const
+{
+	// 베이스캠프 방 (2026-10-17) - 캠프 바닥 네모가 해안선, NPC · 장식이 기둥
+	return (_kind == RoomKind::BaseCamp) ? BaseCampTable::Walls() : WallTable::Get(_floorId);
 }
 
 void Room::RebuildWalls()
@@ -59,14 +66,14 @@ void Room::RebuildWalls()
 	}
 
 	// 층 벽(771) + 임시 벽으로 지도를 다시 짓는다 - 격자 CSR 이라 O(n), 1 ms 미만. 벽이 생기고 사라질 때만 (쿨다운 15 s)
-	vector<WallBox> all = WallTable::Get(_floorId).Walls();
+	vector<WallBox> all = BaseWalls().Walls();
 	for (const DynamicWall& w : _dynWalls)
 		all.push_back(w.box);
 
 	// 해안선도 옮긴다 - 임시 벽이 선 동안에도 바다는 바다다 (2026-10-11 섬)
 	auto map = make_shared<WallMap>();
 	string error;
-	if (map->Build(move(all), OUT error) == false || map->SetOutline(WallTable::Get(_floorId).Outline(), OUT error) == false)
+	if (map->Build(move(all), OUT error) == false || map->SetOutline(BaseWalls().Outline(), OUT error) == false)
 	{
 		LOG_LINE << "[WALL] rebuild failed - " << error << " (temporary walls ignored)\n";
 		_wallsWithDynamic.reset();
@@ -99,7 +106,7 @@ void Room::RaiseWall(const CreatureRef& caster, const SkillDef& def, const Skill
 	w.effectId = def.effectId;
 
 	// 바다 위에는 세우지 않는다 - 가운데가 해안선 밖이면 짓지 못한 것으로 (2026-10-11 섬)
-	if (WallTable::Get(_floorId).InsideFloor(w.box.cx, w.box.cy) == false)
+	if (BaseWalls().InsideFloor(w.box.cx, w.box.cy) == false)
 		return;
 
 	_dynWalls.push_back(w);

@@ -241,6 +241,7 @@ struct SkillDef
 	vector<string>			tags;					// skills.csv tags 열 (세미콜론 구분) - damage_mod tag:<태그> 가 본다
 	string					requiresWeapon;			// skills.csv requires_weapon 열 - "hammer" 등 무기 풀 id. 비면 조건 없음 (갑옷 #106 ~ #114)
 	string					requiresWeaponTag;		// "sword:ghost" 의 ghost - 무기 칸 스킬 중 하나가 그 태그를 가져야 한다 (#113)
+	uint32					recoveryMs = 0;			// skill_recovery.csv - 친 뒤 이만큼 이동 · 평타 · 스킬이 막힌다 (후딜, 2026-10-15). 0 = 없음 (버프 · 순수 이동기)
 	uint32					motionId = 0;			// skill_motions.csv - 몸이 하는 동작(휘두르기 · 질주 · 시전…) 번호. S_SKILL_CAST 로 보는 사람 모두에게 (스킬 id 는 아니다, 2026-10-12)
 
 	bool HasHardCc() const;
@@ -288,6 +289,8 @@ public:
 	// motions.csv (motion_id,key) + skill_motions.csv (skill_id,motion_key) - 애니메이션 동작 (2026-10-12). 둘 다 없으면 동작 0.
 	// 한쪽만 있거나, 모르는 키 · 모르는 스킬 · 두 번 적힌 스킬이면 거부. Parse 다음에 부른다
 	static bool				ParseMotions(const string* motionsCsv, const string* skillMotionsCsv, OUT string& error);
+	/** skill_recovery.csv (skill_id,recovery_ms) - 후딜. 모르는 스킬 · 음수는 거부. 표에 없는 스킬은 0 (선택 파일) */
+	static bool				ParseRecovery(const string& recoveryCsv, OUT string& error);
 	static const unordered_map<uint32, string>&	Motions() { return s_motions; }
 	// 동작 표가 있으면 skills.csv 의 모든 스킬이 skill_motions.csv 에 있어야 한다 (부팅 검사 - Load 가 부른다)
 	static bool				MotionsCoverAllSkills(OUT string& error);

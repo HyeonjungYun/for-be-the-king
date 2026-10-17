@@ -76,7 +76,7 @@ namespace
 	// 이번 런에 생긴 아이템(isNew)은 DB 행이 없다 - 커밋이 새 행으로 넣는다 (상자 S-4).
 	constexpr const char* INSERT_ITEMS =
 		"INSERT INTO item_instances (instance_id, item_type_id, grade, level, state, slot, "
-		"owner_character_id, bag_id, skill_id_primary, skill_id_secondary) VALUES ";
+		"owner_character_id, bag_id, skill_id_primary, skill_id_secondary, lone_path) VALUES ";
 
 	// INSERT_ITEMS 뒤에 붙일 한 행. 주인과 가방은 둘 중 하나만 있다 (chk_owner_xor_bag) - 없는 쪽은 0 을 넘긴다.
 	void AppendItemValues(OUT string& values, const ItemEntry& e, Protocol::ItemState state, int32 slot, uint32 level, uint64 ownerId, uint64 bagId)
@@ -88,7 +88,7 @@ namespace
 			+ "," + to_string(level) + "," + to_string(static_cast<int32>(state)) + "," + to_string(slot)
 			+ "," + ((ownerId != 0) ? to_string(ownerId) : string("NULL"))
 			+ "," + ((bagId != 0) ? to_string(bagId) : string("NULL"))
-			+ "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + ")";
+			+ "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + "," + (e.lonePath ? "1" : "0") + ")";
 	}
 
 	// INSERT_ITEMS 의 관대 판 - 이미 있는 id(중복 키) · 제약 위반 행은 건너뛰고 나머지를 넣는다
@@ -581,7 +581,7 @@ bool LoadLiveBags(DBConnection* conn)
 		return false;
 
 	MYSQL_RES* itemRes = conn->Query(
-		"SELECT bag_id, instance_id, item_type_id, grade, level, skill_id_primary, skill_id_secondary "
+		"SELECT bag_id, instance_id, item_type_id, grade, level, skill_id_primary, skill_id_secondary, lone_path "
 		"FROM item_instances WHERE bag_id IS NOT NULL");
 
 	if (itemRes == nullptr)
@@ -609,6 +609,7 @@ bool LoadLiveBags(DBConnection* conn)
 		e.level = static_cast<uint32>(::atoi(row[4]));
 		e.skillIdPrimary = static_cast<uint32>(::atoi(row[5]));
 		e.skillIdSecondary = static_cast<uint32>(::atoi(row[6]));
+		e.lonePath = ::atoi(row[7]) != 0;
 
 		findIt->second->items.push_back(e);
 		itemCount++;
@@ -865,7 +866,7 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 
 	char query[320];
 	::snprintf(query, sizeof(query),
-		"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary "
+		"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path "
 		"FROM item_instances WHERE owner_character_id = %llu AND state IN (%d, %d, %d)",
 		characterId,
 		static_cast<int32>(Protocol::ITEM_STATE_VAULTED),
@@ -883,6 +884,7 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 	int32 vaulted = 0;
 	int32 carried = 0;
 	int32 equipped = 0;
+	int32 lonePieces = 0;		// 고독한 길 - 착용한 옵션 아이템 수 (2026-10-17)
 
 	while (MYSQL_ROW row = ::mysql_fetch_row(res))
 	{
@@ -893,6 +895,7 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 		e.level = static_cast<uint32>(::atoi(row[3]));
 		e.skillIdPrimary = static_cast<uint32>(::atoi(row[6]));
 		e.skillIdSecondary = static_cast<uint32>(::atoi(row[7]));
+		e.lonePath = ::atoi(row[8]) != 0;
 
 		const Protocol::ItemState state = static_cast<Protocol::ItemState>(::atoi(row[4]));
 		const Protocol::EquipSlot slot = static_cast<Protocol::EquipSlot>(::atoi(row[5]));
@@ -903,10 +906,14 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 		else if (state == Protocol::ITEM_STATE_CARRIED)
 			carried++;
 		else
+		{
 			equipped++;
+			lonePieces += e.lonePath ? 1 : 0;
+		}
 	}
 
 	conn->FreeResult(res);
+	session->lonePieces.store(lonePieces);
 
 	SEND_PACKET_DECLARATION(pkt);
 	session->Send(sendBuffer);

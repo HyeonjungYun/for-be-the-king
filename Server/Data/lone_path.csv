@@ -1,0 +1,8 @@
+key,value
+roll_pct,5
+damage_reduce_per_piece,0.08
+cc_reduce_per_piece,0.10
+attack_per_piece,0.03
+max_pieces,4
+outnumber_radius_cm,800
+outnumber_enemies,2

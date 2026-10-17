@@ -177,6 +177,9 @@
     <ClCompile Include="InstanceManager.cpp" />
     <ClCompile Include="RoomPacks.cpp" />
     <ClCompile Include="EscapeLogic.cpp" />
+    <ClCompile Include="LonePath.cpp" />
+    <ClCompile Include="BaseCampTable.cpp" />
+    <ClCompile Include="RoomBaseCamp.cpp" />
     <ClCompile Include="EquipStats.cpp" />
     <ClCompile Include="CommitRetry.cpp" />
     <ClCompile Include="CommitJournal.cpp" />
@@ -237,6 +240,8 @@
     <ClInclude Include="InstanceManager.h" />
     <ClInclude Include="InstanceRules.h" />
     <ClInclude Include="EscapeLogic.h" />
+    <ClInclude Include="LonePath.h" />
+    <ClInclude Include="BaseCampTable.h" />
     <ClInclude Include="EquipStats.h" />
     <ClInclude Include="KillBatch.h" />
     <ClInclude Include="CommitRetry.h" />

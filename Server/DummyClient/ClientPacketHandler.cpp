@@ -51,6 +51,8 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 		enterPkt.set_mode(Protocol::RUN_MODE_PVE_SOLO);
 		enterPkt.set_floor_id(0);
 	}
+	if (mode == Protocol::RUN_MODE_BASECAMP)
+		enterPkt.set_mode(Protocol::RUN_MODE_BASECAMP);		// 베이스캠프 맵 (2026-10-17) - 런이 아니라 개인 방
 
 	// -enhance N (N > 0): 베이스캠프에 남아 강화만 보낸다 (item-enhance AC-EN-02) - 입장하지 않는다
 	if (GEnhance.load() > 0)
@@ -171,6 +173,12 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	bot->objectId.store(pkt.player().object_id());
 	bot->replanPath.store(true);
+
+	// 새 방 - 지난 방에서 본 몬스터는 잊는다 (베이스캠프 허수아비는 조용히 사라져 S_DESPAWN 이 오지 않는다)
+	{
+		lock_guard<mutex> guard(bot->itemLock);
+		bot->monsters.clear();
+	}
 	bot->enteredAtUs = Utils::NowMicroseconds();
 	bot->pvpInviteSent = false;
 	bot->betraySent = false;
