@@ -53,17 +53,18 @@ namespace
 		return ec == errc() && ptr == s.data() + s.size() && s.empty() == false;
 	}
 
-	// instanceId,typeId,grade,level,skillPrimary,skillSecondary,isNew,lonePath (lonePath 는 2026-10-17 부터 - 7 칸 저널도 읽는다)
+	// instanceId,typeId,grade,level,skillPrimary,skillSecondary,isNew,lonePath,stackCount
+	// (lonePath · stackCount 는 2026-10-17 부터 - 7 · 8 칸 저널도 읽는다)
 	string FormatItem(const ItemEntry& e)
 	{
 		return to_string(e.instanceId) + "," + to_string(e.itemTypeId) + "," + to_string(static_cast<int32>(e.grade)) + ","
 			+ to_string(e.level) + "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + "," + (e.isNew ? "1" : "0")
-			+ "," + (e.lonePath ? "1" : "0");
+			+ "," + (e.lonePath ? "1" : "0") + "," + to_string(max<uint32>(e.stackCount, 1));
 	}
 
 	bool ParseItem(const vector<string>& f, size_t first, OUT ItemEntry& e)
 	{
-		if (f.size() != first + 7 && f.size() != first + 8)
+		if (f.size() < first + 7 || f.size() > first + 9)
 			return false;
 
 		uint32 grade = 0;
@@ -73,9 +74,13 @@ namespace
 			|| ToU32(f[first + 3], e.level) == false || ToU32(f[first + 4], e.skillIdPrimary) == false
 			|| ToU32(f[first + 5], e.skillIdSecondary) == false || ToU64(f[first + 6], isNew) == false || isNew > 1)
 			return false;
-		if (f.size() == first + 8 && (ToU64(f[first + 7], lone) == false || lone > 1))
+		if (f.size() >= first + 8 && (ToU64(f[first + 7], lone) == false || lone > 1))
 			return false;
 		e.lonePath = (lone == 1);
+		uint32 stack = 1;
+		if (f.size() == first + 9 && (ToU32(f[first + 8], stack) == false || stack < 1))
+			return false;
+		e.stackCount = stack;
 
 		if (grade > Protocol::ITEM_GRADE_LEGENDARY)
 			return false;

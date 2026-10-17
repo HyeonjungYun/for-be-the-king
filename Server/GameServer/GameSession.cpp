@@ -61,11 +61,13 @@ void GameSession::OnSend(int32 len)
 {
 }
 
-void GameSession::SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed)
+void GameSession::SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed, int64 gold)
 {
 	Protocol::S_ITEM_RESULT pkt;
 	pkt.set_request_id(requestId);
 	pkt.set_result(result);
+	if (gold >= 0)
+		pkt.set_gold(static_cast<uint64>(gold));
 
 	for (const Protocol::ItemInstance& c : changed)
 		pkt.add_changed()->CopyFrom(c);

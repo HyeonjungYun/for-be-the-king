@@ -5,6 +5,7 @@
 #include "ItemTable.h"
 #include "ItemRoller.h"
 #include "LonePath.h"
+#include "Economy.h"
 #include "ServerStats.h"
 #include "ObjectUtils.h"
 #include "Bag.h"
@@ -2218,17 +2219,72 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 		return;
 	}
 
-	// 부분 루팅 - 거부된 아이템은 가방에 남는다.
-	if (player->IsInventoryFull())
+	ItemEntry e = *itemIt;
+	vector<Protocol::ItemInstance> changed;
+	bool taken = false;
+
+	// 전리품 겹침 (2026-10-17 경제 R2) - 이미 든 같은 종류 칸에 먼저 채운다. 가방이 가득 차도 칸이 안 늘면 줍는다.
+	// DB 행이 있는 칸(시체 가방)은 다 채울 수 있을 때만 합친다 - 합쳐진 원래 행은 커밋이 지운다(droppedIds).
+	// 일부만 합치면 가방에 남은 행의 개수가 DB 와 어긋나 재시작 때 늘어난다
+	if (LootTable::IsLoot(e.itemTypeId))
 	{
-		session->SendItemResult(requestId, Protocol::ITEM_INVENTORY_FULL);
-		return;
+		vector<ItemEntry> trial = player->inventory;
+		ItemEntry rest = e;
+		const Economy::AbsorbResult r = Economy::AbsorbIntoStacks(trial, rest);
+		const bool hasRow = (e.isNew == false);
+
+		if (r.absorbed > 0 && (r.left == 0 || hasRow == false))
+		{
+			for (size_t i = 0; i < trial.size(); i++)
+			{
+				if (trial[i].stackCount != player->inventory[i].stackCount)
+					changed.push_back(trial[i].ToProto(Protocol::ITEM_STATE_CARRIED));
+			}
+			player->inventory = move(trial);
+
+			if (r.left == 0)
+			{
+				bag->items.erase(itemIt);
+				if (hasRow)
+					player->droppedIds.push_back(e.instanceId);
+				taken = true;
+			}
+			else if (player->IsInventoryFull())
+			{
+				// 채울 만큼만 채우고 나머지는 가방에 둔다 (새 아이템이라 DB 행 없음)
+				itemIt->stackCount = r.left;
+				session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
+				PushBagContents(bag);
+				LOG_LINE << "[LOOT] stack partial - char=" << playerId << " bag=" << bagId << " type=" << e.itemTypeId << " +" << r.absorbed << " left_in_bag=" << r.left << '\n';
+				return;
+			}
+			else
+			{
+				ItemEntry remainder = e;
+				remainder.stackCount = r.left;
+				bag->items.erase(itemIt);
+				player->inventory.push_back(remainder);
+				changed.push_back(remainder.ToProto(Protocol::ITEM_STATE_CARRIED));
+				taken = true;
+			}
+			LOG_LINE << "[LOOT] stack - char=" << playerId << " type=" << e.itemTypeId << " +" << r.absorbed << " into " << r.touchedCells << " cell(s) new=" << r.left << '\n';
+		}
 	}
 
-	// 메모리만 옮긴다. DB의 이 아이템은 탈출,사망 커밋 때까지 원래 가방 소속이다.
-	ItemEntry e = *itemIt;
-	bag->items.erase(itemIt);
-	player->inventory.push_back(e);
+	if (taken == false)
+	{
+		// 부분 루팅 - 거부된 아이템은 가방에 남는다.
+		if (player->IsInventoryFull())
+		{
+			session->SendItemResult(requestId, Protocol::ITEM_INVENTORY_FULL);
+			return;
+		}
+
+		// 메모리만 옮긴다. DB의 이 아이템은 탈출,사망 커밋 때까지 원래 가방 소속이다.
+		bag->items.erase(itemIt);
+		player->inventory.push_back(e);
+		changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
+	}
 
 	// 상자는 첫 "획득"에서 Looted 가 되고 리스폰 시계가 돈다 (§ 8). 열기만 해서는 바뀌지 않는다.
 	if (bag->MarkTaken(Utils::NowMicroseconds()))
@@ -2243,8 +2299,6 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 		Broadcast(sendBuffer);
 	}
 
-	vector<Protocol::ItemInstance> changed;
-	changed.push_back(e.ToProto(Protocol::ITEM_STATE_CARRIED));
 	session->SendItemResult(requestId, Protocol::ITEM_OK, changed);
 
 	// 비어도 지우지 않는다.
@@ -7794,6 +7848,14 @@ void Room::OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 
 	{
 		vector<ItemEntry> items = MonsterDrop::Roll(type, type.drops ? FloorItemPool::Find(_floorId, type.dropTier) : nullptr,
 			_rng, []() { return GNextInstanceId.fetch_add(1); });
+
+		// 전리품 (2026-10-17 경제 R3) - 같은 가방에. 장비가 없어도 전리품만으로 가방이 생긴다
+		{
+			vector<ItemEntry> loot = Economy::RollLoot(type.typeId, _rng, []() { return GNextInstanceId.fetch_add(1); });
+			for (const ItemEntry& e : loot)
+				LOG_LINE << "[LOOT] drop monster=" << id << " type=" << type.nameKey << " loot=" << e.itemTypeId << " x" << e.stackCount << '\n';
+			items.insert(items.end(), loot.begin(), loot.end());
+		}
 
 		if (items.empty() == false)
 		{

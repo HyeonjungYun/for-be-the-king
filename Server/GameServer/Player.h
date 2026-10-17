@@ -20,6 +20,9 @@ struct ItemEntry
 	// 고독한 길 (2026-10-17) - 낮은 확률로 붙는 옵션. 하나라도 착용하면 파티 불가, 착용 수만큼 다구대일 방어 (LonePath.h)
 	bool				lonePath = false;
 
+	// 전리품 겹침 개수 (2026-10-17 경제 - Economy.h). 장비는 늘 1
+	uint32				stackCount = 1;
+
 	// 이번 런에 서버가 만들었다(상자 · 롤) - DB 행이 아직 없다. 탈출 · 사망 커밋이 UPDATE 대신 INSERT 한다.
 	// 커밋으로 행이 생기면 false 로 돌린다. 메모리 전용이라 클라로 보내지 않는다.
 	bool				isNew = false;

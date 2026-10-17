@@ -168,6 +168,7 @@ Protocol::ItemInstance ItemEntry::ToProto(Protocol::ItemState state, Protocol::E
 	item.set_state(state);
 	item.set_slot(slot);
 	item.set_lone_path(lonePath);
+	item.set_stack_count(stackCount);
 
 	if (skillIdPrimary != 0)
 		item.add_skills()->set_skill_id(skillIdPrimary);

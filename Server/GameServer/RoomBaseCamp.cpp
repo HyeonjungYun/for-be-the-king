@@ -118,6 +118,7 @@ void Room::BaseCampApplyItems(PlayerRef player, vector<Protocol::ItemInstance> c
 		e.skillIdPrimary = c.skills_size() > 0 ? c.skills(0).skill_id() : 0;
 		e.skillIdSecondary = c.skills_size() > 1 ? c.skills(1).skill_id() : 0;
 		e.lonePath = c.lone_path();
+		e.stackCount = max<uint32>(c.stack_count(), 1);
 
 		// 새 자리 - 착용 · 소지만 몸이 든다 (창고 · 파기는 몸에서 사라진다)
 		if (c.state() == Protocol::ITEM_STATE_EQUIPPED && c.slot() >= Protocol::SLOT_WEAPON_PRIMARY && c.slot() <= Protocol::SLOT_TRINKET)

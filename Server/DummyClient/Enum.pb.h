@@ -442,12 +442,13 @@ enum ItemResult : int {
   ITEM_BAD_REQUEST = 5,
   ITEM_DB_ERROR = 6,
   ITEM_LONE_PATH_IN_PARTY = 7,
+  ITEM_NOT_ENOUGH_GOLD = 8,
   ItemResult_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   ItemResult_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool ItemResult_IsValid(int value);
 constexpr ItemResult ItemResult_MIN = ITEM_OK;
-constexpr ItemResult ItemResult_MAX = ITEM_LONE_PATH_IN_PARTY;
+constexpr ItemResult ItemResult_MAX = ITEM_NOT_ENOUGH_GOLD;
 constexpr int ItemResult_ARRAYSIZE = ItemResult_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor();

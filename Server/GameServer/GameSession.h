@@ -49,7 +49,8 @@ public:
 	// 몸이 있으면 Player::ApplyEquipmentStats 가, 베이스캠프 DB 조작 뒤엔 SyncBaseCamp 가 맞춘다
 	atomic<int32> lonePieces = 0;
 
-	void SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed = {});
+	// gold >= 0 이면 바뀐 창고 골드를 싣는다 (매입 · 강화 - 2026-10-17 경제)
+	void SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed = {}, int64 gold = -1);
 
 private:
 	USE_LOCK;

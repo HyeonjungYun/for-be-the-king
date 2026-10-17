@@ -13,6 +13,7 @@
 #include "InstanceManager.h"
 #include "PartyManager.h"
 #include "BaseCampTable.h"
+#include "Economy.h"
 #include <sstream>
 #include <thread>
 
@@ -64,7 +65,7 @@ namespace
 
 		::snprintf(query, sizeof(query),
 			"SELECT instance_id, item_type_id, grade, level, state, slot, "
-			"skill_id_primary, skill_id_secondary, lone_path FROM item_instances "
+			"skill_id_primary, skill_id_secondary, lone_path, stack_count FROM item_instances "
 			"WHERE owner_character_id = %llu",
 			characterId);
 
@@ -76,7 +77,7 @@ namespace
 			return false;
 		}
 
-		enum { COL_ID = 0, COL_TYPE, COL_GRADE, COL_LEVEL, COL_STATE, COL_SLOT, COL_SKILL1, COL_SKILL2, COL_LONE, COL_COUNT };
+		enum { COL_ID = 0, COL_TYPE, COL_GRADE, COL_LEVEL, COL_STATE, COL_SLOT, COL_SKILL1, COL_SKILL2, COL_LONE, COL_STACK, COL_COUNT };
 
 		if (::mysql_num_fields(res) < COL_COUNT)
 		{
@@ -98,6 +99,7 @@ namespace
 			e.skillIdPrimary = static_cast<uint32>(::atoi(row[COL_SKILL1]));
 			e.skillIdSecondary = static_cast<uint32>(::atoi(row[COL_SKILL2]));
 			e.lonePath = ::atoi(row[COL_LONE]) != 0;
+			e.stackCount = max(1, ::atoi(row[COL_STACK]));
 
 			const int32 state = ::atoi(row[COL_STATE]);
 			const int32 slot = ::atoi(row[COL_SLOT]);
@@ -120,7 +122,7 @@ namespace
 		return true;
 	}
 
-	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy, Equip, Unequip, Enhance };
+	enum class BaseCampOp : uint8 { ToVault, ToCarried, Destroy, Equip, Unequip, Enhance, Sell };
 
 	const int32 VAULT_SLOT_COUNT = 25;
 
@@ -133,6 +135,7 @@ namespace
 		case BaseCampOp::Equip: return "equip";
 		case BaseCampOp::Unequip: return "unequip";
 		case BaseCampOp::Enhance: return "enhance";
+		case BaseCampOp::Sell: return "sell";
 		default: return "destroy";
 		}
 	}
@@ -141,7 +144,7 @@ namespace
 	bool LockItemRow(DBConnection* conn, const string& where, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
 	{
 		const string query =
-			"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path "
+			"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path, stack_count "
 			"FROM item_instances WHERE " + where + " FOR UPDATE";
 
 		MYSQL_RES* res = conn->Query(query.c_str());
@@ -160,6 +163,7 @@ namespace
 			e.skillIdPrimary = static_cast<uint32>(::atoi(row[6]));
 			e.skillIdSecondary = static_cast<uint32>(::atoi(row[7]));
 			e.lonePath = ::atoi(row[8]) != 0;
+			e.stackCount = max(1, ::atoi(row[9]));
 			found = true;
 		}
 		conn->FreeResult(res);
@@ -185,9 +189,10 @@ namespace
 		return true;
 	}
 
-	Protocol::ItemResult RunBaseCampItemOp(DBConnection* conn, GameSessionRef session, uint64 instanceId, BaseCampOp op, Protocol::EquipSlot equipSlot, OUT vector<Protocol::ItemInstance>& changed)
+	Protocol::ItemResult RunBaseCampItemOp(DBConnection* conn, GameSessionRef session, uint64 instanceId, BaseCampOp op, Protocol::EquipSlot equipSlot, OUT vector<Protocol::ItemInstance>& changed, OUT int64& goldAfter)
 	{
 		char query[512];
+		goldAfter = -1;
 
 		// 주인 - 클라는 instance_id만 보낸다. 주인은 서버가 자기 데이터에서 찾는다.
 		uint64 ownerId = 0;
@@ -214,9 +219,9 @@ namespace
 		if (conn->BeginTransaction() == false)
 			return Protocol::ITEM_DB_ERROR;
 
-		// 캐릭터 잠금
+		// 캐릭터 잠금 - 창고 골드도 같이 (매입 · 강화 비용, 2026-10-17 경제)
 		::snprintf(query, sizeof(query),
-			"SELECT character_id FROM characters WHERE character_id = %llu FOR UPDATE", ownerId);
+			"SELECT character_id, gold FROM characters WHERE character_id = %llu FOR UPDATE", ownerId);
 
 		MYSQL_RES* lockRes = conn->Query(query);
 		if (lockRes == nullptr)
@@ -224,6 +229,9 @@ namespace
 			conn->Rollback();
 			return Protocol::ITEM_DB_ERROR;
 		}
+		uint64 gold = 0;
+		if (MYSQL_ROW row = ::mysql_fetch_row(lockRes))
+			gold = (row[1] != nullptr) ? ::strtoull(row[1], nullptr, 10) : 0;
 		conn->FreeResult(lockRes);
 
 		// 잠근 뒤에 다시 본다 - 그 사이 입장을 시작했거나(Entering) 사망 커밋이 진행 중이면 손대지 않는다.
@@ -262,9 +270,16 @@ namespace
 		Protocol::ItemState target = Protocol::ITEM_STATE_NONE;
 		int32 targetSlot = 0;
 		ItemEntry outgoing;			// 착용 교체로 소지품이 되는 아이템. 없으면 instanceId 0
-		
+		uint64 price = 0;			// 매입가 (Sell) · 강화 비용 (Enhance)
+
 		switch (op)
 		{
+		case BaseCampOp::Sell:
+			// 매입 행수 (economy-loot R5 · R6): 소지 · 창고의 한 칸 전체. 착용품은 먼저 벗기
+			if (state != Protocol::ITEM_STATE_CARRIED && state != Protocol::ITEM_STATE_VAULTED)
+				result = Protocol::ITEM_INVALID_STATE;
+			price = Economy::SellPrice(e, EconomyRules::Get());
+			break;
 		case BaseCampOp::Destroy:
 			// 착용품은 해제부터. Carried, Vaulted만 곧바로 파기
 			if (state != Protocol::ITEM_STATE_CARRIED && state != Protocol::ITEM_STATE_VAULTED)
@@ -342,8 +357,14 @@ namespace
 			// 강화 (item-enhance-2026-10-12 R4): 베이스캠프의 내 것이면 상태 불문, 16 이면 거절. 재화 없음 - 사용자 결정. 상태 · 슬롯은 그대로
 			target = static_cast<Protocol::ItemState>(state);
 			targetSlot = slot;
-			if (ItemLevel::CanEnhance(e.level) == false)
+			// 비용 (economy-loot R7, 2026-10-17 - 예전 "재화 없음" 을 대체): 20 × 1.25^레벨. 전리품은 강화 불가
+			price = Economy::EnhanceCost(e.level, EconomyRules::Get());
+			if (LootTable::IsLoot(e.itemTypeId))
+				result = Protocol::ITEM_BAD_REQUEST;
+			else if (ItemLevel::CanEnhance(e.level) == false)
 				result = Protocol::ITEM_INVALID_STATE;
+			else if (gold < price)
+				result = Protocol::ITEM_NOT_ENOUGH_GOLD;
 			break;
 		}
 
@@ -381,7 +402,7 @@ namespace
 
 		if (ok)
 		{
-			if (op == BaseCampOp::Destroy)
+			if (op == BaseCampOp::Destroy || op == BaseCampOp::Sell)
 				::snprintf(query, sizeof(query), "DELETE FROM item_instances WHERE instance_id = %llu", instanceId);
 			else if (op == BaseCampOp::Enhance)
 			{
@@ -393,6 +414,17 @@ namespace
 					static_cast<int32>(target), targetSlot, instanceId);
 			
 			ok = conn->Excute(query) && conn->GetAffectedRows() == 1;
+		}
+
+		// 골드 - 매입은 더하고 강화는 뺀다 (같은 트랜잭션 · 캐릭터 행은 위에서 잠갔다)
+		if (ok && (op == BaseCampOp::Sell || op == BaseCampOp::Enhance))
+		{
+			const uint64 newGold = (op == BaseCampOp::Sell) ? gold + price : gold - price;
+			::snprintf(query, sizeof(query), "UPDATE characters SET gold = %llu WHERE character_id = %llu", newGold, ownerId);
+			ok = conn->Excute(query);
+			goldAfter = static_cast<int64>(newGold);
+			LOG_LINE << "[GOLD] " << BaseCampOpName(op) << " char=" << ownerId << " item=" << instanceId << " type=" << e.itemTypeId
+				<< " count=" << e.stackCount << " " << (op == BaseCampOp::Sell ? "+" : "-") << price << " -> " << newGold << '\n';
 		}
 
 		if (ok == false || conn->Commit() == false)
@@ -427,11 +459,12 @@ namespace
 		GDBQueue.Push([session, requestId, instanceId, op, slot](DBConnection* conn)
 			{
 				vector<Protocol::ItemInstance> changed;
-				const Protocol::ItemResult result = RunBaseCampItemOp(conn, session, instanceId, op, slot, OUT changed);
+				int64 goldAfter = -1;
+				const Protocol::ItemResult result = RunBaseCampItemOp(conn, session, instanceId, op, slot, OUT changed, OUT goldAfter);
 
 				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " item=" << instanceId << " slot=" << slot << " result=" << result << " changed=" << changed.size() <<'\n';
 
-				session->SendItemResult(requestId, result, changed);
+				session->SendItemResult(requestId, result, changed, goldAfter);
 
 				// 베이스캠프 맵의 몸 (2026-10-17) - 착용 · 강화가 허수아비 앞의 스킬 · 스탯에 바로 보이게
 				if (result == Protocol::ITEM_OK && changed.empty() == false)
@@ -1526,6 +1559,31 @@ bool Handle_C_ENHANCE(PacketSessionRef& session, Protocol::C_ENHANCE& pkt)
 		return true;
 	}
 	PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(), BaseCampOp::Enhance);
+	return true;
+}
+
+// 매입 행수 (2026-10-17 경제 - design/quick-specs/economy-loot-2026-10-17.md R5 · R6): 베이스캠프에서 한 칸을 판다.
+// 강화와 같은 가드 - 증가형이라 같은 request_id 는 한 번만
+bool Handle_C_SELL(PacketSessionRef& session, Protocol::C_SELL& pkt)
+{
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	if (gameSession->accountId.load() == 0 || pkt.instance_id() == 0)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_BAD_REQUEST);
+		return true;
+	}
+	if (gameSession->TryBeginRequest(pkt.request_id()) == false)
+	{
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_ALREADY);
+		return true;
+	}
+	if (gameSession->place.load() != SessionPlace::BaseCamp)
+	{
+		LOG_LINE << "[BASECAMP] sell rejected - not in base camp. item=" << pkt.instance_id() << '\n';
+		gameSession->SendItemResult(pkt.request_id(), Protocol::ITEM_BAD_REQUEST);
+		return true;
+	}
+	PushBaseCampItemOp(gameSession, pkt.request_id(), pkt.instance_id(), BaseCampOp::Sell);
 	return true;
 }
 

@@ -93,6 +93,9 @@ extern C_PARTY_LEAVEDefaultTypeInternal _C_PARTY_LEAVE_default_instance_;
 class C_PARTY_RESPONSE;
 struct C_PARTY_RESPONSEDefaultTypeInternal;
 extern C_PARTY_RESPONSEDefaultTypeInternal _C_PARTY_RESPONSE_default_instance_;
+class C_SELL;
+struct C_SELLDefaultTypeInternal;
+extern C_SELLDefaultTypeInternal _C_SELL_default_instance_;
 class C_SKILL;
 struct C_SKILLDefaultTypeInternal;
 extern C_SKILLDefaultTypeInternal _C_SKILL_default_instance_;
@@ -218,6 +221,7 @@ template<> ::Protocol::C_MOVE* Arena::CreateMaybeMessage<::Protocol::C_MOVE>(Are
 template<> ::Protocol::C_PARTY_INVITE* Arena::CreateMaybeMessage<::Protocol::C_PARTY_INVITE>(Arena*);
 template<> ::Protocol::C_PARTY_LEAVE* Arena::CreateMaybeMessage<::Protocol::C_PARTY_LEAVE>(Arena*);
 template<> ::Protocol::C_PARTY_RESPONSE* Arena::CreateMaybeMessage<::Protocol::C_PARTY_RESPONSE>(Arena*);
+template<> ::Protocol::C_SELL* Arena::CreateMaybeMessage<::Protocol::C_SELL>(Arena*);
 template<> ::Protocol::C_SKILL* Arena::CreateMaybeMessage<::Protocol::C_SKILL>(Arena*);
 template<> ::Protocol::C_SKILL_CANCEL* Arena::CreateMaybeMessage<::Protocol::C_SKILL_CANCEL>(Arena*);
 template<> ::Protocol::C_STASH* Arena::CreateMaybeMessage<::Protocol::C_STASH>(Arena*);
@@ -5467,6 +5471,7 @@ class S_ITEM_RESULT final :
   enum : int {
     kChangedFieldNumber = 3,
     kRequestIdFieldNumber = 1,
+    kGoldFieldNumber = 4,
     kResultFieldNumber = 2,
   };
   // repeated .Protocol.ItemInstance changed = 3;
@@ -5501,6 +5506,19 @@ class S_ITEM_RESULT final :
   std::string* _internal_mutable_request_id();
   public:
 
+  // optional uint64 gold = 4;
+  bool has_gold() const;
+  private:
+  bool _internal_has_gold() const;
+  public:
+  void clear_gold();
+  uint64_t gold() const;
+  void set_gold(uint64_t value);
+  private:
+  uint64_t _internal_gold() const;
+  void _internal_set_gold(uint64_t value);
+  public:
+
   // .Protocol.ItemResult result = 2;
   void clear_result();
   ::Protocol::ItemResult result() const;
@@ -5518,10 +5536,12 @@ class S_ITEM_RESULT final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::HasBits<1> _has_bits_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
     ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ItemInstance > changed_;
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr request_id_;
+    uint64_t gold_;
     int result_;
-    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
@@ -5825,6 +5845,7 @@ class S_INVENTORY_SYNC final :
 
   enum : int {
     kItemsFieldNumber = 1,
+    kGoldFieldNumber = 2,
   };
   // repeated .Protocol.ItemInstance items = 1;
   int items_size() const;
@@ -5844,6 +5865,19 @@ class S_INVENTORY_SYNC final :
   const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ItemInstance >&
       items() const;
 
+  // optional uint64 gold = 2;
+  bool has_gold() const;
+  private:
+  bool _internal_has_gold() const;
+  public:
+  void clear_gold();
+  uint64_t gold() const;
+  void set_gold(uint64_t value);
+  private:
+  uint64_t _internal_gold() const;
+  void _internal_set_gold(uint64_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_INVENTORY_SYNC)
  private:
   class _Internal;
@@ -5852,8 +5886,10 @@ class S_INVENTORY_SYNC final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
-    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ItemInstance > items_;
+    ::PROTOBUF_NAMESPACE_ID::internal::HasBits<1> _has_bits_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ItemInstance > items_;
+    uint64_t gold_;
   };
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
@@ -8809,6 +8845,170 @@ class S_PARTY_BETRAYED final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class C_SELL final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_SELL) */ {
+ public:
+  inline C_SELL() : C_SELL(nullptr) {}
+  ~C_SELL() override;
+  explicit PROTOBUF_CONSTEXPR C_SELL(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_SELL(const C_SELL& from);
+  C_SELL(C_SELL&& from) noexcept
+    : C_SELL() {
+    *this = ::std::move(from);
+  }
+
+  inline C_SELL& operator=(const C_SELL& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_SELL& operator=(C_SELL&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_SELL& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_SELL* internal_default_instance() {
+    return reinterpret_cast<const C_SELL*>(
+               &_C_SELL_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    51;
+
+  friend void swap(C_SELL& a, C_SELL& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_SELL* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_SELL* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  C_SELL* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<C_SELL>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const C_SELL& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const C_SELL& from) {
+    C_SELL::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_SELL* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_SELL";
+  }
+  protected:
+  explicit C_SELL(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRequestIdFieldNumber = 1,
+    kInstanceIdFieldNumber = 2,
+  };
+  // string request_id = 1;
+  void clear_request_id();
+  const std::string& request_id() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_request_id(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_request_id();
+  PROTOBUF_NODISCARD std::string* release_request_id();
+  void set_allocated_request_id(std::string* request_id);
+  private:
+  const std::string& _internal_request_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_request_id(const std::string& value);
+  std::string* _internal_mutable_request_id();
+  public:
+
+  // uint64 instance_id = 2;
+  void clear_instance_id();
+  uint64_t instance_id() const;
+  void set_instance_id(uint64_t value);
+  private:
+  uint64_t _internal_instance_id() const;
+  void _internal_set_instance_id(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_SELL)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr request_id_;
+    uint64_t instance_id_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -10963,6 +11163,34 @@ S_ITEM_RESULT::changed() const {
   return _impl_.changed_;
 }
 
+// optional uint64 gold = 4;
+inline bool S_ITEM_RESULT::_internal_has_gold() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  return value;
+}
+inline bool S_ITEM_RESULT::has_gold() const {
+  return _internal_has_gold();
+}
+inline void S_ITEM_RESULT::clear_gold() {
+  _impl_.gold_ = uint64_t{0u};
+  _impl_._has_bits_[0] &= ~0x00000001u;
+}
+inline uint64_t S_ITEM_RESULT::_internal_gold() const {
+  return _impl_.gold_;
+}
+inline uint64_t S_ITEM_RESULT::gold() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ITEM_RESULT.gold)
+  return _internal_gold();
+}
+inline void S_ITEM_RESULT::_internal_set_gold(uint64_t value) {
+  _impl_._has_bits_[0] |= 0x00000001u;
+  _impl_.gold_ = value;
+}
+inline void S_ITEM_RESULT::set_gold(uint64_t value) {
+  _internal_set_gold(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ITEM_RESULT.gold)
+}
+
 // -------------------------------------------------------------------
 
 // C_STASH
@@ -11096,6 +11324,34 @@ inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::ItemInstance
 S_INVENTORY_SYNC::items() const {
   // @@protoc_insertion_point(field_list:Protocol.S_INVENTORY_SYNC.items)
   return _impl_.items_;
+}
+
+// optional uint64 gold = 2;
+inline bool S_INVENTORY_SYNC::_internal_has_gold() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  return value;
+}
+inline bool S_INVENTORY_SYNC::has_gold() const {
+  return _internal_has_gold();
+}
+inline void S_INVENTORY_SYNC::clear_gold() {
+  _impl_.gold_ = uint64_t{0u};
+  _impl_._has_bits_[0] &= ~0x00000001u;
+}
+inline uint64_t S_INVENTORY_SYNC::_internal_gold() const {
+  return _impl_.gold_;
+}
+inline uint64_t S_INVENTORY_SYNC::gold() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_INVENTORY_SYNC.gold)
+  return _internal_gold();
+}
+inline void S_INVENTORY_SYNC::_internal_set_gold(uint64_t value) {
+  _impl_._has_bits_[0] |= 0x00000001u;
+  _impl_.gold_ = value;
+}
+inline void S_INVENTORY_SYNC::set_gold(uint64_t value) {
+  _internal_set_gold(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_INVENTORY_SYNC.gold)
 }
 
 // -------------------------------------------------------------------
@@ -12438,9 +12694,85 @@ S_PARTY_BETRAYED::mutable_victim_names() {
   return &_impl_.victim_names_;
 }
 
+// -------------------------------------------------------------------
+
+// C_SELL
+
+// string request_id = 1;
+inline void C_SELL::clear_request_id() {
+  _impl_.request_id_.ClearToEmpty();
+}
+inline const std::string& C_SELL::request_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_SELL.request_id)
+  return _internal_request_id();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void C_SELL::set_request_id(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.request_id_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.C_SELL.request_id)
+}
+inline std::string* C_SELL::mutable_request_id() {
+  std::string* _s = _internal_mutable_request_id();
+  // @@protoc_insertion_point(field_mutable:Protocol.C_SELL.request_id)
+  return _s;
+}
+inline const std::string& C_SELL::_internal_request_id() const {
+  return _impl_.request_id_.Get();
+}
+inline void C_SELL::_internal_set_request_id(const std::string& value) {
+  
+  _impl_.request_id_.Set(value, GetArenaForAllocation());
+}
+inline std::string* C_SELL::_internal_mutable_request_id() {
+  
+  return _impl_.request_id_.Mutable(GetArenaForAllocation());
+}
+inline std::string* C_SELL::release_request_id() {
+  // @@protoc_insertion_point(field_release:Protocol.C_SELL.request_id)
+  return _impl_.request_id_.Release();
+}
+inline void C_SELL::set_allocated_request_id(std::string* request_id) {
+  if (request_id != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.request_id_.SetAllocated(request_id, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.request_id_.IsDefault()) {
+    _impl_.request_id_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:Protocol.C_SELL.request_id)
+}
+
+// uint64 instance_id = 2;
+inline void C_SELL::clear_instance_id() {
+  _impl_.instance_id_ = uint64_t{0u};
+}
+inline uint64_t C_SELL::_internal_instance_id() const {
+  return _impl_.instance_id_;
+}
+inline uint64_t C_SELL::instance_id() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_SELL.instance_id)
+  return _internal_instance_id();
+}
+inline void C_SELL::_internal_set_instance_id(uint64_t value) {
+  
+  _impl_.instance_id_ = value;
+}
+inline void C_SELL::set_instance_id(uint64_t value) {
+  _internal_set_instance_id(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_SELL.instance_id)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

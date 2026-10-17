@@ -194,6 +194,7 @@ message S_ITEM_RESULT
 	string request_id = 1;
 	ItemResult result = 2;
 	repeated ItemInstance changed = 3;
+	optional uint64 gold = 4;		// vault gold after the op - only when it changed it (sell, enhance) 2026-10-17
 }
 
 message C_STASH
@@ -206,6 +207,7 @@ message C_STASH
 message S_INVENTORY_SYNC
 {
 	repeated ItemInstance items= 1;
+	optional uint64 gold = 2;		// vault gold - base camp sync only (2026-10-17)
 }
 
 message S_BAG_CONTENTS
@@ -331,4 +333,12 @@ message S_PARTY_BETRAYED
 	string betrayer_name = 2;
 	uint64 party_id = 3;
 	repeated string victim_names = 4;	// the members left behind
+}
+
+// Economy (2026-10-17, design/quick-specs/economy-loot-2026-10-17.md) - sell one carried or vaulted cell to the guild buyer, base camp only.
+// Answered with S_ITEM_RESULT{changed = the cell gone (state NONE), gold = vault gold after}
+message C_SELL
+{
+	string request_id = 1;
+	uint64 instance_id = 2;
 }

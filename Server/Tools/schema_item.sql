@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS item_instances
     -- 고독한 길 옵션 (2026-10-17) - 하나라도 착용하면 파티 불가, 착용 수만큼 다구대일 방어. migrate_lone_path.sql
     lone_path           TINYINT UNSIGNED NOT NULL DEFAULT 0,
 
+    -- 전리품 겹침 개수 (2026-10-17 경제) - 장비는 늘 1. migrate_economy.sql
+    stack_count         INT UNSIGNED    NOT NULL DEFAULT 1,
+
     created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
                                         ON UPDATE CURRENT_TIMESTAMP,

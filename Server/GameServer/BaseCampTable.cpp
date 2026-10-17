@@ -101,9 +101,10 @@ bool BaseCampTable::Parse(const string& csv, OUT string& error)
 		}
 		else if (kind == "npc")
 		{
-			if (p.id != "stash" && p.id != "enhance" && p.id != "gate")
+			// trade = 매입 행수 (2026-10-17 경제) - 없어도 된다 (전리품을 팔 곳이 없을 뿐)
+			if (p.id != "stash" && p.id != "enhance" && p.id != "gate" && p.id != "trade")
 			{
-				error = where + " npc id must be stash, enhance or gate";
+				error = where + " npc id must be stash, enhance, gate or trade";
 				return false;
 			}
 			for (const BaseCampPoint& n : s_npcs)
@@ -137,7 +138,8 @@ bool BaseCampTable::Parse(const string& csv, OUT string& error)
 		}
 	}
 
-	if (hasArea == false || hasSpawn == false || s_npcs.size() != 3)
+	auto hasNpc = [&](const char* id) { return any_of(s_npcs.begin(), s_npcs.end(), [&](const BaseCampPoint& n) { return n.id == id; }); };
+	if (hasArea == false || hasSpawn == false || hasNpc("stash") == false || hasNpc("enhance") == false || hasNpc("gate") == false)
 	{
 		error = "basecamp.csv needs one area, one spawn and the three npcs (stash, enhance, gate)";
 		return false;

@@ -27,6 +27,7 @@
 #include "Monster.h"
 #include "EscapeLogic.h"
 #include "LonePath.h"
+#include "Economy.h"
 #include "BaseCampTable.h"
 #include "Telemetry.h"
 #include "Bag.h"
@@ -131,6 +132,24 @@ int main()
 		LOG_LINE << "[BOOT] item data loaded - types=" << ItemTable::All().size() << " pools=" << ItemTable::PoolCount()
 			<< " stat_lines=" << ItemTable::StatLineCount() << " grade_x=" << ItemTable::GradeMultiplier(Protocol::ITEM_GRADE_COMMON)
 			<< "/" << ItemTable::GradeMultiplier(Protocol::ITEM_GRADE_LEGENDARY) << '\n';
+
+		// 경제 1차 (2026-10-17) - 강화 비용 · 매입가 · 사망 차감 · 전리품 종류. 전리품 id 는 장비 표와 겹치면 안 된다
+		if (EconomyRules::Get().Load(dataDir, OUT error) == false || LootTable::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] economy invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+		for (uint32 id = LootTable::ID_MIN; id <= LootTable::ID_MAX; id++)
+		{
+			if (LootTable::IsLoot(id) && ItemTable::Find(id) != nullptr)
+			{
+				LOG_LINE << "[BOOT] economy invalid - loot id " << id << " is also an item type\n";
+				return -1;
+			}
+		}
+		LOG_LINE << "[BOOT] economy - loot types=" << LootTable::TypeCount() << " drops=" << LootTable::Drops().size()
+			<< " enhance=" << EconomyRules::Get().enhanceCostBase << "x" << EconomyRules::Get().enhanceCostGrowth
+			<< "^L death_loss=" << EconomyRules::Get().deathGoldLossPct << "%\n";
 
 		// 고독한 길 (2026-10-17) - 옵션 확률 · 다구대일 효과. 파일이 없으면 기본값
 		if (LonePathRules::Get().Load(dataDir, OUT error) == false)
@@ -237,6 +256,16 @@ int main()
 
 		LOG_LINE << "[BOOT] towers=" << TowerTable::All().size() << " monster types=" << MonsterTable::TypeCount()
 			<< " spawns=" << MonsterTable::Spawns().size() << '\n';
+
+		// 전리품 드랍의 몬스터 종류가 있어야 한다 (2026-10-17 경제)
+		for (const LootDropDef& d : LootTable::Drops())
+		{
+			if (MonsterTable::FindType(d.monsterTypeId) == nullptr)
+			{
+				LOG_LINE << "[BOOT] economy invalid - loot_drops monster_type_id " << d.monsterTypeId << " is not in monster_types.csv\n";
+				return -1;
+			}
+		}
 
 		// 베이스캠프 맵 (2026-10-17) - 개인 방의 배치. 섬 밖이어야 하고 허수아비 종류가 있어야 한다. 파일이 없으면 맵 없음 (UI 베이스캠프만)
 		if (BaseCampTable::Load(dataDir, OUT error) == false || BaseCampTable::CheckClearOf(WallTable::Get(0), OUT error) == false)

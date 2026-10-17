@@ -1,0 +1,9 @@
+key,value
+enhance_cost_base,20
+enhance_cost_growth,1.25
+death_gold_loss_pct,10
+sell_grade_1,20
+sell_grade_2,60
+sell_grade_3,180
+sell_grade_4,500
+sell_level_bonus,0.10

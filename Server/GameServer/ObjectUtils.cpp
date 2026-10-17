@@ -8,6 +8,7 @@
 #include "ItemTable.h"
 #include "ChestSpawnTable.h"
 #include "StarterKitTable.h"
+#include "Economy.h"
 #include "DBError.h"
 #include <thread>
 
@@ -76,7 +77,7 @@ namespace
 	// 이번 런에 생긴 아이템(isNew)은 DB 행이 없다 - 커밋이 새 행으로 넣는다 (상자 S-4).
 	constexpr const char* INSERT_ITEMS =
 		"INSERT INTO item_instances (instance_id, item_type_id, grade, level, state, slot, "
-		"owner_character_id, bag_id, skill_id_primary, skill_id_secondary, lone_path) VALUES ";
+		"owner_character_id, bag_id, skill_id_primary, skill_id_secondary, lone_path, stack_count) VALUES ";
 
 	// INSERT_ITEMS 뒤에 붙일 한 행. 주인과 가방은 둘 중 하나만 있다 (chk_owner_xor_bag) - 없는 쪽은 0 을 넘긴다.
 	void AppendItemValues(OUT string& values, const ItemEntry& e, Protocol::ItemState state, int32 slot, uint32 level, uint64 ownerId, uint64 bagId)
@@ -88,7 +89,52 @@ namespace
 			+ "," + to_string(level) + "," + to_string(static_cast<int32>(state)) + "," + to_string(slot)
 			+ "," + ((ownerId != 0) ? to_string(ownerId) : string("NULL"))
 			+ "," + ((bagId != 0) ? to_string(bagId) : string("NULL"))
-			+ "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + "," + (e.lonePath ? "1" : "0") + ")";
+			+ "," + to_string(e.skillIdPrimary) + "," + to_string(e.skillIdSecondary) + "," + (e.lonePath ? "1" : "0")
+			+ "," + to_string(max<uint32>(e.stackCount, 1)) + ")";
+	}
+
+	// 사망 차감 (2026-10-17 경제 R8): gold -= floor(gold × pct / 100). 커밋 트랜잭션 안에서 부른다
+	bool ApplyDeathGoldLoss(DBConnection* conn, uint64 characterId, bool lenient, const char* tag)
+	{
+		const uint64 pct = EconomyRules::Get().deathGoldLossPct;
+		if (pct == 0)
+			return true;
+
+		char query[256];
+		::snprintf(query, sizeof(query), "SELECT gold FROM characters WHERE character_id = %llu FOR UPDATE", characterId);
+		MYSQL_RES* res = conn->Query(query);
+		if (res == nullptr)
+			return false;
+		uint64 gold = 0;
+		if (MYSQL_ROW row = ::mysql_fetch_row(res))
+			gold = (row[0] != nullptr) ? ::strtoull(row[0], nullptr, 10) : 0;
+		conn->FreeResult(res);
+
+		const uint64 loss = Economy::DeathGoldLoss(gold, EconomyRules::Get());
+		if (loss == 0)
+			return true;
+
+		::snprintf(query, sizeof(query), "%s characters SET gold = gold - %llu WHERE character_id = %llu AND gold >= %llu",
+			lenient ? "UPDATE IGNORE" : "UPDATE", loss, characterId, loss);
+		if (conn->Excute(query) == false)
+			return false;
+		LOG_LINE << "[GOLD] " << tag << " loss char=" << characterId << " -" << loss << " (" << pct << "% of " << gold << ")\n";
+		return true;
+	}
+
+	// 전리품 칸의 개수를 쓴다 (2026-10-17 경제) - DB 행이 있는 전리품만. 장비는 늘 1 이라 건너뛴다
+	bool WriteStackCounts(DBConnection* conn, const vector<ItemEntry>& items, const string& ownerFilter, bool lenient)
+	{
+		for (const ItemEntry& e : items)
+		{
+			if (e.isNew || e.instanceId == 0 || LootTable::IsLoot(e.itemTypeId) == false)
+				continue;
+			const string update = string(lenient ? "UPDATE IGNORE" : "UPDATE") + " item_instances SET stack_count = "
+				+ to_string(max<uint32>(e.stackCount, 1)) + " WHERE instance_id = " + to_string(e.instanceId) + ownerFilter;
+			if (conn->Excute(update.c_str()) == false)
+				return false;
+		}
+		return true;
 	}
 
 	// INSERT_ITEMS 의 관대 판 - 이미 있는 id(중복 키) · 제약 위반 행은 건너뛰고 나머지를 넣는다
@@ -317,6 +363,10 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 			return RollbackAndClassify(conn);
 	}
 
+	// 전리품 겹침 개수 - 던전에서 주워 합친 칸은 개수가 바뀌었다 (2026-10-17 경제). 새 행은 INSERT 가 이미 썼다
+	if (WriteStackCounts(conn, snap.carried, mineOrUnowned, lenient) == false)
+		return RollbackAndClassify(conn);
+
 	if (snap.droppedIds.empty() == false)
 	{
 		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
@@ -484,6 +534,17 @@ bool ValidateItemRows(DBConnection* conn)
 		const char* rows = row[5];
 		const char* sample = row[6];
 
+		// 전리품 (2026-10-17 경제) - 장비 표가 아니라 전리품 표에 있다. 착용 · 스킬이 없으니 착용 행만 막는다
+		if (LootTable::IsLoot(typeId))
+		{
+			if (state == Protocol::ITEM_STATE_EQUIPPED)
+			{
+				LOG_LINE << "[BOOT] equipped loot rows - type=" << typeId << " rows=" << rows << " e.g. instance=" << sample << '\n';
+				valid = false;
+			}
+			continue;
+		}
+
 		// 표에 없는 종류 - 클라가 그릴 수도, 서버가 착용을 판정할 수도 없다.
 		const ItemTypeDef* def = ItemTable::Find(typeId);
 		if (def == nullptr)
@@ -581,7 +642,7 @@ bool LoadLiveBags(DBConnection* conn)
 		return false;
 
 	MYSQL_RES* itemRes = conn->Query(
-		"SELECT bag_id, instance_id, item_type_id, grade, level, skill_id_primary, skill_id_secondary, lone_path "
+		"SELECT bag_id, instance_id, item_type_id, grade, level, skill_id_primary, skill_id_secondary, lone_path, stack_count "
 		"FROM item_instances WHERE bag_id IS NOT NULL");
 
 	if (itemRes == nullptr)
@@ -610,6 +671,7 @@ bool LoadLiveBags(DBConnection* conn)
 		e.skillIdPrimary = static_cast<uint32>(::atoi(row[5]));
 		e.skillIdSecondary = static_cast<uint32>(::atoi(row[6]));
 		e.lonePath = ::atoi(row[7]) != 0;
+		e.stackCount = max(1, ::atoi(row[8]));
 
 		findIt->second->items.push_back(e);
 		itemCount++;
@@ -752,6 +814,10 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 			return RollbackAndClassify(conn);
 	}
 
+	// 전리품 겹침 개수 - 시체 가방에 든 칸의 개수 그대로 (2026-10-17 경제). 이제 가방 소속이라 주인 조건 없이
+	if (WriteStackCounts(conn, snap.items, string(" AND bag_id = ") + to_string(snap.bagId), lenient) == false)
+		return RollbackAndClassify(conn);
+
 	//  이번 런에서 버린 아이템을 파기한다. 이미 없으면 목적은 달성된 것이라 개수가 달라도 실패로 보지않는다.
 	if (snap.droppedIds.empty() == false)
 	{
@@ -762,6 +828,10 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		if (conn->GetAffectedRows() != snap.droppedIds.size())
 			LOG_LINE << "[DEATH] dropped rows already gone - expected=" << snap.droppedIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
 	}
+
+	// 사망 차감 (2026-10-17 경제 R8) - 창고 골드의 10 %. 같은 트랜잭션 · 같은 적용 표시라 재시도해도 한 번
+	if (ApplyDeathGoldLoss(conn, snap.characterId, lenient, "DEATH") == false)
+		return RollbackAndClassify(conn);
 
 	// 관대 단계: 가방에 실제로 들어간 것만 메모리 가방에 담는다 - 안 그러면 DB 에 없는 아이템을 주워 갈 수 있다
 	unordered_set<uint64> inBag;
@@ -866,7 +936,7 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 
 	char query[320];
 	::snprintf(query, sizeof(query),
-		"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path "
+		"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path, stack_count "
 		"FROM item_instances WHERE owner_character_id = %llu AND state IN (%d, %d, %d)",
 		characterId,
 		static_cast<int32>(Protocol::ITEM_STATE_VAULTED),
@@ -896,6 +966,7 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 		e.skillIdPrimary = static_cast<uint32>(::atoi(row[6]));
 		e.skillIdSecondary = static_cast<uint32>(::atoi(row[7]));
 		e.lonePath = ::atoi(row[8]) != 0;
+		e.stackCount = max(1, ::atoi(row[9]));
 
 		const Protocol::ItemState state = static_cast<Protocol::ItemState>(::atoi(row[4]));
 		const Protocol::EquipSlot slot = static_cast<Protocol::EquipSlot>(::atoi(row[5]));
@@ -914,6 +985,15 @@ void SyncBaseCamp(DBConnection* conn, GameSessionRef session, uint64 characterId
 
 	conn->FreeResult(res);
 	session->lonePieces.store(lonePieces);
+
+	// 창고 골드 (2026-10-17 경제 R9) - 베이스캠프 동기화에만 싣는다
+	::snprintf(query, sizeof(query), "SELECT gold FROM characters WHERE character_id = %llu", characterId);
+	if (MYSQL_RES* goldRes = conn->Query(query))
+	{
+		if (MYSQL_ROW row = ::mysql_fetch_row(goldRes))
+			pkt.set_gold(row[0] != nullptr ? ::strtoull(row[0], nullptr, 10) : 0);
+		conn->FreeResult(goldRes);
+	}
 
 	SEND_PACKET_DECLARATION(pkt);
 	session->Send(sendBuffer);
@@ -960,6 +1040,10 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 		if (conn->GetAffectedRows() != snap.rowIds.size())
 			LOG_LINE << "[EXPIRE] row mismatch - expected=" << snap.rowIds.size() << " affected=" << conn->GetAffectedRows() << " char=" << snap.characterId << '\n';
 	}
+
+	// 사망 차감 (2026-10-17 경제 R8) - 시간 초과도 던전 사망이다. 런 골드(30 % 유지)를 더하기 전에 창고 골드에서
+	if (ApplyDeathGoldLoss(conn, snap.characterId, lenient, "EXPIRE") == false)
+		return RollbackAndClassify(conn);
 
 	if (snap.goldKept > 0)
 	{

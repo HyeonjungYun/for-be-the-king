@@ -103,6 +103,7 @@
     </ClCompile>
     <ClCompile Include="EscapeLogicTest.cpp" />
     <ClCompile Include="LonePathTest.cpp" />
+    <ClCompile Include="EconomyTest.cpp" />
     <ClCompile Include="BaseCampTableTest.cpp" />
     <ClCompile Include="EquipStatsTest.cpp" />
     <ClCompile Include="KillBatchTest.cpp" />
@@ -153,6 +154,7 @@
     <ClCompile Include="..\GameServer\PartyBook.cpp" />
     <ClCompile Include="..\GameServer\EscapeLogic.cpp" />
     <ClCompile Include="..\GameServer\LonePath.cpp" />
+    <ClCompile Include="..\GameServer\Economy.cpp" />
     <ClCompile Include="..\GameServer\BaseCampTable.cpp" />
     <ClCompile Include="..\GameServer\EquipStats.cpp" />
     <ClCompile Include="..\GameServer\CommitRetry.cpp" />

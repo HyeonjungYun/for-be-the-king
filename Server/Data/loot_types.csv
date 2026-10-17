@@ -1,0 +1,7 @@
+id,name_key,sell_price,stack_max
+901,loot.901,5,10
+902,loot.902,8,10
+903,loot.903,15,10
+904,loot.904,40,5
+905,loot.905,120,5
+906,loot.906,400,1
