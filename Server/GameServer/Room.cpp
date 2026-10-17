@@ -2361,8 +2361,10 @@ void Room::HandleBagOpen(GameSessionRef session, uint64 bagId)
 		{
 			bag->RollIfNeeded(*pool, _rng, []() { return GNextInstanceId.fetch_add(1); });
 
+			// lone = 고독한 길 옵션이 붙은 수 (lone-path AC-LP-11 실측, 2026-10-18)
+			const int64 lone = count_if(bag->items.begin(), bag->items.end(), [](const ItemEntry& e) { return e.lonePath; });
 			LOG_LINE << "[CHEST] rolled chest=" << bag->chestId << " tier=" << FloorItemPool::TierName(bag->tier)
-				<< " items=" << bag->items.size() << " by=" << playerId << '\n';
+				<< " items=" << bag->items.size() << " lone=" << lone << " by=" << playerId << '\n';
 		}
 	}
 
@@ -8141,6 +8143,7 @@ void Room::OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 
 
 	// ── 드랍 - 주인 없는 메모리 전용 가방, 먼저 여는 사람이 임자 (Core Rule 20) ──
 	size_t dropped = 0;
+	int64 droppedLone = 0;		// 고독한 길 옵션이 붙은 수 (AC-LP-11 실측)
 	{
 		vector<ItemEntry> items = MonsterDrop::Roll(type, type.drops ? FloorItemPool::Find(_floorId, type.dropTier) : nullptr,
 			_rng, []() { return GNextInstanceId.fetch_add(1); });
@@ -8179,12 +8182,13 @@ void Room::OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 
 			bag->objectInfo->set_bag_kind(Protocol::BAG_KIND_MONSTER);		// 사망 가방과 다르게 보인다 (OQ-3) - "저기서 누가 죽었다" 신호에 섞이지 않게
 			bag->items = move(items);
 			dropped = bag->items.size();
+			droppedLone = count_if(bag->items.begin(), bag->items.end(), [](const ItemEntry& e) { return e.lonePath; });
 			AddBag(bag);
 		}
 	}
 
 	LOG_LINE << "[MON] died id=" << id << " spawn=" << monster->spawn->spawnId << " type=" << type.nameKey
-		<< " by=" << instigatorId << " drop=" << dropped << " respawn_in=" << monster->spawn->respawnSeconds << "s\n";
+		<< " by=" << instigatorId << " drop=" << dropped << " lone=" << droppedLone << " respawn_in=" << monster->spawn->respawnSeconds << "s\n";
 }
 
 bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs, uint64 targetId, float aimX, float aimY)
