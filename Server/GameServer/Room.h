@@ -239,6 +239,18 @@ struct PendingBurst
 constexpr uint64 PROJECTILE_ID_BASE = 5'000'000'000;
 extern atomic<uint64> GNextProjectileId;
 
+// AC-3 "30명 균등 분포 시 방송 대상 수 P95 ≤ 12" (roadmap P3) 계측 - 플레이어 하나의 이동을 받는 다른 플레이어 수의 분포.
+// 방마다 1 초에 한 번 표본(FlushMoves), 주 루프가 10 초마다 Dump 하고 비운다 (2026-10-18)
+struct AudienceStats
+{
+	static constexpr int32	MAX_BUCKET = 128;
+	atomic<uint64>			hist[MAX_BUCKET + 1] = {};
+
+	void	Record(int32 audience) { hist[(std::clamp)(audience, 0, MAX_BUCKET)].fetch_add(1, memory_order_relaxed); }
+	void	Dump();
+};
+extern AudienceStats GAudienceStats;
+
 // 유도 스킬 화살 (포착 · 약속의 한 발, 2026-10-11) - 사거리 밖의 보이는 표식 대상까지 날아간다. 끝없이 쫓지 않게 이만큼만
 constexpr float HOMING_SKILL_MAX_CM = 3000.f;
 
@@ -699,6 +711,8 @@ private:
 	vector<MonsterSlot>					_monsterSlots;
 	vector<unique_ptr<PackSlot>>		_packs;				// 무리 - 주소가 바뀌지 않게 unique_ptr (Monster::spawn 이 안을 가리킨다)
 	uint32								_pathBudget = 0;	// 이번 걸음에 남은 길 계산 수 (§ K - StepMonsters 가 채운다)
+	uint32								_audienceTick = 0;	// AC-3 계측 - FlushMoves 30 번(≈ 1 초)에 한 번 표본
+	static constexpr uint32				AUDIENCE_SAMPLE_EVERY = 30;
 	unordered_map<uint64, shared_ptr<MonsterSpawnDef>>	_dummySpawns;	// 테스트 모드 더미의 자리 - Monster::spawn 이 가리킨다. 몬스터를 지울 때 함께
 	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
 

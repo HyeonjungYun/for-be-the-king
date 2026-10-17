@@ -227,6 +227,46 @@ RoomRef GRooms[FLOOR_COUNT] =
 // 투사체 id - 층을 가리지 않고 유일 (클라는 한 층만 보지만 로그에서 섞이지 않게). 50 억 대역 (몬스터 40 억 위)
 atomic<uint64> GNextProjectileId = PROJECTILE_ID_BASE;
 
+AudienceStats GAudienceStats;
+
+void AudienceStats::Dump()
+{
+	uint64 counts[MAX_BUCKET + 1];
+	uint64 total = 0;
+	for (int32 i = 0; i <= MAX_BUCKET; i++)
+	{
+		counts[i] = hist[i].exchange(0, memory_order_relaxed);
+		total += counts[i];
+	}
+	if (total == 0)
+		return;
+
+	auto percentile = [&](double p)
+		{
+			const uint64 want = static_cast<uint64>(::ceil(p * static_cast<double>(total)));
+			uint64 seen = 0;
+			for (int32 i = 0; i <= MAX_BUCKET; i++)
+			{
+				seen += counts[i];
+				if (seen >= want)
+					return i;
+			}
+			return MAX_BUCKET;
+		};
+	int32 maxAudience = 0;
+	for (int32 i = MAX_BUCKET; i >= 0; i--)
+	{
+		if (counts[i] != 0)
+		{
+			maxAudience = i;
+			break;
+		}
+	}
+
+	LOG_LINE << "[AOI] move_audience samples=" << total << " p50=" << percentile(0.50) << " p95=" << percentile(0.95)
+		<< " max=" << maxAudience << " (AC-3 target p95 <= 12)\n";
+}
+
 // 미끼 id - 60 억 대역. 오브젝트라 _objects 에 들어가므로 플레이어 · 몬스터 · 가방과 겹치면 안 된다
 atomic<uint64> GNextDecoyId = DECOY_ID_BASE;
 
@@ -2963,6 +3003,31 @@ void Room::FlushMoves()
 
 	// FoW - 이번 위치로 시야를 갱신한다. 보이게 된 생물의 S_SPAWN 이 아래 S_MOVE 보다 먼저 나가야 한다
 	UpdateVisibility(Utils::NowMicroseconds());
+
+	// AC-3 계측 (2026-10-18) - 1 초에 한 번, 플레이어마다 "이 사람의 이동을 받는 다른 플레이어 수" (= 방송 대상 수).
+	// FoW 가 받는 사람마다 거른다 - 층 전체 방송이 아니다. GAudienceStats 가 10 초마다 P50 · P95 · max 를 찍는다
+	if (++_audienceTick >= AUDIENCE_SAMPLE_EVERY)
+	{
+		_audienceTick = 0;
+		const bool fowOn = Vision::Enabled();
+		vector<const Player*> viewers;
+		for (const auto& [id, object] : _objects)
+		{
+			if (object->IsPlayer())
+				viewers.push_back(static_cast<const Player*>(object.get()));
+		}
+		for (const Player* subject : viewers)
+		{
+			const uint64 sid = subject->objectInfo->object_id();
+			int32 audience = 0;
+			for (const Player* v : viewers)
+			{
+				if (v != subject && (fowOn == false || v->fowKnown.contains(sid)))
+					audience++;
+			}
+			GAudienceStats.Record(audience);
+		}
+	}
 
 	if (_dirtyMovers.empty() == false)
 	{

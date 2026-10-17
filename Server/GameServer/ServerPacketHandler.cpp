@@ -533,8 +533,17 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		return true;
 	}
 
-	GDBQueue.Push([gameSession, token](DBConnection* conn)
+	const uint64 queuedUs = Utils::NowMicroseconds();
+	GDBQueue.Push([gameSession, token, queuedUs](DBConnection* conn)
 		{
+			// 로그인 지연 계측 (2026-10-18 - roadmap "Handle_C_LOGIN 왕복 지연"): DB 큐에서 기다린 시간 · 질의 두 개 시간
+			const uint64 startUs = Utils::NowMicroseconds();
+			struct TimingLine
+			{
+				uint64 queued, start;
+				~TimingLine() { LOG_LINE << "[LOGIN] timing wait_us=" << (start - queued) << " db_us=" << (Utils::NowMicroseconds() - start) << '\n'; }
+			} timing{ queuedUs, startUs };
+
 			// 검증 전용 (FBTK_LOGIN_DELAY_MS) - 이 사이에 접속을 끊어 아래 회수 경로를 시험한다
 			if (const uint32 delayMs = GLoginDelayMs.load(); delayMs > 0)
 				this_thread::sleep_for(chrono::milliseconds(delayMs));

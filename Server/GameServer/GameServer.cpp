@@ -746,6 +746,7 @@ int main()
 		this_thread::sleep_for(10s);
 		GStats.Dump(service->GetCurrentSessionCount());
 		GMonsterStats.Dump(10);
+		GAudienceStats.Dump();		// AC-3 방송 대상 수 (2026-10-18)
 
 		// 자원 고갈 등으로 포기했던 Accept 슬롯을 다시 건다 (TD-014) - 예전엔 그 슬롯을 영영 잃었다
 		service->RetryLostAccepts();

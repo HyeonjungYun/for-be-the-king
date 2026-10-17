@@ -32,6 +32,7 @@ atomic<bool> GTowerMode = false;
 atomic<bool> GIdleOne = false;
 atomic<bool> GIdleAll = false;
 atomic<int32> GForceFloor = -1;
+int32 GBotBase = 0;		// -botbase N: bot_{N+1} 부터 쓴다 - 두 하네스를 함께 돌릴 때 계정이 겹치지 않게 (2026-10-18 PVE 40 판 + PvP 120)
 float GTowerX = 0.f;
 float GTowerY = 0.f;
 atomic<uint64> GRunGold = 0;
@@ -891,6 +892,8 @@ int main(int argc, char* argv[])
 			GCampEnterAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
 		else if (::strcmp(argv[i], "-kickafter") == 0)
 			GKickAfterUs.store(static_cast<uint64>(::atof(argv[i + 1]) * 1'000'000.0));
+		else if (::strcmp(argv[i], "-botbase") == 0)
+			GBotBase = (std::max)(0, ::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-floor") == 0)
 			GForceFloor.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-mode") == 0)
@@ -1032,7 +1035,7 @@ int main(int argc, char* argv[])
 		GFreeBotIndices.clear();
 		GFreeBotIndices.reserve(botCount);
 		for (int32 i = botCount; i >= 1; i--)
-			GFreeBotIndices.push_back(static_cast<uint32>(i));
+			GFreeBotIndices.push_back(static_cast<uint32>(GBotBase + i));
 	}
 
 	::timeBeginPeriod(1);
