@@ -94,6 +94,7 @@
     <ClCompile Include="VisionTest.cpp" />
     <ClCompile Include="MonsterTest.cpp" />
     <ClCompile Include="MonsterPackTest.cpp" />
+    <ClCompile Include="NavGridTest.cpp" />
     <ClCompile Include="RouteGenTest.cpp" />
     <ClCompile Include="SkillMotionsTest.cpp" />
     <ClCompile Include="BotBrainTest.cpp" />
@@ -149,6 +150,7 @@
     <ClCompile Include="..\GameServer\MonsterTable.cpp" />
     <ClCompile Include="..\GameServer\MonsterBrain.cpp" />
     <ClCompile Include="..\GameServer\MonsterPack.cpp" />
+    <ClCompile Include="..\GameServer\NavGrid.cpp" />
     <ClCompile Include="..\GameServer\HouseTable.cpp" />
     <ClCompile Include="..\GameServer\PatrolRouteGen.cpp" />
     <ClCompile Include="..\GameServer\PartyBook.cpp" />

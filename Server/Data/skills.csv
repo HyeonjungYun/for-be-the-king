@@ -76,6 +76,8 @@ skill_id,name_key,power,kind,cast_ms,cooldown_ms,can_move,telegraph_ms,shape,aim
 1076,skill.1076,none,hold,0,15000,0,0,circle_self,self_area,400,0,400,0,0,0,0,,
 1077,skill.1077,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,
 9001,skill.9001,ad,active,600,8000,0,1450,circle_self,self_area,400,0,400,0,0,0,0,,
+9002,skill.9002,ad,active,250,9000,0,750,line,direction,700,140,0,0,0,0,0,,
+9003,skill.9003,ad,active,450,1400,0,0,projectile,direction,850,60,0,0,0,1600,0,,
 1078,skill.1078,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,
 1079,skill.1079,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,
 1080,skill.1080,none,active,0,15000,0,0,none,none,0,0,0,0,0,0,0,,

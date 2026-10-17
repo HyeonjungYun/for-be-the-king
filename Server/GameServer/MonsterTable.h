@@ -46,6 +46,10 @@ struct MonsterTypeDef
 
 	uint32		skillId = 0;			// 0 = 없음. 몬스터 스킬은 9000번대 (skill-system Q5)
 
+	// 원거리 (§ L, 2026-10-17 허깨비 궁수) - 0 = 근접. 목표가 kite 안이면 물러나고, keep 까지는 다가가 그 자리에서 쏜다
+	float		kiteMinCm = 0.f;
+	float		keepRangeCm = 0.f;
+
 	bool		drops = false;			// drop_tier 가 none 이 아니다
 	ChestTier	dropTier = ChestTier::Open;
 	uint32		dropChancePct = 0;
@@ -143,6 +147,22 @@ namespace MonsterConfig
 	constexpr uint64	RETURN_HARD_TIMEOUT_US	= 45'000'000;	// 돌아가는 길이 이보다 길면 (아무도 안 보는 때) 제자리로 옮긴다
 	constexpr float		TOWER_NO_GO_CM			= 1200.f;		// 타워 둘레 - 무리는 이 안으로 들어가지 않는다 (목표가 안에 있으면 테두리까지)
 	constexpr uint64	PACK_RETARGET_COOLDOWN_US = 0;			// 다른 사람이 때리면 바로 옮긴다 (사용자 결정 - 최신 공격자)
+
+	// ── 길찾기 (§ K, 2026-10-17 - NavGrid A*) ──
+	constexpr uint64	PATH_CHECK_US			= 200'000;		// 직선이 트였는지 다시 보는 주기 (5 Hz - 30 Hz 걸음마다 쓸지 않는다)
+	constexpr float		PATH_GOAL_SLACK_CM		= 200.f;		// 목표가 길을 구한 때보다 이만큼 움직이면 다시 구한다
+	constexpr uint64	PATH_MAX_AGE_US			= 2'000'000;	// 목표가 그대로여도 이만큼 지나면 다시 (임시 벽 · 밀려난 자리)
+	constexpr uint64	PATH_RETRY_US			= 1'000'000;	// 실패한 뒤 다시 구하기까지 - 그동안은 예전처럼 직선 + 미끄러짐
+	constexpr float		PATH_REACH_CM			= 40.f;			// 꺾는 점에 이만큼 다가가면 다음 점
+	constexpr uint32	PATH_BUDGET_PER_STEP	= 4;			// 방마다 걸음(33 ms)당 길 계산 수 - 넘친 몸은 다음 걸음에
+
+	// ── 몬스터 스킬 · 원거리 (§ L, 2026-10-17 - 멧돼지 돌진 · 허깨비 궁수) ──
+	constexpr float		CHARGE_MIN_CM			= 250.f;		// 이보다 가까우면 돌진하지 않는다 (붙어 있으면 평타)
+	constexpr float		RETREAT_STEP_CM			= 300.f;		// 원거리가 물러날 자리 - 지금 자리에서 이만큼
+	constexpr float		RETREAT_LEASH_MARGIN_CM	= 100.f;		// 물러날 자리는 끈 반경보다 이만큼 안쪽 (물러나다 끈이 끊겨 집으로 가지 않게)
+	constexpr float		RANGED_ENGAGE_RATIO		= 1.3f;			// 원거리는 keep × 이것 안에서 시야가 닿으면 교전 중 (T2 포기가 오지 않게)
+	constexpr uint64	RETREAT_MAX_US			= 1'200'000;	// 한 번 물러나는 시간 - 플레이어(340)가 궁수(260)보다 빨라 무한히 물러나면 한 발도 못 쏜다 (2026-10-18 실측)
+	constexpr uint64	RETREAT_COOLDOWN_US		= 2'500'000;	// 물러난 뒤 이만큼은 붙어 있어도 맞서 쏜다
 }
 
 struct RouteSet;		// PatrolRouteGen.h - 생성된 길 묶음

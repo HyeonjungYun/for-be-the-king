@@ -45,11 +45,13 @@ TEST(SkillRoster, 실제_데이터가_읽히고_76개_전부_있다)
 	}
 
 	EXPECT_NE(SkillTable::Find(9001), nullptr);
+	EXPECT_NE(SkillTable::Find(9002), nullptr);		// 멧돼지 돌진 (monster-ai.md § L, 2026-10-17)
+	EXPECT_NE(SkillTable::Find(9003), nullptr);		// 허깨비 화살
 	EXPECT_EQ(SkillTable::Find(1001), nullptr) << "채찍(#1)은 구현하지 않는다";
 	EXPECT_EQ(SkillTable::Find(1155), nullptr) << "1155 는 스킬 목록에 없다";
 	// 76 + 몬스터 9001 + 모자 27 (#78 ~ #104) + 모자 1 · 갑옷 9 (#105 ~ #114, 2026-10-10 오후) + 2차 로스터 23 (1115 ~ 1137, 2026-10-11)
-	// + 3차 로스터 51 (1138 ~ 1189 - 1155, 2026-10-11 밤)
-	EXPECT_EQ(SkillTable::All().size(), 188u);
+	// + 3차 로스터 51 (1138 ~ 1189 - 1155, 2026-10-11 밤) + 몬스터 9002 · 9003 (2026-10-17)
+	EXPECT_EQ(SkillTable::All().size(), 190u);
 }
 
 // 🔴 갑옷 로스터 #106 ~ #114 - "망치 / 검을 들고 있을 때만" 은 skills.csv requires_weapon 열 (Room::MeetsWeaponRequirement 가 본다)

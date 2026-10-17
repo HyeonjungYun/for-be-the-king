@@ -129,7 +129,12 @@ TEST(MonsterTable, 실제_데이터_7종_8자리가_1층_벽_진입_타워_검�
 	// 집 지키는 병사 7 · 보스 1 은 그대로 (guard). 들개(1)는 테스트 더미용으로 종류만 남는다.
 	// 2026-10-12 부터 1층 무리는 monster_packs.csv 가 아니라 pack_rules.csv 로 생성된다 (RouteGenTest) - CSV 무리 0
 	// 2026-10-17 베이스캠프 허수아비(90) - 자리 없이 종류만 (basecamp.csv 의 dummy 가 쓴다)
-	EXPECT_EQ(MonsterTable::TypeCount(), 8u);
+	// 2026-10-17 허깨비 궁수(8) - 집마다 병사 한 자리(402 · 404 · 407)를 바꿨다. 자리 수는 그대로 (monster-ai.md § L)
+	EXPECT_EQ(MonsterTable::TypeCount(), 9u);
+	ASSERT_NE(MonsterTable::FindType(8), nullptr);
+	EXPECT_GT(MonsterTable::FindType(8)->keepRangeCm, MonsterTable::FindType(8)->kiteMinCm);
+	EXPECT_EQ(MonsterTable::FindType(8)->skillId, 9003u);
+	EXPECT_EQ(MonsterTable::FindType(7)->skillId, 9002u);		// 멧돼지 우두머리 돌진
 	ASSERT_NE(MonsterTable::FindType(90), nullptr);
 	EXPECT_EQ(MonsterTable::FindType(90)->attackPower, 0);
 	EXPECT_EQ(MonsterTable::Spawns().size(), 8u);
@@ -143,7 +148,7 @@ TEST(MonsterTable, 실제_데이터_7종_8자리가_1층_벽_진입_타워_검�
 	EXPECT_EQ(set->packs.size(), 10u);
 
 	// 몬스터는 플레이어보다 느리다 - 0.9 × 340 (Core Rule 1)
-	for (uint32 id = 1; id <= 7; id++)
+	for (uint32 id = 1; id <= 8; id++)
 	{
 		const MonsterTypeDef* t = MonsterTable::FindType(id);
 		ASSERT_NE(t, nullptr);

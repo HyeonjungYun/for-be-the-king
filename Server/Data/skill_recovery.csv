@@ -76,6 +76,8 @@ skill_id,recovery_ms,why
 1076,0,hold
 1077,0,buff
 9001,300,default
+9002,300,default
+9003,300,default
 1078,0,buff
 1079,0,buff
 1080,0,buff

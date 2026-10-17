@@ -80,6 +80,11 @@ namespace
 		auto kindIt = table.columns.find("aggro_kind");
 		const int32 kindCol = (kindIt != table.columns.end()) ? kindIt->second : -1;
 
+		// 원거리 (§ L 허깨비 궁수, 2026-10-17) - 고를 열. 없거나 비면 0 = 근접 몬스터 (예전 그대로)
+		auto optionalCol = [&table](const char* name) { auto it = table.columns.find(name); return (it != table.columns.end()) ? it->second : -1; };
+		const int32 kiteCol = optionalCol("kite_min_cm");
+		const int32 keepCol = optionalCol("keep_range_cm");
+
 		for (size_t r = 0; r < table.rows.size(); r++)
 		{
 			const vector<string>& row = table.rows[r];
@@ -173,6 +178,36 @@ namespace
 			if (t.skillId != 0 && SkillTable::Find(t.skillId) == nullptr)
 			{
 				error = where + " skill_id " + to_string(t.skillId) + " is not in SkillTable";
+				return false;
+			}
+
+			// 몬스터가 쓸 줄 아는 스킬 모양 - 두뇌가 이 셋만 판단한다 (MonsterSkillUse)
+			if (t.skillId != 0)
+			{
+				const SkillShape shape = SkillTable::Find(t.skillId)->shape;
+				if (shape != SkillShape::CircleSelf && shape != SkillShape::Line && shape != SkillShape::Projectile)
+				{
+					error = where + " skill_id " + to_string(t.skillId) + " shape must be circle_self / line / projectile (the monster brain decides only these)";
+					return false;
+				}
+			}
+
+			for (const auto& [col, name, out] : { make_tuple(kiteCol, "kite_min_cm", &t.kiteMinCm), make_tuple(keepCol, "keep_range_cm", &t.keepRangeCm) })
+			{
+				if (col < 0 || col >= static_cast<int32>(row.size()) || row[col].empty())
+					continue;
+				if (Csv::ParseFloat(row[col], OUT *out) == false || InRange(*out, 0.f, 1200.f, where, name, error) == false)
+				{
+					if (error.empty())
+						error = where + " " + name + " must be a number";
+					return false;
+				}
+			}
+
+			// 원거리는 서서 쏘는 거리가 물러나는 거리보다 1 m 는 멀어야 한다 - 아니면 제자리에서 떤다
+			if (t.kiteMinCm > 0.f && t.keepRangeCm < t.kiteMinCm + 100.f)
+			{
+				error = where + " keep_range_cm must be at least kite_min_cm + 100 (a ranged monster needs room to stand)";
 				return false;
 			}
 

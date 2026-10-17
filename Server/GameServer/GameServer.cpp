@@ -35,6 +35,7 @@
 #include "ObjectUtils.h"
 #include "InstanceManager.h"
 #include "PartyManager.h"
+#include "NavGrid.h"
 
 enum
 {
@@ -209,6 +210,20 @@ int main()
 			else
 				LOG_LINE << "[LEVEL] floor=" << floor << " walls=" << WallTable::Get(floor).Count()
 					<< " version=" << (version.empty() ? "none" : version) << '\n';
+		}
+
+		// 몬스터 길찾기 격자 (monster-ai.md § K, 2026-10-17) - 벽 다음. 벽이 있는 층만 만든다 (나머지는 직선 이동 그대로)
+		{
+			const uint64 navStartUs = Utils::NowMicroseconds();
+			const uint32 navFloors = NavGridTable::Build(FLOOR_COUNT);
+			const uint64 navMs = (Utils::NowMicroseconds() - navStartUs) / 1000;
+			for (uint32 floor = 0; floor < FLOOR_COUNT; floor++)
+			{
+				if (const NavGrid* nav = NavGridTable::Get(floor))
+					LOG_LINE << "[NAV] floor=" << floor << " cell=" << NavGrid::CELL_CM << "cm walkable(r45)=" << nav->WalkableCells(45.f)
+						<< " walkable(r110)=" << nav->WalkableCells(110.f) << '\n';
+			}
+			LOG_LINE << "[NAV] grids=" << navFloors << " built in " << navMs << "ms\n";
 		}
 
 		// FoW 시야 규칙 (design/gdd/fog-of-war.md, 2026-10-11) - 벽 다음. 시선 판정이 벽을 읽는다

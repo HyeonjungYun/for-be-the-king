@@ -36,6 +36,8 @@ struct MonsterBrainState
 	uint64				returnStartUs = 0;
 	uint64				searchArrivedUs = 0;
 	uint64				skillReadyAtUs = 0;
+	uint64				retreatEndUs = 0;		// § L 원거리 - 지금 물러나는 창의 끝
+	uint64				retreatReadyUs = 0;		// 다음에 물러날 수 있는 때 (그 전엔 맞서 쏜다)
 
 	// 피격 (T9) - OnDamaged 가 남기고 다음 Think 가 쓴다
 	uint64				pendingAttackerId = 0;
@@ -50,6 +52,16 @@ struct MonsterBrainState
 	uint64				slideUntilUs = 0;
 	float				slideDirX = 0.f;		// 직전에 비껴간 월드 방향 - 벽면을 따라 그대로 미끄러진다
 	float				slideDirY = 0.f;
+
+	// 길찾기 (§ K, 2026-10-17) - 직선이 막혔을 때만 NavGrid 길을 따른다
+	vector<pair<float, float>>	path;		// 꺾는 점 - 마지막 = 구할 때의 목표 (걸을 때는 지금 목표로 바꿔 쓴다)
+	uint32				pathIndex = 0;
+	float				pathGoalX = 0.f;		// 길을 구한 때의 목표 - 목표가 PATH_GOAL_SLACK_CM 넘게 움직이면 다시 구한다
+	float				pathGoalY = 0.f;
+	uint64				pathBuiltUs = 0;
+	uint64				pathRetryUs = 0;		// 실패한 뒤 이때까지 다시 구하지 않는다
+	uint64				directCheckUs = 0;		// 다음 직선 검사 시각
+	bool				directClear = true;		// 지금 자리 → 목표 직선이 몸 반지름으로 트였다
 };
 
 // 유효 목표 - 방 안 · 살아 있는 플레이어만 (끊긴 몸 포함, § 12). Room 이 틱마다 한 번 만든다
@@ -74,6 +86,9 @@ struct BrainInput
 	bool						casting = false;
 	const vector<BrainPlayer>*	players = nullptr;
 	LineClearFn					lineClear;
+
+	// 몸이 그 자리로 갈 수 있는가 - 원거리의 물러날 자리 검사 (§ L). 없으면 lineClear 로 대신한다
+	function<bool(float ax, float ay, float bx, float by)>	bodyClear;
 };
 
 struct BrainOutput
@@ -85,7 +100,11 @@ struct BrainOutput
 	float	speedMult = 1.f;		// 복귀 1.5
 
 	uint64	attackTargetId = 0;		// 0 이 아니면 Room 이 HandleAttack(몬스터, 이 id) 를 부른다
-	bool	castSkill = false;		// 보스 광역 - Room 이 BeginMonsterCast
+	bool	castSkill = false;		// 몬스터 스킬 - Room 이 BeginMonsterCast (보스 광역 · 돌진 · 화살)
+	uint64	castTargetId = 0;
+	float	castAimX = 0.f;			// 조준 - 시전 때 고정된다 (돌진 · 화살은 비키면 피한다)
+	float	castAimY = 0.f;
+	bool	retreating = false;		// 원거리가 물러나는 중 (§ L)
 	bool	aggroed = false;		// 이번 틱에 추격을 시작했다 - 무리 호출 (T10)
 	bool	enteredReturn = false;
 	bool	resetOnArrive = false;	// T11 · T12 - 만피 · CC 해제
@@ -119,16 +138,46 @@ public:
 	static float		ThreatOf(const MonsterBrainState& s, uint64 id);
 };
 
+/*-------------------
+	MonsterSkillUse
+-------------------*/
+
+// 몬스터 스킬을 지금 쓸까 (§ L, 2026-10-17). 쿨다운 · 시전 중 · windup 은 부르는 쪽(두뇌 · 무리 적용)이 먼저 본다.
+//   circle_self (보스 내려치기 9001)  유효 목표 누구라도 반경 - SKILL_TRIGGER_MARGIN_CM 안
+//   line        (멧돼지 돌진 9002)    목표가 CHARGE_MIN_CM .. 사거리 안 · 시선이 닿는다
+//   projectile  (허깨비 화살 9003)    목표가 사거리 안 · 시선이 닿는다
+// 조준 = 목표의 지금 자리. 방향은 시전 때 고정된다 - 예고를 보고 옆으로 비키면 피한다.
+struct SkillDef;
+
+struct MonsterCastDecision
+{
+	bool	cast = false;
+	uint64	targetId = 0;
+	float	aimX = 0.f;
+	float	aimY = 0.f;
+};
+
+namespace MonsterSkillUse
+{
+	MonsterCastDecision	Decide(const SkillDef& skill, float x, float y, const BrainPlayer* target, const vector<BrainPlayer>& players, const LineClearFn& lineClear);
+}
+
 /*-----------------
 	MonsterMover
 -----------------*/
 
-// 이동 한 걸음 (§ C-9) - 직선, 막히면 ±30 · 60 · 90° 로 비껴 가고, 모두 막히면 멈춘다. 길찾기는 없다.
+// 이동 한 걸음 (§ C-9) - 직선, 막히면 ±30 · 60 · 90° 로 비껴 가고, 모두 막히면 멈춘다.
 // 막힘 = 1 초 창 안에서 목표 방향으로 간 거리(이동을 목표 방향에 투영)가 50 cm 미만. 2 초 쌓이면 T3.
 // 🔴 "목표까지 거리가 줄었나" 로 재면 더 빠른 플레이어를 쫓을 때 매번 막힘이 된다 - 투영으로 잰다.
+//
+// 길찾기 (§ K, 2026-10-17) - nav 가 있으면 PATH_CHECK_US 마다 지금 자리 → 목표 직선을 몸 반지름으로 쓸어 본다. 막혔으면 NavGrid 길을
+// 구해(방마다 걸음당 pathBudget 번까지) 꺾는 점을 차례로 걷는다. 마지막 구간은 지금 목표 그대로 - 움직이는 목표를 따라간다.
+// 두뇌(언제 쫓고 놓치나)는 바뀌지 않는다: 시야가 끊기면 여전히 놓친다. 길은 "보이는데 몸이 못 가는" 것과 수색 · 복귀를 고친다.
 
 // a -> b 로 반지름 r 원을 밀 때 벽에 닿는가 (WallMap::SweepBlocked)
 using SweepBlockedFn = function<bool(float ax, float ay, float bx, float by, float r)>;
+
+class NavGrid;
 
 struct StepInput
 {
@@ -142,6 +191,9 @@ struct StepInput
 	float			speedCms = 0.f;		// 0 이면 서 있다 (CC · windup · 시전) - 막힘으로 세지 않는다
 	float			radiusCm = 0.f;
 	SweepBlockedFn	blocked;
+
+	const NavGrid*	nav = nullptr;		// nullptr = 길찾기 없음 (벽 없는 층 · 무리 순찰)
+	uint32*			pathBudget = nullptr;	// 남은 길 계산 횟수 - 0 이면 이번 걸음엔 구하지 않는다 (nullptr = 무제한, 테스트)
 };
 
 struct StepOutput
@@ -151,6 +203,11 @@ struct StepOutput
 	float	yawDeg = 0.f;
 	bool	moved = false;
 	bool	arrived = false;
+
+	bool	pathSearched = false;		// 이번 걸음에 길을 구했다 (Room 이 시간을 잰다 - MON 통계)
+	bool	pathFound = false;
+	int32	pathExpansions = 0;
+	bool	onPath = false;				// 꺾는 점을 따라 걸었다
 };
 
 class MonsterMover

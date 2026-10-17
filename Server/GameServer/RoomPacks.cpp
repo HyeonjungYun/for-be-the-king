@@ -6,6 +6,7 @@
 #include "PatrolRouteGen.h"
 #include "TowerTable.h"
 #include "SkillKinematics.h"
+#include "SkillTable.h"
 #include "Vision.h"
 #include "GameSession.h"
 
@@ -269,7 +270,7 @@ void Room::UpdatePacks(uint64 nowUs, const LineClearFn& lineClear)
 			v.x = m->posInfo->x();
 			v.y = m->posInfo->y();
 			v.windingUp = (m->attackHitAtUs != 0);
-			v.casting = m->IsCasting();
+			v.casting = m->IsCasting() || nowUs < m->holdUntilUs;		// 돌진 예고 · 날아가는 동안도 (§ L)
 			v.stuckAccumUs = m->brain.stuckAccumUs;
 			v.attackRangeCm = m->type->attackRangeCm;
 			// 실명한 몸은 아무도 보지 못한다 (뇌섬 · 번-쩍) - 감지에서 빠진다
@@ -349,6 +350,29 @@ void Room::UpdatePacks(uint64 nowUs, const LineClearFn& lineClear)
 			}
 
 			m->decision = out.perMember[k];
+
+			// 몬스터 스킬 (§ L - 멧돼지 우두머리 돌진 9002). 교전 중 · 무리의 목표에게만. 쓰면 이번 틱 평타는 없다
+			if (slot.state.mode == PackMode::Engage && m->type->skillId != 0 && nowUs >= m->brain.skillReadyAtUs
+				&& views[k].casting == false && views[k].windingUp == false)
+			{
+				const SkillDef* skill = SkillTable::Find(m->type->skillId);
+				const BrainPlayer* target = nullptr;
+				for (const BrainPlayer& p : _brainPlayers)
+				{
+					if (p.id == slot.state.targetId)
+					{
+						target = &p;
+						break;
+					}
+				}
+				if (skill != nullptr && target != nullptr)
+				{
+					const MonsterCastDecision c = MonsterSkillUse::Decide(*skill, views[k].x, views[k].y, target, _brainPlayers, lineClear);
+					if (c.cast && BeginMonsterCast(m, *skill, nowUs, c.targetId, c.aimX, c.aimY))
+						continue;
+				}
+			}
+
 			if (m->decision.attackTargetId != 0)
 				HandleAttack(m->objectInfo->object_id(), m->decision.attackTargetId);
 		}
@@ -362,14 +386,28 @@ void Room::StepPacks(uint64 nowUs)
 
 	const WallMap& walls = Walls();
 	auto blocked = [&walls](float ax, float ay, float bx, float by, float r) { return walls.SweepBlocked(ax, ay, bx, by, r); };
+	const NavGrid* nav = Nav();
 
-	// 몸 하나 한 걸음 - 예전 StepMonsters 와 같은 규칙 (CC · windup · 시전이면 0, 움직였으면 RUN, 처음 멈춘 걸음에 IDLE 한 번)
-	auto stepOne = [&](const MonsterRef& m, const BrainOutput& goal, float speed) -> bool
+	// 몸 하나 한 걸음 - 예전 StepMonsters 와 같은 규칙 (CC · windup · 시전이면 0, 움직였으면 RUN, 처음 멈춘 걸음에 IDLE 한 번).
+	// 길찾기는 교전 · 복귀 때만 (§ K) - 순찰 길은 생성기가 이미 몸 반지름으로 검사했다
+	auto stepOne = [&](const MonsterRef& m, const BrainOutput& goal, float speed, bool usePath) -> bool
 		{
 			const uint64 id = m->objectInfo->object_id();
 			const uint64 dtUs = (m->lastStepUs != 0 && nowUs > m->lastStepUs) ? nowUs - m->lastStepUs : 0;
 			m->lastStepUs = nowUs;
 			Protocol::PosInfo* pos = m->posInfo;
+
+			// 몬스터 스킬의 예고 · 돌진 중 - 그 자리에 선다 (§ L 돌진, 2026-10-17)
+			if (nowUs < m->holdUntilUs)
+			{
+				if (pos->state() == Protocol::MOVE_STATE_RUN)
+				{
+					pos->set_state(Protocol::MOVE_STATE_IDLE);
+					_dirtyMovers.insert(id);
+					GMonsterStats.moveEntries.fetch_add(1);
+				}
+				return false;
+			}
 
 			if (goal.hasGoal == false)
 			{
@@ -396,8 +434,13 @@ void Room::StepPacks(uint64 nowUs)
 			in.speedCms = speed;
 			in.radiusCm = m->type->radiusCm;
 			in.blocked = blocked;
+			if (usePath)
+			{
+				in.nav = nav;
+				in.pathBudget = &_pathBudget;
+			}
 
-			const StepOutput o = MonsterMover::Step(m->brain, in);
+			const StepOutput o = StepMonsterBody(m, in);
 			if (o.moved)
 			{
 				pos->set_x(o.x);
@@ -447,7 +490,7 @@ void Room::StepPacks(uint64 nowUs)
 			for (const MonsterRef& m : refs)
 			{
 				const BrainOutput& d = m->decision;
-				stepOne(m, d, m->type->moveSpeedCms * (1.f - m->activeSlow) * d.speedMult);
+				stepOne(m, d, m->type->moveSpeedCms * (1.f - m->activeSlow) * d.speedMult, /*usePath*/ true);
 			}
 			continue;
 		}
@@ -492,7 +535,7 @@ void Room::StepPacks(uint64 nowUs)
 				speed = (std::min)(m->type->moveSpeedCms, slot.def.patrolSpeedCms + MonsterConfig::FOLLOW_GAIN_PER_S * Dist(x, y, goal.goalX, goal.goalY));
 			speed *= (1.f - m->activeSlow);
 
-			stepOne(m, goal, speed);
+			stepOne(m, goal, speed, /*usePath*/ false);
 
 			// 머리의 발자국 - 뒤의 몸이 밟는다 (멈춰 있어도 지금 자리를 머리로)
 			if (rank == 0)

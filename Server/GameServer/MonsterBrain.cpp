@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "MonsterBrain.h"
+#include "NavGrid.h"
 #include "FloorBounds.h"
 #include "SkillTable.h"
 #include "Player.h"
@@ -135,6 +136,96 @@ namespace
 	bool LineClear(const BrainInput& in, float bx, float by)
 	{
 		return in.lineClear == nullptr || in.lineClear(in.x, in.y, bx, by);
+	}
+
+	// § L - 원거리가 물러날 자리. 목표 반대쪽부터 ±40 · ±80° 로 비껴 보며, 몸이 갈 수 있고 · 목표에서 지금보다 멀고 · 끈 안쪽인 첫 자리
+	bool FindRetreat(const BrainInput& in, const MonsterTypeDef& def, const BrainPlayer& target, float distNow, OUT float& outX, OUT float& outY)
+	{
+		float ax = in.x - target.x;
+		float ay = in.y - target.y;
+		const float len = ::sqrtf(ax * ax + ay * ay);
+		if (len < 1.f)
+		{
+			ax = 1.f;
+			ay = 0.f;
+		}
+		else
+		{
+			ax /= len;
+			ay /= len;
+		}
+
+		const float angles[] = { 0.f, 40.f, -40.f, 80.f, -80.f };
+		for (float a : angles)
+		{
+			const float rad = a * 3.14159265f / 180.f;
+			const float rx = ax * ::cosf(rad) - ay * ::sinf(rad);
+			const float ry = ax * ::sinf(rad) + ay * ::cosf(rad);
+			const float px = in.x + rx * MonsterConfig::RETREAT_STEP_CM;
+			const float py = in.y + ry * MonsterConfig::RETREAT_STEP_CM;
+
+			if (Dist(px, py, target.x, target.y) <= distNow + 50.f)
+				continue;
+			if (def.leashRadiusCm > 0.f && Dist(px, py, in.homeX, in.homeY) > def.leashRadiusCm - MonsterConfig::RETREAT_LEASH_MARGIN_CM)
+				continue;
+
+			const bool clear = (in.bodyClear != nullptr) ? in.bodyClear(in.x, in.y, px, py) : LineClear(in, px, py);
+			if (clear == false)
+				continue;
+
+			outX = px;
+			outY = py;
+			return true;
+		}
+		return false;
+	}
+}
+
+MonsterCastDecision MonsterSkillUse::Decide(const SkillDef& skill, float x, float y, const BrainPlayer* target, const vector<BrainPlayer>& players, const LineClearFn& lineClear)
+{
+	MonsterCastDecision c;
+
+	switch (skill.shape)
+	{
+	case SkillShape::CircleSelf:
+	{
+		// 보스 광역 - 유효 목표 하나라도 반경 - 50 안 (예전 규칙 그대로). 조준은 발밑
+		const float trigger = skill.radiusCm - MonsterConfig::SKILL_TRIGGER_MARGIN_CM;
+		for (const BrainPlayer& p : players)
+		{
+			if (Dist(x, y, p.x, p.y) <= trigger)
+			{
+				c.cast = true;
+				c.aimX = x;
+				c.aimY = y;
+				return c;
+			}
+		}
+		return c;
+	}
+
+	case SkillShape::Line:
+	case SkillShape::Projectile:
+	{
+		if (target == nullptr)
+			return c;
+
+		const float d = Dist(x, y, target->x, target->y);
+		const float minD = (skill.shape == SkillShape::Line) ? MonsterConfig::CHARGE_MIN_CM : 0.f;
+		if (d < minD || d > skill.rangeCm)
+			return c;
+		if (lineClear != nullptr && lineClear(x, y, target->x, target->y) == false)
+			return c;
+
+		c.cast = true;
+		c.targetId = target->id;
+		c.aimX = target->x;
+		c.aimY = target->y;
+		return c;
+	}
+
+	default:
+		return c;
 	}
 }
 
@@ -342,8 +433,9 @@ BrainOutput MonsterBrain::Think(MonsterBrainState& s, const MonsterTypeDef& def,
 
 		const BrainPlayer* target = FindPlayer(players, targetId);
 		const float d = Dist(in.x, in.y, target->x, target->y);
+		const bool seen = LineClear(in, target->x, target->y);
 
-		if (LineClear(in, target->x, target->y))
+		if (seen)
 		{
 			s.losLostSinceUs = 0;
 			s.lastSeenX = target->x;
@@ -372,29 +464,61 @@ BrainOutput MonsterBrain::Think(MonsterBrainState& s, const MonsterTypeDef& def,
 				out.attackTargetId = targetId;
 		}
 
-		// 보스 광역 - 쿨다운 끝 · 비시전 · windup 아님 · 유효 목표 하나가 반경 - 50 안
+		// 원거리 (§ L) - 멀리서 쏘기만 해도 교전 중. 너무 가까우면 물러난다 (구석이면 그 자리에서 버틴다)
+		const bool ranged = def.keepRangeCm > 0.f;
+		if (ranged && seen && d <= def.keepRangeCm * MonsterConfig::RANGED_ENGAGE_RATIO)
+			s.lastEngagedUs = now;
+
+		// 물러나기는 RETREAT_MAX_US 동안만, 그 뒤 RETREAT_COOLDOWN_US 는 붙어 있어도 맞서 쏜다 - 플레이어가 더 빨라서
+		// 무한히 물러나면 한 발도 못 쏘고 죽는다 (2026-10-18 봇 실측)
+		const bool retreatOpen = now < s.retreatEndUs;
+		if (ranged && seen && d < def.kiteMinCm && in.windingUp == false && in.casting == false && (retreatOpen || now >= s.retreatReadyUs))
+		{
+			if (retreatOpen == false)
+			{
+				s.retreatEndUs = now + MonsterConfig::RETREAT_MAX_US;
+				s.retreatReadyUs = s.retreatEndUs + MonsterConfig::RETREAT_COOLDOWN_US;
+			}
+
+			float rx = 0.f;
+			float ry = 0.f;
+			if (FindRetreat(in, def, *target, d, OUT rx, OUT ry))
+			{
+				out.attackTargetId = 0;
+				out.retreating = true;
+				out.hasGoal = true;
+				out.goalX = rx;
+				out.goalY = ry;
+				out.stopDistCm = 0.f;
+				break;
+			}
+
+			s.retreatEndUs = now;		// 구석 - 물러날 자리가 없다. 쉬는 시간은 그대로 (그동안 맞서 쏜다)
+		}
+
+		// 몬스터 스킬 - 쿨다운 끝 · 비시전 · windup 아님. 모양마다 조건이 다르다 (MonsterSkillUse)
 		if (def.skillId != 0 && now >= s.skillReadyAtUs && in.casting == false && in.windingUp == false)
 		{
 			if (const SkillDef* skill = SkillTable::Find(def.skillId))
 			{
-				const float trigger = skill->radiusCm - MonsterConfig::SKILL_TRIGGER_MARGIN_CM;
-				for (const BrainPlayer& p : players)
+				const MonsterCastDecision c = MonsterSkillUse::Decide(*skill, in.x, in.y, target, players, in.lineClear);
+				if (c.cast)
 				{
-					if (Dist(in.x, in.y, p.x, p.y) <= trigger)
-					{
-						out.castSkill = true;
-						out.attackTargetId = 0;
-						break;
-					}
+					out.castSkill = true;
+					out.castTargetId = c.targetId;
+					out.castAimX = c.aimX;
+					out.castAimY = c.aimY;
+					out.attackTargetId = 0;
 				}
 			}
 		}
 
-		// 시야가 끊긴 500 ms 동안은 마지막으로 본 자리로 간다 - 벽 너머 위치를 몬스터가 알지 못한다
+		// 시야가 끊긴 500 ms 동안은 마지막으로 본 자리로 간다 - 벽 너머 위치를 몬스터가 알지 못한다.
+		// 원거리는 보이는 동안 keep 까지만 다가가 그 자리에서 쏜다
 		out.hasGoal = true;
 		out.goalX = s.lastSeenX;
 		out.goalY = s.lastSeenY;
-		out.stopDistCm = def.attackRangeCm * MonsterConfig::STOP_DIST_RATIO;
+		out.stopDistCm = (ranged && seen) ? def.keepRangeCm : def.attackRangeCm * MonsterConfig::STOP_DIST_RATIO;
 		break;
 	}
 
@@ -514,21 +638,92 @@ BrainOutput MonsterBrain::Think(MonsterBrainState& s, const MonsterTypeDef& def,
 	return out;
 }
 
+namespace
+{
+	// § K - 직선이 막혔으면 길의 다음 꺾는 점을 걸음의 목표로 바꾼다. 길이 없거나 못 구하면 그대로 (직선 + 미끄러짐)
+	void Steer(MonsterBrainState& s, const StepInput& in, StepOutput& out, float& goalX, float& goalY, float& stopDist)
+	{
+		const uint64 now = in.nowUs;
+
+		// 목표가 많이 움직였거나 길이 오래됐다 - 버리고 다시 (임시 벽 · 밀려난 자리)
+		if (s.path.empty() == false
+			&& (Dist(in.goalX, in.goalY, s.pathGoalX, s.pathGoalY) > MonsterConfig::PATH_GOAL_SLACK_CM || now - s.pathBuiltUs >= MonsterConfig::PATH_MAX_AGE_US))
+			s.path.clear();
+
+		if (now >= s.directCheckUs)
+		{
+			s.directCheckUs = now + MonsterConfig::PATH_CHECK_US;
+			s.directClear = (in.blocked(in.x, in.y, in.goalX, in.goalY, in.radiusCm) == false);
+		}
+
+		if (s.directClear)
+		{
+			s.path.clear();
+			return;
+		}
+
+		if (s.path.empty() && now >= s.pathRetryUs && (in.pathBudget == nullptr || *in.pathBudget > 0))
+		{
+			if (in.pathBudget != nullptr)
+				(*in.pathBudget)--;
+
+			NavGrid::PathResult r = in.nav->FindPath(in.x, in.y, in.goalX, in.goalY, in.radiusCm, in.blocked);
+			out.pathSearched = true;
+			out.pathFound = r.found;
+			out.pathExpansions = r.expansions;
+
+			if (r.found && r.points.empty() == false)
+			{
+				s.path = move(r.points);
+				s.pathIndex = 0;
+				s.pathGoalX = in.goalX;
+				s.pathGoalY = in.goalY;
+				s.pathBuiltUs = now;
+			}
+			else
+			{
+				s.pathRetryUs = now + MonsterConfig::PATH_RETRY_US;
+			}
+		}
+
+		if (s.path.empty())
+			return;
+
+		const uint32 last = static_cast<uint32>(s.path.size()) - 1;
+		while (s.pathIndex < last && Dist(in.x, in.y, s.path[s.pathIndex].first, s.path[s.pathIndex].second) <= MonsterConfig::PATH_REACH_CM)
+			s.pathIndex++;
+
+		// 한 점 앞이 이미 트였으면 건너뛴다 (밀려났거나 비껴 걸어 지름길이 생겼다) - 걸음당 한 번만 쓸어 본다
+		if (s.pathIndex < last)
+		{
+			const float nx = (s.pathIndex + 1 == last) ? in.goalX : s.path[s.pathIndex + 1].first;
+			const float ny = (s.pathIndex + 1 == last) ? in.goalY : s.path[s.pathIndex + 1].second;
+			if (in.blocked(in.x, in.y, nx, ny, in.radiusCm) == false)
+				s.pathIndex++;
+		}
+
+		out.onPath = true;
+		if (s.pathIndex == last)
+			return;		// 마지막 구간 = 지금 목표 그대로 (움직이는 목표를 따라간다)
+
+		goalX = s.path[s.pathIndex].first;
+		goalY = s.path[s.pathIndex].second;
+		stopDist = 0.f;
+	}
+}
+
 StepOutput MonsterMover::Step(MonsterBrainState& s, const StepInput& in)
 {
 	StepOutput out;
 	out.x = in.x;
 	out.y = in.y;
 
-	const float dx = in.goalX - in.x;
-	const float dy = in.goalY - in.y;
-	const float dist = ::sqrtf(dx * dx + dy * dy);
-
 	// 닿았거나 서 있어야 한다 - 막힘이 아니다
-	if (dist <= in.stopDistCm + 0.5f)
+	if (Dist(in.x, in.y, in.goalX, in.goalY) <= in.stopDistCm + 0.5f)
 	{
 		out.arrived = true;
 		ResetStuck(s);
+		s.path.clear();
 		return out;
 	}
 
@@ -540,7 +735,20 @@ StepOutput MonsterMover::Step(MonsterBrainState& s, const StepInput& in)
 		return out;
 	}
 
-	const float len = min(in.speedCms * static_cast<float>(dtUs) / 1'000'000.f, dist - in.stopDistCm);
+	// 걸음의 목표 - 길을 따르면 다음 꺾는 점 (§ K)
+	float goalX = in.goalX;
+	float goalY = in.goalY;
+	float stopDist = in.stopDistCm;
+	if (in.nav != nullptr && in.blocked != nullptr)
+		Steer(s, in, out, goalX, goalY, stopDist);
+
+	const float dx = goalX - in.x;
+	const float dy = goalY - in.y;
+	const float dist = ::sqrtf(dx * dx + dy * dy);
+	if (dist <= stopDist + 0.5f)
+		return out;
+
+	const float len = min(in.speedCms * static_cast<float>(dtUs) / 1'000'000.f, dist - stopDist);
 	const float hx = dx / dist;
 	const float hy = dy / dist;
 

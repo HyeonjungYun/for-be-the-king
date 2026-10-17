@@ -96,6 +96,10 @@ public:
 	// 점이 벽 안이면 가장 깊이 들어간 벽의 침투 깊이 (cm), 아니면 0. 테스트 · 로그용
 	float	PenetrationDepth(float x, float y) const;
 
+	// 가장 가까운 벽까지 부호 거리 (cm) - 밖이면 양수, 벽 안이면 음수. cap 보다 먼 벽은 보지 않고 cap 을 돌려준다.
+	// 층 사각형 경계도 벽으로 친다 (해안선은 boundary 벽이 이미 막는다). 몬스터 길찾기 격자(NavGrid)가 칸마다 부른다
+	float	Clearance(float x, float y, float cap) const;
+
 	// 블링크 도착점 보정 (skill-system R13 · movement-camera § Edge Cases · ADR-0006 § ⑦).
 	// (x, y) 의 반지름 r 원이 벽이나 층 경계(r 만큼 줄인 사각형 · 해안선)와 겹치면 (x, y) 에서 maxSearch 안의 가장 가까운 빈 점을 찾는다.
 	// 바다 위 점은 해안선 안쪽으로 끌어온 뒤 찾는다 - 답은 언제나 해안선 안이다 (2026-10-11).

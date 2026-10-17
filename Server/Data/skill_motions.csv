@@ -187,3 +187,5 @@ skill_id,motion_key,note
 1188,m_none,
 1189,m_none,자리에 연막
 9001,m_none,보스 몬스터 스킬
+9002,m_shout,멧돼지 우두머리 돌진 - 앞발 구르기 (예고 동안 선다)
+9003,m_shoot,허깨비 궁수 화살

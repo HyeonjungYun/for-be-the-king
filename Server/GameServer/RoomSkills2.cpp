@@ -7,6 +7,7 @@
 #include "SkillKinematics.h"
 #include "WallTable.h"
 #include "BaseCampTable.h"
+#include "NavGrid.h"
 #include "Vision.h"
 #include "GameSession.h"
 
@@ -45,6 +46,12 @@ namespace
 const WallMap& Room::Walls() const
 {
 	return (_wallsWithDynamic != nullptr) ? *_wallsWithDynamic : BaseWalls();
+}
+
+const NavGrid* Room::Nav() const
+{
+	// 베이스캠프 방은 캠프 벽이라 층 격자와 맞지 않는다 - 허수아비만 산다 (길찾기 없음)
+	return (_kind == RoomKind::BaseCamp) ? nullptr : NavGridTable::Get(_floorId);
 }
 
 const WallMap& Room::BaseWalls() const

@@ -514,7 +514,11 @@ private:
 	void	SpawnMonster(MonsterSlot& slot, uint64 nowUs);
 	void	OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 damage, uint64 nowUs);
 	void	OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 nowUs);
-	bool	BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs);
+	// 몬스터 스킬 (§ L) - 조준은 두뇌가 고른 목표의 그 순간 자리. 돌진(자기 이동 효과)은 시전 + 예고 + 날아가는 동안 선다
+	bool	BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs, uint64 targetId, float aimX, float aimY);
+	// 걸음 한 번 (MonsterMover::Step) + 길찾기 통계 (§ K)
+	StepOutput	StepMonsterBody(const MonsterRef& m, const StepInput& in);
+	const NavGrid*	Nav() const;		// 이 층의 길찾기 격자 - 벽 없는 층 · 베이스캠프는 nullptr
 
 	// ── 무리 (2026-10-11 몬스터 개선) - RoomPacks.cpp ──
 	void	InitPacks(uint64 nowUs);
@@ -693,6 +697,7 @@ private:
 	unordered_map<uint64, MonsterRef>	_monsters;			// 시체 유예 중인 것 포함
 	vector<MonsterSlot>					_monsterSlots;
 	vector<unique_ptr<PackSlot>>		_packs;				// 무리 - 주소가 바뀌지 않게 unique_ptr (Monster::spawn 이 안을 가리킨다)
+	uint32								_pathBudget = 0;	// 이번 걸음에 남은 길 계산 수 (§ K - StepMonsters 가 채운다)
 	unordered_map<uint64, shared_ptr<MonsterSpawnDef>>	_dummySpawns;	// 테스트 모드 더미의 자리 - Monster::spawn 이 가리킨다. 몬스터를 지울 때 함께
 	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
 

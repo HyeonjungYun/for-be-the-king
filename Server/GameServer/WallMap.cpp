@@ -675,3 +675,17 @@ float WallMap::PenetrationDepth(float x, float y) const
 
 	return depth;
 }
+
+float WallMap::Clearance(float x, float y, float cap) const
+{
+	if (std::isfinite(x) == false || std::isfinite(y) == false)
+		return -cap;
+
+	float best = (std::min)(cap, FloorBounds::HALF_CM - (std::max)(std::fabs(x), std::fabs(y)));
+	ForEachCandidate(x - cap, y - cap, x + cap, y + cap, [&](const WallBox& w)
+	{
+		best = (std::min)(best, WallGeom::SignedDistance(w, x, y));
+	});
+
+	return best;
+}

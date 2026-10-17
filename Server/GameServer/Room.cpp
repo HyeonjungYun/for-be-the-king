@@ -3902,6 +3902,15 @@ void Room::ApplySelfEffect(const CreatureRef& caster, const SkillDef& def, const
 			Rewind(caster, e, nowUs);							// 회귀 - 3 초 전 자리로
 		else if (e.param == "off_wall")
 			WallKick(caster, e, nowUs);							// 벽 차기 - 서버가 벽 반대쪽으로 민다
+		else if (caster->IsMonster())
+		{
+			// 몬스터의 질주 (멧돼지 돌진 9002, monster-ai.md § L) - 몬스터는 옮겨 줄 클라가 없다. 서버가 조준 방향으로 민다 (벽 앞에서 멈춘다).
+			// 클라는 S_CC 넉백으로 같은 끝점까지 미끄러져 그린다
+			float moved = 0.f;
+			bool hitWall = false;
+			PushCreature(caster, ctx.casterId, ctx.aimX - ctx.originX, ctx.aimY - ctx.originY, e.distCm, e.speedCms, /*wallStun*/ false, nowUs, &moved, &hitWall);
+			LOG_LINE << "[MON] charge id=" << ctx.casterId << " skill=" << def.skillId << " moved=" << ::lroundf(moved) << (hitWall ? " wall" : "") << '\n';
+		}
 		else
 		{
 			ApplyMovement(caster, e, nowUs);
@@ -7694,9 +7703,11 @@ void Room::UpdateMonsters(uint64 nowUs)
 		in.homeX = m->spawn->x;
 		in.homeY = m->spawn->y;
 		in.windingUp = m->attackHitAtUs != 0;
-		in.casting = m->IsCasting();
+		in.casting = m->IsCasting() || nowUs < m->holdUntilUs;		// 돌진 예고 · 날아가는 동안도 시전 중으로 친다 (§ L)
 		in.players = &_brainPlayers;
 		in.lineClear = lineClear;
+		const float bodyRadius = m->type->radiusCm;
+		in.bodyClear = [&walls, bodyRadius](float ax, float ay, float bx, float by) { return walls.SweepBlocked(ax, ay, bx, by, bodyRadius) == false; };
 
 		const MonsterState before = m->brain.state;
 		m->decision = MonsterBrain::Think(m->brain, *m->type, in);
@@ -7749,7 +7760,7 @@ void Room::UpdateMonsters(uint64 nowUs)
 		if (out.castSkill)
 		{
 			if (const SkillDef* def = SkillTable::Find(m->type->skillId))
-				BeginMonsterCast(m, *def, nowUs);
+				BeginMonsterCast(m, *def, nowUs, out.castTargetId, out.castAimX, out.castAimY);
 		}
 		else if (out.attackTargetId != 0)
 		{
@@ -7771,6 +7782,10 @@ void Room::StepMonsters(uint64 nowUs)
 	const WallMap& walls = Walls();
 	auto blocked = [&walls](float ax, float ay, float bx, float by, float r) { return walls.SweepBlocked(ax, ay, bx, by, r); };
 
+	// 길찾기 (§ K) - 걸음(33 ms)마다 방 전체 PATH_BUDGET_PER_STEP 번까지. 무리 걸음(StepPacks)과 함께 쓴다
+	_pathBudget = MonsterConfig::PATH_BUDGET_PER_STEP;
+	const NavGrid* nav = Nav();
+
 	uint32 entries = 0;
 
 	for (auto& [id, m] : _monsters)
@@ -7781,6 +7796,19 @@ void Room::StepMonsters(uint64 nowUs)
 		// 무리의 몸은 StepPacks 가 줄 순서로 걷게 한다
 		if (m->packSlot != 0)
 			continue;
+
+		// 몬스터 스킬의 예고 · 돌진 중 - 그 자리에 선다 (§ L 돌진, 2026-10-17)
+		if (nowUs < m->holdUntilUs)
+		{
+			m->lastStepUs = nowUs;
+			if (m->posInfo->state() == Protocol::MOVE_STATE_RUN)
+			{
+				m->posInfo->set_state(Protocol::MOVE_STATE_IDLE);
+				_dirtyMovers.insert(id);
+				entries++;
+			}
+			continue;
+		}
 
 		const uint64 dtUs = (m->lastStepUs != 0 && nowUs > m->lastStepUs) ? nowUs - m->lastStepUs : 0;
 		m->lastStepUs = nowUs;
@@ -7815,8 +7843,10 @@ void Room::StepMonsters(uint64 nowUs)
 		in.speedCms = speed;
 		in.radiusCm = m->type->radiusCm;
 		in.blocked = blocked;
+		in.nav = nav;
+		in.pathBudget = &_pathBudget;
 
-		const StepOutput o = MonsterMover::Step(m->brain, in);
+		const StepOutput o = StepMonsterBody(m, in);
 
 		if (o.moved)
 		{
@@ -7848,6 +7878,26 @@ void Room::StepMonsters(uint64 nowUs)
 
 	// 무리 - 머리는 순찰 길, 뒤는 머리 발자국 (교전 · 복귀 때는 몸마다 목표)
 	StepPacks(nowUs);
+}
+
+StepOutput Room::StepMonsterBody(const MonsterRef& m, const StepInput& in)
+{
+	// 길을 구하는 걸음만 시간을 잰다 - 나머지 걸음은 예전과 같은 비용
+	const uint64 startUs = (in.nav != nullptr) ? Utils::NowMicroseconds() : 0;
+	const StepOutput o = MonsterMover::Step(m->brain, in);
+
+	if (o.pathSearched)
+	{
+		const uint64 us = Utils::NowMicroseconds() - startUs;
+		GMonsterStats.RecordPath(o.pathFound, us);
+		if (o.pathFound == false)
+			LOG_LINE << "[MON] path fail id=" << m->objectInfo->object_id() << " type=" << m->type->nameKey << " from=(" << ::lroundf(in.x) << ","
+				<< ::lroundf(in.y) << ") to=(" << ::lroundf(in.goalX) << "," << ::lroundf(in.goalY) << ") exp=" << o.pathExpansions << '\n';
+	}
+	if (o.onPath)
+		GMonsterStats.onPathSteps.fetch_add(1);
+
+	return o;
 }
 
 void Room::OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 damage, uint64 nowUs)
@@ -7957,10 +8007,10 @@ void Room::OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 
 		<< " by=" << instigatorId << " drop=" << dropped << " respawn_in=" << monster->spawn->respawnSeconds << "s\n";
 }
 
-bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs)
+bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint64 nowUs, uint64 targetId, float aimX, float aimY)
 {
 	// HandleSkill 의 꼬리를 슬롯 검사 없이 - 몬스터는 6 슬롯이 없다 (skill-system Q5 · monster-ai.md Core Rule 18 ①)
-	if (monster->CanUseSkill(nowUs) == false || monster->IsCasting())
+	if (monster->CanUseSkill(nowUs) == false || monster->IsCasting() || nowUs < monster->holdUntilUs)
 		return false;
 
 	const uint64 id = monster->objectInfo->object_id();
@@ -7975,11 +8025,32 @@ bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint
 
 	monster->castSkillId = def.skillId;
 	monster->castSlot = Protocol::SLOT_NONE;
-	monster->castTargetId = 0;
-	monster->castAimX = monster->posInfo->x();
-	monster->castAimY = monster->posInfo->y();
+	monster->castTargetId = targetId;
+	monster->castAimX = aimX;
+	monster->castAimY = aimY;
 	monster->castEndAtUs = nowUs + static_cast<uint64>(def.castMs) * 1000;
 	_casters.insert(id);
+
+	// 조준 쪽을 본다 - 예고 · 시전 포즈가 어디로 올지 읽힌다
+	{
+		const float dx = aimX - monster->posInfo->x();
+		const float dy = aimY - monster->posInfo->y();
+		if (dx * dx + dy * dy > 1.f)
+		{
+			monster->posInfo->set_yaw(::atan2f(dy, dx) * 180.f / 3.14159265f);
+			monster->posInfo->set_state(Protocol::MOVE_STATE_IDLE);
+			_dirtyMovers.insert(id);
+		}
+	}
+
+	// 돌진 (자기 이동 효과가 있는 스킬, 9002) - 시전 + 예고 + 날아가는 동안 선다. 예고 중 걸어가면 예고선이 거짓말이 된다
+	if (const SkillEffect* move = def.FindEffect(SkillEffectType::Movement); move != nullptr && move->speedCms > 0.f)
+	{
+		const uint64 holdMs = static_cast<uint64>(def.castMs) + def.telegraphMs + SkillKinematics::TravelMs(move->distCm, move->speedCms);
+		monster->holdUntilUs = nowUs + holdMs * 1000;
+	}
+
+	GMonsterStats.casts.fetch_add(1);
 
 	if (def.castMs > 0)
 	{
@@ -7991,7 +8062,8 @@ bool Room::BeginMonsterCast(const MonsterRef& monster, const SkillDef& def, uint
 
 	monster->brain.skillReadyAtUs = nowUs + static_cast<uint64>(def.castMs + def.cooldownMs) * 1000;
 
-	LOG_LINE << "[MON] cast id=" << id << " skill=" << def.skillId << '\n';
+	LOG_LINE << "[MON] cast id=" << id << " skill=" << def.skillId << " target=" << targetId
+		<< " aim=(" << ::lroundf(aimX) << "," << ::lroundf(aimY) << ")" << '\n';
 	return true;
 }
 
