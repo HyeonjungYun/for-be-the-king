@@ -95,6 +95,13 @@ void US1ItemDetailWidget::ShowItem(const US1ItemSubsystem& Items, const FS1ItemV
 		: FText::Format(Text(TEXT("label.enhance_level")), FText::AsNumber(static_cast<int32>(Item.Level)), FText::AsNumber(static_cast<int32>(S1ItemLogic::ItemLevelMax))),
 		FontBody, TextSecondary());
 
+	// 고독한 길 (2026-10-17) - the option and its price, in one place: no party while worn, stronger when outnumbered
+	if (Item.bLonePath)
+	{
+		AddLine(Text(TEXT("label.lone_path")), FontBody, LonePathPurple());
+		AddLine(Text(TEXT("label.lone_path_desc")), FontSmall, TextSecondary());
+	}
+
 	const bool bIsWorn = Item.State == ES1ItemState::Equipped;
 	const FS1ItemView* Compare = bIsWorn ? nullptr : Worn;
 	const FS1ItemTypeDef* CompareType = Compare != nullptr ? Items.GetCatalog().Find(Compare->ItemTypeId) : nullptr;

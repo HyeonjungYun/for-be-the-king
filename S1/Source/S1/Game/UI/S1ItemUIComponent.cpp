@@ -173,7 +173,18 @@ void US1ItemUIComponent::OnPartyKey()
 void US1ItemUIComponent::OnOpenKey()
 {
 	if (Root != nullptr && CanUseDungeonKeys())
+	{
 		Root->ToggleLootNearest();
+		return;
+	}
+
+	// Camp map (2026-10-17): the same F talks to the NPC in reach - "열기" in the dungeon, "대화" in the camp
+	const UWorld* World = GetWorld();
+	if (US1BaseCampSubsystem* BaseCamp = World != nullptr && World->GetGameInstance() != nullptr
+		? World->GetGameInstance()->GetSubsystem<US1BaseCampSubsystem>() : nullptr; BaseCamp != nullptr && BaseCamp->IsOnCampMap())
+	{
+		BaseCamp->InteractNearestNpc();
+	}
 }
 
 void US1ItemUIComponent::OnCloseKey()

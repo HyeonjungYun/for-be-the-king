@@ -72,12 +72,30 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 {
 	if (pkt.success() == false)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ENTER] rejected by server"));
+		UE_LOG(LogTemp, Warning, TEXT("[ENTER] rejected by server mode=%d"), static_cast<int32>(pkt.mode()));
+
+		// 베이스캠프 맵 요청의 거절 (2026-10-17 basecamp-map, 에이전트 - 위임) - 다시 묻거나 예전 S3 로
+		if (pkt.mode() == Protocol::RUN_MODE_BASECAMP)
+		{
+			if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+				BaseCamp->HandleCampRejected();
+			return true;
+		}
 
 		// H8 - S3 로 돌아가 사유를 보이고 잠금을 푼다
 		if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
 			BaseCamp->HandleEnterRejected();
 
+		return true;
+	}
+
+	// 베이스캠프 맵 (2026-10-17) - 런이 아니다: 파티 · 체류 타이머는 건드리지 않고 캠프 몸만 세운다. HandleSpawn 보다 먼저
+	if (pkt.mode() == Protocol::RUN_MODE_BASECAMP)
+	{
+		if (US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get())
+			BaseCamp->HandleCampEntered(pkt.player());
+		if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
+			GameInstance->HandleSpawn(pkt);
 		return true;
 	}
 

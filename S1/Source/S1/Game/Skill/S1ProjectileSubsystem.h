@@ -5,7 +5,11 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Tickable.h"
+#include "Game/Skill/S1SwordWave.h"
 #include "S1ProjectileSubsystem.generated.h"
+
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 namespace Protocol
 {
@@ -56,6 +60,13 @@ struct FS1ClientProjectile
 	float RadiusCm = 40.f;
 	uint64 TargetId = 0;		// homing: follows this actor
 	FColor Colour = FColor::White;
+
+	// skill_vfx.csv look (2026-10-15) - a mesh that flies with the projectile instead of the debug bolt
+	TWeakObjectPtr<AActor> Visual;
+	TWeakObjectPtr<UMaterialInstanceDynamic> VisualMid;
+	float VisualLiftCm = 0.f;	// Pos is chest height; the wave stands on the ground
+	float Born = 0.f;
+	float PreviewUntil = 0.f;	// DebugVfx - no server end packet comes; it fades at this time
 };
 
 /**
@@ -89,6 +100,12 @@ public:
 	/** 종이매 - a hawk flies from the caster to the nearest enemy (S_SKILL_HIT 1135 aimed far away, owner only). */
 	void AddHawkFlight(const FVector& From, const FVector& To, uint64 TargetId);
 
+	/**
+	 * Show a skill's projectile look without a cast - from Chest along Dir at SpeedCms for Seconds, then it fades (no server,
+	 * nothing hits). The DebugVfx console command; tuning skill_vfx.csv by eye. False = no look for this skill.
+	 */
+	bool PreviewLook(uint32 EffectId, const FVector& Chest, const FVector& Dir, float SpeedCms, float Seconds);
+
 	int32 NumFlying() const { return Flying.Num(); }
 	int32 NumZones() const { return Zones.Num(); }
 
@@ -119,6 +136,31 @@ private:
 	/** Hawks: circling a followed enemy (S_VISION source kind "hawk") and flights to a far one. */
 	void TickHawks(UWorld* World, float Now);
 	TArray<FS1HawkFlight> HawkFlights;
+
+	// ── Projectile looks (skill_vfx.csv, 2026-10-15) ─────────────────────────
+	/** 검의 찬양 - an upright crescent (procedural mesh + M_S1SwordWave) riding on the projectile. False = draw the stock bolt. */
+	bool SpawnWaveVisual(FS1ClientProjectile& P, const FS1ProjectileLook& Look, float Now);
+	void PlaceWaveVisual(const FS1ClientProjectile& P, float Now) const;
+	/** The wave flares and fades where the server ended the projectile, then its actor goes. */
+	void StartWaveFade(const FS1ClientProjectile& P, float Now);
+	void TickFadingWaves(float Now);
+	void DestroyAllWaves();
+
+	struct FFadingWave
+	{
+		TWeakObjectPtr<AActor> Actor;
+		TWeakObjectPtr<UMaterialInstanceDynamic> Mid;
+		float Start = 0.f;
+		float Until = 0.f;
+	};
+	TArray<FFadingWave> FadingWaves;
+	TMap<uint32, FS1ProjectileLook> Looks;		// effect id → look
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> WaveMaterial;
+
+	static constexpr float WaveGrowSeconds = 0.08f;		// the blade rises out of the swing
+	static constexpr float WaveFadeSeconds = 0.18f;		// M_S1SwordWave "Fade" 1 → 0
 
 	struct FImpact
 	{

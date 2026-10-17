@@ -6,6 +6,7 @@
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
+#include "Game/Party/S1PartySubsystem.h"
 #include "Game/S1Player.h"
 #include "Game/UI/S1ItemUIStyle.h"
 #include "Rendering/DrawElements.h"
@@ -22,6 +23,7 @@ namespace
 	const FLinearColor CcAmber(FColor(255, 176, 64));			// CC words - warm, apart from the teal names and the white numbers
 	const FLinearColor NoticeWhite(FColor(240, 240, 240));
 	const FLinearColor AllyBlue(FColor(0x39, 0x87, 0xE5));		// art bible party colour - PVE co-op ally (ADR-0014)
+	const FLinearColor NpcGold(FColor(0xE8, 0xC1, 0x6A));		// camp map NPC names - the dialogue box's name colour
 	constexpr float LineStepPx = 19.f;							// one label line higher per extra line (16 overlapped the name - 2026-10-11 screenshot)
 
 	FSlateFontInfo LabelFont()
@@ -46,13 +48,26 @@ void US1WorldLabelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 	Labels.Reset();
 
 	const US1BaseCampSubsystem* BaseCamp = US1BaseCampSubsystem::Get();
-	if (BaseCamp == nullptr || BaseCamp->GetPlace() != ES1Place::Dungeon)
+	if (BaseCamp == nullptr || (BaseCamp->GetPlace() != ES1Place::Dungeon && BaseCamp->IsOnCampMap() == false))
 		return;
 
 	const US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance());
 	const APlayerController* PC = GetOwningPlayer();
 	if (GameInstance == nullptr || PC == nullptr)
 		return;
+	const US1PartySubsystem* Party = US1PartySubsystem::Get();
+
+	// Camp map NPCs (2026-10-17) - their names in gold, "[F] 대화" over the one in reach
+	for (const FS1CampLabel& Camp : BaseCamp->GetCampLabels())
+	{
+		FVector2D Position;
+		if (UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, Camp.World, Position, /*bPlayerViewportRelative*/ true) == false)
+			continue;
+		FLabel& Label = Labels.AddDefaulted_GetRef();
+		Label.Text = Camp.Text;
+		Label.Anchor = Position - FVector2D(0.f, LiftPx + LiftPerScalePx + (Camp.bPrompt ? LineStepPx : 0.f));
+		Label.Colour = Camp.bPrompt ? NoticeWhite : NpcGold;
+	}
 
 	for (const TPair<uint64, TWeakObjectPtr<AS1Player>>& Pair : GameInstance->Players)
 	{
@@ -75,13 +90,13 @@ void US1WorldLabelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 			Lift += LineStepPx;
 		}
 
-		// Dungeon-party betrayer - "배신자 name" in warning red, for everyone else until the run ends (party-betrayal R6; no ⚠ - the font has no glyph for it).
-		// Not over my own head - the toast already told me (verifier r1 #4)
-		if (Creature->IsBetrayer() && Creature != PC->GetPawn())
+		// Dungeon-party betrayer - "배신자 name" in warning red, only if I was the one betrayed and only for a minute
+		// (2026-10-13 user decision · art-bible 배신자 표식 규칙; no ⚠ - the font has no glyph for it). Never over my own head.
+		FString BetrayerName;
+		if (Party != nullptr && Creature != PC->GetPawn() && Party->GetBetrayerMark(Pair.Key, BetrayerName))
 		{
 			FLabel& Label = Labels.AddDefaulted_GetRef();
-			const FString Name = Creature->GetBetrayerName();
-			Label.Text = FText::FromString(S1ItemUIStyle::Text(TEXT("label.betrayer")).ToString() + (Name.IsEmpty() ? FString() : TEXT(" ") + Name));
+			Label.Text = FText::FromString(S1ItemUIStyle::Text(TEXT("label.betrayer")).ToString() + (BetrayerName.IsEmpty() ? FString() : TEXT(" ") + BetrayerName));
 			Label.Anchor = Position - FVector2D(0.f, Lift);
 			Label.Colour = S1ItemUIStyle::BetrayerRed();
 			Lift += LineStepPx;

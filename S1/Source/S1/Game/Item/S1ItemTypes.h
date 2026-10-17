@@ -45,6 +45,7 @@ enum class ES1ItemResult : uint8
 	InventoryFull,
 	BadRequest,
 	DbError,
+	LonePathInParty,	// 고독한 길 - cannot be worn while in a party (2026-10-17)
 };
 
 /** Which request produced a result. The same result code reads differently per action. */
@@ -77,6 +78,7 @@ enum class ES1ItemNotice : uint8
 	BadRequest,			// 할 수 없는 동작입니다
 	RetryLater,			// 잠시 후 다시 시도해 주세요
 	LootPartial,		// n개를 가져오지 못했습니다(인벤토리 가득 참) — carries a count
+	LonePathInParty,	// 고독한 길은 파티 중에 착용할 수 없습니다 (2026-10-17)
 };
 
 /** Why an open bag window closed. The window closes the same way for all of them — no reason line. */
@@ -112,6 +114,7 @@ struct FS1ItemView
 	ES1ItemState			State = ES1ItemState::None;
 	int32					Slot = 0;		// Protocol::EquipSlot while equipped, 0 otherwise
 	TArray<FS1ItemSkill>	Skills;
+	bool					bLonePath = false;	// 고독한 길 (2026-10-17) - worn: no party; more worn: stronger when outnumbered
 };
 
 /**

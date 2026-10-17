@@ -22,6 +22,7 @@
 #include "Game/Escape/S1EscapeSubsystem.h"
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/Radar/S1RadarLogic.h"
+#include "Game/Skill/S1ProjectileSubsystem.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "DrawDebugHelpers.h"
 
@@ -253,6 +254,9 @@ void AS1MyPlayer::Tick(float DeltaTime)
 		// opened its speed window at the same moment, so the two line up.
 		if (PendingDashDistCm > 0.f)
 			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls, bPendingDashThroughPawns);
+
+		// The skill went off - the post-skill lock runs from here (the server starts its own at the same fire)
+		StartSkillLock(LastSentDashSec, LocalCastRecoveryMs);
 
 		// A recast's first press landed - the window for the second press starts now
 		if (bPendingRecast)
@@ -591,7 +595,7 @@ bool AS1MyPlayer::HasTargetlessBasic() const
 void AS1MyPlayer::SendTargetlessAttack()
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-	if (Now < LocalReadyAt)
+	if (Now < LocalReadyAt || CanAttack() == false)
 		return;
 
 	FVector Cursor = GetActorLocation() + GetActorForwardVector() * 100.f;
@@ -650,6 +654,10 @@ void AS1MyPlayer::OnSkillKey(int32 EquipSlotValue)
 		}
 		return;
 	}
+
+	// 후딜 - the last skill's animation is still running; the server refuses this one too (2026-10-15)
+	if (IsSkillLocked())
+		return;
 
 	// A skill on cooldown does not even open aiming. Letting the range circle appear and
 	// then swallowing the click would look identical to a broken skill — which is exactly
@@ -846,6 +854,10 @@ void AS1MyPlayer::OnCancelReleased()
 
 void AS1MyPlayer::FireAimedSkill()
 {
+	// 후딜 - an aim opened before the lock waits; the click does nothing until the animation ends (2026-10-15)
+	if (IsSkillLocked())
+		return;
+
 	const Protocol::SkillInfo* Slot = FindUsableSlot(AimingSlot);
 	if (Slot == nullptr)
 	{
@@ -903,6 +915,7 @@ void AS1MyPlayer::FireAimedSkill()
 	// arrived, so re-reading the cursor on completion would send the two apart.
 	// 🔴 blink is the one movement the server performs itself (through walls, landing corrected) - it arrives
 	//    as an S_MOVE correction, so nothing is queued here. back = away from the aim; dash / leap / forward = toward it
+	LastSentDashSec = 0.f;
 	if (Def != nullptr && Def->HasMovement() && Def->MoveKind != TEXT("blink"))
 	{
 		FVector DashDir = FVector(SkillPkt.aim_x(), SkillPkt.aim_y(), 0.f) - GetActorLocation();
@@ -911,7 +924,8 @@ void AS1MyPlayer::FireAimedSkill()
 		float DashDistCm = MaxDistCm;
 
 		// to_target (기습 단검 · 일도양단, 2026-10-11) - straight at the clicked enemy, stopping just in front of it
-		if (Def->MoveKind == TEXT("to_target") && ClickedTarget != nullptr)
+		// leap_target (맹수의 어금니 · 맹수의 앞발, 2026-10-15) lands the same way - the server applies the hit on landing
+		if ((Def->MoveKind == TEXT("to_target") || Def->MoveKind == TEXT("leap_target")) && ClickedTarget != nullptr)
 		{
 			constexpr float StopShortCm = 90.f;		// two capsule radii plus a little - land beside it, not inside it
 			DashDir = ClickedTarget->GetActorLocation() - GetActorLocation();
@@ -931,6 +945,10 @@ void AS1MyPlayer::FireAimedSkill()
 			PendingDashDirection = DashDir;
 			PendingDashDistCm = DashDistCm;
 			PendingDashSpeedCms = Def->MoveSpeedCms;
+			LastSentDashSec = Def->MoveSpeedCms > 0.f ? DashDistCm / Def->MoveSpeedCms : 0.f;
+			// leap_target: the server lands the hit telegraph_ms after the landing (맹수의 어금니 - near the clip's end, 2026-10-15)
+			if (Def->MoveKind == TEXT("leap_target"))
+				LastSentDashSec += Def->TelegraphMs / 1000.f;
 			bPendingDashIgnoresWalls = Def->bMoveIgnoresWalls;		// 유령 신랑의 저주 - through walls (server skips its wall check for the window)
 			bPendingDashThroughPawns = (Def->MoveKind == TEXT("dash_through"));		// 그림자 베기 - characters do not stop it
 		}
@@ -953,6 +971,7 @@ void AS1MyPlayer::FireAimedSkill()
 		LocalCastDuration = Def->CastMs / 1000.f;
 		LocalCastEndsAt = Now + LocalCastDuration;
 		bLocalCastLocksMovement = (Def->bCanMoveWhileCasting == false);
+		LocalCastRecoveryMs = (Def->Kind == ES1SkillKind::Hold) ? 0 : Def->RecoveryMs;
 
 		// 🔴 Held back until the cast completes. R3 puts the cooldown at the moment the
 		// effect lands, so a cancelled cast leaves no trace at all — including here.
@@ -979,6 +998,10 @@ void AS1MyPlayer::FireAimedSkill()
 			RequestDash(PendingDashDirection, PendingDashDistCm, PendingDashSpeedCms, bPendingDashIgnoresWalls, bPendingDashThroughPawns);
 			PendingDashDistCm = 0.f;
 		}
+
+		// Instant - it went off as it was sent, so the post-skill lock starts now
+		if (Def != nullptr && Def->Kind != ES1SkillKind::Hold)
+			StartSkillLock(LastSentDashSec, Def->RecoveryMs);
 
 		if (bPendingRecast)
 			OpenRecastWindow(AimingSlot);
@@ -1117,6 +1140,10 @@ void AS1MyPlayer::OnAimAttackKey()
 void AS1MyPlayer::SendAttack(uint64 TargetId)
 {
 	if (TargetId == 0)
+		return;
+
+	// Hard CC or the post-skill lock - the server refuses the swing anyway
+	if (CanAttack() == false)
 		return;
 
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
@@ -1547,6 +1574,33 @@ void AS1MyPlayer::TestCmd(const FString& Args)
 
 	if (Args.StartsWith(TEXT("cd")) || Args.StartsWith(TEXT("gear")))
 		ResetAllSlotCooldowns();
+}
+
+void AS1MyPlayer::DebugMoveSpeed(float Cms, float ToggleSec)
+{
+	DebugMaxWalkSpeed = FMath::Max(Cms, 0.f);
+	DebugSpeedToggleSec = FMath::Max(ToggleSec, 0.f);
+	UE_LOG(LogTemp, Log, TEXT("[ANIM] debug move speed cap %s toggle=%.1fs"), DebugMaxWalkSpeed > 0.f ? *FString::Printf(TEXT("%.0f cm/s"), DebugMaxWalkSpeed) : TEXT("off"), DebugSpeedToggleSec);
+}
+
+void AS1MyPlayer::StartSkillLock(float DelaySec, uint32 RecoveryMs)
+{
+	if (RecoveryMs == 0 || GetWorld() == nullptr)
+		return;
+	const float Now = GetWorld()->GetTimeSeconds();
+	SkillLockUntil = FMath::Max(SkillLockUntil, Now + FMath::Max(DelaySec, 0.f) + RecoveryMs / 1000.f);
+	DoMove(0.f, 0.f);		// a held key does not keep walking into the lock
+	UE_LOG(LogTemp, Log, TEXT("[SKILL INPUT] recovery lock %.2fs (strike +%.2fs, recovery %ums)"), SkillLockUntil - Now, DelaySec, RecoveryMs);
+}
+
+void AS1MyPlayer::DebugVfx(int32 SkillId, float Seconds, float SpeedCms)
+{
+	US1ProjectileSubsystem* Projectiles = US1ProjectileSubsystem::Get();
+	// Chest height like a real launch (US1ProjectileSubsystem::GroundZ), a step in front so it does not start inside me
+	const FVector Chest = GetActorLocation() - FVector(0.f, 0.f, 40.f) + GetActorForwardVector() * 150.f;
+	const bool bShown = Projectiles != nullptr && SkillId > 0
+		&& Projectiles->PreviewLook(static_cast<uint32>(SkillId), Chest, GetActorForwardVector(), FMath::Max(SpeedCms, 0.f), FMath::Clamp(Seconds, 0.1f, 30.f));
+	UE_LOG(LogTemp, Log, TEXT("[VFX] debug preview skill=%d %s"), SkillId, bShown ? TEXT("shown") : TEXT("- no look in skill_vfx.csv"));
 }
 
 void AS1MyPlayer::DebugRadar()

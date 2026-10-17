@@ -145,7 +145,48 @@ bool FS1SkillTable::LoadFromDirectory(const FString& Directory, FString& OutErro
 		return false;
 	}
 
-	return Parse(SkillsCsv, EffectsCsv, OutError) && ParseRules(RulesCsv, OutError);
+	if (Parse(SkillsCsv, EffectsCsv, OutError) == false || ParseRules(RulesCsv, OutError) == false)
+		return false;
+
+	// The post-skill lock (2026-10-15) - optional: without the file nothing is locked
+	FString RecoveryCsv;
+	if (FFileHelper::LoadFileToString(RecoveryCsv, *FPaths::Combine(Directory, TEXT("skill_recovery.csv"))))
+		return ParseRecovery(RecoveryCsv, OutError);
+	return true;
+}
+
+bool FS1SkillTable::ParseRecovery(const FString& RecoveryCsv, FString& OutError)
+{
+	for (TPair<uint32, FS1SkillDef>& Pair : Defs())
+		Pair.Value.RecoveryMs = 0;
+
+	const FSkillCsv Csv = ReadSkillCsv(RecoveryCsv);
+	const int32 ColId = Csv.Column(TEXT("skill_id"));
+	const int32 ColMs = Csv.Column(TEXT("recovery_ms"));
+	if (ColId == INDEX_NONE || ColMs == INDEX_NONE)
+	{
+		OutError = TEXT("skill_recovery.csv needs skill_id,recovery_ms");
+		return false;
+	}
+	for (int32 r = 0; r < Csv.Rows.Num(); r++)
+	{
+		const TArray<FString>& Cells = Csv.Rows[r];
+		int32 Id = 0, Ms = 0;
+		if (Cells.Num() <= FMath::Max(ColId, ColMs) || FDefaultValueHelper::ParseInt(Cells[ColId], Id) == false
+			|| FDefaultValueHelper::ParseInt(Cells[ColMs], Ms) == false || Ms < 0)
+		{
+			OutError = FString::Printf(TEXT("skill_recovery.csv line %d: skill_id and recovery_ms must be numbers >= 0"), Csv.LineNumbers[r]);
+			return false;
+		}
+		FS1SkillDef* Def = Defs().Find(static_cast<uint32>(Id));
+		if (Def == nullptr)
+		{
+			OutError = FString::Printf(TEXT("skill_recovery.csv line %d: unknown skill %d"), Csv.LineNumbers[r], Id);
+			return false;
+		}
+		Def->RecoveryMs = static_cast<uint32>(Ms);
+	}
+	return true;
 }
 
 bool FS1SkillTable::ParseRules(const FString& RulesCsv, FString& OutError)
@@ -208,6 +249,7 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 		const int32 ColPierce	= Csv.Column(TEXT("pierce"));
 		const int32 ColTags		= Csv.Column(TEXT("tags"));				// optional - older test fixtures have no such column
 		const int32 ColReqWeapon = Csv.Column(TEXT("requires_weapon"));		// optional
+		const int32 ColTelegraph = Csv.Column(TEXT("telegraph_ms"));		// optional - the client times a leap_target strike by it (2026-10-15)
 
 		for (int32 Col : { ColId, ColPower, ColKind, ColCast, ColCooldown, ColCanMove, ColShape, ColAim, ColRange, ColWidth, ColRadius, ColAngle, ColProjSpd, ColPierce })
 		{
@@ -263,6 +305,9 @@ bool FS1SkillTable::Parse(const FString& SkillsCsv, const FString& EffectsCsv, F
 			Def.EffectId = Def.SkillId;
 			Def.CastMs = static_cast<uint32>(Cast);
 			Def.CooldownMs = static_cast<uint32>(Cooldown);
+			int32 Telegraph = 0;
+			if (ColTelegraph != INDEX_NONE && Cells.IsValidIndex(ColTelegraph) && FDefaultValueHelper::ParseInt(Cells[ColTelegraph], Telegraph) && Telegraph > 0)
+				Def.TelegraphMs = static_cast<uint32>(Telegraph);
 			Def.bCanMoveWhileCasting = (CanMove != 0);
 			Def.bPierce = (Pierce != 0);
 

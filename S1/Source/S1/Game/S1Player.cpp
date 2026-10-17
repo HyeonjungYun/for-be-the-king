@@ -5,6 +5,7 @@
 #include "Game/Anim/S1AnimCatalog.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequence.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/Skeleton.h"
 #include "Engine/SkeletalMesh.h"
@@ -221,6 +222,14 @@ void AS1Player::TickCc()
 	// run past the server's ceiling and every move would bounce
 	const float Speed = BaseWalkSpeed * (1.f + Bonus + MoveSpeedBuff + Passive) * (1.f - ActiveSlow);
 	Movement->MaxWalkSpeed = FMath::Clamp(Speed, BaseWalkSpeed * 0.5f, BaseWalkSpeed * 1.5f);
+	// DebugMoveSpeed (dev console) can only lower it - the server's ceiling is never crossed (walk/run animation checks, 2026-10-15)
+	if (DebugMaxWalkSpeed > 0.f)
+	{
+		const bool bCapOn = DebugSpeedToggleSec <= 0.f
+			|| (FMath::FloorToInt((GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) / DebugSpeedToggleSec) % 2) == 0;
+		if (bCapOn)
+			Movement->MaxWalkSpeed = FMath::Min(Movement->MaxWalkSpeed, DebugMaxWalkSpeed);
+	}
 
 	if (CanMove() == false)
 		Movement->StopMovementImmediately();
@@ -827,7 +836,7 @@ bool AS1Player::CanMove() const
 {
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
-	return Now >= StunUntil && Now >= RootUntil && Now >= KnockbackUntil && Now >= LaunchUntil && Now >= TauntUntil;
+	return Now >= StunUntil && Now >= RootUntil && Now >= KnockbackUntil && Now >= LaunchUntil && Now >= TauntUntil && Now >= SkillLockUntil;
 }
 
 bool AS1Player::CanTurn() const
@@ -878,12 +887,20 @@ namespace
 	constexpr float ANIM_ATTACK_RATE_MIN = 0.5f;		// strike frame aligned to the server windup, clamped
 	constexpr float ANIM_ATTACK_RATE_MAX = 2.5f;
 	constexpr float ANIM_SKILL_RATE_MAX = 3.f;			// my own cast aligned to cast_ms, clamped
+	constexpr float ANIM_RECOVERY_GRACE_SEC = 0.2f;		// after a skill's strike, moving ends its recovery - not before this (a dash's last frames)
 	constexpr float ANIM_CHANNEL_DEFAULT_SEC = 1.5f;	// a looping motion with unknown cast time holds this long
 	constexpr float ANIM_HIT_RATE = 1.2f;				// flinch plays a little fast
 	constexpr float ANIM_HIT_REPEAT_GUARD_SEC = 0.2f;	// no new flinch unless the current one is almost over (multi-hit)
+	// 8-direction locomotion (2026-10-15): walk_<dir> / run_<dir> clips with their natural speed (speed_cms)
+	constexpr float ANIM_DIR_HYSTERESIS_DEG = 10.f;		// a direction is kept until the heading is 10° past its 22.5° edge
+	constexpr float ANIM_RUN_ENTER_CMS = 260.f;			// walk → run above this (walk clips ~145-175 cm/s, run ~340-520, players move at 340)
+	constexpr float ANIM_RUN_EXIT_CMS = 230.f;			// run → walk below this (slows, the first frames of a start)
+	constexpr float ANIM_DIR_RATE_MIN = 0.5f;			// clip rate = actual speed / natural speed, clamped
+	constexpr float ANIM_DIR_RATE_MAX = 1.8f;
+	constexpr float ANIM_DIR_BLEND_SEC = 0.15f;			// direction / gait change blend (the step phase carries over)
 }
 
-bool AS1Player::PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1AnimLayer Layer, float BlendIn, float BlendOut)
+bool AS1Player::PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1AnimLayer Layer, float BlendIn, float BlendOut, float StartPhase)
 {
 	USkeletalMeshComponent* MeshComp = GetMesh();
 	UAnimInstance* Anim = MeshComp != nullptr ? MeshComp->GetAnimInstance() : nullptr;
@@ -896,10 +913,20 @@ bool AS1Player::PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1Anim
 	if (Sequence == nullptr)
 		return false;
 
+	// Every clip plays in place - the server owns the position. Clips flagged root motion (GhostSamurai *_Root lunges) would move
+	// the capsule through the montage: extract and discard it. Clips with root translation but no flag (Archer / Spear loops)
+	// would drift the mesh ahead of the capsule and snap back: lock the root bone (in memory only, the asset is not saved)
+	if (Anim->RootMotionMode != ERootMotionMode::IgnoreRootMotion)
+		Anim->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+	UAnimSequence* Seq = Cast<UAnimSequence>(Sequence);
+	if (Seq != nullptr && !Seq->bEnableRootMotion && !Seq->bForceRootLock)
+		Seq->bForceRootLock = true;
+
 	const float PlayRate = (Rate > 0.f) ? Rate : Clip->Rate;
 	// Loops get a very large count - the driver restarts them anyway when the key changes
 	const int32 LoopCount = bLoop ? 100000 : 1;
-	ActiveMontage = Anim->PlaySlotAnimationAsDynamicMontage(Sequence, TEXT("DefaultSlot"), BlendIn, BlendOut, PlayRate, LoopCount);
+	const float StartAt = FMath::Clamp(StartPhase, 0.f, 0.999f) * Sequence->GetPlayLength();
+	ActiveMontage = Anim->PlaySlotAnimationAsDynamicMontage(Sequence, TEXT("DefaultSlot"), BlendIn, BlendOut, PlayRate, LoopCount, -1.f, StartAt);
 	if (ActiveMontage == nullptr)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[ANIM] play failed key=%s weapon=%s asset=%s - no DefaultSlot in the anim blueprint?"), *Key, *AnimWeaponKey.ToString(), *Sequence->GetName());
@@ -911,13 +938,66 @@ bool AS1Player::PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1Anim
 	ActiveClipKey = Key;
 	ActiveLayer = Layer;
 	LocoRate = PlayRate;
+	ActiveClipLength = Sequence->GetPlayLength();
+	SkillStrikeAt = 0.f;		// OnSkillMotion sets it for a skill clip
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
-	OneShotEndsAt = bLoop ? 0.f : Now + Sequence->GetPlayLength() / FMath::Max(PlayRate, 0.01f);
+	OneShotEndsAt = bLoop ? 0.f : Now + (Sequence->GetPlayLength() - StartAt) / FMath::Max(PlayRate, 0.01f);
+	return true;
+}
+
+bool AS1Player::PlayDirectionalLocomotion(float SpeedCms)
+{
+	FS1AnimCatalog& Catalog = FS1AnimCatalog::Get();
+	if (Catalog.FindExact(TEXT("run_f"), AnimWeaponKey) == nullptr || Catalog.FindExact(TEXT("walk_f"), AnimWeaponKey) == nullptr)
+		return false;		// this weapon has no 8-direction set yet
+
+	// Direction = where the body moves relative to where it faces (the cursor for me, the server yaw for others)
+	const float MoveYaw = FMath::RadiansToDegrees(FMath::Atan2(LastMoveVelocity.Y, LastMoveVelocity.X));
+	const float RelYaw = FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, MoveYaw);
+	const int32 Sector = S1LocoLogic::DirectionSector(RelYaw, LocoSector, ANIM_DIR_HYSTERESIS_DEG);
+	const bool bRun = S1LocoLogic::IsRunGait(SpeedCms, bLocoRun, ANIM_RUN_ENTER_CMS, ANIM_RUN_EXIT_CMS);
+	const FString Key = FString(bRun ? TEXT("run_") : TEXT("walk_")) + S1LocoLogic::SectorSuffix(Sector);
+
+	const FS1AnimClip* Clip = Catalog.FindExact(Key, AnimWeaponKey);
+	if (Clip == nullptr)
+		return false;
+	// Stride matches the ground speed: the clip plays at actual speed / its natural speed
+	const float Rate = Clip->SpeedCms > 0.f
+		? FMath::Clamp(SpeedCms / Clip->SpeedCms, ANIM_DIR_RATE_MIN, ANIM_DIR_RATE_MAX)
+		: FMath::Clamp(SpeedCms / BaseWalkSpeed, ANIM_RUN_RATE_MIN, ANIM_RUN_RATE_MAX);
+
+	UAnimInstance* Anim = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	const bool bPlaying = Anim != nullptr && ActiveMontage != nullptr && Anim->Montage_IsPlaying(ActiveMontage);
+	if (ActiveLayer == ES1AnimLayer::Locomotion && ActiveClipKey == Key && bPlaying)
+	{
+		if (FMath::Abs(Rate - LocoRate) > 0.05f)
+		{
+			Anim->Montage_SetPlayRate(ActiveMontage, Rate);
+			LocoRate = Rate;
+		}
+		return true;
+	}
+
+	// Direction or gait changed: start the new loop at the same point of the step cycle so the feet carry on
+	// (the pack's walk clips share one length, the runs another - the cycles line up)
+	const bool bFromDirectional = ActiveLayer == ES1AnimLayer::Locomotion && bPlaying
+		&& (ActiveClipKey.StartsWith(TEXT("walk_")) || ActiveClipKey.StartsWith(TEXT("run_")));
+	const float Phase = bFromDirectional ? S1LocoLogic::LoopPhase(Anim->Montage_GetPosition(ActiveMontage), ActiveClipLength) : 0.f;
+	const float Blend = bFromDirectional ? ANIM_DIR_BLEND_SEC : ANIM_LOCO_BLEND_SEC;
+	if (PlayAnimClip(Key, Rate, true, ES1AnimLayer::Locomotion, Blend, Blend, Phase) == false)
+		return false;
+	LocoSector = Sector;
+	bLocoRun = bRun;
 	return true;
 }
 
 void AS1Player::PlayLocomotionClip(bool bMoving, float SpeedCms)
 {
+	if (bMoving && PlayDirectionalLocomotion(SpeedCms))
+		return;
+	if (bMoving == false)
+		LocoSector = -1;		// standing still - the next start picks its direction fresh
+
 	// The server moves everyone at 340 cm/s (less under a slow) - the run clip is stretched to the real speed
 	const FString Key = bMoving ? TEXT("run") : TEXT("idle");
 	const float Rate = bMoving ? FMath::Clamp(SpeedCms / BaseWalkSpeed, ANIM_RUN_RATE_MIN, ANIM_RUN_RATE_MAX) : 1.f;
@@ -958,17 +1038,23 @@ void AS1Player::TickAnimation(float DeltaTime)
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	if (ActiveLayer == ES1AnimLayer::Attack || ActiveLayer == ES1AnimLayer::Skill || ActiveLayer == ES1AnimLayer::Hit)
 	{
-		if (Now < OneShotEndsAt)
+		// A skill's recovery (after its strike) gives way once the character moves again - the GhostSamurai clips stand back up
+		// for ~2 s. The grace keeps a dash skill's own arrival from ending it
+		const bool bWalksOffRecovery = ActiveLayer == ES1AnimLayer::Skill && SkillStrikeAt > 0.f && Now > SkillStrikeAt + ANIM_RECOVERY_GRACE_SEC
+			&& GetCharacterMovement() != nullptr && GetCharacterMovement()->Velocity.Size2D() > ANIM_MOVE_THRESHOLD_CMS;
+		if (Now < OneShotEndsAt && bWalksOffRecovery == false)
 			return;
 	}
 
 	// Remote players and monsters move in 30 Hz server steps, so their velocity flickers around zero between packets -
 	// keep "run" for 0.25 s after the last fast sample instead of restarting idle/run every frame (live check 2026-10-12: a passing pack restarted 2,000+ times)
-	const float Speed = GetCharacterMovement() ? GetCharacterMovement()->Velocity.Size2D() : 0.f;
+	const FVector Velocity = GetCharacterMovement() ? GetCharacterMovement()->Velocity : FVector::ZeroVector;
+	const float Speed = Velocity.Size2D();
 	if (Speed > ANIM_MOVE_THRESHOLD_CMS)
 	{
 		LastMovingTime = Now;
 		LastMoveSpeed = Speed;
+		LastMoveVelocity = FVector(Velocity.X, Velocity.Y, 0.f);
 	}
 	const bool bMoving = (Now - LastMovingTime) < ANIM_IDLE_DEBOUNCE_SEC;
 	PlayLocomotionClip(bMoving, bMoving ? LastMoveSpeed : 0.f);
@@ -1005,17 +1091,22 @@ void AS1Player::OnSkillMotion(uint32 MotionId, bool bStationary, uint32 CastMs)
 	const FS1AnimClip* Clip = Catalog.FindMotion(MotionId, AnimWeaponKey);
 	if (Clip == nullptr)
 		return;		// m_none / unknown - nothing to show
+	// The strike lands when the effect does: after the cast, and for a dash skill (기습 · 일도양단) after the dash arrives -
+	// the windup covers the travel. Only my own cast knows both; observers play the table's rate (sized for a full dash)
+	const float StrikeSec = CastMs / 1000.f + LastSkillDashSec();
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	UAnimSequenceBase* Sequence = Catalog.Load(*Clip, MeshComp && MeshComp->GetSkeletalMeshAsset() ? MeshComp->GetSkeletalMeshAsset()->GetSkeleton() : nullptr);
+	const float WindupClipSec = Sequence != nullptr ? Sequence->GetPlayLength() * (Clip->HitPct - Clip->StartPct) / 100.f : 0.f;
 	float Rate = 0.f;
-	if (CastMs > 0 && Clip->bLoop == false)
-	{
-		USkeletalMeshComponent* MeshComp = GetMesh();
-		UAnimSequenceBase* Sequence = Catalog.Load(*Clip, MeshComp && MeshComp->GetSkeletalMeshAsset() ? MeshComp->GetSkeletalMeshAsset()->GetSkeleton() : nullptr);
-		if (Sequence != nullptr)
-			Rate = FMath::Clamp(Sequence->GetPlayLength() * Clip->HitPct / 100.f / (CastMs / 1000.f), ANIM_ATTACK_RATE_MIN, ANIM_SKILL_RATE_MAX);
-	}
-	PlayAnimClip(Clip->Key, Rate, Clip->bLoop, ES1AnimLayer::Skill, 0.1f, 0.15f);
+	if (StrikeSec > 0.f && Clip->bLoop == false && Sequence != nullptr)
+		Rate = FMath::Clamp(WindupClipSec / StrikeSec, ANIM_ATTACK_RATE_MIN, ANIM_SKILL_RATE_MAX);
+	if (PlayAnimClip(Clip->Key, Rate, Clip->bLoop, ES1AnimLayer::Skill, 0.1f, 0.15f, Clip->StartPct / 100.f) == false)
+		return;
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	if (Clip->bLoop)
-		OneShotEndsAt = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) + (CastMs > 0 ? CastMs / 1000.f : ANIM_CHANNEL_DEFAULT_SEC);	// a channel holds for the cast, then locomotion resumes
+		OneShotEndsAt = Now + (CastMs > 0 ? CastMs / 1000.f : ANIM_CHANNEL_DEFAULT_SEC);	// a channel holds for the cast, then locomotion resumes
+	else
+		SkillStrikeAt = Now + WindupClipSec / FMath::Max(LocoRate, 0.01f);		// LocoRate = the rate PlayAnimClip used
 }
 
 void AS1Player::OnAnimDamaged(int32 Damage, int32 RemainingHp)
@@ -1410,8 +1501,8 @@ bool AS1Player::CanAttack() const
 	// Deliberately identical to CanTurn: if you can still aim, you can still swing.
 	// Kept as its own function because the two answer different questions and the server
 	// splits them the same way — combat-system.md Rule 5 is free to move one without
-	// dragging the other along.
-	return CanTurn();
+	// dragging the other along. The post-skill lock stops swings but not aiming (2026-10-15)
+	return CanTurn() && (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) >= SkillLockUntil;
 }
 
 void AS1Player::ResetInterpolation(Protocol::MoveState State)
@@ -1496,10 +1587,7 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 	if (Info.creature_type() != Protocol::CREATE_TYPE_MONSTER || bIsMonster)
 	{
 		SetWeaponType(Info.weapon_type_id());		// stance from the spawn snapshot (anim, 2026-10-12)
-		if (Info.betrayer())
-			SetBetrayer(true, FString());			// a late viewer learns the mark from the snapshot (party-betrayal R6)
-		else if (bBetrayer)
-			SetBetrayer(false, FString());
+		// ObjectInfo.betrayer is no longer used: the betrayer mark is the victims' own, kept by US1PartySubsystem (2026-10-13)
 		return;
 	}
 
@@ -1543,10 +1631,58 @@ void AS1Player::SetCreatureInfo(const Protocol::ObjectInfo& Info)
 		MonsterDisc->RegisterComponent();
 	}
 
+	// Base-camp scarecrow - it should read as a training post, not a monster wearing a player (2026-10-17)
+	if (Def != nullptr && Def->NameKey == TEXT("monster.scarecrow"))
+		BuildScarecrowLook();
+
 	// Painted by US1WorldLabelWidget in screen space with the UI font (the world text font has no Hangul)
 	MonsterName = Def != nullptr ? FText::FromStringTable(TEXT("S1Items"), Def->NameKey) : FText::FromString(TEXT("?"));
 
 	UE_LOG(LogTemp, Log, TEXT("[MON] spawn id=%llu type=%u hp=%d/%d"), Info.object_id(), MonsterTypeId, CurrentHp, MaxHp);
+}
+
+void AS1Player::BuildScarecrowLook()
+{
+	if (ScarecrowParts.Num() > 0)
+		return;
+
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (Cube == nullptr || Cylinder == nullptr || Sphere == nullptr)
+		return;
+
+	// The borrowed mesh goes - hit reactions are the damage numbers and the HP bar
+	GetMesh()->SetVisibility(false, true);
+
+	// Parts in the actor's unscaled space: feet at -half height, a 1.8 m figure
+	const float Feet = -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+	auto Part = [&](UStaticMesh* PartMesh, const FVector& At, const FVector& SizeCm, const FLinearColor& Color)
+		{
+			UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+			C->SetStaticMesh(PartMesh);
+			C->SetupAttachment(RootComponent);
+			C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			C->SetRelativeLocation(FVector(At.X, At.Y, Feet + At.Z));
+			C->SetRelativeScale3D(SizeCm / 100.f);
+			if (Base != nullptr)
+			{
+				UMaterialInstanceDynamic* Tint = UMaterialInstanceDynamic::Create(Base, this);
+				Tint->SetVectorParameterValue(TEXT("Color"), Color);
+				C->SetMaterial(0, Tint);
+			}
+			C->RegisterComponent();
+			ScarecrowParts.Add(C);
+		};
+
+	const FLinearColor Wood(0.34f, 0.22f, 0.12f);
+	const FLinearColor Straw(0.78f, 0.64f, 0.30f);
+	const FLinearColor Cloth(0.42f, 0.36f, 0.30f);
+	Part(Cylinder, FVector(0.f, 0.f, 90.f), FVector(14.f, 14.f, 180.f), Wood);		// post
+	Part(Cube, FVector(0.f, 0.f, 135.f), FVector(12.f, 130.f, 12.f), Wood);			// crossbar (arms out to the sides)
+	Part(Cube, FVector(0.f, 0.f, 112.f), FVector(36.f, 50.f, 60.f), Cloth);			// sack body
+	Part(Sphere, FVector(0.f, 0.f, 170.f), FVector(34.f, 34.f, 34.f), Straw);		// straw head
 }
 
 void AS1Player::SetDestInfo(const Protocol::PosInfo& Info)

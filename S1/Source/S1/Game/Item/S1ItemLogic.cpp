@@ -36,6 +36,9 @@ namespace S1ItemLogic
 
 		case ES1ItemResult::DbError:
 			return ES1ItemNotice::RetryLater;
+
+		case ES1ItemResult::LonePathInParty:
+			return ES1ItemNotice::LonePathInParty;
 		}
 
 		// A code this client does not know — a newer server. Say something rather than nothing.

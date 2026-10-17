@@ -57,6 +57,12 @@ namespace S1ItemUIStyle
 	// ── Text ──────────────────────────────────────────────────────────────
 	FText Text(const TCHAR* Key);
 	FText ItemName(const FS1ItemTypeDef* Type, uint32 TypeId);
+
+	/** A grid cell's words: name, "+n" when enhanced, and the 고독 tag on a lone path item (2026-10-17). */
+	FText SlotLabel(const FS1ItemTypeDef* Type, const FS1ItemView& Item);
+
+	/** 고독한 길 — the option's colour in the detail pane and the cell tag. */
+	FLinearColor LonePathPurple();
 	FText GradeLabel(ES1ItemGrade Grade);
 	FText PartLabel(int32 EquipSlot);
 	FText ArchetypeLabel(FName Archetype);

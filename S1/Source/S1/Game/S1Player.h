@@ -115,10 +115,6 @@ public:
 	void SetAlly(bool bAlly, const FString& Name);
 	bool IsAlly() const { return bIsAlly; }
 	const FString& GetAllyName() const { return AllyName; }
-	/** 던전 파티 배신자 표식 (party-betrayal 2026-10-12 R6) - S_PARTY_BETRAYED 또는 스폰 스냅샷 ObjectInfo.betrayer */
-	void SetBetrayer(bool bInBetrayer, const FString& Name) { bBetrayer = bInBetrayer; if (Name.IsEmpty() == false) BetrayerName = Name; }
-	bool IsBetrayer() const { return bBetrayer; }
-	const FString& GetBetrayerName() const { return BetrayerName; }
 
 public:
 	/**
@@ -140,7 +136,7 @@ public:
 	/** Aggregated slow from the server (Formula C5). Drives MaxWalkSpeed, never the reverse. */
 	void SetActiveSlow(float InActiveSlow);
 
-	/** Hard CC — all four types stop movement. */
+	/** Hard CC — all four types stop movement. So does the post-skill lock (SkillLockUntil). */
 	bool CanMove() const;
 
 	/** Root is the exception: it pins you in place but lets you keep aiming. */
@@ -152,6 +148,13 @@ public:
 	 * Silence is not checked here: it blocks skills only, never the basic attack.
 	 */
 	bool CanAttack() const;
+
+	/**
+	 * 후딜 (2026-10-15) - after my own skill goes off, no move / basic attack / other skill until this world time (the skill's
+	 * clip ends). Same deadline the server keeps (Creature::skillLockUntilUs), set by AS1MyPlayer when the skill fires.
+	 */
+	float SkillLockUntil = 0.f;
+	bool IsSkillLocked() const { return (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) < SkillLockUntil; }
 
 	/**
 	 * Displacement API the skill system calls — movement-camera.md Formula 3.
@@ -253,6 +256,9 @@ public:
 	 * — B2a sends no cast time, so they see the clip at its natural speed).
 	 */
 	void OnSkillMotion(uint32 MotionId, bool bStationary, uint32 CastMs);
+
+	/** Seconds the dash of my last skill takes (AS1MyPlayer - 0 for everyone else): a dash skill strikes on arrival (기습 · 일도양단, 2026-10-15). */
+	virtual float LastSkillDashSec() const { return 0.f; }
 
 	/** The clip key playing now ("idle", "run", "attack", "m_dash", ...) — tests and the debug readout. Empty = template ABP pose. */
 	const FString& GetAnimClipKey() const { return ActiveClipKey; }
@@ -368,6 +374,8 @@ protected:
 
 	/** Base walk speed captured at construction so slow is applied against a fixed value. */
 	float BaseWalkSpeed = 340.f;
+	float DebugMaxWalkSpeed = 0.f;		// dev console DebugMoveSpeed: caps my own speed (0 = off) - to see the walk clips without a slow
+	float DebugSpeedToggleSec = 0.f;	// > 0: the cap is on for this long, off for this long, repeating
 
 	/** Turn off in BP when the debug bars get in the way of a screenshot. */
 	UPROPERTY(EditAnywhere, Category = "Debug")
@@ -390,9 +398,11 @@ protected:
 	// ── Animation driver state ──
 	enum class ES1AnimLayer : uint8 { None, Locomotion, Attack, Skill, Hit, Dead };
 	void TickAnimation(float DeltaTime);
-	/** Plays a catalog clip in DefaultSlot. Rate 0 = the clip's own. Returns false when there is no clip (template pose stays). */
-	bool PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1AnimLayer Layer, float BlendIn = 0.15f, float BlendOut = 0.15f);
+	/** Plays a catalog clip in DefaultSlot. Rate 0 = the clip's own. StartPhase 0..1 = where in the clip to start (locomotion keeps the step phase). Returns false when there is no clip (template pose stays). */
+	bool PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1AnimLayer Layer, float BlendIn = 0.15f, float BlendOut = 0.15f, float StartPhase = 0.f);
 	void PlayLocomotionClip(bool bMoving, float SpeedCms);
+	/** 8-direction walk/run (walk_<dir> / run_<dir> in anim_clips.csv). False = this weapon has no directional set - the caller uses idle/run. */
+	bool PlayDirectionalLocomotion(float SpeedCms);
 	void OnAnimDamaged(int32 Damage, int32 RemainingHp);
 
 	uint32 WeaponTypeId = 0;
@@ -400,9 +410,14 @@ protected:
 	FString ActiveClipKey;
 	ES1AnimLayer ActiveLayer = ES1AnimLayer::None;
 	float OneShotEndsAt = 0.f;				// world seconds when the current one-shot clip (attack/skill/hit/death) finishes
+	float SkillStrikeAt = 0.f;				// world seconds the playing skill clip strikes (0 = none) - moving after it ends the recovery
 	float LocoRate = 1.f;
 	float LastMovingTime = -10.f;			// world seconds when the speed was last above the run threshold (remotes step at 30 Hz - debounce before idle)
 	float LastMoveSpeed = 0.f;
+	FVector LastMoveVelocity = FVector::ZeroVector;	// last fast sample - its heading vs the facing picks the walk/run direction
+	int32 LocoSector = -1;					// S1LocoLogic sector 0..7 of the playing directional clip, -1 = none
+	bool bLocoRun = true;					// walk / run gait of the directional set (hysteresis)
+	float ActiveClipLength = 0.f;			// length of the playing clip - phase carry-over between direction clips
 	bool bAnimDead = false;
 	UPROPERTY(Transient)
 	TObjectPtr<class UAnimMontage> ActiveMontage = nullptr;
@@ -410,11 +425,19 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> MonsterDisc = nullptr;
 
+public:
+	/** Camp map NPC bodies (2026-10-17) carry no HP bar - they are not in any fight. */
+	void SetCombatDebugShown(bool bShown) { bShowCombatDebug = bShown; }
+protected:
+
+	/** Base-camp scarecrow (2026-10-17) — a post, a crossbar and a straw head instead of the borrowed player mesh. */
+	void BuildScarecrowLook();
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> ScarecrowParts;
+
 	/** PVE co-op ally marker (SetAlly). */
 	bool bIsAlly = false;
 	FString AllyName;
-	bool bBetrayer = false;
-	FString BetrayerName;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> AllyDisc = nullptr;

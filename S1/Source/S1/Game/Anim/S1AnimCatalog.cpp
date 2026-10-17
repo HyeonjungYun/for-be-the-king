@@ -87,6 +87,8 @@ bool FS1AnimCatalog::ParseClips(const FString& Csv, FString& OutError)
 	const int32 RateCol = Header.IndexOfByKey(TEXT("rate"));
 	const int32 LoopCol = Header.IndexOfByKey(TEXT("loop"));
 	const int32 HitCol = Header.IndexOfByKey(TEXT("hit_pct"));
+	const int32 SpeedCol = Header.IndexOfByKey(TEXT("speed_cms"));		// optional (2026-10-15 locomotion)
+	const int32 StartCol = Header.IndexOfByKey(TEXT("start_pct"));		// optional (2026-10-15 per-skill clips)
 	if (KeyCol < 0 || WeaponCol < 0 || AssetCol < 0 || RateCol < 0 || LoopCol < 0 || HitCol < 0)
 	{
 		OutError = TEXT("anim_clips.csv needs key,weapon,asset,rate,loop,hit_pct");
@@ -109,9 +111,14 @@ bool FS1AnimCatalog::ParseClips(const FString& Csv, FString& OutError)
 		Clip.Rate = FCString::Atof(*Cells[RateCol]);
 		Clip.bLoop = Cells[LoopCol] == TEXT("1");
 		Clip.HitPct = FCString::Atoi(*Cells[HitCol]);
-		if (Clip.Key.IsEmpty() || Clip.Weapon.IsNone() || Clip.Asset.IsNull() || Clip.Rate <= 0.f || Clip.HitPct < 0 || Clip.HitPct > 100)
+		if (SpeedCol >= 0 && Cells.IsValidIndex(SpeedCol) && Cells[SpeedCol].IsEmpty() == false)
+			Clip.SpeedCms = FCString::Atof(*Cells[SpeedCol]);
+		if (StartCol >= 0 && Cells.IsValidIndex(StartCol) && Cells[StartCol].IsEmpty() == false)
+			Clip.StartPct = FCString::Atoi(*Cells[StartCol]);
+		if (Clip.Key.IsEmpty() || Clip.Weapon.IsNone() || Clip.Asset.IsNull() || Clip.Rate <= 0.f || Clip.HitPct < 0 || Clip.HitPct > 100 || Clip.SpeedCms < 0.f
+			|| Clip.StartPct < 0 || Clip.StartPct > Clip.HitPct)
 		{
-			OutError = FString::Printf(TEXT("anim_clips.csv line %d: key, weapon, asset, rate > 0, hit_pct 0..100"), i + 1);
+			OutError = FString::Printf(TEXT("anim_clips.csv line %d: key, weapon, asset, rate > 0, hit_pct 0..100, speed_cms >= 0, start_pct 0..hit_pct"), i + 1);
 			return false;
 		}
 		const FString MapKey = MakeKey(Clip.Key, Clip.Weapon);
@@ -174,6 +181,47 @@ const FS1AnimClip* FS1AnimCatalog::Find(const FString& Key, FName Weapon) const
 			return Clip;
 	}
 	return nullptr;
+}
+
+const FS1AnimClip* FS1AnimCatalog::FindExact(const FString& Key, FName Weapon) const
+{
+	static const FName AnyWeapon(TEXT("any"));
+	if (const FS1AnimClip* Clip = Clips.Find(MakeKey(Key, Weapon)))
+		return Clip;
+	return Clips.Find(MakeKey(Key, AnyWeapon));
+}
+
+int32 S1LocoLogic::DirectionSector(float RelYawDeg, int32 PrevSector, float HysteresisDeg)
+{
+	const float Angle = FRotator::NormalizeAxis(RelYawDeg);		// (-180, 180]
+	if (PrevSector >= 0 && PrevSector < 8)
+	{
+		const float Center = PrevSector <= 4 ? PrevSector * 45.f : (PrevSector - 8) * 45.f;
+		if (FMath::Abs(FRotator::NormalizeAxis(Angle - Center)) <= 22.5f + HysteresisDeg)
+			return PrevSector;
+	}
+	int32 Sector = FMath::RoundToInt(Angle / 45.f);				// -4 .. 4
+	if (Sector < 0)
+		Sector += 8;
+	return Sector % 8;
+}
+
+const TCHAR* S1LocoLogic::SectorSuffix(int32 Sector)
+{
+	static const TCHAR* Suffix[] = { TEXT("f"), TEXT("fr"), TEXT("r"), TEXT("br"), TEXT("b"), TEXT("bl"), TEXT("l"), TEXT("fl") };
+	return Suffix[((Sector % 8) + 8) % 8];
+}
+
+bool S1LocoLogic::IsRunGait(float SpeedCms, bool bWasRun, float EnterRunCms, float ExitRunCms)
+{
+	return bWasRun ? SpeedCms >= ExitRunCms : SpeedCms >= EnterRunCms;
+}
+
+float S1LocoLogic::LoopPhase(float Position, float Length)
+{
+	if (Length <= UE_KINDA_SMALL_NUMBER || Position < 0.f)
+		return 0.f;
+	return FMath::Fmod(Position, Length) / Length;
 }
 
 const FS1AnimClip* FS1AnimCatalog::FindMotion(uint32 MotionId, FName Weapon) const

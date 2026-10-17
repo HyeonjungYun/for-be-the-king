@@ -6,6 +6,7 @@
 #include "Blueprint/UserWidget.h"
 #include "InputCoreTypes.h"
 #include "Game/Item/S1ItemTypes.h"
+#include "Game/BaseCamp/S1CampLayout.h"
 #include "S1BaseCampWidget.generated.h"
 
 class UBorder;
@@ -31,11 +32,26 @@ enum class ES1Place : uint8;
  * Click grammar (§ Interaction Map): left = move between vault and carried, or take off a worn
  * part; right = wear from carried — from the vault it says why not (AC-UI-30); Ctrl+left = discard.
  * Every action goes straight to the DB on the server, and nothing changes here until it answers.
+ *
+ * Camp map (2026-10-17, basecamp-map): each NPC opens one part of this screen (SetSection) over the world —
+ *   Stash   창고지기   vault | me | carried, the click grammar above. No mode row, no [강화], no [입장]
+ *   Enhance 대장장이   vault | me | carried, a click only picks the item; [강화 +1]
+ *   Gate    길드장     me | carried (what I take), a click only picks; mode row · party · [입장]
+ *   All     the old whole screen — a server without the camp map
+ * Esc closes an NPC window (back to walking).
  */
 UCLASS()
 class S1_API US1BaseCampWidget : public UUserWidget
 {
 	GENERATED_BODY()
+
+public:
+
+	void SetSection(ES1CampSection InSection);
+	ES1CampSection GetSection() const { return Section; }
+
+	/** 길드장 "파티를 꾸린다" — the gate window with the party window over it. */
+	void OpenPartyFromCamp() { OpenPartyPanel(); }
 
 protected:
 
@@ -43,6 +59,7 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
 
 private:
 
@@ -132,6 +149,19 @@ private:
 	void	RefreshMode();
 	void	OpenPartyPanel();
 	void	ClosePartyPanel();
+
+	// Camp map sections (2026-10-17)
+	bool	ShowsVault() const { return Section != ES1CampSection::Gate; }
+	bool	ShowsEnhance() const { return Section == ES1CampSection::All || Section == ES1CampSection::Enhance; }
+	bool	ShowsEnter() const { return Section == ES1CampSection::All || Section == ES1CampSection::Gate; }
+	bool	PickOnly() const { return Section == ES1CampSection::Enhance || Section == ES1CampSection::Gate; }
+
+	ES1CampSection											Section = ES1CampSection::All;
+	UPROPERTY() TObjectPtr<UBorder>							Background;
+	UPROPERTY() TObjectPtr<UWidget>							TitleRow;
+	UPROPERTY() TObjectPtr<UTextBlock>						TitleText;
+	UPROPERTY() TArray<TObjectPtr<UVerticalBox>>			ColumnBoxes;		// EColumn order
+	UPROPERTY() TObjectPtr<UWidget>							ModeRowWidget;
 
 	bool			bVaultBySkill = false;
 	bool			bCarriedBySkill = false;

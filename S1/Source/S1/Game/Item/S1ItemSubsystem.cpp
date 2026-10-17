@@ -22,6 +22,7 @@ static_assert(static_cast<int32>(ES1ItemState::Carried) == Protocol::ITEM_STATE_
 static_assert(static_cast<int32>(ES1ItemState::InBag) == Protocol::ITEM_STATE_IN_BAG, "ES1ItemState drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemResult::InventoryFull) == Protocol::ITEM_INVENTORY_FULL, "ES1ItemResult drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemResult::DbError) == Protocol::ITEM_DB_ERROR, "ES1ItemResult drifted from Enum.proto");
+static_assert(static_cast<int32>(ES1ItemResult::LonePathInParty) == Protocol::ITEM_LONE_PATH_IN_PARTY, "ES1ItemResult drifted from Enum.proto");
 
 namespace
 {
@@ -38,6 +39,7 @@ namespace
 		for (const Protocol::SkillInfo& Skill : Item.skills())
 			View.Skills.Add(FS1ItemSkill{ static_cast<int32>(Skill.slot()), Skill.skill_id() });
 
+		View.bLonePath	= Item.lone_path();
 		return View;
 	}
 

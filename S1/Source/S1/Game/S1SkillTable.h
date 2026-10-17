@@ -71,6 +71,8 @@ struct FS1SkillDef
 	ES1SkillKind		Kind = ES1SkillKind::Active;
 
 	uint32				CastMs = 0;
+	uint32				TelegraphMs = 0;		// skills.csv telegraph_ms - for a leap_target skill, how long after landing the hit lands (맹수의 어금니)
+	uint32				RecoveryMs = 0;			// skill_recovery.csv - after the strike, no move / basic attack / skill for this long (후딜, 2026-10-15). 0 = none
 	uint32				CooldownMs = 0;
 	bool				bCanMoveWhileCasting = false;
 
@@ -146,6 +148,9 @@ public:
 
 	/** skill_rules.csv — only the keys the client acts on (recast window). Unknown keys are ignored. */
 	static bool ParseRules(const FString& RulesCsv, FString& OutError);
+
+	/** skill_recovery.csv (skill_id,recovery_ms) - the post-skill lock. Unknown skill or a bad number fails; skills not listed stay 0. */
+	static bool ParseRecovery(const FString& RecoveryCsv, FString& OutError);
 
 	/** Null when the id is unknown — treat that as "cannot aim, cannot fire". */
 	static const FS1SkillDef* Find(uint32 SkillId);

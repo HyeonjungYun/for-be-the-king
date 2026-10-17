@@ -185,6 +185,7 @@ FText US1BaseCampWidget::KeyName(int32 KeySlot) const
 void US1BaseCampWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	SetIsFocusable(true);		// Esc closes a camp map NPC window (NativeOnKeyDown)
 
 	auto MakeText = [this](int32 Size, const FLinearColor& Color) -> UTextBlock*
 	{
@@ -257,22 +258,43 @@ void US1BaseCampWidget::NativeOnInitialized()
 	};
 
 	// ── The whole screen — base camp has nothing behind it worth seeing ──
-	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	// Opaque: the dungeon HUD panels may let the world show through, but in base camp there is no
-	// world to show — after a death the camera points at the sky.
+	// world to show — after a death the camera points at the sky. (Camp map NPC windows let the camp show - SetSection)
 	FLinearColor Opaque = PanelBackground();
 	Opaque.A = 1.f;
 	Background->SetBrushColor(Opaque);
 	Background->SetPadding(FMargin(S1BaseCampLayout::ScreenPadding));
 	WidgetTree->RootWidget = Background;
 
+	UVerticalBox* Page = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	Background->SetContent(Page);
+
+	// Camp map NPC window title - "창고 · 창고지기 오르트" … "Esc 닫기" (hidden on the whole screen)
+	{
+		UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		TitleText = MakeText(FontEmphasis, TextPrimary());
+		if (UHorizontalBoxSlot* TitleSlot = Row->AddChildToHorizontalBox(TitleText))
+			TitleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		UTextBlock* CloseHint = MakeText(FontSmall, TextTertiary());
+		CloseHint->SetText(Text(TEXT("camp.close_hint")));
+		if (UHorizontalBoxSlot* HintSlot = Row->AddChildToHorizontalBox(CloseHint))
+			HintSlot->SetVerticalAlignment(VAlign_Center);
+		if (UVerticalBoxSlot* RowSlot = Page->AddChildToVerticalBox(Row))
+			RowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
+		TitleRow = Row;
+		TitleRow->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
 	UHorizontalBox* Columns = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-	Background->SetContent(Columns);
+	if (UVerticalBoxSlot* ColumnsSlot = Page->AddChildToVerticalBox(Columns))
+		ColumnsSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 
 	UVerticalBox* Column[3];
 	for (int32 i = 0; i < 3; i++)
 	{
 		Column[i] = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+		ColumnBoxes.Add(Column[i]);
 		if (UHorizontalBoxSlot* ColumnSlot = Columns->AddChildToHorizontalBox(Column[i]))
 		{
 			FSlateChildSize Size(ESlateSizeRule::Fill);
@@ -394,6 +416,7 @@ void US1BaseCampWidget::NativeOnInitialized()
 
 		if (UVerticalBoxSlot* RowSlot = Column[2]->AddChildToVerticalBox(ModeRow))
 			RowSlot->SetPadding(FMargin(0.f, 4.f, 0.f, 4.f));
+		ModeRowWidget = ModeRow;
 	}
 
 	// The server dresses a character with nothing at all - worn, carried and vault empty - in the starter kit
@@ -421,7 +444,51 @@ void US1BaseCampWidget::NativeOnInitialized()
 	EnterButton->SetContent(EnterText);
 	Column[2]->AddChildToVerticalBox(EnterButton);
 
+	SetSection(Section);
 	Refresh();
+}
+
+void US1BaseCampWidget::SetSection(ES1CampSection InSection)
+{
+	Section = (InSection == ES1CampSection::None) ? ES1CampSection::All : InSection;
+	if (Background == nullptr)
+		return;
+
+	// The whole screen hides the world; an NPC window lets the camp show at its edges
+	FLinearColor Fill = PanelBackground();
+	Fill.A = (Section == ES1CampSection::All) ? 1.f : 0.985f;		// 0.94 let the bright camp ground wash the grids out (2026-10-17 screenshot)
+	Background->SetBrushColor(Fill);
+
+	const TCHAR* TitleKey = Section == ES1CampSection::Stash ? TEXT("camp.title.stash")
+		: Section == ES1CampSection::Enhance ? TEXT("camp.title.enhance")
+		: Section == ES1CampSection::Gate ? TEXT("camp.title.gate") : nullptr;
+	TitleRow->SetVisibility(TitleKey != nullptr ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	if (TitleKey != nullptr)
+		TitleText->SetText(Text(TitleKey));
+
+	auto Show = [](UWidget* W, bool bOn) { if (W != nullptr) W->SetVisibility(bOn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); };
+	Show(ColumnBoxes[static_cast<int32>(EColumn::Vault)], ShowsVault());
+	Show(ModeRowWidget, ShowsEnter());
+	Show(EnterButton, ShowsEnter());
+	Show(EnhanceButton, ShowsEnhance());
+	if (ShowsEnter() == false)
+		StarterNotice->SetVisibility(ESlateVisibility::Collapsed);
+
+	// A pick-only window never leaves a discard waiting
+	CancelConfirm();
+	Refresh();
+}
+
+FReply US1BaseCampWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	// An NPC window closes with Esc - back to walking around the camp (S4 and the party window take their own Esc first)
+	if (InKeyEvent.GetKey() == EKeys::Escape && Section != ES1CampSection::All)
+	{
+		if (US1BaseCampSubsystem* BaseCamp = GetBaseCamp())
+			BaseCamp->CloseCampPanel();
+		return FReply::Handled();
+	}
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
 void US1BaseCampWidget::NativeConstruct()
@@ -565,7 +632,7 @@ void US1BaseCampWidget::RefreshGrid(bool bVault)
 		if (bReady && List.IsValidIndex(i))
 		{
 			const FS1ItemView& Item = *List[i];
-			Cells[i]->SetItem(Item.InstanceId, Item.Grade, S1ItemLogic::LabelWithLevel(ItemName(Catalog.Find(Item.ItemTypeId), Item.ItemTypeId), Item.Level), Items->IsPending(Item.InstanceId));
+			Cells[i]->SetItem(Item.InstanceId, Item.Grade, SlotLabel(Catalog.Find(Item.ItemTypeId), Item), Items->IsPending(Item.InstanceId));
 		}
 		else
 		{
@@ -585,7 +652,7 @@ void US1BaseCampWidget::RefreshStrip()
 		const FS1ItemTypeDef* Type = Worn != nullptr ? Catalog.Find(Worn->ItemTypeId) : nullptr;
 
 		if (Worn != nullptr)
-			StripSlots[i]->SetItem(Worn->InstanceId, Worn->Grade, S1ItemLogic::LabelWithLevel(ItemName(Type, Worn->ItemTypeId), Worn->Level), Items->IsPending(Worn->InstanceId));
+			StripSlots[i]->SetItem(Worn->InstanceId, Worn->Grade, SlotLabel(Type, *Worn), Items->IsPending(Worn->InstanceId));
 		else
 			StripSlots[i]->SetEmpty(true);
 
@@ -773,7 +840,7 @@ void US1BaseCampWidget::RefreshEnter()
 		&& Items->GetByState(ES1ItemState::Carried).Num() == 0
 		&& Items->GetByState(ES1ItemState::Equipped).Num() == 0;
 	const bool bReady = BaseCamp != nullptr && BaseCamp->IsInventoryReady();
-	StarterNotice->SetVisibility(bReady && bOwnsNothing ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	StarterNotice->SetVisibility(bReady && bOwnsNothing && ShowsEnter() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
 
 void US1BaseCampWidget::RefreshDetail()
@@ -831,8 +898,15 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 	const FVector2D At = InMouseEvent.GetScreenSpacePosition();
 	auto IsUnder = [&At](const UWidget* Widget) { return Widget != nullptr && Widget->GetCachedGeometry().IsUnderLocation(At); };
 
+	// A camp map NPC window shows only its part - a hidden button keeps its old geometry, so never ask it (2026-10-17)
+	const bool bEnterShown = ShowsEnter();
+
+	// S3 is focusable now (Esc closes an NPC window), so a click here takes the keyboard by itself - a window opened
+	// from the click must take it back in the reply, or S4 loses 1~9 · R · Esc (2026-10-17 live check)
+	auto FocusTo = [](UUserWidget* Opened) { return Opened != nullptr ? FReply::Handled().SetUserFocus(Opened->TakeWidget(), EFocusCause::SetDirectly) : FReply::Handled(); };
+
 	// Mode row and party window (PVE, ADR-0014) - changing the mode is a base-camp action like the others
-	for (int32 i = 0; i < ModeButtons.Num(); i++)
+	for (int32 i = 0; i < ModeButtons.Num() && bEnterShown; i++)
 	{
 		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(ModeButtons[i]))
 		{
@@ -844,13 +918,13 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 			return FReply::Handled();
 		}
 	}
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(PartyButton))
+	if (bEnterShown && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(PartyButton))
 	{
 		OpenPartyPanel();
-		return FReply::Handled();
+		return FocusTo(PartyPanel);
 	}
 
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnhanceButton))
+	if (ShowsEnhance() && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnhanceButton))
 	{
 		// [강화 +1] (item-enhance-2026-10-12 R8): 상세가 보여 주는 아이템, 16 이면 아무것도 안 한다. 응답 전엔 pending 으로 흐려진다
 		US1ItemSubsystem* Items = GetItems();
@@ -866,7 +940,7 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 		return FReply::Handled();
 	}
 
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnterButton))
+	if (bEnterShown && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsUnder(EnterButton))
 	{
 		// [입장] — no shortcut on purpose (§ Interaction Map: 실수 방지). It opens S4, the entry-point map;
 		// C_ENTER_GAME goes out from there once a point or [무작위] is picked (design/ux/entry-point.md)
@@ -876,6 +950,7 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 			CancelConfirm();
 			ClearNotices();
 			OpenEntryMap();
+			return FocusTo(EntryMap);
 		}
 		else if (IsLocked() == false && BaseCamp != nullptr)
 		{
@@ -885,7 +960,7 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 				: Block == S1PartyLogic::EEnterBlock::WaitForParty ? TEXT("notice.party_wait_back") : TEXT("notice.party_wait_leader")), 0);
 		}
 	}
-	else if (IsUnder(VaultSort))
+	else if (ShowsVault() && IsUnder(VaultSort))
 	{
 		bVaultBySkill = !bVaultBySkill;
 		RefreshGrid(true);
@@ -927,6 +1002,15 @@ void US1BaseCampWidget::HandleSlotClicked(uint64 InstanceId, FKey Button, bool b
 	// Waiting on the server — the cell is dimmed and repeat clicks send nothing (AC-UI-22).
 	if (Items->IsPending(InstanceId))
 		return;
+
+	// 대장장이 · 길드장 windows (camp map, 2026-10-17): a click picks the item for the detail and [강화 +1] - moving
+	// things between vault, carried and worn is the 창고지기's job
+	if (PickOnly())
+	{
+		ShownId = InstanceId;
+		RefreshDetail();
+		return;
+	}
 
 	if (bCtrl && Button == EKeys::LeftMouseButton)
 	{

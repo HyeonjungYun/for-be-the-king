@@ -6,6 +6,7 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "TimerManager.h"
 #include "Game/BaseCamp/S1EntryPoints.h"
+#include "Game/BaseCamp/S1CampLayout.h"
 #include "Game/Party/S1PartySubsystem.h"
 #include "S1BaseCampSubsystem.generated.h"
 
@@ -16,7 +17,17 @@ namespace Protocol
 }
 
 class APlayerController;
+class AS1CampScenery;
 class US1BaseCampWidget;
+class US1DialogueWidget;
+
+/** A name (or the talk prompt) to paint over an NPC — US1WorldLabelWidget. */
+struct FS1CampLabel
+{
+	FVector	World = FVector::ZeroVector;
+	FText	Text;
+	bool	bPrompt = false;
+};
 
 /** Where this client is, as far as the server has said. design/ux/item-ui.md § Navigation Position. */
 enum class ES1Place : uint8
@@ -39,6 +50,10 @@ DECLARE_MULTICAST_DELEGATE(FOnS1BaseCampEvent);
  *
  * S3 lives here and not on the pawn: the server despawns our own character when it leaves the
  * dungeon, and the pawn takes the dungeon HUD with it. The player controller outlives both.
+ *
+ * Camp map (2026-10-17, design/quick-specs/basecamp-map-2026-10-17.md): in BaseCamp the client asks for its private
+ * camp room (C_ENTER_GAME{mode=BASECAMP}) and walks around it — NPCs open the dialogue box, then one part of S3
+ * (stash · enhance · gate). The place stays BaseCamp the whole time; without the camp map S3 is the whole screen as before.
  *
  * Packets come in through the Handle* hooks in ClientPacketHandler.cpp (H7 ~ H10).
  */
@@ -73,6 +88,36 @@ public:
 
 	/** H10. Someone died. If it was us, we go back to base camp after DeathReturnSeconds. */
 	void HandleDied(uint64 VictimId);
+
+	// ── Base-camp map (2026-10-17, design/quick-specs/basecamp-map-2026-10-17.md) ─────────
+
+	/**
+	 * S_ENTER_GAME{mode=BASECAMP} succeeded — our body stands in the private camp room. Call before
+	 * US1GameInstance::HandleSpawn (like HandleEnterAccepted): the camp view is cleared and our pawn ensured first.
+	 */
+	void HandleCampEntered(const Protocol::ObjectInfo& Player);
+
+	/** S_ENTER_GAME{mode=BASECAMP} refused — retried a few times, then the old whole-screen S3. */
+	void HandleCampRejected();
+
+	/** Walking around the camp: base camp, the server put our body in the camp room, the map loaded. */
+	bool IsOnCampMap() const { return bCampMap && IsInBaseCamp(); }
+
+	/** F near an NPC — the conversation box. Nothing when no one is in reach or a window is already up. */
+	void InteractNearestNpc();
+
+	/** The NPC within talking range of our pawn, or nullptr. */
+	const FS1CampPoint* GetNpcInReach() const;
+
+	/** The NPC windows: Stash · Enhance · Gate (None = back to walking). */
+	void OpenCampPanel(ES1CampSection Section);
+	void CloseCampPanel();
+	ES1CampSection GetCampSection() const { return CampSection; }
+
+	/** NPC names, and "[F] 대화" over the one in reach. Empty off the camp map. */
+	TArray<FS1CampLabel> GetCampLabels() const;
+
+	const FS1CampLayout& GetCampLayout() const { return CampLayout; }
 
 	// ── UI ───────────────────────────────────────────────────────────────
 
@@ -128,6 +173,18 @@ private:
 
 	void SetPlace(ES1Place NewPlace);
 	void ShowBaseCamp(bool bShow);
+
+	/** Asks the server for the camp room (C_ENTER_GAME{mode=BASECAMP}). Bots and old clients never do. */
+	void RequestCampMap();
+	void HandleCampTimeout();
+	void EnsureScenery();
+	void ChooseDialogueOption(ES1CampAction Action);
+	void CloseDialogue();
+	bool IsDialogueOpen() const;
+
+	/** Flush held keys and the pawn's walk input when the input mode flips between UI-only and the game. */
+	void ReleaseHeldInput(APlayerController* PC, bool bUiOnly);
+	bool bInputUiOnly = false;
 	void HandleInventorySynced(bool bBaseCamp);
 	void SendLeave();
 	void EnsureLocalPawn(const Protocol::ObjectInfo& Player);
@@ -151,6 +208,24 @@ private:
 	ES1RunMode			CurrentRunMode = ES1RunMode::Pvp;
 
 	UPROPERTY() TObjectPtr<US1BaseCampWidget>	Widget;
+	UPROPERTY() TObjectPtr<US1DialogueWidget>	Dialogue;
+
+	/** How close (cm, from the NPC's body edge) F starts a conversation. */
+	UPROPERTY(Config)
+	float NpcTalkRangeCm = 300.f;
+
+	/** The camp room request is retried this many times (3 s apart) before falling back to the whole-screen S3. */
+	UPROPERTY(Config)
+	int32 CampRetryLimit = 5;
+
+	FS1CampLayout					CampLayout;
+	TWeakObjectPtr<AS1CampScenery>	Scenery;
+	ES1CampSection					CampSection = ES1CampSection::None;
+	bool							bCampMap = false;		// the server put our body in the camp room
+	bool							bCampPending = false;	// C_ENTER_GAME{BASECAMP} in flight
+	bool							bCampGaveUp = false;	// no camp room this session - S3 is the whole screen
+	int32							CampRetries = 0;
+	FTimerHandle					CampRetryTimer;
 
 	FS1EntryPoints		EntryPoints;
 	uint32				FloorId = 0;

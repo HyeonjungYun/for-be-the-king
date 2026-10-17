@@ -825,8 +825,30 @@ party.leave_betray,배신하고 나가기,dungeon party window (party-betrayal 2
 party.leave_betray_arm,한 번 더 누르면 배신입니다 — 파티 전원에게 알려집니다,dungeon party window armed
 party.betrayed_me,{0} 가 배신했다!,HUD toast for the party left behind
 party.betrayed_other,{0} 가 파티를 배신했다,HUD toast for everyone else in the room
-label.betrayer,배신자,world label prefix until the run ends (red - the HUD font has no warning glyph)
+label.betrayer,배신자,world label prefix - only the betrayed party members see it for 60 s (red - the HUD font has no warning glyph)
 party.title_run,파티 ({0}/{1}),party window title inside a PvP run
 party.result.not_found_run,이 층에서 '{0}' 캐릭터를 찾을 수 없습니다,party result - dungeon invite: no such player in this room
 party.result.not_visible,'{0}' 은(는) 지금 시야에 없습니다 - 눈앞의 플레이어만 초대할 수 있습니다,party result - dungeon invite (party-betrayal R2)
 party.result.no_kick_in_run,던전 안에서는 내보낼 수 없습니다 - 떠나는 쪽이 배신자입니다,party result - dungeon kick (party-betrayal R4)
+monster.scarecrow,허수아비,basecamp-map 2026-10-17 - 연습용 (맞으면 곧 만피)
+camp.npc.stash,창고지기 오르트,basecamp-map 2026-10-17 NPC (임시 이름 - narrative 확정 전)
+camp.npc.enhance,대장장이 두란,basecamp-map 2026-10-17 NPC (임시 이름 - narrative 확정 전)
+camp.npc.gate,길드장 니라,basecamp-map 2026-10-17 NPC - worldbuilding.md 길드장
+camp.line.stash,맡길 건 맡기고 들고 갈 건 들고 가. 안에서 잃은 건 길드도 못 찾아 줘.,basecamp-map 2026-10-17 대사
+camp.line.enhance,기물은 손볼수록 말을 잘 들어. 다만 열여섯 번이 한계야 — 그 이상은 기물이 못 버텨.,basecamp-map 2026-10-17 대사 (강화 상한 16)
+camp.line.gate,안개가 걷혔네. 서른 분일세 — 그 안에 돌아오기만 하면 나머지는 전부 자네 몫이야.,basecamp-map 2026-10-17 대사 (체류 30분)
+camp.option.stash,창고를 열어 줘,basecamp-map 2026-10-17 대화 선택지
+camp.option.enhance,장비를 손봐 줘,basecamp-map 2026-10-17 대화 선택지
+camp.option.gate,던전으로 가겠어,basecamp-map 2026-10-17 대화 선택지
+camp.option.party,동료를 모으고 싶어,basecamp-map 2026-10-17 대화 선택지
+camp.option.bye,됐어,basecamp-map 2026-10-17 대화 선택지 (Esc)
+camp.prompt.talk,[F] 대화,basecamp-map 2026-10-17 NPC 머리 위
+camp.close_hint,Esc 닫기,basecamp-map 2026-10-17 NPC 창
+camp.title.stash,창고 · 창고지기 오르트,basecamp-map 2026-10-17 NPC 창 제목
+camp.title.enhance,강화 · 대장장이 두란 — 칸을 눌러 고르고 [강화 +1],basecamp-map 2026-10-17 NPC 창 제목
+camp.title.gate,출정 · 길드장 니라,basecamp-map 2026-10-17 NPC 창 제목
+label.lone_path,고독한 길,lone-path 2026-10-17 아이템 상세
+label.lone_path_desc,착용 중엔 파티를 맺을 수 없다 · 8 m 안의 적이 둘 이상이면 받는 피해 -8% · CC -10% (개당 · 4개까지) · 공격력 · 마력 +3% (개당),lone-path 2026-10-17 아이템 상세 (lone_path.csv 기본값)
+label.lone_tag,고독,lone-path 2026-10-17 칸 표식
+notice.lone_path_party,고독한 길은 파티 중에 착용할 수 없습니다,lone-path 2026-10-17 ITEM_LONE_PATH_IN_PARTY
+party.result.lone_path,고독한 길을 착용한 사람은 파티를 맺을 수 없습니다,lone-path 2026-10-17 PARTY_LONE_PATH

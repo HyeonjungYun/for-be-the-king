@@ -22,6 +22,9 @@ public class S1 : ModuleRules
 		// HTTP — the login screen talks to the auth server (ADR-0011). Windows uses the Curl backend; plain http works in Shipping too.
 		PrivateDependencyModuleNames.Add("HTTP");
 
+		// ProceduralMeshComponent - skill effects build their own meshes (the upright sword wave of 1009, skill_vfx.csv, 2026-10-15).
+		PrivateDependencyModuleNames.Add("ProceduralMeshComponent");
+
 		PrivateIncludePaths.AddRange(new string[]
 		{
 			"S1/",

@@ -259,7 +259,7 @@ void US1LootWindowWidget::Refresh()
 		if (i < Count)
 		{
 			const FS1ItemView& Item = (*Contents)[i];
-			GridSlots[i]->SetItem(Item.InstanceId, Item.Grade, ItemName(Catalog.Find(Item.ItemTypeId), Item.ItemTypeId), Items->IsPending(Item.InstanceId));
+			GridSlots[i]->SetItem(Item.InstanceId, Item.Grade, SlotLabel(Catalog.Find(Item.ItemTypeId), Item), Items->IsPending(Item.InstanceId));
 		}
 		else
 		{

@@ -20,7 +20,28 @@ struct FS1AnimClip
 	float				Rate = 1.f;
 	bool				bLoop = false;		// idle / run / channel loops
 	int32				HitPct = 40;		// where the strike lands in the clip (0..100 %) - the driver stretches the clip so this meets the server windup
+	float				SpeedCms = 0.f;		// natural ground speed of a locomotion clip (optional speed_cms column, 0 = unknown) - played at actual speed / this
+	int32				StartPct = 0;		// skill clips start here (optional start_pct column, 0..hit_pct) - skips a windup the skill does not have (기습's crouch before the lunge)
 };
+
+/**
+ * 8-direction locomotion math (2026-10-15 — sword = CoolKatana V1 walk_<dir> / run_<dir>). Pure, so it is unit-tested (S1.Anim.Loco.*).
+ * Sectors: 0 F · 1 FR · 2 R · 3 BR · 4 B · 5 BL · 6 L · 7 FL. RelYawDeg = movement yaw − facing yaw (UE yaw: positive = to the right).
+ */
+namespace S1LocoLogic
+{
+	/** The sector for a relative movement angle. Keeps PrevSector (0..7) until the angle is more than HysteresisDeg past its 22.5° edge, so a diagonal held on the line does not flicker. PrevSector < 0 = none yet. */
+	S1_API int32 DirectionSector(float RelYawDeg, int32 PrevSector, float HysteresisDeg);
+
+	/** "f" "fr" "r" "br" "b" "bl" "l" "fl" for sectors 0..7 (the anim_clips.csv key suffix). */
+	S1_API const TCHAR* SectorSuffix(int32 Sector);
+
+	/** Walk / run with hysteresis: a walker starts running at EnterRunCms, a runner drops to a walk below ExitRunCms. */
+	S1_API bool IsRunGait(float SpeedCms, bool bWasRun, float EnterRunCms, float ExitRunCms);
+
+	/** Where in the new loop to start so the step phase carries over (0..1 of the cycle). Position may be past one cycle (looping montage). */
+	S1_API float LoopPhase(float Position, float Length);
+}
 
 /**
  * Animation catalog (2026-10-12 animation task — design/quick-specs/animation-2026-10-12.md).
@@ -49,6 +70,9 @@ public:
 
 	/** Clip for a key and weapon with the fallback chain. Null only when the table has nothing at all for the key. */
 	const FS1AnimClip* Find(const FString& Key, FName Weapon) const;
+
+	/** (key, weapon) → (key, any) only - no "attack" fallback. For optional sets like walk_<dir> / run_<dir>: null = this weapon has none. */
+	const FS1AnimClip* FindExact(const FString& Key, FName Weapon) const;
 
 	/** Clip for a server motion id (motions.csv). 0 / unknown → null (no motion). */
 	const FS1AnimClip* FindMotion(uint32 MotionId, FName Weapon) const;

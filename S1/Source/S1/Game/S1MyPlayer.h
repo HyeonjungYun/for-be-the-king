@@ -273,6 +273,21 @@ public:
 	UFUNCTION(Exec)
 	void TestCmd(const FString& Args);
 
+	/**
+	 * Caps my own walk speed in cm/s (0 = off) — only ever lower than the real speed, so the server accepts every move.
+	 * ToggleSec > 0 switches the cap on and off every ToggleSec seconds (walk ↔ run while a key stays held — opening the
+	 * console mid-move would release it). For checking the walk clips and the walk ↔ run blend (2026-10-15).
+	 */
+	UFUNCTION(Exec)
+	void DebugMoveSpeed(float Cms, float ToggleSec = 0.f);
+
+	/**
+	 * Shows a skill's projectile look (skill_vfx.csv) in front of me without casting - it drifts forward at SpeedCms for
+	 * Seconds, then fades. Nothing is sent to the server. For tuning the look by eye (검의 찬양 1009, 2026-10-15).
+	 */
+	UFUNCTION(Exec)
+	void DebugVfx(int32 SkillId, float Seconds = 3.f, float SpeedCms = 120.f);
+
 public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -298,6 +313,17 @@ public:
 	/** cast_ms of the skill in the slot of my last C_SKILL (skills.csv via the equip sync), 0 if unknown — the cast clip is stretched to it (anim, 2026-10-12). */
 	uint32 CastMsOfLastSkill() const;
 	uint32 LastSentSkillSlot = 0;
+
+	/** How long the dash of my last C_SKILL takes (distance / speed, 0 = no dash) — its clip strikes on arrival (2026-10-15). */
+	virtual float LastSkillDashSec() const override { return LastSentDashSec; }
+	float LastSentDashSec = 0.f;
+
+	/**
+	 * 후딜 (2026-10-15) - my skill just went off: no move / basic attack / other skill until DelaySec (its dash / leap / landing
+	 * delay) + RecoveryMs from now - the same deadline the server keeps. RecoveryMs 0 (buff, pure movement) = no lock.
+	 */
+	void StartSkillLock(float DelaySec, uint32 RecoveryMs);
+	uint32 LocalCastRecoveryMs = 0;		// the casting skill's recovery - the lock starts when its cast completes
 
 	/**
 	 * S_ATTACK for one of my own swings — the server's windup and attack interval (attack speed applied). The sustained

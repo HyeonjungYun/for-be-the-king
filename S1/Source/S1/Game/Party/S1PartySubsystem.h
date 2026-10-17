@@ -98,6 +98,14 @@ public:
 
 	/** An ally in my current run (PVE co-op only). Not me. */
 	bool	IsAlly(uint64 ObjectId) const;
+
+	/**
+	 * The betrayer mark (party-betrayal R6, 2026-10-13 user decision · art-bible 배신자 표식 규칙): only someone the betrayer
+	 * left behind sees it, for BetrayerMarkSec. Kept here by object id, not on the actor, so it survives the betrayer leaving
+	 * my sight and coming back (a new actor). Cleared when my run ends.
+	 */
+	bool	GetBetrayerMark(uint64 ObjectId, FString& OutName) const;
+	static constexpr double BetrayerMarkSec = 60.0;
 	FString	NameOf(uint64 CharacterId) const;
 
 	bool			HasInvite() const { return InvitePartyId != 0; }
@@ -134,6 +142,9 @@ private:
 	ES1RunMode					RunMode = ES1RunMode::Pvp;		// of the run I am in (S_ENTER_GAME)
 	bool						bInDungeon = false;				// between S_ENTER_GAME and S_LEAVE_GAME
 	TMap<uint64, FString>		RunAllies;
+
+	struct FBetrayerMark { FString Name; double ExpiresAt = 0.0; };
+	TMap<uint64, FBetrayerMark>	BetrayerMarks;					// object id -> mark I see (I was betrayed)
 
 	UPROPERTY() TObjectPtr<US1PartyInviteWidget>	InvitePopup;
 };

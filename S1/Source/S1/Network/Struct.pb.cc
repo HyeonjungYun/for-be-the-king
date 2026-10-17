@@ -335,6 +335,7 @@ PROTOBUF_CONSTEXPR ItemInstance::ItemInstance(
   , /*decltype(_impl_.level_)*/0u
   , /*decltype(_impl_.state_)*/0
   , /*decltype(_impl_.slot_)*/0
+  , /*decltype(_impl_.lone_path_)*/false
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct ItemInstanceDefaultTypeInternal {
   PROTOBUF_CONSTEXPR ItemInstanceDefaultTypeInternal()
@@ -604,6 +605,7 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.state_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.slot_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.skills_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ItemInstance, _impl_.lone_path_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::VisionSource, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -649,8 +651,8 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 173, -1, -1, sizeof(::Protocol::ZoneInfo)},
   { 192, -1, -1, sizeof(::Protocol::CharacterInfo)},
   { 203, -1, -1, sizeof(::Protocol::ItemInstance)},
-  { 216, -1, -1, sizeof(::Protocol::VisionSource)},
-  { 231, -1, -1, sizeof(::Protocol::PartyMember)},
+  { 217, -1, -1, sizeof(::Protocol::VisionSource)},
+  { 232, -1, -1, sizeof(::Protocol::PartyMember)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -737,27 +739,27 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "\021\n\tfollow_id\030\r \001(\004\"v\n\rCharacterInfo\022)\n\013o"
   "bject_info\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014"
   "\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005"
-  "\022\020\n\010floor_id\030\005 \001(\r\"\330\001\n\014ItemInstance\022\023\n\013i"
+  "\022\020\n\010floor_id\030\005 \001(\r\"\353\001\n\014ItemInstance\022\023\n\013i"
   "nstance_id\030\001 \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\""
   "\n\005grade\030\003 \001(\0162\023.Protocol.ItemGrade\022\r\n\005le"
   "vel\030\004 \001(\r\022\"\n\005state\030\005 \001(\0162\023.Protocol.Item"
   "State\022!\n\004slot\030\006 \001(\0162\023.Protocol.EquipSlot"
-  "\022#\n\006skills\030\007 \003(\0132\023.Protocol.SkillInfo\"\252\001"
-  "\n\014VisionSource\022\021\n\tsource_id\030\001 \001(\004\022\021\n\tfol"
-  "low_id\030\002 \001(\004\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tra"
-  "dius_cm\030\005 \001(\002\022\024\n\014remaining_ms\030\006 \001(\r\022\021\n\tn"
-  "eeds_los\030\007 \001(\010\022\024\n\014sees_stealth\030\010 \001(\010\022\014\n\004"
-  "kind\030\t \001(\t\"l\n\013PartyMember\022\024\n\014character_i"
-  "d\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\016\n\006leader\030\003 \001(\010\022)\n"
-  "\005state\030\004 \001(\0162\032.Protocol.PartyMemberState"
-  "b\006proto3"
+  "\022#\n\006skills\030\007 \003(\0132\023.Protocol.SkillInfo\022\021\n"
+  "\tlone_path\030\010 \001(\010\"\252\001\n\014VisionSource\022\021\n\tsou"
+  "rce_id\030\001 \001(\004\022\021\n\tfollow_id\030\002 \001(\004\022\t\n\001x\030\003 \001"
+  "(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tradius_cm\030\005 \001(\002\022\024\n\014rema"
+  "ining_ms\030\006 \001(\r\022\021\n\tneeds_los\030\007 \001(\010\022\024\n\014see"
+  "s_stealth\030\010 \001(\010\022\014\n\004kind\030\t \001(\t\"l\n\013PartyMe"
+  "mber\022\024\n\014character_id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t"
+  "\022\016\n\006leader\030\003 \001(\010\022)\n\005state\030\004 \001(\0162\032.Protoc"
+  "ol.PartyMemberStateb\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 2928, descriptor_table_protodef_Struct_2eproto,
+    false, false, 2947, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 20,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -6538,12 +6540,13 @@ ItemInstance::ItemInstance(const ItemInstance& from)
     , decltype(_impl_.level_){}
     , decltype(_impl_.state_){}
     , decltype(_impl_.slot_){}
+    , decltype(_impl_.lone_path_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&_impl_.instance_id_, &from._impl_.instance_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.slot_) -
-    reinterpret_cast<char*>(&_impl_.instance_id_)) + sizeof(_impl_.slot_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.lone_path_) -
+    reinterpret_cast<char*>(&_impl_.instance_id_)) + sizeof(_impl_.lone_path_));
   // @@protoc_insertion_point(copy_constructor:Protocol.ItemInstance)
 }
 
@@ -6559,6 +6562,7 @@ inline void ItemInstance::SharedCtor(
     , decltype(_impl_.level_){0u}
     , decltype(_impl_.state_){0}
     , decltype(_impl_.slot_){0}
+    , decltype(_impl_.lone_path_){false}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -6589,8 +6593,8 @@ void ItemInstance::Clear() {
 
   _impl_.skills_.Clear();
   ::memset(&_impl_.instance_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.slot_) -
-      reinterpret_cast<char*>(&_impl_.instance_id_)) + sizeof(_impl_.slot_));
+      reinterpret_cast<char*>(&_impl_.lone_path_) -
+      reinterpret_cast<char*>(&_impl_.instance_id_)) + sizeof(_impl_.lone_path_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -6661,6 +6665,14 @@ const char* ItemInstance::_InternalParse(const char* ptr, ::_pbi::ParseContext* 
             CHK_(ptr);
             if (!ctx->DataAvailable(ptr)) break;
           } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<58>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // bool lone_path = 8;
+      case 8:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 64)) {
+          _impl_.lone_path_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
         } else
           goto handle_unusual;
         continue;
@@ -6740,6 +6752,12 @@ uint8_t* ItemInstance::_InternalSerialize(
         InternalWriteMessage(7, repfield, repfield.GetCachedSize(), target, stream);
   }
 
+  // bool lone_path = 8;
+  if (this->_internal_lone_path() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(8, this->_internal_lone_path(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -6796,6 +6814,11 @@ size_t ItemInstance::ByteSizeLong() const {
       ::_pbi::WireFormatLite::EnumSize(this->_internal_slot());
   }
 
+  // bool lone_path = 8;
+  if (this->_internal_lone_path() != 0) {
+    total_size += 1 + 1;
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -6833,6 +6856,9 @@ void ItemInstance::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::P
   if (from._internal_slot() != 0) {
     _this->_internal_set_slot(from._internal_slot());
   }
+  if (from._internal_lone_path() != 0) {
+    _this->_internal_set_lone_path(from._internal_lone_path());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -6852,8 +6878,8 @@ void ItemInstance::InternalSwap(ItemInstance* other) {
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   _impl_.skills_.InternalSwap(&other->_impl_.skills_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(ItemInstance, _impl_.slot_)
-      + sizeof(ItemInstance::_impl_.slot_)
+      PROTOBUF_FIELD_OFFSET(ItemInstance, _impl_.lone_path_)
+      + sizeof(ItemInstance::_impl_.lone_path_)
       - PROTOBUF_FIELD_OFFSET(ItemInstance, _impl_.instance_id_)>(
           reinterpret_cast<char*>(&_impl_.instance_id_),
           reinterpret_cast<char*>(&other->_impl_.instance_id_));

@@ -10,6 +10,10 @@
 #include "Engine/World.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "ProceduralMeshComponent.h"
 #include "Game/S1Player.h"
 #include "Game/S1SkillTable.h"
 #include "Game/Vision/S1VisionSubsystem.h"
@@ -51,11 +55,29 @@ void US1ProjectileSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 	GProjectiles = this;
 	bInitialized = true;
+
+	// Projectile looks - optional: without the table every projectile keeps the stock drawing
+	const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data"), TEXT("skill_vfx.csv"));
+	FString Csv;
+	FString Error;
+	if (FFileHelper::LoadFileToString(Csv, *Path) == false)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[VFX] %s missing - projectiles use the stock drawing"), *Path);
+	}
+	else if (S1SwordWave::ParseLooks(Csv, Looks, Error) == false)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[VFX] %s"), *Error);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[VFX] projectile looks loaded - %d"), Looks.Num());
+	}
 }
 
 void US1ProjectileSubsystem::Deinitialize()
 {
 	bInitialized = false;
+	DestroyAllWaves();
 	DestroyAllWallActors();
 	Flying.Reset();
 	Impacts.Reset();
@@ -75,6 +97,7 @@ void US1ProjectileSubsystem::HandlePacket(const Protocol::S_PROJECTILE& Pkt)
 
 void US1ProjectileSubsystem::Clear()
 {
+	DestroyAllWaves();
 	Flying.Reset();
 	Impacts.Reset();
 	Zones.Reset();
@@ -345,6 +368,8 @@ void US1ProjectileSubsystem::OnSpawned(const Protocol::ProjectileInfo& Info)
 	P.RadiusCm = Info.radius_cm() > 0.f ? Info.radius_cm() : 40.f;
 	P.TargetId = Info.target_id();
 	P.Colour = ColourFor(P.EffectId);
+	if (const FS1ProjectileLook* Look = Looks.Find(P.EffectId))
+		SpawnWaveVisual(P, *Look, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f);
 
 	Flying.Add(P);
 
@@ -374,6 +399,13 @@ void US1ProjectileSubsystem::OnEnded(const Protocol::ProjectileEndInfo& Info)
 		UE_LOG(LogTemp, Log, TEXT("[PROJ] end id=%llu reason=%d target=%llu drift=%.0fcm"),
 			Info.projectile_id(), static_cast<int32>(Info.reason()), Info.target_id(), DriftCm);
 
+		// A wave finishes where the server stopped it, then flares out
+		if (Flying[i].Visual.IsValid())
+		{
+			Flying[i].Pos = Impact.Pos;
+			StartWaveFade(Flying[i], Now);
+		}
+
 		Flying.RemoveAtSwap(i);
 		return;
 	}
@@ -389,6 +421,7 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 	const float Now = World->GetTimeSeconds();
 
 	TickHawks(World, Now);
+	TickFadingWaves(Now);
 
 	if (Flying.Num() == 0 && Impacts.Num() == 0 && Zones.Num() == 0)
 		return;
@@ -532,6 +565,16 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 		DrawDebugCircle(World, Z.Pos, Z.RadiusCm * Pulse, 24, Z.Colour, false, -1.f, 0, 1.5f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 	}
 
+	// DebugVfx previews end on their own clock - no server packet comes for them
+	for (int32 i = Flying.Num() - 1; i >= 0; i--)
+	{
+		if (Flying[i].PreviewUntil > 0.f && Now >= Flying[i].PreviewUntil)
+		{
+			StartWaveFade(Flying[i], Now);
+			Flying.RemoveAtSwap(i);
+		}
+	}
+
 	for (FS1ClientProjectile& P : Flying)
 	{
 		// Homing: re-aim at the target every frame - the server does the same each flush
@@ -557,6 +600,12 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 			P.RemainingCm -= Step;
 		}
 		P.Pos += P.Dir * Step;
+
+		if (P.Visual.IsValid())
+		{
+			PlaceWaveVisual(P, Now);
+			continue;
+		}
 
 		// A wide projectile is a blade of force, not a bolt - a crescent across its path (검의 함성 1112 반원 검기, 2026-10-11)
 		if (P.RadiusCm >= 90.f)
@@ -592,4 +641,129 @@ void US1ProjectileSubsystem::Tick(float DeltaTime)
 		const float Radius = Impact.bHit ? (60.f + 60.f * (1.f - Alpha)) : 30.f;
 		DrawDebugCircle(World, Impact.Pos, Radius, 16, Impact.Colour, false, -1.f, 0, Impact.bHit ? 5.f : 2.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 	}
+}
+
+// ── Projectile looks (skill_vfx.csv, 2026-10-15) ─────────────────────────────
+
+bool US1ProjectileSubsystem::SpawnWaveVisual(FS1ClientProjectile& P, const FS1ProjectileLook& Look, float Now)
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+		return false;
+
+	if (WaveMaterial == nullptr)
+		WaveMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FX/M_S1SwordWave.M_S1SwordWave"));
+	if (WaveMaterial == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[VFX] /Game/FX/M_S1SwordWave is missing (tools/fx/make_sword_wave_material.py) - effect %u keeps the stock drawing"), P.EffectId);
+		return false;
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AActor* Actor = World->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
+	if (Actor == nullptr)
+		return false;
+
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(Actor, TEXT("SwordWave"));
+	Actor->SetRootComponent(Mesh);
+	Mesh->RegisterComponent();
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetCastShadow(false);
+
+	const FS1SwordWaveMesh Built = S1SwordWave::BuildCrescent(Look);
+	Mesh->CreateMeshSection_LinearColor(0, Built.Vertices, Built.Triangles, TArray<FVector>(), TArray<FVector2D>(), Built.Colours, TArray<FProcMeshTangent>(), false);
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(WaveMaterial, Mesh);
+	Mesh->SetMaterial(0, Mid != nullptr ? static_cast<UMaterialInterface*>(Mid) : WaveMaterial.Get());
+
+	P.Visual = Actor;
+	P.VisualMid = Mid;
+	// Pos is feet + 50 (GroundZ). Sink 0 = the bottom tip skims the floor; sink 50 = the middle sits on it and the floor hides the rest
+	P.VisualLiftCm = Look.HeightCm * (0.5f - Look.SinkPct / 100.f) + 5.f - 50.f;
+	P.Born = Now;
+	PlaceWaveVisual(P, Now);
+	UE_LOG(LogTemp, Log, TEXT("[VFX] wave id=%llu effect=%u kind=%s h=%.0f"), P.Id, P.EffectId, *Look.Kind.ToString(), Look.HeightCm);
+	return true;
+}
+
+void US1ProjectileSubsystem::PlaceWaveVisual(const FS1ClientProjectile& P, float Now) const
+{
+	AActor* Actor = P.Visual.Get();
+	if (Actor == nullptr)
+		return;
+	// Edge first, standing up: local X = flight direction, Z = up. It rises out of the swing over the first frames
+	const float Grow = FMath::Clamp((Now - P.Born) / WaveGrowSeconds, 0.f, 1.f);
+	Actor->SetActorLocationAndRotation(P.Pos + FVector(0.f, 0.f, P.VisualLiftCm), FRotator(0.f, P.Dir.Rotation().Yaw, 0.f));
+	Actor->SetActorScale3D(FVector(1.f, 1.f, 0.5f + 0.5f * Grow));
+}
+
+bool US1ProjectileSubsystem::PreviewLook(uint32 EffectId, const FVector& Chest, const FVector& Dir, float SpeedCms, float Seconds)
+{
+	const FS1ProjectileLook* Look = Looks.Find(EffectId);
+	if (Look == nullptr)
+		return false;
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	FS1ClientProjectile P;
+	P.EffectId = EffectId;
+	P.Pos = Chest;
+	P.Dir = FVector(Dir.X, Dir.Y, 0.f).GetSafeNormal();
+	if (P.Dir.IsNearlyZero())
+		P.Dir = FVector::ForwardVector;
+	P.SpeedCms = SpeedCms;
+	P.RemainingCm = SpeedCms * Seconds;
+	P.Colour = ColourFor(EffectId);
+	P.PreviewUntil = Now + Seconds;
+	if (SpawnWaveVisual(P, *Look, Now) == false)
+		return false;
+	Flying.Add(P);
+	return true;
+}
+
+void US1ProjectileSubsystem::StartWaveFade(const FS1ClientProjectile& P, float Now)
+{
+	if (P.Visual.IsValid() == false)
+		return;
+	PlaceWaveVisual(P, Now);
+	FFadingWave& Fade = FadingWaves.AddDefaulted_GetRef();
+	Fade.Actor = P.Visual;
+	Fade.Mid = P.VisualMid;
+	Fade.Start = Now;
+	Fade.Until = Now + WaveFadeSeconds;
+}
+
+void US1ProjectileSubsystem::TickFadingWaves(float Now)
+{
+	for (int32 i = FadingWaves.Num() - 1; i >= 0; i--)
+	{
+		FFadingWave& Wave = FadingWaves[i];
+		AActor* Actor = Wave.Actor.Get();
+		if (Actor == nullptr || Now >= Wave.Until)
+		{
+			if (Actor != nullptr)
+				Actor->Destroy();
+			FadingWaves.RemoveAtSwap(i);
+			continue;
+		}
+		// Flare out: a little bigger, then gone
+		const float Left = (Wave.Until - Now) / FMath::Max(Wave.Until - Wave.Start, 0.01f);
+		Actor->SetActorScale3D(FVector(1.f + 0.4f * (1.f - Left), 1.f, 1.f + 0.25f * (1.f - Left)));
+		if (UMaterialInstanceDynamic* Mid = Wave.Mid.Get())
+			Mid->SetScalarParameterValue(TEXT("Fade"), Left);
+	}
+}
+
+void US1ProjectileSubsystem::DestroyAllWaves()
+{
+	for (FS1ClientProjectile& P : Flying)
+	{
+		if (AActor* Actor = P.Visual.Get())
+			Actor->Destroy();
+		P.Visual.Reset();
+	}
+	for (FFadingWave& Wave : FadingWaves)
+	{
+		if (AActor* Actor = Wave.Actor.Get())
+			Actor->Destroy();
+	}
+	FadingWaves.Reset();
 }

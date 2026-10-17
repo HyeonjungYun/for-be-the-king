@@ -2,6 +2,7 @@
 
 #include "Game/UI/S1ItemUIStyle.h"
 #include "Game/Item/S1ItemCatalog.h"
+#include "Game/Item/S1ItemLogic.h"
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Styling/CoreStyle.h"
 
@@ -55,6 +56,14 @@ namespace S1ItemUIStyle
 		return Keyed(Type->NameKey);
 	}
 
+	FText SlotLabel(const FS1ItemTypeDef* Type, const FS1ItemView& Item)
+	{
+		const FText Label = S1ItemLogic::LabelWithLevel(ItemName(Type, Item.ItemTypeId), Item.Level);
+		return Item.bLonePath ? FText::Format(INVTEXT("{0}\n{1}"), Label, Text(TEXT("label.lone_tag"))) : Label;
+	}
+
+	FLinearColor LonePathPurple()			{ return FLinearColor(FColor::FromHex(TEXT("B58CFFFF"))); }
+
 	FText GradeLabel(ES1ItemGrade Grade)		{ return Keyed(FString::Printf(TEXT("grade.%d"), static_cast<int32>(Grade))); }
 	FText PartLabel(int32 EquipSlot)			{ return Keyed(FString::Printf(TEXT("part.%d"), EquipSlot)); }
 	FText ArchetypeLabel(FName Archetype)		{ return Keyed(TEXT("archetype.") + Archetype.ToString()); }
@@ -77,6 +86,7 @@ namespace S1ItemUIStyle
 		case ES1ItemNotice::BadRequest:			return Text(TEXT("notice.bad_request"));
 		case ES1ItemNotice::RetryLater:			return Text(TEXT("notice.retry_later"));
 		case ES1ItemNotice::LootPartial:		return FText::Format(Text(TEXT("notice.loot_partial")), FText::AsNumber(Count));
+		case ES1ItemNotice::LonePathInParty:	return Text(TEXT("notice.lone_path_party"));
 		default:								return FText::GetEmpty();
 		}
 	}

@@ -149,6 +149,16 @@ void US1PartySubsystem::HandleLeftGame()
 	bInDungeon = false;
 	RunMode = ES1RunMode::Pvp;
 	RunAllies.Reset();
+	BetrayerMarks.Reset();
+}
+
+bool US1PartySubsystem::GetBetrayerMark(uint64 ObjectId, FString& OutName) const
+{
+	const FBetrayerMark* Mark = BetrayerMarks.Find(ObjectId);
+	if (Mark == nullptr || FPlatformTime::Seconds() >= Mark->ExpiresAt)
+		return false;
+	OutName = Mark->Name;
+	return true;
 }
 
 // ── UI ───────────────────────────────────────────────────────────────────
@@ -249,6 +259,7 @@ FText US1PartySubsystem::ResultText(int32 Result, const FString& Subject, bool b
 	case Protocol::PARTY_COOP_ONLY:			Key = TEXT("party.result.coop_only"); break;
 	case Protocol::PARTY_NOT_VISIBLE:		Key = TEXT("party.result.not_visible"); break;		// party-betrayal R2: 시야 안의 플레이어만
 	case Protocol::PARTY_NO_KICK_IN_RUN:	Key = TEXT("party.result.no_kick_in_run"); break;	// party-betrayal R4: 던전 안 추방 없음
+	case Protocol::PARTY_LONE_PATH:			Key = TEXT("party.result.lone_path"); break;		// 고독한 길 (2026-10-17): 착용 중엔 파티 불가
 	default:								return FText::GetEmpty();
 	}
 	return FText::Format(S1ItemUIStyle::Text(Key), FText::FromString(Subject));
@@ -294,15 +305,9 @@ void US1PartySubsystem::HandleBetrayed(const Protocol::S_PARTY_BETRAYED& Pkt)
 	for (const std::string& V : Pkt.victim_names())
 		bVictim |= (UTF8_TO_TCHAR(V.c_str()) == MyName);
 
-	// 표식 - 런이 끝날 때까지 (라벨 "⚠ 배신자 이름"). 늦게 본 사람은 스폰 스냅샷 ObjectInfo.betrayer 로 안다
-	if (US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
-	{
-		if (TWeakObjectPtr<AS1Player>* Found = GameInstance->Players.Find(Pkt.betrayer_id()))
-		{
-			if (AS1Player* Actor = Found->Get())
-				Actor->SetBetrayer(true, Name);
-		}
-	}
+	// 표식 "배신자 이름" - 배신당한 파티원(나)에게만, 1 분 (2026-10-13 사용자 결정 · art-bible 배신자 표식 규칙 1 · 2). 제3자는 토스트만 본다
+	if (bVictim)
+		BetrayerMarks.Add(Pkt.betrayer_id(), FBetrayerMark{ Name, FPlatformTime::Seconds() + BetrayerMarkSec });
 
 	// 토스트 - 파티원이었으면 "X 가 배신했다!", 아니면 "X 가 파티를 배신했다" (party-betrayal § 7 토스트 5 s)
 	constexpr float BetrayToastSec = 5.f;
