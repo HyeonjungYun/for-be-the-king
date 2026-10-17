@@ -150,7 +150,7 @@ app.MapPost("/auth/login", async (Credentials body, MySqlDataSource db) =>
             INSERT INTO login_sessions (token, account_id, expires_at)
             VALUES (@token, @accountId, DATE_ADD(NOW(), INTERVAL @minutes MINUTE))
             """;
-        insert.Parameters.AddWithValue("@token", token);
+        insert.Parameters.AddWithValue("@token", Auth.HashToken(token));     // 저장은 해시 - 클라에는 원래 토큰을 준다 (2026-10-17)
         insert.Parameters.AddWithValue("@accountId", accountId);
         insert.Parameters.AddWithValue("@minutes", settings.TokenLifetimeMinutes);
         await insert.ExecuteNonQueryAsync();
@@ -316,6 +316,11 @@ static class Auth
     public static string NewToken() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(TokenBytes)).ToLowerInvariant();
 
+    // login_sessions.token 에는 이 값만 들어간다 - DB 가 새도 그 값으로는 로그인할 수 없다 (2026-10-17 사용자 결정 · 로그인 OQ-2).
+    // 게임 서버 Utils::Sha256Hex 와 같은 값: 원래 토큰(ASCII hex)의 SHA-256, 소문자 hex 64 자 = CHAR(64)
+    public static string HashToken(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.ASCII.GetBytes(token))).ToLowerInvariant();
+
     public static bool IsValidName(string? name, AuthSettings settings) =>
         name is not null
         && name.Length >= settings.NameMinLength
@@ -343,7 +348,7 @@ static class Auth
 
         await using var select = conn.CreateCommand();
         select.CommandText = "SELECT account_id FROM login_sessions WHERE token = @token AND expires_at > NOW()";
-        select.Parameters.AddWithValue("@token", token);
+        select.Parameters.AddWithValue("@token", HashToken(token));
 
         object? result = await select.ExecuteScalarAsync();
         return result is null or DBNull ? 0 : Convert.ToUInt64(result);

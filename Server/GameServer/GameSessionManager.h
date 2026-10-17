@@ -18,6 +18,9 @@ public:
 	// 캐릭터 이름이 정확히 같은 로그인 세션 - 초대 (이름은 전역 유일, schema uk_name)
 	GameSessionRef FindByName(const string& name);
 
+	// 연결만 하고 C_LOGIN 을 보내지 않은 지 timeoutUs 가 지난 세션을 끊는다 - 메인 루프가 10 초마다 (2026-10-17 사용자 결정). 끊은 수
+	int32 DropUnauthenticated(uint64 nowUs, uint64 timeoutUs);
+
 private:
 	USE_LOCK;
 	set<GameSessionRef> _sessions;

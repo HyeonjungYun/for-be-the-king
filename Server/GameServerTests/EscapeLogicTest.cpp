@@ -188,7 +188,8 @@ TEST(EscapeConfig, 실제_설정_파일과_범위_검사_AC_ET_13_28)
 	string error;
 	EscapeConfig cfg;
 	ASSERT_TRUE(cfg.Load(ItemTable::DefaultDataDir(), OUT error)) << error;
-	EXPECT_FLOAT_EQ(cfg.zoneEnterCm, 1000.f);
+	EXPECT_FLOAT_EQ(cfg.zoneEnterCm, 667.f);		// 2026-10-17 사용자 결정 - 1000 의 2/3
+	EXPECT_FLOAT_EQ(cfg.zoneLeaveCm, 733.f);
 	EXPECT_EQ(cfg.fillUs, 60 * SEC);
 	EXPECT_FLOAT_EQ(cfg.alertCm, 4000.f);
 	EXPECT_EQ(cfg.runLimitUs, 1800 * SEC);
@@ -201,6 +202,8 @@ TEST(EscapeConfig, 실제_설정_파일과_범위_검사_AC_ET_13_28)
 	};
 
 	EXPECT_TRUE(parse("zone_enter_radius_cm,1100\n", OUT error)) << error;
+	EXPECT_TRUE(parse("zone_enter_radius_cm,500\n", OUT error)) << error;				// 하한
+	EXPECT_FALSE(parse("zone_enter_radius_cm,499\n", OUT error));
 	EXPECT_FALSE(parse("zone_leave_radius_cm,1201\n", OUT error));				// 무벽 원 12 m 밖
 	EXPECT_FALSE(parse("zone_enter_radius_cm,1150\n", OUT error));				// enter > leave(1100)
 	EXPECT_FALSE(parse("gauge_alert_radius_m,24\n", OUT error));				// R_alert < R_vis

@@ -16,6 +16,26 @@ void GameSessionManager::Remove(GameSessionRef session)
 	_sessions.erase(session);
 }
 
+int32 GameSessionManager::DropUnauthenticated(uint64 nowUs, uint64 timeoutUs)
+{
+	vector<GameSessionRef> idle;
+	{
+		WRITE_LOCK;
+		for (const GameSessionRef& session : _sessions)
+		{
+			const uint64 since = session->connectedAtUs.load();
+			// 로그인 처리 중(loginStarted)이면 DB 가 느린 것이다 - 건드리지 않는다
+			if (session->loginStarted.load() == false && session->accountId.load() == 0 && since != 0 && nowUs > since + timeoutUs)
+				idle.push_back(session);
+		}
+	}
+
+	// 락 밖에서 끊는다 - Disconnect 의 정리(OnDisconnected → Remove)가 이 락을 다시 잡는다
+	for (const GameSessionRef& session : idle)
+		session->Disconnect(L"login timeout");
+	return static_cast<int32>(idle.size());
+}
+
 GameSessionRef GameSessionManager::FindByCharacter(uint64 characterId)
 {
 	WRITE_LOCK;

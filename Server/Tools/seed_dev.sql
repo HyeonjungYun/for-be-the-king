@@ -19,9 +19,13 @@ VALUES (@account_id, 'dev_1', 500, 500, 0, 200.0, 200.0, 100.0, 0.0);
 
 -- 토큰 = SHA2('dev_1', 256). 봇과 같은 규칙이라 계산 방식을 기억할 필요가 없다
 INSERT INTO login_sessions (token, account_id, expires_at)
-VALUES (SHA2('dev_1', 256), @account_id, DATE_ADD(NOW(), INTERVAL 1 YEAR));
+VALUES (SHA2(SHA2('dev_1', 256), 256), @account_id, DATE_ADD(NOW(), INTERVAL 1 YEAR));	-- DB 에는 토큰의 해시 (2026-10-17 migrate_hash_tokens.sql)
 
 COMMIT;
+
+-- 처음부터 해시로 넣었다 - 이전 스크립트(migrate_hash_tokens.sql)가 다시 해시하지 않게
+CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(64) NOT NULL PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
+INSERT IGNORE INTO schema_migrations (name) VALUES ('hash_login_tokens');
 
 SELECT a.username, c.name, c.floor_id, s.token, s.expires_at
 FROM accounts a

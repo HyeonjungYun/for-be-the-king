@@ -1,6 +1,6 @@
 key,value
-zone_enter_radius_cm,1000
-zone_leave_radius_cm,1100
+zone_enter_radius_cm,667
+zone_leave_radius_cm,733
 gauge_fill_s,60
 gauge_reverse_mult_x100,200
 gauge_alert_radius_m,40

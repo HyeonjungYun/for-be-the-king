@@ -64,10 +64,37 @@ public:
 	// [ID MISMATCH] 는 세션당 한 번만 남긴다 - 잘못된 C_MOVE 마다 찍혔다
 	atomic<bool> idMismatchLogged = false;
 
+	// ── 연결당 속도 제한 (2026-10-17 사용자 결정 · 보안 점검 H2) ──
+	// 전체 패킷 초당 120 · 순간 240 - 넘으면 끊는다 (정상 클라는 이동 30 Hz + 스킬 · 평타).
+	// DB 를 치는 요청 초당 10 · 순간 20 - 넘는 요청은 버리고, 50 번 버리면 끊는다 (클릭 한 번에 하나라 정상 손으로는 닿지 않는다).
+	// 로그인 전 연결은 10 초 (메인 루프가 10 초마다 보니 실제로는 10 ~ 20 초) - GameSessionManager::DropUnauthenticated
+	static constexpr double	PACKET_RATE_PER_SEC = 120.0;
+	static constexpr double	PACKET_BURST = 240.0;
+	static constexpr double	DB_RATE_PER_SEC = 10.0;
+	static constexpr double	DB_BURST = 20.0;
+	static constexpr int32	DB_DROPS_BEFORE_DISCONNECT = 50;
+	static constexpr uint64	LOGIN_TIMEOUT_US = 10'000'000;
+
+	atomic<uint64> connectedAtUs = 0;
+
+	// 패킷 하나를 받아도 되는가 - false 면 이미 끊었거나 버릴 패킷이다. 수신은 세션마다 한 스레드씩이라 락이 없다
+	bool AdmitPacket(uint16 packetId);
+
+
 	// gold >= 0 이면 바뀐 창고 골드를 싣는다 (매입 · 강화 - 2026-10-17 경제)
 	void SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed = {}, int64 gold = -1);
 
 private:
 	USE_LOCK;
 	unordered_set<string> _handleRequests;
+
+	struct TokenBucket
+	{
+		double	tokens = -1.0;		// 처음 쓸 때 가득 채운다
+		uint64	lastUs = 0;
+		bool	Take(double ratePerSec, double burst, uint64 nowUs);
+	};
+	TokenBucket	_packetBucket;
+	TokenBucket	_dbBucket;
+	int32		_dbDrops = 0;
 };

@@ -89,7 +89,8 @@ bool EscapeConfig::Parse(const string& csv, OUT string& error)
 
 bool EscapeConfig::Validate(OUT string& error) const
 {
-	return InRange(zoneEnterCm, 800.f, 1100.f, "zone_enter_radius_cm", error)
+	// 하한 800 → 500 (2026-10-17 사용자 결정: 구역 반경을 2/3 로 - 667 cm)
+	return InRange(zoneEnterCm, 500.f, 1100.f, "zone_enter_radius_cm", error)
 		&& InRange(zoneLeaveCm, zoneEnterCm, 1200.f, "zone_leave_radius_cm (enter .. tower_clear_radius 1200)", error)
 		&& InRange(fillUs, 3ull * 1'000'000, 120ull * 1'000'000, "gauge_fill (us)", error)
 		&& InRange(reverseMultX100, 100u, 400u, "gauge_reverse_mult_x100", error)

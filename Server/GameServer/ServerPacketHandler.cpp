@@ -542,7 +542,9 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			Protocol::S_LOGIN loginPkt;
 			loginPkt.set_success(false);
 
-			const string safeToken = conn->Escape(token);
+			// DB 에는 토큰의 SHA-256 만 있다 (2026-10-17 사용자 결정 · 로그인 OQ-2) - DB 가 새도 그 값으로는 로그인할 수 없다.
+			// 클라는 원래 토큰을 보내고, 인증 서버(AuthServer)도 저장할 때 같은 해시를 쓴다. migrate_hash_tokens.sql
+			const string safeToken = conn->Escape(Utils::Sha256Hex(token));
 
 			char query[256];
 			::snprintf(query, sizeof(query),

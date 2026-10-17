@@ -244,6 +244,11 @@ void Room::UpdateVisibility(uint64 nowUs)
 				auto followIt = _objects.find(e.followId);
 				if (followIt == _objects.end())
 					alive = false;
+				// 아군 시야는 같은 팀인 동안만 - 배신(팀 0)하면 그 순간 양쪽 다 끊긴다. 예전엔 방을 떠날 때까지 남아
+				// 배신자와 옛 파티가 서로의 시야로 계속 봤다 (2026-10-17 사용자 결정 · 리팩터링 리뷰 TD-004)
+				else if (e.kind == "ally" && (followIt->second->IsPlayer() == false
+					|| SameTeam(*viewer, static_cast<const Player&>(*followIt->second)) == false))
+					alive = false;
 				else
 				{
 					x = followIt->second->posInfo->x();
