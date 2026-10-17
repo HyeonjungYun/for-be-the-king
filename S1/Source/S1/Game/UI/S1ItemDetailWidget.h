@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Game/Item/S1ItemTypes.h"
+#include "Game/UI/S1TextLinePool.h"
 #include "S1ItemDetailWidget.generated.h"
 
 class UVerticalBox;
@@ -51,6 +52,7 @@ private:
 	FText KeyLabel(int32 KeySlot) const;
 
 	UPROPERTY() TObjectPtr<UVerticalBox> Lines;
+	FS1TextLinePool LinePool;		// TD-010 - lines are reused across hovers, not rebuilt
 
 	FS1KeyNameResolver KeyName;
 };

@@ -22,19 +22,16 @@ void US1ItemDetailWidget::NativeOnInitialized()
 void US1ItemDetailWidget::Clear()
 {
 	if (Lines != nullptr)
-		Lines->ClearChildren();
+		LinePool.Begin(Lines);
 }
 
 void US1ItemDetailWidget::AddLine(const FText& Text, int32 FontSize, const FLinearColor& Color)
 {
-	UTextBlock* Line = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	UTextBlock* Line = LinePool.Next(WidgetTree, Lines, FMargin(0.f, 1.f));
 	Line->SetText(Text);
 	Line->SetFont(Font(FontSize));
 	Line->SetColorAndOpacity(FSlateColor(Color));
 	Line->SetAutoWrapText(true);
-
-	if (UVerticalBoxSlot* LineSlot = Lines->AddChildToVerticalBox(Line))
-		LineSlot->SetPadding(FMargin(0.f, 1.f));
 }
 
 FText US1ItemDetailWidget::KeyLabel(int32 KeySlot) const

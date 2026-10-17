@@ -7,6 +7,7 @@
 #include "InputCoreTypes.h"
 #include "Game/Item/S1ItemTypes.h"
 #include "Game/BaseCamp/S1CampLayout.h"
+#include "Game/UI/S1TextLinePool.h"
 #include "S1BaseCampWidget.generated.h"
 
 class UBorder;
@@ -130,6 +131,8 @@ private:
 	UPROPERTY() TObjectPtr<UTextBlock>						TotalsTitle;
 	UPROPERTY() TObjectPtr<UVerticalBox>					TotalLines;
 	UPROPERTY() TObjectPtr<UVerticalBox>					AtomicLines;
+	FS1TextLinePool											TotalLinePool;		// TD-010 - reused, not rebuilt per refresh
+	FS1TextLinePool											AtomicLinePool;
 	UPROPERTY() TObjectPtr<US1ItemDetailWidget>				Detail;
 	UPROPERTY() TObjectPtr<UTextBlock>						StarterNotice;	// above [입장] - "기본 장비 3종을 받고 입장한다"
 	UPROPERTY() TObjectPtr<UBorder>							EnterButton;

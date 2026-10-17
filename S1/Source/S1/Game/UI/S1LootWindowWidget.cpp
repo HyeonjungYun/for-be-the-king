@@ -313,7 +313,16 @@ void US1LootWindowWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
 	if (IsOpen() == false)
+	{
+		bRefreshPending = false;
 		return;
+	}
+
+	if (bRefreshPending)
+	{
+		bRefreshPending = false;
+		Refresh();
+	}
 
 	TickAccumulator += InDeltaTime;
 	if (TickAccumulator < TickSeconds)
@@ -379,8 +388,9 @@ void US1LootWindowWidget::HandleSlotHovered(uint64 InstanceId)
 
 void US1LootWindowWidget::HandleBagChanged(uint64 InBagId)
 {
+	// A take-all answers one reply per item — refresh once on the next frame, not once per reply (TD-010, 2026-10-18)
 	if (InBagId == BagId)
-		Refresh();
+		bRefreshPending = true;
 }
 
 void US1LootWindowWidget::HandleBagClosed(uint64 InBagId, ES1BagCloseReason Reason)

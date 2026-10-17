@@ -742,17 +742,15 @@ bool US1BaseCampWidget::MatchesFilter(const FS1ItemView& Item, const FString& Fi
 
 void US1BaseCampWidget::RefreshAtomic()
 {
-	AtomicLines->ClearChildren();
+	AtomicLinePool.Begin(AtomicLines);
 
 	auto AddLine = [this](const FText& Line, int32 Size, const FLinearColor& Color, float Bottom)
 	{
-		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		UTextBlock* Text = AtomicLinePool.Next(WidgetTree, AtomicLines, FMargin(0.f, 0.f, 0.f, Bottom));
 		Text->SetFont(Font(Size));
 		Text->SetColorAndOpacity(FSlateColor(Color));
 		Text->SetAutoWrapText(true);
 		Text->SetText(Line);
-		if (UVerticalBoxSlot* LineSlot = AtomicLines->AddChildToVerticalBox(Text))
-			LineSlot->SetPadding(FMargin(0.f, 0.f, 0.f, Bottom));
 	};
 
 	// Live keys only — a shadowed key does nothing, so its numbers would be noise (the strip already says why).
@@ -792,7 +790,7 @@ void US1BaseCampWidget::HandleCarriedFilterChanged(const FText& InText)
 void US1BaseCampWidget::RefreshTotals()
 {
 	US1ItemSubsystem* Items = GetItems();
-	TotalLines->ClearChildren();
+	TotalLinePool.Begin(TotalLines);
 
 	// Stats in the order they first appear across the parts, summed over everything worn.
 	TArray<FName> Order;
@@ -815,11 +813,10 @@ void US1BaseCampWidget::RefreshTotals()
 
 	auto AddLine = [this](const FText& Line, const FLinearColor& Color)
 	{
-		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		UTextBlock* Text = TotalLinePool.Next(WidgetTree, TotalLines);
 		Text->SetFont(Font(FontBody));
 		Text->SetColorAndOpacity(FSlateColor(Color));
 		Text->SetText(Line);
-		TotalLines->AddChildToVerticalBox(Text);
 	};
 
 	if (Order.Num() == 0)

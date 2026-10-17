@@ -82,6 +82,7 @@ private:
 	double				OpenedAtSeconds = 0.0;
 	bool				bNoticeShowing = false;
 	float				TickAccumulator = 0.f;
+	bool				bRefreshPending = false;		// TD-010 - bag changes are folded into one refresh per frame
 	FTimerHandle		NoticeTimer;
 
 	FDelegateHandle		BagChangedHandle;
