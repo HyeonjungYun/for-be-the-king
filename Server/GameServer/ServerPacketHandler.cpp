@@ -489,7 +489,8 @@ namespace
 bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 {
 	// 모르는 패킷 id - 정상 클라는 보내지 않는다. 끊는다 (예전엔 false 만 돌려줬고 OnRecvPacket 이 그 값을 보지 않아 무시됐다 -
-	// 2026-10-17 보안 점검 H2). 해석 실패 · 경합(방을 떠난 뒤의 C_MOVE)은 그대로 둔다 - 그것들은 정상 흐름에서도 false 다
+	// 2026-10-17 보안 점검 H2). 해석 실패는 2026-10-18 부터 생성 템플릿(HandlePacket)이 끊는다 (TD-002).
+	// 경합(방을 떠난 뒤의 C_MOVE)은 그대로 둔다 - 정상 흐름에서도 핸들러가 false 를 돌려준다
 	session->Disconnect(L"unknown packet id");
 	return false;
 }

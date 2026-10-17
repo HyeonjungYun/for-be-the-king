@@ -94,6 +94,11 @@ public:
 public:
 	uint64					lastMoveUs = 0;
 	double					moveBudget = 0.0;
+
+	// 이동 거부 · 막힘 로그 상한 (TD-003, 2026-10-18) - 1 초 창마다 MOVE_LOG_PER_SEC 줄, 넘친 수는 다음 창 첫 줄에 요약
+	uint64					moveLogWindowUs = 0;
+	uint32					moveLogCount = 0;
+	uint32					moveLogSuppressed = 0;
 	MoveClock				moveClock;		// 이동 검증 경과 시간 - C_MOVE.client_ms 기준 (MoveClock.h)
 	float					moveExceptionSpeed = 0.f;
 	uint64					moveExceptionEndUs = 0;

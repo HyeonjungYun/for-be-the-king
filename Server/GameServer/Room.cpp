@@ -37,6 +37,31 @@ namespace
 	constexpr float		CAST_MOVE_EPSILON = 1.f;
 	constexpr float		CAST_MOVE_EPSILON_SQ = CAST_MOVE_EPSILON * CAST_MOVE_EPSILON;
 
+	// TD-003 (2026-10-18) - [MOVE REJECT] · [MOVE BLOCKED] 가 패킷마다 한 줄이라 조작 클라 하나가 30 Hz 로 로그를 범람시켰다.
+	// 플레이어마다 1 초에 이만큼만 남기고, 넘친 수는 다음 창의 첫 줄에 붙인다 (거부 · 막힘 자체와 통계는 그대로)
+	constexpr uint32	MOVE_LOG_PER_SEC = 5;
+	constexpr uint64	MOVE_LOG_WINDOW_US = 1'000'000;
+
+	bool AllowMoveLog(Player& player, uint64 nowUs)
+	{
+		if (nowUs - player.moveLogWindowUs >= MOVE_LOG_WINDOW_US)
+		{
+			if (player.moveLogSuppressed > 0)
+				LOG_LINE << "[MOVE REJECT] id=" << player.objectInfo->object_id() << " reason=suppressed n=" << player.moveLogSuppressed
+					<< " (TD-003 - over " << MOVE_LOG_PER_SEC << " lines/s)\n";
+			player.moveLogWindowUs = nowUs;
+			player.moveLogCount = 0;
+			player.moveLogSuppressed = 0;
+		}
+		if (player.moveLogCount < MOVE_LOG_PER_SEC)
+		{
+			player.moveLogCount++;
+			return true;
+		}
+		player.moveLogSuppressed++;
+		return false;
+	}
+
 	constexpr uint64	SAVE_INTERVAL_US = 60'000'000;
 	constexpr int32		SAVE_PER_TICK = 2;
 
@@ -810,9 +835,10 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 
 		GStats.AddMoveBlocked();
 
-		LOG_LINE << "[MOVE BLOCKED] id=" << objectId
-			<< " reason=" << reason
-			<< " remain=" << remainMs << "ms" << '\n';
+		if (AllowMoveLog(*player, blockCheckUs))
+			LOG_LINE << "[MOVE BLOCKED] id=" << objectId
+				<< " reason=" << reason
+				<< " remain=" << remainMs << "ms" << '\n';
 
 		Protocol::S_MOVE snapbackPkt;
 		snapbackPkt.set_correction(true);
@@ -888,10 +914,11 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		{
 			rejected = true;
 
-			LOG_LINE << "[MOVE REJECT] id=" << objectId
-				<< " reason=bounds"
-				<< " x=" << pkt.info().x()
-				<< " y=" << pkt.info().y() << '\n';
+			if (AllowMoveLog(*player, nowUs))
+				LOG_LINE << "[MOVE REJECT] id=" << objectId
+					<< " reason=bounds"
+					<< " x=" << pkt.info().x()
+					<< " y=" << pkt.info().y() << '\n';
 		}
 
 		// XY 평면 거리만 본다.
@@ -907,13 +934,14 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		{
 			rejected = true;
 
-			LOG_LINE << "[MOVE REJECT] id=" << objectId
-				<< " reason=speed"
-				<< " dist=" << distance
-				<< " budget=" << player->moveBudget
-				<< " dt=" << deltaSec
-				<< " server_dt=" << (serverDtUs / 1'000'000.0)
-				<< " lead_ms=" << (player->moveClock.leadUs / 1000) << '\n';
+			if (AllowMoveLog(*player, nowUs))
+				LOG_LINE << "[MOVE REJECT] id=" << objectId
+					<< " reason=speed"
+					<< " dist=" << distance
+					<< " budget=" << player->moveBudget
+					<< " dt=" << deltaSec
+					<< " server_dt=" << (serverDtUs / 1'000'000.0)
+					<< " lead_ms=" << (player->moveClock.leadUs / 1000) << '\n';
 		}
 		else
 		{
@@ -934,13 +962,14 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 				rejected = true;
 				wallRejected = true;
 
-				LOG_LINE << "[MOVE REJECT] id=" << objectId
-					<< " reason=wall"
-					<< " x0=" << x0
-					<< " y0=" << y0
-					<< " x1=" << pkt.info().x()
-					<< " y1=" << pkt.info().y()
-					<< " kind=" << WallKindName(hitKind) << '\n';
+				if (AllowMoveLog(*player, nowUs))
+					LOG_LINE << "[MOVE REJECT] id=" << objectId
+						<< " reason=wall"
+						<< " x0=" << x0
+						<< " y0=" << y0
+						<< " x1=" << pkt.info().x()
+						<< " y1=" << pkt.info().y()
+						<< " kind=" << WallKindName(hitKind) << '\n';
 			}
 			else
 			{

@@ -176,7 +176,7 @@ enum RunMode
 	RUN_MODE_PVP = 0;			// the shared floor room - default for old clients and bots
 	RUN_MODE_PVE_SOLO = 1;		// a private copy of the floor for one player
 	RUN_MODE_PVE_COOP = 2;		// the party's private copy, up to 3 party members
-	RUN_MODE_BASECAMP = 3;		// the player's private base camp room - only sent in S_ENTER_GAME, never asked for (2026-10-17)
+	RUN_MODE_BASECAMP = 3;		// the player's private base camp room - the client asks for it in C_ENTER_GAME (S1BaseCampSubsystem::RequestCampMap) and the server echoes it in S_ENTER_GAME (2026-10-17)
 }
 
 // Outcome of a party request - S_PARTY_STATE.result
