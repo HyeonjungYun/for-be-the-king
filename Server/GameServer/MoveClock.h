@@ -36,8 +36,10 @@ struct MoveClock
 	{
 		if (clientMs == 0 || lastClientMs == 0 || clientMs < lastClientMs)
 		{
+			// 기준만 다시 잡고 쌓인 앞섬(leadUs)은 그대로 둔다. 0 으로 돌리던 때는 낮은 시각 · 높은 시각을 번갈아 보내면
+			// 높은 패킷마다 상한(2초)을 새로 받아 속도가 사실상 무제한이었다 (2026-10-17 보안 점검 H1).
+			// 정상 클라 시계는 거꾸로 가지 않는다 - 입장 · 재접속은 Reset 이 0 으로 돌린다
 			lastClientMs = clientMs;
-			leadUs = 0;
 			return static_cast<double>(serverDtUs) / 1'000'000.0;
 		}
 

@@ -316,8 +316,6 @@ void Creature::RefreshActiveSlow(uint64 nowUs)
 			maxMagnitude = slowSources[readIdx].magnitude;
 
 		slowSources[writeIdx++] = slowSources[readIdx];
-
-		activeSlow = maxMagnitude;
 	}
 	slowSources.resize(writeIdx);
 

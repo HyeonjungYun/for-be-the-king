@@ -16,8 +16,6 @@ public:
 	// 상자 = 만료 없고 주인 없는 가방. 처음 열 때 롤한다 (Room::HandleBagOpen)
 	static BagRef CreateChest(const ChestSpawn& spawn);
 
-private:
-	static atomic<int64> s_idGenerator;
 };
 
 constexpr uint64 RUNTIME_ID_BASE = 1'000'000'000;
@@ -131,6 +129,10 @@ extern atomic<uint64> GDisconnectGraceUs;
 
 // /gold N - 런 골드 디버그 (FBTK_DEBUG_GOLD=1, escape-timer.md Core Rule 18). 꺼져 있으면 명령을 무시한다
 extern atomic<bool> GDebugGold;
+
+// C_GRANT_REWARD - 아무 캐릭터에게나 골드를 넣는 MVP 끝점 (ADR-0003 멱등 시연 · DummyClient -grant). 기본 꺼짐 (FBTK_GRANT_ENDPOINT=1).
+// 🔴 2026-10-17 보안 점검 C1: 로그인한 아무 클라나 무한 골드를 찍을 수 있었다 - 매입 · 강화 경제가 생긴 뒤로는 바로 치트다. UE 클라는 보내지 않는다
+extern atomic<bool> GGrantEndpoint;
 
 // /bag · /unbag · /die · /stun · /root · /silence · /slow - 디버그 채팅 명령 (FBTK_DEBUG_COMMANDS=1). 기본 꺼짐.
 // 예전에는 접속한 누구나 남에게 CC 를 걸고 가방을 지울 수 있었다 (ADR-0007 · 2026-10-07)

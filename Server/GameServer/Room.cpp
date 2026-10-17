@@ -23,6 +23,7 @@
 #include "InstanceManager.h"
 #include "InstanceRules.h"
 #include "PartyManager.h"
+#include <charconv>
 
 namespace
 {
@@ -175,15 +176,37 @@ void Room::SendListVisible(const vector<TItem>& items, AddFn&& add, KeepFn&& kee
 	auto finish = [statId](TPkt& pkt)
 		{
 			SendBufferRef buffer = ServerPacketHandler::MakeSendBuffer(pkt);
-			if (statId != 0)
+			if (statId != 0 && buffer != nullptr)
 				buffer->SetStatId(statId);
 			return buffer;
 		};
 
+	// 보는 사람마다 keep 을 한 번만 돈다 - 예전엔 세면서 한 번, 만들면서 또 한 번 돌았다(S_MOVE 30 Hz × 사람 × 항목).
+	// SendVisible 은 count 바로 뒤에 같은 사람으로 makeMine 을 부른다 - 그 사이 kept 가 그 사람 것이다.
+	// 개인 패킷은 스레드마다 하나를 비워 다시 쓴다 (Clear 는 반복 필드의 할당을 남긴다). 나가는 바이트는 같다 (2026-10-17)
+	vector<uint32> kept;
+	kept.reserve(items.size());
+
 	SendVisible(static_cast<int32>(items.size()),
-		[&](const PlayerRef& v) { int32 n = 0; for (const TItem& item : items) n += keep(v, item) ? 1 : 0; return n; },
+		[&](const PlayerRef& v)
+		{
+			kept.clear();
+			for (uint32 i = 0; i < static_cast<uint32>(items.size()); i++)
+			{
+				if (keep(v, items[i]))
+					kept.push_back(i);
+			}
+			return static_cast<int32>(kept.size());
+		},
 		[&]() { TPkt pkt; for (const TItem& item : items) add(pkt, item); return finish(pkt); },
-		[&](const PlayerRef& v) { TPkt pkt; for (const TItem& item : items) if (keep(v, item)) add(pkt, item); return finish(pkt); });
+		[&](const PlayerRef&)
+		{
+			thread_local TPkt mine;
+			mine.Clear();
+			for (uint32 i : kept)
+				add(mine, items[i]);
+			return finish(mine);
+		});
 }
 
 static RoomRef MakeFloorRoom(uint32 floorId)
@@ -320,7 +343,7 @@ void Room::TryCloseInstance(uint64 nowUs)
 	int32 players = 0;
 	for (const auto& [objectId, object] : _objects)
 	{
-		if (dynamic_pointer_cast<Player>(object) != nullptr)
+		if (AsPlayer(object) != nullptr)
 			players++;
 	}
 
@@ -413,7 +436,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		object->posInfo->set_y(spawnY);
 		object->posInfo->set_z(100.f);
 	}
-	else if (auto entering = dynamic_pointer_cast<Player>(object); entering != nullptr && entering->spreadOnEnter)
+	else if (auto entering = AsPlayer(object); entering != nullptr && entering->spreadOnEnter)
 	{
 		// 고른 진입 지점 둘레의 빈자리 - 같은 지점을 고른 사람끼리 겹치지 않게 (entry-point.md AC-EP-04)
 		float spawnX = 0.f;
@@ -441,7 +464,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 	}
 
 	// 입장 사실을 신입 플레이어에게 알린다.
-	if (auto player = dynamic_pointer_cast<Player>(object))
+	if (auto player = AsPlayer(object))
 	{
 		const uint64 enterUs = Utils::NowMicroseconds();
 		player->lastMoveUs = enterUs;
@@ -584,7 +607,7 @@ bool Room::LeaveRoom(ObjectRef object)
 	const uint64 objectId = object->objectInfo->object_id();
 	bool success = RemoveObject(objectId);
 
-	if (auto player = dynamic_pointer_cast<Player>(object))
+	if (auto player = AsPlayer(object))
 	{
 		SavePlayer(player);
 
@@ -596,7 +619,7 @@ bool Room::LeaveRoom(ObjectRef object)
 	}
 
 	// 퇴장 사실을 퇴장하는 플레이어에게 알린다.
-	if (auto player = dynamic_pointer_cast<Player>(object))
+	if (auto player = AsPlayer(object))
 	{
 		Protocol::S_LEAVE_GAME leaveGamePkt;
 
@@ -622,7 +645,7 @@ bool Room::LeaveRoom(ObjectRef object)
 		SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(despawnPkt);
 		Broadcast(sendBuffer, objectId);
 
-		if (auto player = dynamic_pointer_cast<Player>(object))
+		if (auto player = AsPlayer(object))
 			if (auto session = player->session.lock())
 				session->Send(sendBuffer);
 		// "bool success = LeavePlayer(objectId);" 이 부분이 위에서 누락될 경우를 대비하여
@@ -716,7 +739,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		return;
 
 	// 적용
-	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+	PlayerRef player = AsPlayer(findIt->second);
 	if (player == nullptr)
 		return;
 
@@ -934,8 +957,18 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		}
 	}
 
-	// 검증 통과, 이동
+	// 검증 통과, 이동. x · y 는 위에서 검사했다 - z · yaw · state 는 그대로 받아 방 전체에 방송했다.
+	// NaN · 무한대 · 없는 상태값은 직전 값으로 둔다 (2026-10-17 보안 점검 M1 - 정상 클라 값은 그대로 지나간다)
+	const float prevZ = player->posInfo->z();
+	const float prevYaw = player->posInfo->yaw();
+	const Protocol::MoveState prevState = player->posInfo->state();
 	player->posInfo->CopyFrom(pkt.info());
+	if (std::isfinite(player->posInfo->z()) == false)
+		player->posInfo->set_z(prevZ);
+	if (std::isfinite(player->posInfo->yaw()) == false)
+		player->posInfo->set_yaw(prevYaw);
+	if (Protocol::MoveState_IsValid(player->posInfo->state()) == false)
+		player->posInfo->set_state(prevState);
 	_dirtyMovers.insert(objectId);
 
 	// 건곤일척 - 움직이면 망치 스킬 피해 증가가 사라진다 (사용자 결정 2026-10-11 "움직이지 않은 상태에서만")
@@ -955,7 +988,7 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 	if (attackerIt == _objects.end())
 		return;
 
-	CreatureRef attacker = dynamic_pointer_cast<Creature>(attackerIt->second);
+	CreatureRef attacker = AsCreature(attackerIt->second);
 	if (attacker == nullptr || attacker->IsAlive() == false)
 		return;
 
@@ -992,7 +1025,7 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 	if (targetIt == _objects.end())
 		return;
 
-	CreatureRef target = dynamic_pointer_cast<Creature>(targetIt->second);
+	CreatureRef target = AsCreature(targetIt->second);
 	if (target == nullptr || target->IsAlive() == false)
 		return;
 
@@ -1057,7 +1090,7 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 	if (casterIt == _objects.end())
 		return;
 
-	CreatureRef caster = dynamic_pointer_cast<Creature>(casterIt->second);
+	CreatureRef caster = AsCreature(casterIt->second);
 	if (caster == nullptr || caster->IsAlive() == false)
 		return;
 
@@ -1160,7 +1193,7 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		if (targetIt == _objects.end())
 			return;
 
-		CreatureRef target = dynamic_pointer_cast<Creature>(targetIt->second);
+		CreatureRef target = AsCreature(targetIt->second);
 		if (target == nullptr || target->IsAlive() == false)
 			return;
 
@@ -1233,7 +1266,7 @@ void Room::HandleSkillCancel(uint64 casterId)
 	if (findIt == _objects.end())
 		return;
 
-	CancelCast(dynamic_pointer_cast<Creature>(findIt->second));
+	CancelCast(AsCreature(findIt->second));
 }
 
 void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, uint32 baseDurationMs, float magnitude)
@@ -1243,7 +1276,7 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 	if (findIt == _objects.end())
 		return;
 
-	CreatureRef target = dynamic_pointer_cast<Creature>(findIt->second);
+	CreatureRef target = AsCreature(findIt->second);
 	if (target == nullptr || target->IsAlive() == false)
 		return;
 
@@ -1260,7 +1293,7 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 	{
 		if (auto instIt = _objects.find(instigatorId); instIt != _objects.end())
 		{
-			if (CreatureRef instigator = dynamic_pointer_cast<Creature>(instIt->second); SameTeam(instigator, target))
+			if (CreatureRef instigator = AsCreature(instIt->second); SameTeam(instigator, target))
 				return;
 		}
 	}
@@ -1303,7 +1336,7 @@ int32 Room::CountEnemiesNear(const CreatureRef& who, float radiusCm)
 	int32 n = 0;
 	for (const auto& [id, obj] : _objects)
 	{
-		CreatureRef c = dynamic_pointer_cast<Creature>(obj);
+		CreatureRef c = AsCreature(obj);
 		if (c == nullptr || c == who || c->IsAlive() == false || SameTeam(c, who))
 			continue;
 		const float dx = c->posInfo->x() - who->posInfo->x();
@@ -1380,7 +1413,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 			continue;
 		}
 
-		CreatureRef attacker = dynamic_pointer_cast<Creature>(attackerIt->second);
+		CreatureRef attacker = AsCreature(attackerIt->second);
 		if (attacker == nullptr)
 		{
 			resolved.push_back(attackerId);
@@ -1408,7 +1441,7 @@ void Room::ResolveAttacks(uint64 nowUs)
 		CreatureRef target = nullptr;
 		auto targetIt = _objects.find(targetId);
 		if (targetIt != _objects.end())
-			target = dynamic_pointer_cast<Creature>(targetIt->second);
+			target = AsCreature(targetIt->second);
 
 
 		// 공격자 사망, 대상 소명, 대상 사망, 사거리 이탈, 대상 진입 무적 -> 취소. 쿨다운을 소모 하지 않는다.
@@ -1541,7 +1574,7 @@ void Room::ResolveCasts(uint64 nowUs)
 			continue;
 		}
 
-		CreatureRef caster = dynamic_pointer_cast<Creature>(casterIt->second);
+		CreatureRef caster = AsCreature(casterIt->second);
 		if (caster == nullptr)
 		{
 			resolved.push_back(casterId);
@@ -1725,7 +1758,7 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		{
 			// 투사체 스킬의 재입력(올가미 당기기) - 투사체가 맞힌 대상에게 바로. 사거리 안이어야 한다
 			auto targetIt = _objects.find(castTargetId);
-			CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+			CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
 			if (target != nullptr && target->IsAlive() && IsInSkillRange(caster, target, def.rangeCm))
 				targets.push_back(target);
 		}
@@ -1867,7 +1900,7 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		if (casterIt == _objects.end())
 			continue;
 
-		CreatureRef caster = dynamic_pointer_cast<Creature>(casterIt->second);
+		CreatureRef caster = AsCreature(casterIt->second);
 
 		// 이번 Flush 에 막 죽은 시전자의 예고는 동시 - 그대로 떨어진다 (TR-combat-022)
 		if (caster == nullptr || CanStillStrike(caster) == false)
@@ -1894,6 +1927,10 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		}
 		ApplySkillEffects(caster, *def, targets, ctx, nowUs);
 
+		// 도약 중인 대상을 맞히면 DealDamage 가 그 도약의 예고를 지운다 - i 아래 칸이 지워지면 다음 [i-1] 이 끝을 넘었다 (2026-10-17 리뷰).
+		// 남은 칸 중 i 이상은 아직 때가 안 된 것뿐이라(때가 된 것은 이미 지웠다) 다시 봐도 결과가 같다. 이 효과들은 예고를 새로 넣지 않는다
+		i = (std::min)(i, static_cast<int32>(_pendingTelegraphs.size()));
+
 		LOG_LINE << "[SKILL FIRE] caster=" << casterId
 			<< " skill=" << skillId
 			<< " targets=" << targets.size()
@@ -1917,7 +1954,7 @@ void Room::UpdateCc(uint64 nowUs)
 			continue;
 		}
 
-		CreatureRef target = dynamic_pointer_cast<Creature>(findIt->second);
+		CreatureRef target = AsCreature(findIt->second);
 		if (target == nullptr)
 		{
 			cleared.push_back(targetId);
@@ -1987,7 +2024,7 @@ void Room::FlushCcState(uint64 nowUs)
 		if (findIt == _objects.end())
 			continue;
 
-		CreatureRef target = dynamic_pointer_cast<Creature>(findIt->second);
+		CreatureRef target = AsCreature(findIt->second);
 		if (target == nullptr)
 			continue;
 
@@ -2408,7 +2445,7 @@ void Room::DebugDropBag(uint64 playerId)
 	if (findIt == _objects.end())
 		return;
 
-	PlayerRef owner = dynamic_pointer_cast<Player>(findIt->second);
+	PlayerRef owner = AsPlayer(findIt->second);
 	if (owner == nullptr)
 		return;
 
@@ -2447,7 +2484,7 @@ void Room::DebugKill(uint64 playerId)
 	if (findIt == _objects.end())
 		return;
 
-	PlayerRef victim = dynamic_pointer_cast<Player>(findIt->second);
+	PlayerRef victim = AsPlayer(findIt->second);
 	if (victim == nullptr || victim->IsAlive() == false)
 		return;
 
@@ -2458,7 +2495,7 @@ void Room::DebugKill(uint64 playerId)
 
 void Room::BeginDeathCommit(const CreatureRef& victim)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(victim);
+	PlayerRef player = AsPlayer(victim);
 	if (player == nullptr)
 		return;
 
@@ -2608,7 +2645,7 @@ void Room::BeginEscapeCommitInto(uint64 playerId, vector<uint64>* despawnBatch)
 	if (findIt == _objects.end())
 		return;
 
-	PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+	PlayerRef player = AsPlayer(findIt->second);
 	if (player == nullptr || player->IsAlive() == false)
 		return;
 
@@ -2844,7 +2881,13 @@ void Room::FlushMoves()
 
 	if (_dirtyMovers.empty() == false)
 	{
-		vector<const Protocol::PosInfo*> infos;
+		// 생물인지는 여기서 한 번 본다 - CanSee 는 모르는 id 마다 _objects 를 다시 찾았다 (보는 사람 × 움직인 것, 30 Hz · 2026-10-17)
+		struct MoveItem
+		{
+			const Protocol::PosInfo*	info;
+			bool						creature;
+		};
+		vector<MoveItem> infos;
 		infos.reserve(_dirtyMovers.size());
 
 		for (uint64 objectId : _dirtyMovers)
@@ -2853,15 +2896,21 @@ void Room::FlushMoves()
 			if (findIt == _objects.end())
 				continue;
 
-			infos.push_back(findIt->second->posInfo);
+			infos.push_back({ findIt->second->posInfo, findIt->second->IsCreature() });
 		}
 
 		_dirtyMovers.clear();
 
-		// 받는 사람마다 아는 생물의 이동만 (FoW). 내 것도 실린다 - 클라는 보정이 아닌 내 이동을 무시한다
+		// 받는 사람마다 아는 생물의 이동만 (FoW). 내 것도 실린다 - 클라는 보정이 아닌 내 이동을 무시한다.
+		// 판정은 CanSee 와 같다: id 0 은 아니다 · FoW 꺼짐 · 나 · 아는 생물 · 생물이 아닌 것(가방 · 상자)은 보인다
+		const bool fow = Vision::Enabled();
 		SendListVisible<Protocol::S_MOVE>(infos,
-			[](Protocol::S_MOVE& pkt, const Protocol::PosInfo* info) { pkt.add_infos()->CopyFrom(*info); },
-			[this](const PlayerRef& viewer, const Protocol::PosInfo* info) { return CanSee(viewer, info->object_id()); });
+			[](Protocol::S_MOVE& pkt, const MoveItem& item) { pkt.add_infos()->CopyFrom(*item.info); },
+			[fow](const PlayerRef& viewer, const MoveItem& item)
+			{
+				const uint64 id = item.info->object_id();
+				return id != 0 && (fow == false || item.creature == false || id == viewer->objectInfo->object_id() || viewer->fowKnown.contains(id));
+			});
 	}
 
 	DoTimer(MOVE_FLUSH_MS, &Room::FlushMoves);
@@ -3113,7 +3162,7 @@ void Room::FlushSpawns()
 			if (findIt == _objects.end())
 				continue;
 
-			if (CreatureRef creature = dynamic_pointer_cast<Creature>(findIt->second))
+			if (CreatureRef creature = AsCreature(findIt->second))
 			{
 				creature->objectInfo->set_hp(creature->hp);
 				creature->objectInfo->set_max_hp(creature->maxHp);
@@ -3191,7 +3240,7 @@ void Room::FlushSpawns()
 					if (findIt == _objects.end())
 						continue;
 
-					PlayerRef player = dynamic_pointer_cast<Player>(findIt->second);
+					PlayerRef player = AsPlayer(findIt->second);
 					if (player == nullptr)
 						continue;
 
@@ -3228,14 +3277,14 @@ bool Room::AddObject(ObjectRef object)
 bool Room::RemoveObject(uint64 objectId)
 {
 	// 없다면 문제가 있다.
-	if (_objects.find(objectId) == _objects.end())
+	auto it = _objects.find(objectId);
+	if (it == _objects.end())
 		return false;
 
-	ObjectRef object = _objects[objectId];
-	object->room.store(weak_ptr<Room>());
-
-	_objects.erase(objectId);
+	it->second->room.store(weak_ptr<Room>());
+	_objects.erase(it);
 	ForgetObject(objectId);
+	_trailBuffPushedUs.erase(objectId);		// 월드 방은 영원히 산다 - 핏자국을 밟은 적 있는 사람마다 한 칸씩 쌓였다 (2026-10-17 리뷰)
 	_dirtyMovers.erase(objectId);
 	_attackers.erase(objectId);
 	_casters.erase(objectId);
@@ -3247,18 +3296,15 @@ bool Room::RemoveObject(uint64 objectId)
 	return true;
 }
 
+// 방의 모든 객체를 돈다 - 플레이어인지는 플래그로 먼저 거른다 (dynamic_pointer_cast 는 몬스터 · 가방 · 상자마다 RTTI 를 탔다)
 void Room::Broadcast(SendBufferRef sendBuffer, uint64 exceptId)
 {
 	for (auto& item : _objects)
 	{
-		PlayerRef player = dynamic_pointer_cast<Player>(item.second);
-		if (player == nullptr)
+		if (item.second->IsPlayer() == false || item.first == exceptId)
 			continue;
 
-		if (player->objectInfo->object_id() == exceptId)
-			continue;
-
-		if (GameSessionRef session = player->session.lock())
+		if (GameSessionRef session = static_cast<Player&>(*item.second).session.lock())
 			session->Send(sendBuffer);
 	}
 }
@@ -3267,14 +3313,10 @@ void Room::Broadcast(SendBufferRef sendBuffer, const unordered_set<uint64>& exce
 {
 	for (auto& item : _objects)
 	{
-		PlayerRef player = dynamic_pointer_cast<Player>(item.second);
-		if (player == nullptr)
+		if (item.second->IsPlayer() == false || exceptIds.contains(item.first))
 			continue;
 
-		if (exceptIds.find(player->objectInfo->object_id()) != exceptIds.end())
-			continue;
-
-		if (GameSessionRef session = player->session.lock())
+		if (GameSessionRef session = static_cast<Player&>(*item.second).session.lock())
 			session->Send(sendBuffer);
 	}
 }
@@ -3389,7 +3431,7 @@ void Room::UpdateDetached(uint64 nowUs)
 	for (uint64 id : _detached)
 	{
 		auto findIt = _objects.find(id);
-		PlayerRef body = (findIt != _objects.end()) ? dynamic_pointer_cast<Player>(findIt->second) : nullptr;
+		PlayerRef body = (findIt != _objects.end()) ? AsPlayer(findIt->second) : nullptr;
 
 		if (body != nullptr && body->IsAlive() && nowUs >= body->detachedUntilUs)
 			expired.push_back(id);
@@ -3415,7 +3457,7 @@ void Room::ReleaseDetachedBody(uint64 characterId)
 	if (findIt == _objects.end())
 		return;
 
-	PlayerRef body = dynamic_pointer_cast<Player>(findIt->second);
+	PlayerRef body = AsPlayer(findIt->second);
 	if (body == nullptr || body->detachedUntilUs == 0)
 		return;
 
@@ -3436,7 +3478,7 @@ void Room::PushBagContents(const BagRef& bag)
 	for (auto it = bag->viewers.begin(); it != bag->viewers.end(); )
 	{
 		auto objIt = _objects.find(*it);
-		PlayerRef viewer = (objIt != _objects.end()) ? dynamic_pointer_cast<Player>(objIt->second) : nullptr;
+		PlayerRef viewer = (objIt != _objects.end()) ? AsPlayer(objIt->second) : nullptr;
 
 		// 닫기 패킷이 없다. 떠났거나 죽었거나 멀어졌으면 열람이 끝난 것으로 보고 여기서 뺀다.
 		if (viewer == nullptr || viewer->IsAlive() == false || IsInLootRange(viewer, bag) == false)
@@ -3508,7 +3550,7 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 				if (item.first == casterId)
 					continue;
 
-				CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+				CreatureRef target = AsCreature(item.second);
 				if (canBeHit(target) == false)
 					continue;
 
@@ -3533,7 +3575,7 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 		if (findIt == _objects.end())
 			return;
 
-		CreatureRef target = dynamic_pointer_cast<Creature>(findIt->second);
+		CreatureRef target = AsCreature(findIt->second);
 		if (canBeHit(target) == false)
 			return;
 
@@ -3571,7 +3613,7 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 			if (item.first == casterId)
 				continue;
 
-			CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+			CreatureRef target = AsCreature(item.second);
 			if (canBeHit(target) == false)
 				continue;
 
@@ -3599,7 +3641,7 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 			if (item.first == casterId)
 				continue;
 
-			CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+			CreatureRef target = AsCreature(item.second);
 			if (canBeHit(target) == false)
 				continue;
 
@@ -3638,7 +3680,7 @@ void Room::CollectSkillTargets(const CreatureRef& caster, const SkillDef& def, c
 			if (item.first == casterId)
 				continue;
 
-			CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+			CreatureRef target = AsCreature(item.second);
 			if (canBeHit(target) == false)
 				continue;
 
@@ -3798,7 +3840,7 @@ bool Room::MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const C
 	{
 		// 스태프 속성 - 시전자에게 깃든 것이 있는가
 		auto casterIt = _objects.find(ctx.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 		const bool hasElement = (caster != nullptr && caster->stance.empty() == false);
 		return (e.condition == SkillRequire::Element) ? hasElement : hasElement == false;
 	}
@@ -3809,7 +3851,7 @@ bool Room::MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const C
 	case SkillRequire::Alone:
 	{
 		auto casterIt = _objects.find(ctx.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 		const SkillDef* def = (caster != nullptr) ? SkillTable::Find(caster->castSkillId) : nullptr;
 		return caster != nullptr && IsAlone(caster, def != nullptr ? def->radiusCm : 0.f);
 	}
@@ -3818,7 +3860,7 @@ bool Room::MeetsCondition(const SkillEffect& e, const SkillContext& ctx, const C
 	{
 		// 시길룸 (2026-10-11) - 그 속성이 깃든 상태일 때만 (불 → 불타는 땅 · 번개 → 벼락 · 얼음 → 빙결)
 		auto casterIt = _objects.find(ctx.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 		return caster != nullptr && caster->stance == e.conditionParam;
 	}
 
@@ -4729,7 +4771,7 @@ void Room::PullCreature(const CreatureRef& target, const CreatureRef& caster, fl
 
 void Room::BlinkCaster(const CreatureRef& caster, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr || e.distCm <= 0.f)
 		return;
 
@@ -4857,7 +4899,7 @@ void Room::UpdateStatuses(uint64 nowUs)
 	for (uint64 id : ids)
 	{
 		auto findIt = _objects.find(id);
-		CreatureRef target = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		CreatureRef target = (findIt != _objects.end()) ? AsCreature(findIt->second) : nullptr;
 		if (target == nullptr)
 		{
 			cleared.push_back(id);
@@ -4876,7 +4918,7 @@ void Room::UpdateStatuses(uint64 nowUs)
 					CreatureRef instigator = nullptr;
 					auto instIt = _objects.find(d.instigatorId);
 					if (instIt != _objects.end())
-						instigator = dynamic_pointer_cast<Creature>(instIt->second);
+						instigator = AsCreature(instIt->second);
 
 					DamageSource src;
 					src.skillId = d.skillId;
@@ -4935,8 +4977,8 @@ void Room::ResolvePendingHits(uint64 nowUs)
 
 		auto casterIt = _objects.find(p.casterId);
 		auto targetIt = _objects.find(p.targetId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
-		CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
+		CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
 
 		// 시전자가 이번 Flush 에 막 죽었으면 남은 타는 동시다 (TR-combat-022) - 그 전에 죽었으면 끊긴다
 		if (caster == nullptr || CanStillStrike(caster) == false || target == nullptr || target->IsAlive() == false)
@@ -5055,6 +5097,18 @@ void Room::LaunchSkillProjectile(const CreatureRef& caster, const SkillDef& def,
 	LaunchProjectile(move(p));
 }
 
+vector<CreatureRef> Room::SnapshotCreatures(uint64 exceptId) const
+{
+	vector<CreatureRef> out;
+	out.reserve(_objects.size());
+	for (const auto& item : _objects)
+	{
+		if (item.first != exceptId && item.second->IsCreature())
+			out.push_back(static_pointer_cast<Creature>(item.second));
+	}
+	return out;
+}
+
 bool Room::CanProjectileHit(const CreatureRef& caster, const CreatureRef& target, uint64 nowUs) const
 {
 	if (target == nullptr || target->IsAlive() == false)
@@ -5087,7 +5141,7 @@ void Room::StepProjectiles(uint64 nowUs)
 		p.lastStepUs = nowUs;
 
 		auto casterIt = _objects.find(p.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 
 		bool ended = false;
 		if (caster == nullptr)
@@ -5133,7 +5187,7 @@ bool Room::StepStraight(Projectile& p, const CreatureRef& caster, const WallMap&
 		if (item.first == p.casterId || find(p.hitIds.begin(), p.hitIds.end(), item.first) != p.hitIds.end())
 			continue;
 
-		CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef target = AsCreature(item.second);
 		if (CanProjectileHit(caster, target, nowUs) == false)
 			continue;
 
@@ -5184,7 +5238,7 @@ bool Room::StepStraight(Projectile& p, const CreatureRef& caster, const WallMap&
 bool Room::StepHoming(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs)
 {
 	auto targetIt = _objects.find(p.homingTargetId);
-	CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+	CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
 
 	// 대상이 사라지거나 죽으면 허공에 - 필중은 "피할 수 없다" 지 "죽은 뒤에도 맞는다" 가 아니다
 	if (target == nullptr || target->IsAlive() == false)
@@ -5504,14 +5558,14 @@ void Room::UpdateZones(uint64 nowUs)
 			}
 
 			auto casterIt = _objects.find(z.casterId);
-			CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+			CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 
 			for (auto& item : _objects)
 			{
 				if (item.first == z.casterId)
 					continue;
 
-				CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+				CreatureRef target = AsCreature(item.second);
 				if (target == nullptr || target->IsAlive() == false)
 					continue;
 				if (caster != nullptr && CanProjectileHit(caster, target, nowUs) == false)
@@ -5650,7 +5704,7 @@ void Room::UpdateHolds(uint64 nowUs)
 	for (uint64 id : ids)
 	{
 		auto findIt = _objects.find(id);
-		CreatureRef caster = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		CreatureRef caster = (findIt != _objects.end()) ? AsCreature(findIt->second) : nullptr;
 		if (caster == nullptr || caster->IsHolding() == false)
 		{
 			_holders.erase(id);
@@ -5735,7 +5789,7 @@ void Room::HoldTick(const CreatureRef& caster, const SkillDef& def, const SkillE
 		if (item.first == casterId)
 			continue;
 
-		CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef target = AsCreature(item.second);
 		if (CanProjectileHit(caster, target, nowUs) == false)
 			continue;
 
@@ -5896,7 +5950,7 @@ bool Room::MeetsWeaponRequirement(const CreatureRef& caster, const SkillDef& def
 		return true;
 
 	// 갑옷 스킬 "망치를 들고 있을 때만" - 플레이어의 무기 칸 아이템 종류의 풀 id 로 본다 (item_types.csv skill_pool_id). 몬스터는 못 쓴다
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return false;
 
@@ -5941,7 +5995,7 @@ void Room::ApplyChain(const CreatureRef& caster, const CreatureRef& first, const
 			if (item.first == casterId || find(visited.begin(), visited.end(), item.first) != visited.end())
 				continue;
 
-			CreatureRef candidate = dynamic_pointer_cast<Creature>(item.second);
+			CreatureRef candidate = AsCreature(item.second);
 			if (CanProjectileHit(caster, candidate, nowUs) == false)
 				continue;
 
@@ -6000,12 +6054,12 @@ void Room::ResolveBursts(uint64 nowUs)
 
 		const SkillDef* def = SkillTable::Find(b.skillId);
 		auto targetIt = _objects.find(b.targetId);
-		CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+		CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
 		if (def == nullptr || target == nullptr || target->IsAlive() == false || b.effectIndex >= def->effects.size())
 			continue;
 
 		auto casterIt = _objects.find(b.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 		const SkillEffect& e = def->effects[b.effectIndex];
 
 		const float tx = target->posInfo->x();
@@ -6027,7 +6081,7 @@ void Room::ResolveBursts(uint64 nowUs)
 			if (item.first == b.casterId)
 				continue;
 
-			CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+			CreatureRef other = AsCreature(item.second);
 			if (other == nullptr || other->IsAlive() == false)
 				continue;
 			if (caster != nullptr && CanProjectileHit(caster, other, nowUs) == false)
@@ -6083,7 +6137,7 @@ void Room::UpdateWindows(uint64 nowUs)
 	for (uint64 id : ids)
 	{
 		auto findIt = _objects.find(id);
-		CreatureRef owner = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		CreatureRef owner = (findIt != _objects.end()) ? AsCreature(findIt->second) : nullptr;
 		if (owner == nullptr)
 		{
 			_windowOwners.erase(id);
@@ -6193,12 +6247,18 @@ void Room::ApplyThrow(const CreatureRef& caster, const CreatureRef& target, cons
 	const float ly = target->posInfo->y();
 	int32 hitCount = 0;
 
+	// 후보를 먼저 모은다 - DealDamage 의 처치가 _objects 를 바꾼다(분신 제거 · 드랍 가방 추가). 예전엔 도는 중인 맵이 바뀌었다 (2026-10-17 리뷰)
+	vector<CreatureRef> candidates;
 	for (auto& item : _objects)
 	{
 		if (item.first == casterId || item.first == targetId)
 			continue;
+		if (CreatureRef c = AsCreature(item.second))
+			candidates.push_back(move(c));
+	}
 
-		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+	for (const CreatureRef& other : candidates)
+	{
 		if (CanProjectileHit(caster, other, nowUs) == false)
 			continue;
 
@@ -6279,7 +6339,7 @@ bool Room::IsAlone(const CreatureRef& creature, float radiusCm) const
 	{
 		if (item.first == selfId)
 			continue;
-		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef other = AsCreature(item.second);
 		if (other == nullptr || other->IsAlive() == false || other->IsDecoy())
 			continue;
 		const float dx = other->posInfo->x() - creature->posInfo->x();
@@ -6314,10 +6374,17 @@ int32 Room::ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& targ
 			{
 				if (sel.rfind("tag:", 0) == 0)
 					return skill != nullptr && skill->HasTag(sel.substr(4));
+				// 맞을 때마다 부른다 - 문자열을 새로 만들지 않고 그 자리에서 비교한다 (substr · to_string 할당을 뺐다, 2026-10-17)
 				if (sel.rfind("elem:", 0) == 0)
-					return src.elem.empty() == false && src.elem == sel.substr(5);
+					return src.elem.empty() == false && sel.compare(5, string::npos, src.elem) == 0;
 				if (sel.rfind("skill:", 0) == 0)
-					return src.skillId != 0 && to_string(src.skillId) == sel.substr(6);
+				{
+					if (src.skillId == 0)
+						return false;
+					char digits[16];
+					const auto [end, ec] = std::to_chars(digits, digits + sizeof(digits), src.skillId);
+					return sel.compare(6, string::npos, digits, static_cast<size_t>(end - digits)) == 0;
+				}
 				if (sel == "range")
 				{
 					if (distSq < 0.f)
@@ -6495,7 +6562,7 @@ void Room::TriggerDashMarks(const CreatureRef& dasher, float dirX, float dirY, u
 	{
 		if (item.first == dasherId)
 			continue;
-		CreatureRef watcher = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef watcher = AsCreature(item.second);
 		if (watcher == nullptr || watcher->IsAlive() == false || watcher->IsPlayer() == false)
 			continue;
 		if (SameTeam(watcher, dasher))		// 간파는 "질주해 오는 적" - 아군의 돌진에는 표식을 남기지 않는다 (ADR-0014)
@@ -6595,7 +6662,7 @@ void Room::Cleanse(const CreatureRef& creature, const string& what, uint64 nowUs
 		// 일편단심의 표식도 사라졌다 - 나를 노리던 집중도 풀린다 (남은 시간 동안 다른 적에게 피해 0 이 되지 않게)
 		for (auto& item : _objects)
 		{
-			CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+			CreatureRef other = AsCreature(item.second);
 			if (other != nullptr && other->focusTargetId == id)
 			{
 				other->focusTargetId = 0;
@@ -6646,7 +6713,7 @@ void Room::Heal(const CreatureRef& creature, uint64 healerId, int32 amount, uint
 
 void Room::RevealNearest(const CreatureRef& caster, const SkillDef& def, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return;
 
@@ -6658,7 +6725,7 @@ void Room::RevealNearest(const CreatureRef& caster, const SkillDef& def, uint64 
 	{
 		if (item.first == casterId)
 			continue;
-		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef other = AsCreature(item.second);
 		if (other == nullptr || other->IsAlive() == false || other->IsDecoy() || other->IsStealthed(nowUs))
 			continue;
 		const float dx = other->posInfo->x() - caster->posInfo->x();
@@ -6702,7 +6769,7 @@ void Room::RevealNearest(const CreatureRef& caster, const SkillDef& def, uint64 
 
 void Room::RevealSkills(const CreatureRef& caster, const CreatureRef& target, uint32 durationMs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr || target == nullptr)
 		return;
 
@@ -6730,7 +6797,7 @@ void Room::RevealSkills(const CreatureRef& caster, const CreatureRef& target, ui
 
 void Room::MoveToMark(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const string& markKind, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return;
 
@@ -6743,7 +6810,7 @@ void Room::MoveToMark(const CreatureRef& caster, const SkillDef& def, const Skil
 	{
 		if (item.first == casterId)
 			continue;
-		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef other = AsCreature(item.second);
 		if (other == nullptr || other->IsAlive() == false || other->status.HasMark(markKind, casterId) == false)
 			continue;
 		const float dx = other->posInfo->x() - caster->posInfo->x();
@@ -6866,7 +6933,7 @@ void Room::StepTaunts(uint64 nowUs)
 	for (uint64 targetId : _ccTargets)
 	{
 		auto findIt = _objects.find(targetId);
-		CreatureRef target = (findIt != _objects.end()) ? dynamic_pointer_cast<Creature>(findIt->second) : nullptr;
+		CreatureRef target = (findIt != _objects.end()) ? AsCreature(findIt->second) : nullptr;
 		if (target == nullptr || target->IsAlive() == false || target->IsTaunted(nowUs) == false)
 			continue;
 
@@ -6875,7 +6942,7 @@ void Room::StepTaunts(uint64 nowUs)
 			continue;
 
 		auto sourceIt = _objects.find(target->tauntSourceId);
-		CreatureRef source = (sourceIt != _objects.end()) ? dynamic_pointer_cast<Creature>(sourceIt->second) : nullptr;
+		CreatureRef source = (sourceIt != _objects.end()) ? AsCreature(sourceIt->second) : nullptr;
 		if (source == nullptr || source->IsAlive() == false)
 		{
 			// 시전자가 사라졌다 - 도발이 풀린다
@@ -6998,7 +7065,7 @@ void Room::UpdateDecoys(uint64 nowUs)
 			continue;
 		}
 
-		CreatureRef decoy = dynamic_pointer_cast<Creature>(findIt->second);
+		CreatureRef decoy = AsCreature(findIt->second);
 		if (decoy == nullptr || decoy->IsDecoy() == false)
 		{
 			_decoys.erase(id);
@@ -7086,7 +7153,7 @@ void Room::UpdateTrails(uint64 nowUs)
 			continue;
 
 		auto ownerIt = _objects.find(t.ownerId);
-		CreatureRef owner = (ownerIt != _objects.end()) ? dynamic_pointer_cast<Creature>(ownerIt->second) : nullptr;
+		CreatureRef owner = (ownerIt != _objects.end()) ? AsCreature(ownerIt->second) : nullptr;
 		if (owner == nullptr || owner->IsAlive() == false)
 			continue;
 
@@ -7154,7 +7221,7 @@ void Room::ApplyWallEffects(const CreatureRef& caster, const SkillDef& def, uint
 				if (item.first == casterId)
 					continue;
 
-				CreatureRef target = dynamic_pointer_cast<Creature>(item.second);
+				CreatureRef target = AsCreature(item.second);
 				if (CanProjectileHit(caster, target, nowUs) == false)
 					continue;
 
@@ -7172,7 +7239,7 @@ void Room::ApplyMovement(const CreatureRef& caster, const SkillEffect& effect, u
 	if (effect.distCm <= 0.f || effect.speedCms <= 0.f)
 		return;
 
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return;
 
@@ -7233,7 +7300,7 @@ void Room::UpdateSaves(uint64 nowUs)
 		if (saved >= SAVE_PER_TICK)
 			break;
 
-		auto player = dynamic_pointer_cast<Player>(item.second);
+		auto player = AsPlayer(item.second);
 		if (player == nullptr)
 			continue;
 
@@ -7419,7 +7486,7 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 	// 일편단심 - 표식 대상이 죽으면 집중도 풀린다 (남은 시간 동안 다른 적에게 피해 0 이 되지 않게)
 	for (auto& item : _objects)
 	{
-		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef other = AsCreature(item.second);
 		if (other != nullptr && other->focusTargetId == victimId)
 		{
 			other->focusTargetId = 0;
@@ -7453,7 +7520,7 @@ void Room::OnCreatureKilled(const CreatureRef& victim, const CreatureRef& instig
 		if (instigator != nullptr && instigator->IsMonster())
 			GMonsterStats.playerKills.fetch_add(1);
 
-		if (PlayerRef player = dynamic_pointer_cast<Player>(victim); player != nullptr && player->runDeadlineUs != 0)
+		if (PlayerRef player = AsPlayer(victim); player != nullptr && player->runDeadlineUs != 0)
 		{
 			WriteRunTelemetry(player, "DIED", instigatorId, 0, nowUs);
 			player->runDeadlineUs = 0;
@@ -7795,7 +7862,7 @@ void Room::OnMonsterDamaged(const MonsterRef& monster, uint64 attackerId, int32 
 		ay = findIt->second->posInfo->y();
 
 		// 야생의 체취 · 은신 - 맞아도 그 사람을 표적으로 삼지 않는다 (FoW · 갑옷 단검 1129, 2026-10-11)
-		if (CreatureRef attacker = dynamic_pointer_cast<Creature>(findIt->second); attacker != nullptr
+		if (CreatureRef attacker = AsCreature(findIt->second); attacker != nullptr
 			&& (attacker->IsScented(nowUs) || attacker->IsStealthed(nowUs)))
 			return;
 	}
@@ -8332,8 +8399,8 @@ void Room::CheckPartyInvite(uint64 fromId, uint64 toId)
 	JOB_TAG();
 	auto fromIt = _objects.find(fromId);
 	auto toIt = _objects.find(toId);
-	PlayerRef from = fromIt != _objects.end() ? dynamic_pointer_cast<Player>(fromIt->second) : nullptr;
-	PlayerRef to = toIt != _objects.end() ? dynamic_pointer_cast<Player>(toIt->second) : nullptr;
+	PlayerRef from = fromIt != _objects.end() ? AsPlayer(fromIt->second) : nullptr;
+	PlayerRef to = toIt != _objects.end() ? AsPlayer(toIt->second) : nullptr;
 	const bool ok = _kind == RoomKind::World && from != nullptr && to != nullptr && from->IsAlive() && to->IsAlive() && CanSee(from, toId);
 	LOG_LINE << "[PARTY] dungeon invite check " << Tag() << " from=" << fromId << " to=" << toId << " visible=" << (ok ? 1 : 0) << '\n';
 	GParties.FinishDungeonInvite(fromId, toId, ok, Key());
@@ -8349,7 +8416,7 @@ void Room::SetPartyTeam(uint64 partyId, vector<uint64> memberIds)
 	for (uint64 id : memberIds)
 	{
 		auto it = _objects.find(id);
-		PlayerRef player = it != _objects.end() ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+		PlayerRef player = it != _objects.end() ? AsPlayer(it->second) : nullptr;
 		if (player == nullptr)
 			continue;
 		player->teamId = partyId;
@@ -8365,7 +8432,7 @@ void Room::PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector
 {
 	JOB_TAG();
 	auto it = _objects.find(who);
-	PlayerRef player = it != _objects.end() ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = it != _objects.end() ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr)
 		return;
 	player->teamId = 0;

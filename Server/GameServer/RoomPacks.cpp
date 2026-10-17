@@ -548,7 +548,7 @@ void Room::TestSpawnPack(uint64 playerId, bool reactive)
 {
 	JOB_TAG();
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr || player->IsAlive() == false)
 		return;
 

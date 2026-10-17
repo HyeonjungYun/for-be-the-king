@@ -12,7 +12,6 @@
 #include "DBError.h"
 #include <thread>
 
-atomic<int64> ObjectUtils::s_idGenerator = RUNTIME_ID_BASE;
 atomic<uint64> GNextInstanceId = 1;
 atomic<uint64>GNextBagId = BAG_ID_BASE;
 atomic<bool> GFailDeathCommit = false;
@@ -27,6 +26,7 @@ DeathCommitTracker GDeathCommits;
 atomic<uint64> GDisconnectGraceUs = 180'000'000;
 DetachedBodies GDetachedBodies;
 atomic<bool> GDebugGold = false;
+atomic<bool> GGrantEndpoint = false;
 atomic<bool> GDebugCommands = false;
 atomic<bool> GTestMode = false;
 
@@ -369,7 +369,8 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 
 	if (snap.droppedIds.empty() == false)
 	{
-		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
+		// 버린 · 합친 행은 내 것이거나 주인 없는(가방) 것뿐이다 - 위 옮기기와 같은 조건 (2026-10-17 리뷰)
+		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")" + mineOrUnowned;
 		if (conn->Excute(del.c_str()) == false)
 			return RollbackAndClassify(conn);
 	}
@@ -690,17 +691,9 @@ bool LoadLiveBags(DBConnection* conn)
 
 bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const vector<uint64>& instanceIds)
 {
-	auto join = [](const vector<uint64>& v)
-		{
-			string s;
-			for (size_t i = 0; i < v.size(); i++)
-			{
-				if (i > 0)
-					s += ',';
-				s += to_string(v[i]);
-			}
-			return s;
-		};
+	// 빈 목록이면 "IN ()" 문법 오류다 - 지금 호출자는 거르지만 여기서도 막는다
+	if (bagIds.empty())
+		return true;
 
 	if (conn->BeginTransaction() == false)
 	{
@@ -713,13 +706,14 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 	// 빈 가방만 만료되면 아이템 목록이 비어 있다.
 	if (instanceIds.empty() == false)
 	{
-		const string delItems = "DELETE FROM item_instances WHERE instance_id IN (" + join(instanceIds) + ")";
+		// 그 가방들에 든 행만 - id 가 어긋나도 남의 소지품을 지우지 않는다 (2026-10-17 리뷰)
+		const string delItems = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(instanceIds) + ") AND bag_id IN (" + JoinIds(bagIds) + ")";
 		ok = conn->Excute(delItems.c_str());
 	}
 
 	if (ok)
 	{
-		const string delBags = "DELETE FROM bags WHERE  bag_id IN (" + join(bagIds) + ")";
+		const string delBags = "DELETE FROM bags WHERE bag_id IN (" + JoinIds(bagIds) + ")";
 		ok = conn->Excute(delBags.c_str());
 	}
 
@@ -821,7 +815,9 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 	//  이번 런에서 버린 아이템을 파기한다. 이미 없으면 목적은 달성된 것이라 개수가 달라도 실패로 보지않는다.
 	if (snap.droppedIds.empty() == false)
 	{
-		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")";
+		// 내 것 또는 주인 없는 것만 - 탈출 커밋과 같은 조건 (2026-10-17 리뷰)
+		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")"
+			+ " AND (owner_character_id IS NULL OR owner_character_id = " + to_string(snap.characterId) + ")";
 		if (conn->Excute(del.c_str()) == false)
 			return RollbackAndClassify(conn);
 
@@ -1029,7 +1025,8 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 	// LoadLiveBags 가 가방을 되살려 복제가 된다. 창고(VAULTED)는 상태 조건으로 어떤 경우에도 못 지운다 (AC-ET-25)
 	if (snap.rowIds.empty() == false)
 	{
-		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.rowIds) + ") AND state IN ("
+		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.rowIds) + ")"
+			+ " AND (owner_character_id IS NULL OR owner_character_id = " + to_string(snap.characterId) + ") AND state IN ("
 			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_CARRIED)) + ","
 			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ","
 			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG)) + ")";

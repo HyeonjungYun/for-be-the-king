@@ -360,6 +360,13 @@ int main()
 			if (GDebugGold.load())
 				LOG_LINE << "[BOOT] FBTK_DEBUG_GOLD=1 - /gold N adds run gold (TEST ONLY)\n";
 
+			if (_dupenv_s(&raw, &length, "FBTK_GRANT_ENDPOINT") == 0 && raw != nullptr)
+			{
+				GGrantEndpoint.store(raw[0] == '1');
+				::free(raw);
+			}
+			LOG_LINE << "[BOOT] C_GRANT_REWARD " << (GGrantEndpoint.load() ? "ON - FBTK_GRANT_ENDPOINT=1 (TEST ONLY - any client can grant gold)" : "off") << '\n';
+
 			if (_dupenv_s(&raw, &length, "FBTK_DEBUG_COMMANDS") == 0 && raw != nullptr)
 			{
 				GDebugCommands.store(raw[0] == '1');

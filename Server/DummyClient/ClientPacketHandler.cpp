@@ -4,7 +4,7 @@
 #include "BotSession.h"
 #include "BotAiDriver.h"
 
-PacketHandlerFunc GPacketHandler[UINT16_MAX];
+PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 {

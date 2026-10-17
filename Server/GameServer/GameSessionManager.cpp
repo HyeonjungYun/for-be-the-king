@@ -16,15 +16,6 @@ void GameSessionManager::Remove(GameSessionRef session)
 	_sessions.erase(session);
 }
 
-void GameSessionManager::Broadcast(SendBufferRef sendBuffer)
-{
-	WRITE_LOCK;
-	for (GameSessionRef session : _sessions)
-	{
-		session->Send(sendBuffer);
-	}
-}
-
 GameSessionRef GameSessionManager::FindByCharacter(uint64 characterId)
 {
 	WRITE_LOCK;

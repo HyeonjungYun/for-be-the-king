@@ -2,6 +2,7 @@
 #include "WallMap.h"
 #include "FloorBounds.h"
 #include <cmath>
+#include <type_traits>
 
 namespace
 {
@@ -444,7 +445,8 @@ void WallMap::PullInsideCoast(float& x, float& y, float inset) const
 	y = static_cast<float>(by + ny * inset);
 }
 
-// 사각형이 걸치는 칸의 벽을 모두 넘긴다. 두 칸에 걸친 벽은 두 번 넘어올 수 있다 - 결과(최솟값 · 하나라도)는 같다
+// 사각형이 걸치는 칸의 벽을 모두 넘긴다. 두 칸에 걸친 벽은 두 번 넘어올 수 있다 - 결과(최솟값 · 하나라도)는 같다.
+// fn 이 bool 을 돌려주면 true 에서 멈춘다 ("하나라도" 질의 - 시야 · 겹침. 예전엔 답이 나온 뒤에도 남은 칸을 다 돌았다, 2026-10-17)
 template <typename Fn>
 void WallMap::ForEachCandidate(float minX, float minY, float maxX, float maxY, Fn&& fn) const
 {
@@ -462,7 +464,17 @@ void WallMap::ForEachCandidate(float minX, float minY, float maxX, float maxY, F
 		{
 			const int32 cell = gy * GRID_N + gx;
 			for (int32 k = _cellStart[cell]; k < _cellStart[cell + 1]; k++)
-				fn(_walls[_cellWalls[k]]);
+			{
+				if constexpr (std::is_same_v<std::invoke_result_t<Fn, const WallBox&>, bool>)
+				{
+					if (fn(_walls[_cellWalls[k]]))
+						return;
+				}
+				else
+				{
+					fn(_walls[_cellWalls[k]]);
+				}
+			}
 		}
 	}
 }
@@ -477,8 +489,8 @@ bool WallMap::Overlaps(float x, float y, float r) const
 	bool hit = false;
 	ForEachCandidate(x - r, y - r, x + r, y + r, [&](const WallBox& w)
 	{
-		if (hit == false && WallGeom::SignedDistance(w, x, y) < r)
-			hit = true;
+		hit = WallGeom::SignedDistance(w, x, y) < r;
+		return hit;
 	});
 
 	// r = 0 이면 위의 "< 0" 이 곧 "면 제외 안" 이다
@@ -526,10 +538,8 @@ bool WallMap::SightBlocked(float ax, float ay, float bx, float by) const
 	bool blocked = false;
 	ForEachCandidate((std::min)(ax, bx), (std::min)(ay, by), (std::max)(ax, bx), (std::max)(ay, by), [&](const WallBox& w)
 		{
-			if (blocked || w.kind == WallKind::Cover)
-				return;
-			if (WallGeom::Sweep(w, ax, ay, bx, by, 0.f) < 1.f)
-				blocked = true;
+			blocked = w.kind != WallKind::Cover && WallGeom::Sweep(w, ax, ay, bx, by, 0.f) < 1.f;
+			return blocked;
 		});
 
 	return blocked;

@@ -123,7 +123,7 @@ void Room::RaiseWall(const CreatureRef& caster, const SkillDef& def, const Skill
 	const WallMap& walls = Walls();
 	for (auto& item : _objects)
 	{
-		CreatureRef c = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef c = AsCreature(item.second);
 		if (c == nullptr || c->IsAlive() == false)
 			continue;
 		if (WallGeom::SignedDistance(probe, c->posInfo->x(), c->posInfo->y()) >= SkillKinematics::CAPSULE_RADIUS_CM)
@@ -137,7 +137,7 @@ void Room::RaiseWall(const CreatureRef& caster, const SkillDef& def, const Skill
 		c->posInfo->set_x(outX);
 		c->posInfo->set_y(outY);
 		_dirtyMovers.insert(item.first);
-		if (PlayerRef p = dynamic_pointer_cast<Player>(c))
+		if (PlayerRef p = AsPlayer(c))
 		{
 			Protocol::S_MOVE snap;
 			snap.set_correction(true);
@@ -315,7 +315,7 @@ void Room::UpdateVolleys(uint64 nowUs)
 		}
 
 		auto casterIt = _objects.find(v.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 		const SkillDef* def = SkillTable::Find(v.skillId);
 
 		// 시전자가 사라졌거나 죽었거나 행동 불능이면 남은 발은 버린다
@@ -366,7 +366,7 @@ void Room::UpdateVolleys(uint64 nowUs)
 
 void Room::SpawnClone(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
-	PlayerRef owner = dynamic_pointer_cast<Player>(caster);
+	PlayerRef owner = AsPlayer(caster);
 	if (owner == nullptr)
 		return;
 
@@ -459,7 +459,7 @@ void Room::StepClones(uint64 nowUs)
 
 void Room::CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs)
 {
-	PlayerRef owner = dynamic_pointer_cast<Player>(caster);
+	PlayerRef owner = AsPlayer(caster);
 	if (owner == nullptr)
 		return;
 
@@ -537,7 +537,7 @@ void Room::CastHawk(const CreatureRef& caster, const SkillDef& def, const SkillE
 
 void Room::StartVisionArea(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
-	PlayerRef owner = dynamic_pointer_cast<Player>(caster);
+	PlayerRef owner = AsPlayer(caster);
 	if (owner == nullptr)
 		return;
 
@@ -586,9 +586,9 @@ void Room::StartVisionArea(const CreatureRef& caster, const SkillDef& def, const
 
 void Room::MoveBehindTarget(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	auto targetIt = _objects.find(ctx.targetId);
-	CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+	CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
 	if (player == nullptr || target == nullptr || target->IsAlive() == false)
 		return;
 

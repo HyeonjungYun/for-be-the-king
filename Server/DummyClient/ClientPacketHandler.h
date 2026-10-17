@@ -6,7 +6,7 @@
 #endif
 
 using PacketHandlerFunc = std::function<bool(PacketSessionRef&, BYTE*, int32)>;
-extern PacketHandlerFunc GPacketHandler[UINT16_MAX];
+extern PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 enum : uint16
 {
@@ -104,7 +104,7 @@ class ClientPacketHandler
 public:
 	static void Init()
 	{
-		for (int32 i = 0; i < UINT16_MAX; i++)
+		for (int32 i = 0; i <= UINT16_MAX; i++)
 			GPacketHandler[i] = Handle_INVALID;
 		GPacketHandler[PKT_S_LOGIN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_LOGIN>(Handle_S_LOGIN, session, buffer, len); };
 		GPacketHandler[PKT_S_ENTER_GAME] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ENTER_GAME>(Handle_S_ENTER_GAME, session, buffer, len); };
@@ -180,7 +180,12 @@ private:
 	template<typename T>
 	static SendBufferRef MakeSendBuffer(T& pkt, uint16 pktId)
 	{
-		const uint16 dataSize = static_cast<uint16>(pkt.ByteSizeLong());
+		// Packet size is a uint16. A bigger message used to wrap the size, allocate a tiny buffer and serialize past it
+		// (heap overflow - security audit C2, 2026-10-17). Refuse it: Send ignores a null buffer
+		const size_t byteSize = pkt.ByteSizeLong();
+		if (byteSize > UINT16_MAX - sizeof(PacketHeader))
+			return nullptr;
+		const uint16 dataSize = static_cast<uint16>(byteSize);
 		const uint16 packetSize = dataSize + sizeof(PacketHeader);
 
 #if UE_BUILD_DEBUG + UE_BUILD_DEVELOPMENT + UE_BUILD_TEST + UE_BUILD_SHIPPING >= 1

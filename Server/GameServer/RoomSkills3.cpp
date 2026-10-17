@@ -102,7 +102,7 @@ void Room::UpdatePendingSelfCcs(uint64 nowUs)
 		_pendingSelfCcs.erase(_pendingSelfCcs.begin() + i);
 
 		auto it = _objects.find(due.casterId);
-		CreatureRef caster = (it != _objects.end()) ? dynamic_pointer_cast<Creature>(it->second) : nullptr;
+		CreatureRef caster = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
 		if (caster == nullptr || caster->IsAlive() == false)
 			continue;
 
@@ -156,7 +156,7 @@ void Room::UpdatePathPainters(uint64 nowUs)
 		PathPainter& p = _pathPainters[i];
 
 		auto it = _objects.find(p.casterId);
-		CreatureRef caster = (it != _objects.end()) ? dynamic_pointer_cast<Creature>(it->second) : nullptr;
+		CreatureRef caster = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
 		const SkillDef* def = SkillTable::Find(p.skillId);
 		if (caster == nullptr || caster->IsAlive() == false || def == nullptr || p.effectIndex >= def->effects.size())
 		{
@@ -260,7 +260,7 @@ uint64 Room::FindHomingMarkTarget(const CreatureRef& caster, const string& markK
 		if (item.first == casterId)
 			continue;
 
-		CreatureRef c = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef c = AsCreature(item.second);
 		if (c == nullptr || c->IsAlive() == false || c->status.HasMark(markKind, casterId) == false)
 			continue;
 		if (CanProjectileHit(caster, c, nowUs) == false || c->IsStealthed(nowUs))
@@ -338,7 +338,7 @@ void Room::SendDetectionPings(const PlayerRef& owner, const SkillDef& def, float
 
 void Room::NotifyPassiveTrigger(const CreatureRef& owner, uint32 skillId)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(owner);
+	PlayerRef player = AsPlayer(owner);
 	if (player == nullptr)
 		return;
 
@@ -364,7 +364,7 @@ void Room::NotifyPassiveTrigger(const CreatureRef& owner, uint32 skillId)
 
 void Room::NotifyCooldown(const CreatureRef& owner, uint32 skillId, uint32 remainingMs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(owner);
+	PlayerRef player = AsPlayer(owner);
 	GameSessionRef session = (player != nullptr) ? player->session.lock() : nullptr;
 	if (session == nullptr)
 		return;
@@ -676,12 +676,12 @@ void Room::UpdateSlams(uint64 nowUs)
 		_pendingSlams.erase(_pendingSlams.begin() + i);
 
 		auto targetIt = _objects.find(s.targetId);
-		CreatureRef target = (targetIt != _objects.end()) ? dynamic_pointer_cast<Creature>(targetIt->second) : nullptr;
+		CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
 		if (target == nullptr || target->IsAlive() == false)
 			continue;
 
 		auto casterIt = _objects.find(s.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? dynamic_pointer_cast<Creature>(casterIt->second) : nullptr;
+		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
 
 		// 벽 기절 (skill_rules wall_stun_ms, 저항이 깎는다)
 		ApplyCc(s.targetId, s.casterId, Protocol::CC_TYPE_STUN, SkillTable::Rules().wallStunMs, 0.f);

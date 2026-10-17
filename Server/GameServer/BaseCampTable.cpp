@@ -55,7 +55,9 @@ bool BaseCampTable::Parse(const string& csv, OUT string& error)
 		BaseCampPoint p;
 		p.id = row[c[1]];
 		if (Csv::ParseFloat(row[c[2]], OUT p.x) == false || Csv::ParseFloat(row[c[3]], OUT p.y) == false || Csv::ParseFloat(row[c[4]], OUT p.yaw) == false
-			|| Csv::ParseFloat(row[c[5]], OUT p.halfX) == false || Csv::ParseFloat(row[c[6]], OUT p.halfY) == false)
+			|| Csv::ParseFloat(row[c[5]], OUT p.halfX) == false || Csv::ParseFloat(row[c[6]], OUT p.halfY) == false
+			|| std::isfinite(p.x) == false || std::isfinite(p.y) == false || std::isfinite(p.yaw) == false
+			|| std::isfinite(p.halfX) == false || std::isfinite(p.halfY) == false)		// from_chars 는 nan · inf 를 받는다 (WallTable 과 같은 검사)
 		{
 			error = where + " x, y, yaw, half_x, half_y must be numbers";
 			return false;

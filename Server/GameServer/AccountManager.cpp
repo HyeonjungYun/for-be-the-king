@@ -22,8 +22,3 @@ void AccountManager::LogOut(uint64 accountId)
 	_accounts.erase(accountId);
 }
 
-int32 AccountManager::GetCount()
-{
-	WRITE_LOCK;
-	return static_cast<int32>(_accounts.size());
-}

@@ -29,19 +29,24 @@ namespace
 	// 테스트 모드 FoW 끔의 이벤트 필터 반경 - 층(280 m)보다 크면 된다
 	constexpr float TEST_SEE_ALL_RADIUS_CM = 1'000'000.f;
 
-	// S_VISION 이 바뀌었는지만 보는 요약. 따라가는 시야원은 위치를 넣지 않는다 - 클라가 그 생물을 따라 그린다
-	string VisionKey(float radiusCm, float cameraScale, const vector<VisionExtra>& extras)
+	// S_VISION 이 바뀌었는지만 보는 요약 (Player.h VisionSig). 따라가는 시야원은 위치를 넣지 않는다 - 클라가 그 생물을 따라 그린다
+	void MakeVisionSig(float radiusCm, float cameraScale, const vector<VisionExtra>& extras, OUT VisionSig& sig)
 	{
-		string key = to_string(::lroundf(radiusCm)) + "/" + to_string(::lroundf(cameraScale * 100.f));
+		sig.valid = true;
+		sig.radius = ::lroundf(radiusCm);
+		sig.cameraPct = ::lroundf(cameraScale * 100.f);
+		sig.extras.clear();
 		for (const VisionExtra& e : extras)
 		{
-			key += "|" + to_string(e.sourceId) + "," + to_string(e.followId) + "," + to_string(::lroundf(e.radiusCm));
-			if (e.followId == 0)
-				key += "," + to_string(::lroundf(e.x)) + "," + to_string(::lroundf(e.y));
-			key += e.needsLos ? "L" : "-";
-			key += e.seesStealth ? "S" : "-";
+			VisionSig::Extra& x = sig.extras.emplace_back();
+			x.sourceId = e.sourceId;
+			x.followId = e.followId;
+			x.radius = ::lroundf(e.radiusCm);
+			x.x = (e.followId == 0) ? ::lroundf(e.x) : 0;
+			x.y = (e.followId == 0) ? ::lroundf(e.y) : 0;
+			x.needsLos = e.needsLos;
+			x.seesStealth = e.seesStealth;
 		}
-		return key;
 	}
 }
 
@@ -389,10 +394,12 @@ void Room::UpdateVisibility(uint64 nowUs)
 
 void Room::SendVisionIfChanged(const PlayerRef& viewer, float radiusCm, float cameraScale, uint64 nowUs)
 {
-	string key = VisionKey(radiusCm, cameraScale, viewer->visionExtras);
-	if (key == viewer->visionSent)
+	// 스레드마다 하나를 다시 쓴다 - 대부분 그대로라 할당 없이 비교만 하고 끝난다
+	thread_local VisionSig sig;
+	MakeVisionSig(radiusCm, cameraScale, viewer->visionExtras, OUT sig);
+	if (sig == viewer->visionSent)
 		return;
-	viewer->visionSent = move(key);
+	viewer->visionSent = sig;
 
 	GameSessionRef session = viewer->session.lock();
 	if (session == nullptr)
@@ -603,7 +610,7 @@ void Room::StartStealth(const CreatureRef& creature, uint32 skillId, uint32 dura
 		if (item.first == id)
 			continue;
 
-		CreatureRef other = dynamic_pointer_cast<Creature>(item.second);
+		CreatureRef other = AsCreature(item.second);
 		if (other == nullptr)
 			continue;
 

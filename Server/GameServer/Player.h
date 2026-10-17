@@ -33,6 +33,29 @@ struct ItemEntry
 	Protocol::ItemInstance ToProto(Protocol::ItemState state, Protocol::EquipSlot slot = Protocol::SLOT_NONE) const;
 };
 
+// 마지막으로 보낸 S_VISION 의 요약 - 바뀌었는지만 본다. 예전엔 30 Hz 로 사람마다 문자열을 이어 붙여 비교했다 (2026-10-17).
+// 같은 값들을 같은 반올림으로 담는다 - 따라가는 시야원은 위치를 넣지 않는다(클라가 그 생물을 따라 그린다)
+struct VisionSig
+{
+	struct Extra
+	{
+		uint64	sourceId = 0;
+		uint64	followId = 0;
+		long	radius = 0;
+		long	x = 0;
+		long	y = 0;
+		bool	needsLos = false;
+		bool	seesStealth = false;
+		bool operator==(const Extra&) const = default;
+	};
+
+	bool			valid = false;		// 한 번도 안 보냈다 = 무엇과도 다르다
+	long			radius = 0;
+	long			cameraPct = 0;
+	vector<Extra>	extras;
+	bool operator==(const VisionSig&) const = default;
+};
+
 class Player : public Creature
 {
 public:
@@ -118,11 +141,11 @@ public:
 	unordered_map<uint64, uint64>	fowRevealed;		// 시야와 상관없이 보이는 생물 id → 끝 시각 (외로운 외침 · 종이매)
 	vector<VisionExtra>				visionExtras;		// 추가 시야원 (그림자 분신 · 종이매 · 맹수의 탐색)
 	float							visionRadiusCm = 0.f;	// 이번 갱신의 내 시야 반경 (실명 · 천리안 반영) - 이벤트 필터가 거리로 쓴다
-	string							visionSent;			// 마지막으로 보낸 S_VISION 의 요약 - 바뀌면 다시 보낸다
+	VisionSig						visionSent;			// 마지막으로 보낸 S_VISION 의 요약 - 바뀌면 다시 보낸다
 	bool							testSeeAll = false;	// 테스트 모드 /t fow 0 - 이 사람만 거리 · 벽과 상관없이 본다 (은신은 그대로 숨는다). 입장마다 끈다
 	bool							betrayer = false;	// 이 런에서 던전 파티를 나갔다 (party-betrayal 2026-10-12). 스냅샷에는 싣지 않는다 - 표식은 피해자 클라만 1 분 (2026-10-13)
 
-	void	ResetVision() { fowKnown.clear(); fowRevealed.clear(); visionExtras.clear(); visionSent.clear(); }
+	void	ResetVision() { fowKnown.clear(); fowRevealed.clear(); visionExtras.clear(); visionSent = VisionSig(); }
 
 	// 텔레메트리 (§ G) - 런 시작에 0
 	uint32					statBroughtInSum = 0;
@@ -134,3 +157,10 @@ public:
 	uint64					statAlertDwellUs = 0;
 	string					statLastTowerId;
 };
+
+// Object 플래그로 거른 static 캐스트 (AsCreature 와 같다)
+template<typename T>
+shared_ptr<Player> AsPlayer(const shared_ptr<T>& object)
+{
+	return (object != nullptr && object->IsPlayer()) ? static_pointer_cast<Player>(object) : nullptr;
+}

@@ -476,6 +476,9 @@ private:
 	bool	StepStraight(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs);	// true = 끝났다
 	bool	StepHoming(Projectile& p, const CreatureRef& caster, const WallMap& walls, float dtSec, uint64 nowUs);
 	bool	CanProjectileHit(const CreatureRef& caster, const CreatureRef& target, uint64 nowUs) const;
+	// 방의 생명체(플레이어 · 몬스터 · 분신) 사본 - exceptId 는 뺀다. 돌면서 피해를 주는 곳은 이걸 돈다:
+	// 처치가 _objects 를 바꾼다(분신 제거 · 드랍 가방 추가 - 2026-10-17 리뷰)
+	vector<CreatureRef>	SnapshotCreatures(uint64 exceptId) const;
 	void	OnProjectileHit(Projectile& p, const CreatureRef& caster, const CreatureRef& target, uint64 nowUs);
 	void	EndProjectile(const Projectile& p, Protocol::ProjectileEnd reason, uint64 targetId);
 	void	PushStatus(bool applied, uint64 targetId, Protocol::StatusKind kind, const string& param, uint32 stacks, uint32 remainingMs, float magnitude, uint64 instigatorId);

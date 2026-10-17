@@ -105,7 +105,7 @@ public:
 	void				RefreshBindStates();
 
 public:
-	bool IsCasting()	{ return castEndAtUs != -0; }
+	bool IsCasting() const	{ return castEndAtUs != 0; }
 
 public:
 	int32				maxHp			= BaseStats::MAX_HP;
@@ -283,3 +283,9 @@ public:
 	SkillSlot			skillSlots[SKILL_SLOT_COUNT];
 };
 
+// Object 플래그로 거른 static 캐스트 - Creature 를 상속하는 것은 Player · Monster · Decoy 뿐이다 (dynamic_pointer_cast 의 RTTI 비용을 뺀다, 2026-10-17)
+template<typename T>
+shared_ptr<Creature> AsCreature(const shared_ptr<T>& object)
+{
+	return (object != nullptr && object->IsCreature()) ? static_pointer_cast<Creature>(object) : nullptr;
+}

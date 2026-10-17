@@ -17,7 +17,7 @@
 #include <sstream>
 #include <thread>
 
-PacketHandlerFunc GPacketHandler[UINT16_MAX];
+PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 namespace
 {
@@ -25,7 +25,7 @@ namespace
 	void SendGrantResult(GameSessionRef session, const string& requestId, Protocol::GrantResult result, uint64 goldAfter)
 	{
 		Protocol::S_GRANT_REWARD pkt;
-		pkt.set_request_id(requestId);
+		pkt.set_request_id(requestId.size() > GameSession::MAX_REQUEST_ID ? requestId.substr(0, GameSession::MAX_REQUEST_ID) : requestId);	// 보안 점검 C2
 		pkt.set_result(result);
 		pkt.set_gold_after(goldAfter);
 
@@ -235,7 +235,10 @@ namespace
 		conn->FreeResult(lockRes);
 
 		// 잠근 뒤에 다시 본다 - 그 사이 입장을 시작했거나(Entering) 사망 커밋이 진행 중이면 손대지 않는다.
-		if (session->place.load() != SessionPlace::BaseCamp || GDeathCommits.IsPending(ownerId) || GDetachedBodies.Contains(ownerId))
+		// 끊긴 세션의 늦은 요청도 막는다 - OnDisconnected 는 place 를 되돌리지 않는다. 끊긴 뒤 새 세션이 로그인해 입장 적재까지 마치면
+		// 이 잠금이 그 뒤에 와서도 BaseCamp 로 보였다 (DB 워커 4 개 - 2026-10-17 리뷰). 새 로그인은 옛 세션이 끊긴 뒤에만 된다
+		if (session->IsConnected() == false || session->place.load() != SessionPlace::BaseCamp
+			|| GDeathCommits.IsPending(ownerId) || GDetachedBodies.Contains(ownerId))
 		{
 			conn->Rollback();
 			return Protocol::ITEM_INVALID_STATE;
@@ -385,6 +388,10 @@ namespace
 		}
 		}
 
+		// 매입이 골드 열(BIGINT, 부호)을 넘기면 거절한다 - 아래는 절대값으로 쓴다 (2026-10-17 리뷰)
+		if (result == Protocol::ITEM_OK && op == BaseCampOp::Sell && price > static_cast<uint64>(INT64_MAX) - min<uint64>(gold, INT64_MAX))
+			result = Protocol::ITEM_DB_ERROR;
+
 		if (result != Protocol::ITEM_OK)
 		{
 			conn->Rollback();
@@ -481,8 +488,9 @@ namespace
 
 bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 {
-	PacketHeader* header = reinterpret_cast<PacketHeader*>(buffer);
-	// TODO : Log
+	// 모르는 패킷 id - 정상 클라는 보내지 않는다. 끊는다 (예전엔 false 만 돌려줬고 OnRecvPacket 이 그 값을 보지 않아 무시됐다 -
+	// 2026-10-17 보안 점검 H2). 해석 실패 · 경합(방을 떠난 뒤의 C_MOVE)은 그대로 둔다 - 그것들은 정상 흐름에서도 false 다
+	session->Disconnect(L"unknown packet id");
 	return false;
 }
 
@@ -499,8 +507,17 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			gameSession->Send(sendBuffer);
 		};
 
-	const string token = pkt.token();
-	if (token.empty())
+	// 연결 하나에 로그인 시도는 10 번까지 - 실패하면 다시 시도할 수 있어(아래) 토큰을 끝없이 대입하며 DB 를 칠 수 있었다
+	// (2026-10-17 보안 점검 M3). 정상 클라는 한 번, 실패해도 몇 번이다
+	if (gameSession->loginAttempts.fetch_add(1) >= GameSession::MAX_LOGIN_ATTEMPTS)
+	{
+		gameSession->Disconnect(L"too many login attempts");		// false 를 돌려줘도 OnRecvPacket 은 끊지 않는다 - 직접 끊는다
+		return false;
+	}
+
+	// login_sessions.token 은 CHAR(64) - 더 긴 토큰은 맞을 수 없다. 이스케이프 · DB 왕복 전에 거른다 (2026-10-17 리뷰)
+	const string& token = pkt.token();
+	if (token.empty() || token.size() > 64)
 	{
 		reject();
 		return true;
@@ -704,6 +721,15 @@ namespace
 			return reject("no basecamp map");
 		if (session->place.load() != SessionPlace::BaseCamp)
 			return reject("not in base camp");
+
+		// 요청마다 인스턴스 방(허수아비 · 벽 · 타이머 4 개)을 새로 만든다 - 연타로 방을 쌓지 못하게 0.5 초에 한 번 (2026-10-17 리뷰).
+		// 클라의 재요청은 3 초 간격이다
+		// 받아들인 요청만 시각을 남긴다 - 거절된 연타가 창을 계속 미루지 않게 (거절은 클라가 3 초 뒤 다시 묻는다)
+		const uint64 nowUs = Utils::NowMicroseconds();
+		const uint64 lastUs = session->lastCampEnterUs.load();
+		if (lastUs != 0 && nowUs - lastUs < 500'000)
+			return reject("too soon");
+		session->lastCampEnterUs.store(nowUs);
 
 		// 이미 몸이 있으면 (클라가 다시 요청 - 재로딩 · 거절 뒤 재시도) 빼고 새로 만든다
 		DropCampBody(session);
@@ -975,6 +1001,10 @@ bool Handle_C_PARTY_INVITE(PacketSessionRef& session, Protocol::C_PARTY_INVITE& 
 	if (gameSession->accountId.load() == 0)
 		return false;
 
+	// 이름은 VARCHAR(32) utf8mb4 = 최대 128 바이트. 더 길면 맞는 사람이 없다 - 로그 · 응답에 그대로 실리던 것을 막는다 (2026-10-17 리뷰)
+	if (pkt.target_name().size() > 128)
+		return true;
+
 	GParties.Invite(gameSession, pkt.target_name());
 	return true;
 }
@@ -1031,13 +1061,14 @@ bool Handle_C_MOVE(PacketSessionRef& session, Protocol::C_MOVE& pkt)
 	const uint64 realId = player->objectInfo->object_id();
 	if (pkt.info().object_id() != realId)
 	{
-		// 클라가 S_ENTER_GAME 을 처리했다면 0 이 아닌 제 id 를 보낸다.
-		LOG_LINE << "[ID MISMATCH] claimed=" << pkt.info().object_id()
-			<< " actual=" << realId << '\n';
+		// 클라가 S_ENTER_GAME 을 처리했다면 0 이 아닌 제 id 를 보낸다. 세션당 한 번만 남긴다 - 이동 패킷(30 Hz)마다 찍혔다
+		if (gameSession->idMismatchLogged.exchange(true) == false)
+			LOG_LINE << "[ID MISMATCH] claimed=" << pkt.info().object_id()
+				<< " actual=" << realId << " (logged once per session)\n";
 	}
 	pkt.mutable_info()->set_object_id(realId);
 
-	room->DoAsync(&Room::HandleMove, pkt);
+	room->DoAsync(&Room::HandleMove, std::move(pkt));		// 다시 쓰지 않는다 - 잡으로 옮긴다 (이동 패킷마다 복사 한 번 줄인다)
 
 	return true;
 }
@@ -1058,7 +1089,9 @@ bool Handle_C_ATTACK(PacketSessionRef& session, Protocol::C_ATTACK& pkt)
 	const uint64 attackerId = player->objectInfo->object_id();
 
 	// 조준점 - 대상 없는 평타 (일보일검 · 난무, 2026-10-11). 보통 평타는 쓰지 않는다
-	room->DoAsync(&Room::HandleAttack, attackerId, pkt.target_id(), pkt.aim_x(), pkt.aim_y());
+	// 조준점이 NaN · 무한대면 "조준 없음"(0, 0) - C_SKILL 과 같다 (보안 점검 M2)
+	const bool aimFinite = std::isfinite(pkt.aim_x()) && std::isfinite(pkt.aim_y());
+	room->DoAsync(&Room::HandleAttack, attackerId, pkt.target_id(), aimFinite ? pkt.aim_x() : 0.f, aimFinite ? pkt.aim_y() : 0.f);
 
 	return true;
 }
@@ -1250,7 +1283,14 @@ bool Handle_C_SKILL(PacketSessionRef& session, Protocol::C_SKILL& pkt)
 
 	const uint64 casterId = player->objectInfo->object_id();
 
-	room->DoAsync(&Room::HandleSkill, casterId, pkt);
+	// 조준점이 NaN · 무한대면 "조준 없음"(0, 0)으로 - 방향 계산이 NaN 이 되어 대상 · 돌진이 이상해진다 (2026-10-17 보안 점검 M2)
+	if (std::isfinite(pkt.aim_x()) == false || std::isfinite(pkt.aim_y()) == false)
+	{
+		pkt.set_aim_x(0.f);
+		pkt.set_aim_y(0.f);
+	}
+
+	room->DoAsync(&Room::HandleSkill, casterId, std::move(pkt));
 
 	return true;
 }
@@ -1281,7 +1321,15 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 	const uint64 gold = pkt.gold();
 	const string reason = pkt.reason();
 
-	if (requestId.empty() || requestId.size() > 36 || characterId == 0 || gold == 0)
+	// 로그인 전 연결은 받지 않는다 - 예전엔 아무 연결이나 DB 작업을 무한히 쌓을 수 있었다 (2026-10-17 리뷰).
+	// reason 은 VARCHAR(32), gold 는 BIGINT(부호) 열이다 - 넘으면 MySQL 모드에 따라 잘리거나 넘친다
+	if (gameSession->accountId.load() == 0)
+		return false;
+	// 시험 전용 끝점 - 꺼져 있으면 응답하지 않는다 (보안 점검 C1, ObjectUtils.h GGrantEndpoint)
+	if (GGrantEndpoint.load() == false)
+		return true;		// 로그도 남기지 않는다 - 패킷마다 한 줄이면 그것이 또 하나의 범람 경로다
+	if (requestId.empty() || requestId.size() > 36 || characterId == 0 || gold == 0
+		|| gold > static_cast<uint64>(INT64_MAX) || reason.size() > 32)
 	{
 		SendGrantResult(gameSession, requestId, Protocol::GRANT_BAD_REQUEST, 0);
 		return true;
@@ -1388,7 +1436,7 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 				return;
 			}
 
-			::snprintf(query, sizeof(query), "SELECT gold FROM characters WHERE character_Id = %llu", characterId);
+			::snprintf(query, sizeof(query), "SELECT gold FROM characters WHERE character_id = %llu", characterId);
 
 			if (MYSQL_RES* res = conn->Query(query))
 			{

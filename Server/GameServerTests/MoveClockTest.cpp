@@ -111,3 +111,24 @@ TEST(MoveClock, 시계가_거꾸로_가면_기준을_다시_잡는다)
 	EXPECT_EQ(clock.lastClientMs, START_MS);
 	EXPECT_EQ(clock.leadUs, 0);
 }
+
+TEST(MoveClock, 시각을_낮췄다_높였다_번갈아도_상한을_다시_받지_못한다)
+{
+	// 2026-10-17 보안 점검 H1 - 거꾸로 간 시각이 쌓인 앞섬을 0 으로 지워 줬다. 높은 시각 패킷마다 2초씩 더 받았다
+	MoveClock clock;
+	clock.Interval(TICK_US, START_MS);
+
+	double claimed = 0.0;
+	double real = 0.0;
+	for (uint64 i = 1; i <= 100; i++)
+	{
+		claimed += clock.Interval(TICK_US, START_MS);								// 낮은 시각 - 기준을 되돌린다
+		claimed += clock.Interval(TICK_US, START_MS + 10'000);						// 10초 뛴 시각
+		real += 2 * TICK_US / 1'000'000.0;
+	}
+
+	// 한 세션에 얻는 것은 상한 한 번(2초)뿐이다 - 예전엔 100 번 x 약 2초 = 200초를 넘었다.
+	// 첫 낮은 시각(같은 값)은 정상 경로라 33ms 뒤처짐이 한 번 생긴다 - 그만큼 여유
+	EXPECT_LE(claimed, real + MoveClock::MAX_LEAD_US / 1'000'000.0 + 0.05);
+	EXPECT_LE(clock.leadUs, MoveClock::MAX_LEAD_US);
+}

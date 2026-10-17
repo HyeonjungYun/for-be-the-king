@@ -40,7 +40,7 @@ void Room::TestGear(uint64 playerId, TestGearRequest req)
 {
 	JOB_TAG();
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr || player->IsAlive() == false)
 		return;
 
@@ -128,7 +128,7 @@ void Room::TestSpawnDummies(uint64 playerId, uint32 monsterTypeId, int32 count, 
 {
 	JOB_TAG();
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr || player->IsAlive() == false)
 		return;
 
@@ -279,7 +279,7 @@ void Room::TestHeal(uint64 playerId)
 
 	// 나 - 체력 · 지속 피해 (CC 는 시간이 지나면 풀린다 - 클라 CC 표시와 어긋나지 않게 건드리지 않는다)
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player != nullptr && player->IsAlive())
 	{
 		if (player->status.RemoveDots("") > 0)
@@ -310,7 +310,7 @@ void Room::TestResetCooldowns(uint64 playerId)
 {
 	JOB_TAG();
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr)
 		return;
 
@@ -324,7 +324,7 @@ void Room::TestGod(uint64 playerId, bool on)
 {
 	JOB_TAG();
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr)
 		return;
 
@@ -336,7 +336,7 @@ void Room::TestFow(uint64 playerId, bool fowOn)
 {
 	JOB_TAG();
 	auto it = _objects.find(playerId);
-	PlayerRef player = (it != _objects.end()) ? dynamic_pointer_cast<Player>(it->second) : nullptr;
+	PlayerRef player = (it != _objects.end()) ? AsPlayer(it->second) : nullptr;
 	if (player == nullptr)
 		return;
 

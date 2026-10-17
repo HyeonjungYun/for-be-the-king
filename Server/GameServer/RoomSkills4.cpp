@@ -93,7 +93,7 @@ void Room::OnAnchorProjectileEnd(const Projectile& p)
 		return;
 
 	auto it = _objects.find(p.casterId);
-	CreatureRef caster = (it != _objects.end()) ? dynamic_pointer_cast<Creature>(it->second) : nullptr;
+	CreatureRef caster = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
 	const uint64 nowUs = Utils::NowMicroseconds();
 	if (caster == nullptr || caster->anchorSkillId != p.skillId || nowUs >= caster->anchorUntilUs)
 		return;
@@ -110,7 +110,7 @@ void Room::OnAnchorProjectileEnd(const Projectile& p)
 
 void Room::TeleportToAnchor(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return;
 
@@ -157,7 +157,7 @@ void Room::TeleportToAnchor(const CreatureRef& caster, const SkillDef& def, cons
 
 void Room::Rewind(const CreatureRef& caster, const SkillEffect& e, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return;
 
@@ -249,7 +249,7 @@ void Room::WallKick(const CreatureRef& caster, const SkillEffect& e, uint64 nowU
 
 void Room::CutCooldowns(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs)
 {
-	PlayerRef player = dynamic_pointer_cast<Player>(caster);
+	PlayerRef player = AsPlayer(caster);
 	if (player == nullptr)
 		return;
 
@@ -291,7 +291,7 @@ void Room::CutCooldowns(const CreatureRef& caster, const SkillDef& def, const Sk
 
 void Room::SendFootprints(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, uint64 nowUs)
 {
-	PlayerRef owner = dynamic_pointer_cast<Player>(caster);
+	PlayerRef owner = AsPlayer(caster);
 	GameSessionRef session = (owner != nullptr) ? owner->session.lock() : nullptr;
 	if (session == nullptr)
 		return;
@@ -439,7 +439,7 @@ void Room::UpdateLandings(uint64 nowUs)
 		_pendingLandings.erase(_pendingLandings.begin() + i);
 
 		auto it = _objects.find(due.casterId);
-		CreatureRef owner = (it != _objects.end()) ? dynamic_pointer_cast<Creature>(it->second) : nullptr;
+		CreatureRef owner = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
 		if (owner == nullptr || owner->IsAlive() == false)
 			continue;
 
@@ -543,11 +543,9 @@ void Room::TriggerStancePassives(const CreatureRef& owner, const string& element
 				continue;
 
 			int32 hit = 0;
-			for (auto& item : _objects)
+			// 후보를 먼저 모은다 - 효과의 처치가 _objects 를 바꾼다 (2026-10-17 리뷰)
+			for (const CreatureRef& c : SnapshotCreatures(ownerId))
 			{
-				if (item.first == ownerId || IsEnemyCreature(item.second) == false)
-					continue;
-				CreatureRef c = static_pointer_cast<Creature>(item.second);
 				if (c->IsAlive() == false || CanProjectileHit(owner, c, nowUs) == false)
 					continue;
 				const float dx = c->posInfo->x() - cx;
@@ -705,11 +703,9 @@ void Room::BurstShield(const CreatureRef& owner, uint64 nowUs)
 	const float cy = owner->posInfo->y();
 	int32 hit = 0;
 
-	for (auto& item : _objects)
+	// 후보를 먼저 모은다 - DealDamage 의 처치가 _objects 를 바꾼다 (ApplyThrow 와 같다, 2026-10-17 리뷰)
+	for (const CreatureRef& c : SnapshotCreatures(ownerId))
 	{
-		if (item.first == ownerId || IsEnemyCreature(item.second) == false)
-			continue;
-		CreatureRef c = static_pointer_cast<Creature>(item.second);
 		if (c->IsAlive() == false || CanProjectileHit(owner, c, nowUs) == false)
 			continue;
 		const float dx = c->posInfo->x() - cx;

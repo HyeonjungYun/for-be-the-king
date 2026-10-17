@@ -51,9 +51,8 @@ void GameSession::OnDisconnected()
 void GameSession::OnRecvPacket(BYTE* buffer, int32 len)
 {
 	PacketSessionRef session = GetPacketSessionRef();
-	PacketHeader* header = reinterpret_cast<PacketHeader*>(buffer);
 
-	// TODO : packetId 대역 체크
+	// 모르는 id 는 Handle_INVALID 가 끊는다. 표는 uint16 전 범위라 id 대역 검사가 따로 필요 없다 (2026-10-17)
 	ServerPacketHandler::HandlePacket(session, buffer, len);
 }
 
@@ -64,7 +63,8 @@ void GameSession::OnSend(int32 len)
 void GameSession::SendItemResult(const string& requestId, Protocol::ItemResult result, const vector<Protocol::ItemInstance>& changed, int64 gold)
 {
 	Protocol::S_ITEM_RESULT pkt;
-	pkt.set_request_id(requestId);
+	// 받은 id 를 그대로 돌려준다 - 길면 잘라서. 64 KB 가까운 id 가 응답 크기(uint16)를 넘겼다 (보안 점검 C2). 정상 id 는 32 자다
+	pkt.set_request_id(requestId.size() > MAX_REQUEST_ID ? requestId.substr(0, MAX_REQUEST_ID) : requestId);
 	pkt.set_result(result);
 	if (gold >= 0)
 		pkt.set_gold(static_cast<uint64>(gold));

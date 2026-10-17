@@ -2,7 +2,7 @@
 #include "Protocol.pb.h"
 
 using PacketHandlerFunc = std::function<bool(PacketSessionRef&, BYTE*, int32)>;
-extern PacketHandlerFunc GPacketHandler[UINT16_MAX];
+extern PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 enum : uint16
 {
@@ -17,7 +17,7 @@ class ClientPacketHandler
 public:
 	static void Init()
 	{
-		for (int32 i = 0; i < UINT16_MAX; i++)
+		for (int32 i = 0; i <= UINT16_MAX; i++)
 			GPacketHandler[i] = Handle_INVALID;
 	}
 

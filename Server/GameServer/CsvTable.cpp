@@ -50,8 +50,15 @@ bool Csv::Parse(const string& text, const char* fileName, OUT CsvTable& out, OUT
 
 		if (header)
 		{
+			// 같은 이름이 두 번이면 앞 열을 덮어써 모든 행이 "열 수가 다르다" 로 실패했다 - 원인을 바로 말한다
 			for (int32 i = 0; i < static_cast<int32>(cells.size()); i++)
-				out.columns[cells[i]] = i;
+			{
+				if (out.columns.emplace(cells[i], i).second == false)
+				{
+					error = string(fileName) + " duplicate column '" + cells[i] + "'";
+					return false;
+				}
+			}
 
 			header = false;
 			continue;

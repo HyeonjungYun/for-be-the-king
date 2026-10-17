@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-class GameSesion;
-
 /*---------------------
 	AccountManager
 ----------------------*/
@@ -12,7 +10,6 @@ public:
 	bool TryLogin(uint64 accountId);
 	void LogOut(uint64 accountId);
 
-	int32 GetCount();
 
 private:
 	USE_LOCK;
