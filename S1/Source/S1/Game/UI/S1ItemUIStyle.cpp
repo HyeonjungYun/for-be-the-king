@@ -51,13 +51,23 @@ namespace S1ItemUIStyle
 	FText ItemName(const FS1ItemTypeDef* Type, uint32 TypeId)
 	{
 		if (Type == nullptr)
+		{
+			// Sell-only loot (2026-10-17 economy) - its own table, not the gear catalog
+			const US1ItemSubsystem* Items = US1ItemSubsystem::Get();
+			if (const FS1LootTypeDef* Loot = Items != nullptr ? Items->GetLoot().Find(TypeId) : nullptr)
+				return Keyed(Loot->NameKey);
 			return FText::Format(Text(TEXT("label.unknown_item")), FText::AsNumber(TypeId));
+		}
 
 		return Keyed(Type->NameKey);
 	}
 
 	FText SlotLabel(const FS1ItemTypeDef* Type, const FS1ItemView& Item)
 	{
+		// Loot shows how many are stacked in the cell - "들개 이빨 ×7"
+		if (Type == nullptr && Item.StackCount > 1)
+			return FText::Format(INVTEXT("{0}\n×{1}"), ItemName(Type, Item.ItemTypeId), FText::AsNumber(static_cast<int32>(Item.StackCount)));
+
 		const FText Label = S1ItemLogic::LabelWithLevel(ItemName(Type, Item.ItemTypeId), Item.Level);
 		return Item.bLonePath ? FText::Format(INVTEXT("{0}\n{1}"), Label, Text(TEXT("label.lone_tag"))) : Label;
 	}
@@ -87,6 +97,10 @@ namespace S1ItemUIStyle
 		case ES1ItemNotice::RetryLater:			return Text(TEXT("notice.retry_later"));
 		case ES1ItemNotice::LootPartial:		return FText::Format(Text(TEXT("notice.loot_partial")), FText::AsNumber(Count));
 		case ES1ItemNotice::LonePathInParty:	return Text(TEXT("notice.lone_path_party"));
+		case ES1ItemNotice::NotEnoughGold:		return Text(TEXT("notice.not_enough_gold"));
+		case ES1ItemNotice::Sold:				return FText::Format(Text(TEXT("notice.sold")), FText::AsNumber(Count));
+		case ES1ItemNotice::LootNotEquippable:	return Text(TEXT("notice.loot_not_equippable"));
+		case ES1ItemNotice::SellEquipped:		return Text(TEXT("notice.sell_equipped"));
 		default:								return FText::GetEmpty();
 		}
 	}

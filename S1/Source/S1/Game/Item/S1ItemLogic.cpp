@@ -39,6 +39,9 @@ namespace S1ItemLogic
 
 		case ES1ItemResult::LonePathInParty:
 			return ES1ItemNotice::LonePathInParty;
+
+		case ES1ItemResult::NotEnoughGold:
+			return ES1ItemNotice::NotEnoughGold;
 		}
 
 		// A code this client does not know — a newer server. Say something rather than nothing.

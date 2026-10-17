@@ -124,6 +124,12 @@ FS1CampDialogue FS1CampLayout::DialogueFor(const FString& NpcId)
 		D.LineKey = TEXT("camp.line.enhance");
 		D.Options = { { TEXT("camp.option.enhance"), ES1CampAction::OpenEnhance }, { TEXT("camp.option.bye"), ES1CampAction::Close } };
 	}
+	else if (NpcId == TEXT("trade"))
+	{
+		D.NameKey = TEXT("camp.npc.trade");
+		D.LineKey = TEXT("camp.line.trade");
+		D.Options = { { TEXT("camp.option.sell"), ES1CampAction::OpenSell }, { TEXT("camp.option.bye"), ES1CampAction::Close } };
+	}
 	else if (NpcId == TEXT("gate"))
 	{
 		D.NameKey = TEXT("camp.npc.gate");

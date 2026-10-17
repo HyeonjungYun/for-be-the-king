@@ -35,7 +35,7 @@ namespace S1CampLook
 	/** Who holds what — the blacksmith a hammer, the others empty-handed (item_types.csv 102 = hammer). */
 	uint32 WeaponOf(const FString& NpcId)
 	{
-		return NpcId == TEXT("enhance") ? 102u : 0u;
+		return NpcId == TEXT("enhance") ? 102u : 0u;		// 매입 행수(trade)는 빈손 - 장부를 든 상인
 	}
 }
 

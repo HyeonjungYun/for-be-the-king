@@ -46,6 +46,7 @@ enum class ES1ItemResult : uint8
 	BadRequest,
 	DbError,
 	LonePathInParty,	// 고독한 길 - cannot be worn while in a party (2026-10-17)
+	NotEnoughGold,		// enhance costs more vault gold than there is (2026-10-17 economy)
 };
 
 /** Which request produced a result. The same result code reads differently per action. */
@@ -58,6 +59,7 @@ enum class ES1ItemAction : uint8
 	Stash,			// Carried -> Vaulted
 	Unstash,		// Vaulted -> Carried
 	Enhance,		// base camp level + 1 (item-enhance 2026-10-12) - answered with S_ITEM_RESULT like the others
+	Sell,			// base camp guild buyer (2026-10-17 economy) - C_SELL, one cell
 };
 
 /**
@@ -79,6 +81,10 @@ enum class ES1ItemNotice : uint8
 	RetryLater,			// 잠시 후 다시 시도해 주세요
 	LootPartial,		// n개를 가져오지 못했습니다(인벤토리 가득 참) — carries a count
 	LonePathInParty,	// 고독한 길은 파티 중에 착용할 수 없습니다 (2026-10-17)
+	NotEnoughGold,		// 골드가 부족합니다 (2026-10-17 경제)
+	Sold,				// n 골드에 팔았습니다 — Count = gold gained
+	LootNotEquippable,	// 전리품은 착용 · 강화할 수 없습니다
+	SellEquipped,		// 착용 중인 장비는 팔 수 없습니다
 };
 
 /** Why an open bag window closed. The window closes the same way for all of them — no reason line. */
@@ -115,6 +121,7 @@ struct FS1ItemView
 	int32					Slot = 0;		// Protocol::EquipSlot while equipped, 0 otherwise
 	TArray<FS1ItemSkill>	Skills;
 	bool					bLonePath = false;	// 고독한 길 (2026-10-17) - worn: no party; more worn: stronger when outnumbered
+	uint32					StackCount = 1;		// loot (sell-only) stacks - how many in this cell (2026-10-17 economy)
 };
 
 /**

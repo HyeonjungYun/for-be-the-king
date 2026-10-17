@@ -370,8 +370,8 @@ void US1InventoryPanelWidget::HandleSlotClicked(uint64 InstanceId, FKey Button, 
 		const FS1ItemTypeDef* Type = Items->GetCatalog().Find(Item->ItemTypeId);
 		if (Type == nullptr)
 		{
-			// Unknown type — the client cannot tell which part it goes on.
-			ShowNotice(Notice(ES1ItemNotice::BadRequest, 0), InstanceId);
+			// Sell-only loot (2026-10-17 economy) says where it goes; a truly unknown type cannot tell which part it goes on
+			ShowNotice(Notice(Items->IsLoot(Item->ItemTypeId) ? ES1ItemNotice::LootNotEquippable : ES1ItemNotice::BadRequest, 0), InstanceId);
 			ShakeSlot(InstanceId);
 			return;
 		}

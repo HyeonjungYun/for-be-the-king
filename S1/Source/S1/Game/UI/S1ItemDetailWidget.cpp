@@ -83,7 +83,15 @@ void US1ItemDetailWidget::ShowItem(const US1ItemSubsystem& Items, const FS1ItemV
 	const FS1ItemTypeDef* Type = Items.GetCatalog().Find(Item.ItemTypeId);
 	if (Type == nullptr)
 	{
-		AddLine(ItemName(nullptr, Item.ItemTypeId), FontEmphasis, TextSecondary());
+		AddLine(ItemName(nullptr, Item.ItemTypeId), FontEmphasis, Type == nullptr && Items.IsLoot(Item.ItemTypeId) ? TextPrimary() : TextSecondary());
+
+		// Sell-only loot (2026-10-17 economy): what it is for and what the guild pays - "매입가 360 골드 (개당 120 × 3)"
+		if (const FS1LootTypeDef* Loot = Items.GetLoot().Find(Item.ItemTypeId))
+		{
+			AddLine(Text(TEXT("label.loot")), FontBody, TextSecondary());
+			AddLine(FText::Format(Text(TEXT("label.loot_price")), FText::AsNumber(S1Economy::SellPrice(Item, Items.GetLoot(), Items.GetEconomy())),
+				FText::AsNumber(Loot->SellPrice), FText::AsNumber(static_cast<int32>(Item.StackCount))), FontBody, TextPrimary());
+		}
 		return;
 	}
 
@@ -93,6 +101,10 @@ void US1ItemDetailWidget::ShowItem(const US1ItemSubsystem& Items, const FS1ItemV
 	AddLine(Item.Level >= S1ItemLogic::ItemLevelMax
 		? FText::Format(Text(TEXT("label.enhance_max")), FText::AsNumber(static_cast<int32>(Item.Level)))
 		: FText::Format(Text(TEXT("label.enhance_level")), FText::AsNumber(static_cast<int32>(Item.Level)), FText::AsNumber(static_cast<int32>(S1ItemLogic::ItemLevelMax))),
+		FontBody, TextSecondary());
+
+	// What the guild buyer would pay for it (2026-10-17 economy) - grade base × (1 + bonus × level)
+	AddLine(FText::Format(Text(TEXT("label.gear_price")), FText::AsNumber(S1Economy::SellPrice(Item, Items.GetLoot(), Items.GetEconomy()))),
 		FontBody, TextSecondary());
 
 	// 고독한 길 (2026-10-17) - the option and its price, in one place: no party while worn, stronger when outnumbered

@@ -852,3 +852,24 @@ label.lone_path_desc,착용 중엔 파티를 맺을 수 없다 · 8 m 안의 적
 label.lone_tag,고독,lone-path 2026-10-17 칸 표식
 notice.lone_path_party,고독한 길은 파티 중에 착용할 수 없습니다,lone-path 2026-10-17 ITEM_LONE_PATH_IN_PARTY
 party.result.lone_path,고독한 길을 착용한 사람은 파티를 맺을 수 없습니다,lone-path 2026-10-17 PARTY_LONE_PATH
+loot.901,들개 이빨,economy-loot 2026-10-17 전리품 (임시 이름)
+loot.902,멧돼지 가죽,economy-loot 2026-10-17 전리품 (임시 이름)
+loot.903,병사의 녹슨 패용물,economy-loot 2026-10-17 전리품 (임시 이름)
+loot.904,우두머리의 송곳니,economy-loot 2026-10-17 전리품 (임시 이름)
+loot.905,마력이 밴 기물 파편,economy-loot 2026-10-17 전리품 (임시 이름)
+loot.906,왕실 문양 장식,economy-loot 2026-10-17 전리품 (임시 이름)
+camp.npc.trade,매입 행수 바엽,economy-loot 2026-10-17 NPC (임시 이름 - 행수 = 상단 직함)
+camp.line.trade,던전에서 건진 건 뭐든 가져와. 이빨 하나도 값은 쳐 주지 — 다만 살아서 들고 나와야 물건이야.,economy-loot 2026-10-17 대사
+camp.option.sell,물건을 팔겠어,economy-loot 2026-10-17 대화 선택지
+camp.title.sell,매입 · 매입 행수 바엽 — 칸을 누르면 바로 팝니다,economy-loot 2026-10-17 NPC 창 제목
+label.gold,골드 {0},economy-loot 2026-10-17 창 제목 줄 · 창고 골드
+label.loot,전리품 · 팔기 전용 — 매입 행수가 산다,economy-loot 2026-10-17 아이템 상세
+label.loot_price,매입가 {0} 골드 (개당 {1} × {2}),economy-loot 2026-10-17 아이템 상세
+label.gear_price,매입가 {0} 골드,economy-loot 2026-10-17 아이템 상세 (장비)
+button.enhance_cost,강화 +1 (Lv {0} → {1}) · {2} 골드,economy-loot 2026-10-17 강화 버튼 (비용)
+button.enhance_loot,전리품은 강화할 수 없다,economy-loot 2026-10-17 강화 버튼
+notice.not_enough_gold,골드가 부족합니다,economy-loot 2026-10-17 ITEM_NOT_ENOUGH_GOLD
+notice.sold,{0} 골드에 팔았습니다,economy-loot 2026-10-17 매입 성공
+notice.loot_not_equippable,전리품은 착용 · 강화할 수 없습니다 — 매입 행수에게 파세요,economy-loot 2026-10-17 전리품 착용 시도
+notice.sell_equipped,착용 중인 장비는 팔 수 없습니다 — 먼저 벗으세요,economy-loot 2026-10-17 착용 장비 판매 시도
+notice.gold_lost,창고 골드 -{0} (던전에서 사망 · {1}%),economy-loot 2026-10-17 사망 차감 알림

@@ -2,6 +2,8 @@
 
 #include "Game/Item/S1ItemSubsystem.h"
 #include "Game/BaseCamp/S1BaseCampSubsystem.h"
+#include "Game/Escape/S1EscapeSubsystem.h"
+#include "Game/UI/S1ItemUIStyle.h"
 #include "Game/S1SkillTable.h"
 #include "S1.h"
 #include "Protocol.pb.h"
@@ -23,6 +25,7 @@ static_assert(static_cast<int32>(ES1ItemState::InBag) == Protocol::ITEM_STATE_IN
 static_assert(static_cast<int32>(ES1ItemResult::InventoryFull) == Protocol::ITEM_INVENTORY_FULL, "ES1ItemResult drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemResult::DbError) == Protocol::ITEM_DB_ERROR, "ES1ItemResult drifted from Enum.proto");
 static_assert(static_cast<int32>(ES1ItemResult::LonePathInParty) == Protocol::ITEM_LONE_PATH_IN_PARTY, "ES1ItemResult drifted from Enum.proto");
+static_assert(static_cast<int32>(ES1ItemResult::NotEnoughGold) == Protocol::ITEM_NOT_ENOUGH_GOLD, "ES1ItemResult drifted from Enum.proto");
 
 namespace
 {
@@ -40,6 +43,7 @@ namespace
 			View.Skills.Add(FS1ItemSkill{ static_cast<int32>(Skill.slot()), Skill.skill_id() });
 
 		View.bLonePath	= Item.lone_path();
+		View.StackCount	= FMath::Max<uint32>(Item.stack_count(), 1);
 		return View;
 	}
 
@@ -91,6 +95,21 @@ void US1ItemSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (Catalog.GetGradeMultipliers().Num() < 4)
 		UE_LOG(LogTemp, Error, TEXT("[ITEMUI] grade multipliers not loaded (item_grades.csv) - every grade counts as x1.0"));
+
+	// Economy (2026-10-17) - loot types and price rules from the same directory, for labels only
+	if (ItemDataDirectory.IsEmpty() == false)
+	{
+		FString EconomyError;
+		if (Loot.LoadFromDirectory(Directory, EconomyError) == false || Economy.LoadFromDirectory(Directory, EconomyError) == false)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[ECONOMY] not loaded - %s"), *EconomyError);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[ECONOMY] loot types %d · enhance %u x %.2f^L · death loss %u%%"), Loot.Num(), Economy.EnhanceCostBase,
+				Economy.EnhanceCostGrowth, Economy.DeathGoldLossPct);
+		}
+	}
 
 	// Skills come from the same directory - skills.csv + skill_effects.csv, what the server fights with (2026-10-10 roster)
 	if (ItemDataDirectory.IsEmpty() == false)
@@ -199,7 +218,11 @@ void US1ItemSubsystem::OnInventorySync(const Protocol::S_INVENTORY_SYNC& Pkt)
 	for (const Protocol::ItemInstance& Item : Pkt.items())
 		Apply(ToView(Item));
 
-	UE_LOG(LogTemp, Log, TEXT("[ITEMUI] sync - %d items, model now %d, %s"), Pkt.items_size(), Items.Num(), bBaseCamp ? TEXT("base camp (full)") : TEXT("dungeon"));
+	// Vault gold rides the base-camp sync (2026-10-17 economy)
+	if (Pkt.has_gold())
+		SetGold(static_cast<int64>(Pkt.gold()), /*bFromSync*/ true);
+
+	UE_LOG(LogTemp, Log, TEXT("[ITEMUI] sync - %d items, model now %d, %s gold=%lld"), Pkt.items_size(), Items.Num(), bBaseCamp ? TEXT("base camp (full)") : TEXT("dungeon"), Gold);
 
 	OnItemsChanged.Broadcast();
 	OnInventorySynced.Broadcast(bBaseCamp);
@@ -220,6 +243,16 @@ void US1ItemSubsystem::OnItemResult(const Protocol::S_ITEM_RESULT& Pkt)
 	{
 		if (Apply(ToView(Item)))
 			bChanged = true;
+	}
+
+	// Sell / enhance carry the new vault gold (2026-10-17 economy) - a sale says how much it brought
+	if (Pkt.has_gold())
+	{
+		const int64 Before = Gold;
+		SetGold(static_cast<int64>(Pkt.gold()), /*bFromSync*/ false);
+		bChanged = true;
+		if (bOurs && Request.Action == ES1ItemAction::Sell && Result == ES1ItemResult::Ok && Before >= 0)
+			OnItemNotice.Broadcast(ES1ItemNotice::Sold, Request.InstanceId, static_cast<int32>(Gold - Before));
 	}
 
 	// A rejection changes no item but still ends the wait — the dim has to go.
@@ -374,6 +407,30 @@ void US1ItemSubsystem::RequestEnhance(uint64 InstanceId)
 	Pkt.set_request_id(TCHAR_TO_UTF8(*AddPending(ES1ItemAction::Enhance, InstanceId, 0)));
 	Pkt.set_instance_id(InstanceId);
 	SEND_PACKET(Pkt);
+}
+
+void US1ItemSubsystem::RequestSell(uint64 InstanceId)
+{
+	Protocol::C_SELL Pkt;
+	Pkt.set_request_id(TCHAR_TO_UTF8(*AddPending(ES1ItemAction::Sell, InstanceId, 0)));
+	Pkt.set_instance_id(InstanceId);
+	SEND_PACKET(Pkt);
+	UE_LOG(LogTemp, Log, TEXT("[ECONOMY] sell requested id=%llu"), InstanceId);
+}
+
+void US1ItemSubsystem::SetGold(int64 NewGold, bool bFromSync)
+{
+	const int64 Before = Gold;
+	Gold = NewGold;
+	UE_LOG(LogTemp, Log, TEXT("[ECONOMY] gold %lld -> %lld%s"), Before, NewGold, bFromSync ? TEXT(" (sync)") : TEXT(""));
+
+	// Only a dungeon death takes vault gold without a request of ours (R8) - say how much
+	if (bFromSync && Before >= 0 && NewGold < Before)
+	{
+		if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+			Escape->ShowNotice(FText::Format(S1ItemUIStyle::Text(TEXT("notice.gold_lost")), FText::AsNumber(Before - NewGold),
+				FText::AsNumber(static_cast<int32>(Economy.DeathGoldLossPct))), 5.f, true);
+	}
 }
 
 void US1ItemSubsystem::RequestOpenBag(uint64 BagId)

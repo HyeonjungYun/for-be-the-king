@@ -3744,6 +3744,7 @@ class ItemInstance final :
     kStateFieldNumber = 5,
     kSlotFieldNumber = 6,
     kLonePathFieldNumber = 8,
+    kStackCountFieldNumber = 9,
   };
   // repeated .Protocol.SkillInfo skills = 7;
   int skills_size() const;
@@ -3826,6 +3827,15 @@ class ItemInstance final :
   void _internal_set_lone_path(bool value);
   public:
 
+  // uint32 stack_count = 9;
+  void clear_stack_count();
+  uint32_t stack_count() const;
+  void set_stack_count(uint32_t value);
+  private:
+  uint32_t _internal_stack_count() const;
+  void _internal_set_stack_count(uint32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ItemInstance)
  private:
   class _Internal;
@@ -3842,6 +3852,7 @@ class ItemInstance final :
     int state_;
     int slot_;
     bool lone_path_;
+    uint32_t stack_count_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -6801,6 +6812,26 @@ inline void ItemInstance::_internal_set_lone_path(bool value) {
 inline void ItemInstance::set_lone_path(bool value) {
   _internal_set_lone_path(value);
   // @@protoc_insertion_point(field_set:Protocol.ItemInstance.lone_path)
+}
+
+// uint32 stack_count = 9;
+inline void ItemInstance::clear_stack_count() {
+  _impl_.stack_count_ = 0u;
+}
+inline uint32_t ItemInstance::_internal_stack_count() const {
+  return _impl_.stack_count_;
+}
+inline uint32_t ItemInstance::stack_count() const {
+  // @@protoc_insertion_point(field_get:Protocol.ItemInstance.stack_count)
+  return _internal_stack_count();
+}
+inline void ItemInstance::_internal_set_stack_count(uint32_t value) {
+  
+  _impl_.stack_count_ = value;
+}
+inline void ItemInstance::set_stack_count(uint32_t value) {
+  _internal_set_stack_count(value);
+  // @@protoc_insertion_point(field_set:Protocol.ItemInstance.stack_count)
 }
 
 // -------------------------------------------------------------------

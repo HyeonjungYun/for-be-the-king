@@ -155,6 +155,10 @@ private:
 	bool	ShowsEnhance() const { return Section == ES1CampSection::All || Section == ES1CampSection::Enhance; }
 	bool	ShowsEnter() const { return Section == ES1CampSection::All || Section == ES1CampSection::Gate; }
 	bool	PickOnly() const { return Section == ES1CampSection::Enhance || Section == ES1CampSection::Gate; }
+	bool	SellsOnClick() const { return Section == ES1CampSection::Sell; }		// 매입 행수 - 누르면 바로 판다 (2026-10-17)
+	void	RefreshGold();
+	UPROPERTY() TObjectPtr<UTextBlock>						GoldText;
+	UPROPERTY() TObjectPtr<UTextBlock>						CloseHint;
 
 	ES1CampSection											Section = ES1CampSection::All;
 	UPROPERTY() TObjectPtr<UBorder>							Background;

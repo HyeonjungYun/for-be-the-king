@@ -7,6 +7,7 @@
 #include "TimerManager.h"
 #include "Game/Item/S1ItemTypes.h"
 #include "Game/Item/S1ItemLogic.h"
+#include "Game/Item/S1Economy.h"
 #include "S1ItemSubsystem.generated.h"
 
 namespace Protocol
@@ -87,6 +88,8 @@ public:
 	void RequestStash(uint64 InstanceId, bool bToVault);
 	/** 베이스캠프 강화 +1 (C_ENHANCE) — 응답은 S_ITEM_RESULT{changed}, 레벨이 오른 인스턴스로 갱신된다 (item-enhance 2026-10-12) */
 	void RequestEnhance(uint64 InstanceId);
+	/** 매입 행수 — sell one carried or vaulted cell (C_SELL, 2026-10-17 economy). The answer carries the new gold */
+	void RequestSell(uint64 InstanceId);
 	void RequestOpenBag(uint64 BagId);
 	void RequestLoot(uint64 BagId, uint64 InstanceId);
 
@@ -135,6 +138,16 @@ public:
 
 	/** Item types read from Server/Data. Empty when the files could not be read — see the log. */
 	const FS1ItemCatalog& GetCatalog() const { return Catalog; }
+
+	// ── Economy (2026-10-17, design/quick-specs/economy-loot-2026-10-17.md) ─────────
+
+	/** Sell-only loot types and the price / cost rules — the server's own files, for labels only. */
+	const FS1LootCatalog& GetLoot() const { return Loot; }
+	const FS1EconomyRules& GetEconomy() const { return Economy; }
+	bool IsLoot(uint32 ItemTypeId) const { return Loot.IsLoot(ItemTypeId); }
+
+	/** Vault gold as of the last base-camp sync or gold-changing result. -1 = not told yet. */
+	int64 GetGold() const { return Gold; }
 
 	/** Common, Rare, Epic, Legendary — Server/Data/item_grades.csv, the file the server fights with. */
 	TArrayView<const float> GetGradeMultipliers() const;
@@ -218,6 +231,12 @@ private:
 	void CheckStrings() const;
 
 	FS1ItemCatalog				Catalog;
+	FS1LootCatalog				Loot;
+	FS1EconomyRules				Economy;
+	int64						Gold = -1;
+
+	/** A new gold number - says so when it went down outside our own requests (only a dungeon death does that). */
+	void SetGold(int64 NewGold, bool bFromSync);
 
 	TMap<uint64, FS1ItemView>	Items;
 	TMap<uint64, FS1BagView>	Bags;

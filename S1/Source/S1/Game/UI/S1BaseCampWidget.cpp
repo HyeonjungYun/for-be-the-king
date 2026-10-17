@@ -276,14 +276,22 @@ void US1BaseCampWidget::NativeOnInitialized()
 		TitleText = MakeText(FontEmphasis, TextPrimary());
 		if (UHorizontalBoxSlot* TitleSlot = Row->AddChildToHorizontalBox(TitleText))
 			TitleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-		UTextBlock* CloseHint = MakeText(FontSmall, TextTertiary());
+
+		// Vault gold (2026-10-17 economy) - on every window, the whole screen too
+		GoldText = MakeText(FontEmphasis, FLinearColor(FColor(0xE8, 0xC1, 0x6A)));
+		if (UHorizontalBoxSlot* GoldSlot = Row->AddChildToHorizontalBox(GoldText))
+		{
+			GoldSlot->SetVerticalAlignment(VAlign_Center);
+			GoldSlot->SetPadding(FMargin(0.f, 0.f, 24.f, 0.f));
+		}
+
+		CloseHint = MakeText(FontSmall, TextTertiary());
 		CloseHint->SetText(Text(TEXT("camp.close_hint")));
 		if (UHorizontalBoxSlot* HintSlot = Row->AddChildToHorizontalBox(CloseHint))
 			HintSlot->SetVerticalAlignment(VAlign_Center);
 		if (UVerticalBoxSlot* RowSlot = Page->AddChildToVerticalBox(Row))
 			RowSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f));
 		TitleRow = Row;
-		TitleRow->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	UHorizontalBox* Columns = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
@@ -461,10 +469,13 @@ void US1BaseCampWidget::SetSection(ES1CampSection InSection)
 
 	const TCHAR* TitleKey = Section == ES1CampSection::Stash ? TEXT("camp.title.stash")
 		: Section == ES1CampSection::Enhance ? TEXT("camp.title.enhance")
-		: Section == ES1CampSection::Gate ? TEXT("camp.title.gate") : nullptr;
-	TitleRow->SetVisibility(TitleKey != nullptr ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
-	if (TitleKey != nullptr)
-		TitleText->SetText(Text(TitleKey));
+		: Section == ES1CampSection::Gate ? TEXT("camp.title.gate")
+		: Section == ES1CampSection::Sell ? TEXT("camp.title.sell") : nullptr;
+	// The row stays for the gold (2026-10-17); the whole screen has no title and nothing to close with Esc
+	TitleRow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	TitleText->SetText(TitleKey != nullptr ? Text(TitleKey) : FText::GetEmpty());
+	CloseHint->SetVisibility(TitleKey != nullptr ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	RefreshGold();
 
 	auto Show = [](UWidget* W, bool bOn) { if (W != nullptr) W->SetVisibility(bOn ? ESlateVisibility::Visible : ESlateVisibility::Collapsed); };
 	Show(ColumnBoxes[static_cast<int32>(EColumn::Vault)], ShowsVault());
@@ -578,6 +589,7 @@ void US1BaseCampWidget::Refresh()
 	RefreshTotals();
 	RefreshAtomic();
 	RefreshEnter();
+	RefreshGold();
 
 	const US1ItemSubsystem* Items = GetItems();
 	if (HoveredId != 0 && Items->FindItem(HoveredId) == nullptr)
@@ -872,21 +884,38 @@ void US1BaseCampWidget::RefreshDetail()
 	RefreshEnhance();
 }
 
+void US1BaseCampWidget::RefreshGold()
+{
+	if (GoldText == nullptr)
+		return;
+	const US1ItemSubsystem* Items = GetItems();
+	const int64 Gold = Items != nullptr ? Items->GetGold() : -1;
+	GoldText->SetText(Gold >= 0 ? FText::Format(Text(TEXT("label.gold")), FText::AsNumber(Gold)) : FText::GetEmpty());
+}
+
 void US1BaseCampWidget::RefreshEnhance()
 {
 	if (EnhanceButton == nullptr || EnhanceText == nullptr)
 		return;
 	US1ItemSubsystem* Items = GetItems();
 	const FS1ItemView* Item = (Items != nullptr && ShownId != 0) ? Items->FindItem(ShownId) : nullptr;
+	const bool bLoot = Item != nullptr && Items->IsLoot(Item->ItemTypeId);
 	const bool bMax = Item != nullptr && Item->Level >= S1ItemLogic::ItemLevelMax;
-	const bool bCan = Item != nullptr && bMax == false && Items->IsPending(ShownId) == false && IsLocked() == false;
+
+	// The cost (2026-10-17 economy): 20 × 1.25^level - shown on the button, dimmed when the vault cannot pay
+	const uint64 Cost = (Item != nullptr && Items != nullptr) ? S1Economy::EnhanceCost(Item->Level, Items->GetEconomy()) : 0;
+	const bool bAfford = Items != nullptr && Items->GetGold() >= static_cast<int64>(Cost);
+	const bool bCan = Item != nullptr && bLoot == false && bMax == false && bAfford && Items->IsPending(ShownId) == false && IsLocked() == false;
 
 	if (Item == nullptr)
 		EnhanceText->SetText(Text(TEXT("button.enhance_pick")));
+	else if (bLoot)
+		EnhanceText->SetText(Text(TEXT("button.enhance_loot")));
 	else if (bMax)
 		EnhanceText->SetText(FText::Format(Text(TEXT("button.enhance_max")), FText::AsNumber(static_cast<int32>(Item->Level))));
 	else
-		EnhanceText->SetText(FText::Format(Text(TEXT("button.enhance")), FText::AsNumber(static_cast<int32>(Item->Level)), FText::AsNumber(static_cast<int32>(Item->Level + 1))));
+		EnhanceText->SetText(FText::Format(Text(TEXT("button.enhance_cost")), FText::AsNumber(static_cast<int32>(Item->Level)),
+			FText::AsNumber(static_cast<int32>(Item->Level + 1)), FText::AsNumber(Cost)));
 	EnhanceText->SetColorAndOpacity(FSlateColor(bCan ? TextPrimary() : S1ItemUIStyle::TextTertiary()));
 	EnhanceButton->SetBrushColor(bCan ? CellHover() : CellBackground());
 }
@@ -931,6 +960,10 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 		const FS1ItemView* Item = (Items != nullptr && ShownId != 0) ? Items->FindItem(ShownId) : nullptr;
 		if (Item == nullptr)
 			ShowNotice(EColumn::Center, Text(TEXT("notice.enhance_pick")), 0);
+		else if (Items->IsLoot(Item->ItemTypeId))
+			ShowNotice(EColumn::Center, Notice(ES1ItemNotice::LootNotEquippable, 0), ShownId);
+		else if (Items->GetGold() < static_cast<int64>(S1Economy::EnhanceCost(Item->Level, Items->GetEconomy())))
+			ShowNotice(EColumn::Center, Notice(ES1ItemNotice::NotEnoughGold, 0), ShownId);
 		else if (Item->Level < S1ItemLogic::ItemLevelMax && Items->IsPending(ShownId) == false && IsLocked() == false)
 		{
 			CancelConfirm();
@@ -1012,6 +1045,22 @@ void US1BaseCampWidget::HandleSlotClicked(uint64 InstanceId, FKey Button, bool b
 		return;
 	}
 
+	// 매입 행수 (2026-10-17 economy, user decision: a click sells at once) - the whole cell. Worn gear comes off first
+	if (SellsOnClick())
+	{
+		ShownId = InstanceId;
+		if (Item->State == ES1ItemState::Equipped)
+		{
+			ShowNotice(EColumn::Center, Notice(ES1ItemNotice::SellEquipped, 0), InstanceId);
+			ShakeSlot(InstanceId);
+			return;
+		}
+		CancelConfirm();
+		Items->RequestSell(InstanceId);
+		Refresh();
+		return;
+	}
+
 	if (bCtrl && Button == EKeys::LeftMouseButton)
 	{
 		Discard(*Item);
@@ -1046,6 +1095,14 @@ void US1BaseCampWidget::HandleSlotClicked(uint64 InstanceId, FKey Button, bool b
 		}
 		else if (bRight)
 		{
+			// Loot is sell-only (2026-10-17 economy) - say where it goes instead of "할 수 없는 동작"
+			if (Items->IsLoot(Item->ItemTypeId))
+			{
+				ShowNotice(EColumn::Carried, Notice(ES1ItemNotice::LootNotEquippable, 0), InstanceId);
+				ShakeSlot(InstanceId);
+				return;
+			}
+
 			const FS1ItemTypeDef* Type = Items->GetCatalog().Find(Item->ItemTypeId);
 			if (Type == nullptr)
 			{

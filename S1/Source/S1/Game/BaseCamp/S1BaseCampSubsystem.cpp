@@ -330,6 +330,7 @@ void US1BaseCampSubsystem::ChooseDialogueOption(ES1CampAction Action)
 	case ES1CampAction::OpenStash:		OpenCampPanel(ES1CampSection::Stash); break;
 	case ES1CampAction::OpenEnhance:	OpenCampPanel(ES1CampSection::Enhance); break;
 	case ES1CampAction::OpenGate:		OpenCampPanel(ES1CampSection::Gate); break;
+	case ES1CampAction::OpenSell:		OpenCampPanel(ES1CampSection::Sell); break;
 	case ES1CampAction::OpenParty:
 		OpenCampPanel(ES1CampSection::Gate);
 		if (Widget != nullptr)

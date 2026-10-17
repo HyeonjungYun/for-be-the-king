@@ -23,6 +23,7 @@ enum class ES1CampSection : uint8
 	Stash,
 	Enhance,
 	Gate,
+	Sell,		// 매입 행수 (2026-10-17 economy) - a click sells the cell
 };
 
 /** What a dialogue option does (US1BaseCampSubsystem::ChooseDialogueOption). */
@@ -33,6 +34,7 @@ enum class ES1CampAction : uint8
 	OpenEnhance,	// 대장장이 — pick an item, [강화 +1]
 	OpenGate,		// 길드장 — mode row, party, [입장] → S4
 	OpenParty,		// 길드장 — the party window straight away
+	OpenSell,		// 매입 행수 — the sell window (2026-10-17 economy)
 };
 
 struct FS1CampOption

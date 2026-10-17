@@ -88,8 +88,8 @@ bool FS1CampLiveDataTest::RunTest(const FString& Parameters)
 	FString Error;
 	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../Server/Data")));
 	TestTrue(TEXT("loads ") + Error, Layout.LoadFromDirectory(Dir, Error));
-	TestEqual(TEXT("three npcs"), Layout.GetNpcs().Num(), 3);
-	for (const TCHAR* Id : { TEXT("stash"), TEXT("enhance"), TEXT("gate") })
+	TestEqual(TEXT("four npcs (+ trade, 2026-10-17 economy)"), Layout.GetNpcs().Num(), 4);
+	for (const TCHAR* Id : { TEXT("stash"), TEXT("enhance"), TEXT("gate"), TEXT("trade") })
 	{
 		const FS1CampPoint* Npc = Layout.FindNpc(Id);
 		TestTrue(FString::Printf(TEXT("%s present and inside"), Id), Npc != nullptr && Layout.Contains(Npc->X, Npc->Y));
