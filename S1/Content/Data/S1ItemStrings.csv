@@ -151,6 +151,7 @@ item.502,목화,TEMP name
 item.601,노리개,TEMP name
 monster.hound,떠돌이 들개,monster-ai.md roster 1 (임시 이름 - narrative 확정 전)
 monster.husk,허깨비 병사,monster-ai.md roster 2 (임시)
+monster.husk_archer,허깨비 궁수,monster-ai.md § L (임시)
 monster.house_boss,집 보스,monster-ai.md roster 3 (임시)
 monster.wolf,들개,monster-ai.md § J 무리 - 탐지형 기본 (2026-10-11 임시 이름)
 monster.wolf_alpha,우두머리 들개,monster-ai.md § J 무리 - 탐지형 우두머리 (임시)
@@ -427,6 +428,12 @@ skill.1077.family,스태프 계열,
 skill.9001,내려치기,house boss (monster-ai.md Core Rule 18)
 skill.9001.desc,보스가 망치를 내리찍어 4m 안의 적에게 큰 피해를 입힌다,
 skill.9001.family,몬스터,
+skill.9002,돌진,boar chief (monster-ai.md § L)
+skill.9002.desc,멧돼지 우두머리가 땅을 긁다 직선으로 7m 돌진해 부딪힌 적을 옆으로 튕겨 낸다,
+skill.9002.family,몬스터,
+skill.9003,허깨비 화살,husk archer (monster-ai.md § L)
+skill.9003.desc,허깨비 궁수가 활을 당겨 8.5m 날아가는 화살을 쏜다. 날아오는 화살은 비켜서 피한다,
+skill.9003.family,몬스터,
 shape.cone,부채꼴,
 shape.projectile,투사체,
 atomic.cone,부채꼴 {0}m · {1}°,{0} metres radius · {1} degrees

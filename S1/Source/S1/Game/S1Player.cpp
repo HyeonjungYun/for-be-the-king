@@ -1183,6 +1183,27 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 		return;
 	}
 
+	// The boar chief's charge telegraph (monster-ai.md § L): the strip it will run down, held for telegraph_ms while it
+	// paws the ground. Same warning colour as the boss — side-step out of the strip and it misses. 🔴 TEMP (DrawDebug)
+	if (EffectId == 9002)
+	{
+		const float LengthCm = (Def != nullptr && Def->RangeCm > 0.f) ? Def->RangeCm : 700.f;
+		const float WidthCm = (Def != nullptr && Def->WidthCm > 0.f) ? Def->WidthCm : 140.f;
+		const float HoldSec = (Def != nullptr && Def->TelegraphMs > 0) ? Def->TelegraphMs / 1000.f : 0.75f;
+		FVector ChargeDir = FVector(Aim.X - Impact.X, Aim.Y - Impact.Y, 0.f);
+		if (ChargeDir.Normalize() == false)
+			return;
+		const FVector Side = FVector(-ChargeDir.Y, ChargeDir.X, 0.f) * (WidthCm * 0.5f);
+		const FVector End = Ground + ChargeDir * LengthCm;
+		const FColor Warn(230, 60, 40);
+		DrawDebugLine(World, Ground + Side, End + Side, Warn, false, HoldSec, 0, 10.f);
+		DrawDebugLine(World, Ground - Side, End - Side, Warn, false, HoldSec, 0, 10.f);
+		DrawDebugLine(World, End + Side, End - Side, Warn, false, HoldSec, 0, 10.f);
+		DrawDebugLine(World, Ground + Side, Ground - Side, FColor(150, 40, 30), false, HoldSec, 0, 4.f);
+		DrawDebugLine(World, Ground, End, FColor(150, 40, 30), false, HoldSec, 0, 4.f);
+		return;
+	}
+
 	if (Def == nullptr)
 	{
 		// Unknown effect_id — the client table is behind the server's. Draw something rather
