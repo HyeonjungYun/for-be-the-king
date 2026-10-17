@@ -73,8 +73,32 @@ bool EscapeConfig::Parse(const string& csv, OUT string& error)
 			}
 			debugEscapeCommand = (value == "on");
 		}
+		else if (key == "telemetry_grade_points")
+		{
+			// "1;2;4;8" - 일반 · 희귀 · 영웅 · 전설, 정확히 4개
+			uint32 points[4] = {};
+			size_t count = 0;
+			size_t start = 0;
+			bool ok = true;
+			while (ok)
+			{
+				const size_t end = value.find(';', start);
+				const string part = value.substr(start, end == string::npos ? string::npos : end - start);
+				ok = count < 4 && Csv::ParseUInt(part, OUT points[count]);
+				count++;
+				if (end == string::npos)
+					break;
+				start = end + 1;
+			}
+			if (ok == false || count != 4)
+			{
+				error = where + " must be 4 non-negative integers separated by ';'";
+				return false;
+			}
+			memcpy(gradePoints, points, sizeof(gradePoints));
+		}
 		// 클라 · 집계 도구가 읽는 값 - 서버는 형식만 받아 둔다
-		else if (key == "run_warning_s" || key == "telemetry_grade_points" || key == "telemetry_alert_camp_alarm_pct")
+		else if (key == "run_warning_s" || key == "telemetry_alert_camp_alarm_pct")
 		{
 		}
 		else
@@ -89,6 +113,14 @@ bool EscapeConfig::Parse(const string& csv, OUT string& error)
 
 bool EscapeConfig::Validate(OUT string& error) const
 {
+	// 등급 점수는 단조 증가 - 등급 구분이 사라지면 리스크 지표가 무의미하다 (§ Tuning Knobs). 30 칸 합이 넘치지 않게 1,000 이하
+	for (int32 i = 0; i < 4; i++)
+	{
+		const uint32 lo = (i == 0) ? 1u : gradePoints[i - 1] + 1;
+		if (InRange(gradePoints[i], lo, 1000u, "telemetry_grade_points (strictly increasing, 1 .. 1000)", error) == false)
+			return false;
+	}
+
 	// 하한 800 → 500 (2026-10-17 사용자 결정: 구역 반경을 2/3 로 - 667 cm)
 	return InRange(zoneEnterCm, 500.f, 1100.f, "zone_enter_radius_cm", error)
 		&& InRange(zoneLeaveCm, zoneEnterCm, 1200.f, "zone_leave_radius_cm (enter .. tower_clear_radius 1200)", error)
@@ -234,4 +266,9 @@ uint64 EscapeLogic::RemainingUs(uint64 deadlineUs, uint64 nowUs)
 bool EscapeLogic::Expired(uint64 deadlineUs, uint64 nowUs)
 {
 	return deadlineUs != 0 && nowUs >= deadlineUs;
+}
+
+uint32 EscapeLogic::GradePoints(uint32 grade, const EscapeConfig& cfg)
+{
+	return (grade >= 1 && grade <= 4) ? cfg.gradePoints[grade - 1] : 0;
 }

@@ -531,9 +531,9 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 			player->statZoneDwellUs = player->statAlertDwellUs = 0;
 			player->statLastTowerId.clear();
 
-			// 텔레메트리 F8 - 들고 들어온 것의 등급 점수 (1 · 2 · 4 · 8)
+			// 텔레메트리 F8 - 들고 들어온 것의 등급 점수 (telemetry_grade_points). 전리품은 등급이 없어 뺀다
 			player->statBroughtInSum = 0;
-			auto points = [](const ItemEntry& e) { return e.grade > 0 ? (1u << (static_cast<int32>(e.grade) - 1)) : 0u; };
+			auto points = [](const ItemEntry& e) { return LootTable::IsLoot(e.itemTypeId) ? 0u : EscapeLogic::GradePoints(static_cast<uint32>(e.grade), EscapeConfig::Get()); };
 			for (const ItemEntry& e : player->inventory)
 				player->statBroughtInSum += points(e);
 			for (const ItemEntry& e : player->equipped)
@@ -8364,11 +8364,14 @@ void Room::WriteRunTelemetry(const PlayerRef& player, const char* reason, uint64
 	row.runMs = (player->runStartUs != 0 && nowUs > player->runStartUs) ? (nowUs - player->runStartUs) / 1000 : 0;
 	row.broughtInSum = player->statBroughtInSum;
 
+	// 전리품은 등급이 없다(전부 일반으로 생성) - 칸 수가 점수가 되지 않게 장비만 센다
 	auto account = [&row](const ItemEntry& e)
 	{
+		if (LootTable::IsLoot(e.itemTypeId))
+			return;
 		const uint32 grade = static_cast<uint32>(e.grade);
 		row.endCarriedCount++;
-		row.endCarriedSum += grade > 0 ? (1u << (grade - 1)) : 0u;
+		row.endCarriedSum += EscapeLogic::GradePoints(grade, EscapeConfig::Get());
 		row.endCarriedMaxGrade = max(row.endCarriedMaxGrade, grade);
 	};
 	for (const ItemEntry& e : player->inventory)

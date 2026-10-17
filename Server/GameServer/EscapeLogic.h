@@ -21,6 +21,7 @@ struct EscapeConfig
 	uint32		expiryGoldKeptPct = 30;
 	bool		debugEscapeCommand = false;		// /escape 즉시 탈출 - 꺼져 있어야 P5 가 산다
 	uint64		telemetryMinRunUs = 60'000'000;
+	uint32		gradePoints[4] = { 1, 2, 4, 8 };	// F8 등급 점수 - 일반 · 희귀 · 영웅 · 전설 (telemetry_grade_points)
 	uint64		spawnInvulnerabilityUs = 3'000'000;	// 런 시작 무적 (AC-10) - 이동 · 공격에 풀린다
 
 	// escape_config.csv (key,value). 모르는 키 · 범위 밖 값은 error 를 남기고 false. 없는 키는 기본값
@@ -69,4 +70,7 @@ namespace EscapeLogic
 	// F4 - 남은 시간 (0 에서 멈춘다) · 만료 여부 (마감 시각 자체가 만료)
 	uint64		RemainingUs(uint64 deadlineUs, uint64 nowUs);
 	bool		Expired(uint64 deadlineUs, uint64 nowUs);
+
+	// F8 - 등급 하나의 점수. 등급 1 ~ 4 밖은 0
+	uint32		GradePoints(uint32 grade, const EscapeConfig& cfg);
 }

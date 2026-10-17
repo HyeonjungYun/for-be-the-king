@@ -212,6 +212,37 @@ TEST(EscapeConfig, 실제_설정_파일과_범위_검사_AC_ET_13_28)
 	EXPECT_FALSE(parse("escape_debug_command,maybe\n", OUT error));
 }
 
+TEST(EscapeConfig, 등급_점수는_설정_파일_값을_쓴다_F8)
+{
+	string error;
+	EscapeConfig cfg;
+	ASSERT_TRUE(cfg.Load(ItemTable::DefaultDataDir(), OUT error)) << error;
+	EXPECT_EQ(EscapeLogic::GradePoints(1, cfg), 1u);			// 실제 파일 1;2;4;8
+	EXPECT_EQ(EscapeLogic::GradePoints(4, cfg), 8u);
+	EXPECT_EQ(EscapeLogic::GradePoints(0, cfg), 0u);			// 등급 없음
+	EXPECT_EQ(EscapeLogic::GradePoints(5, cfg), 0u);
+
+	EscapeConfig custom;
+	ASSERT_TRUE(custom.Parse("key,value\ntelemetry_grade_points,1;3;9;27\n", OUT error)) << error;
+	ASSERT_TRUE(custom.Validate(OUT error)) << error;
+	EXPECT_EQ(EscapeLogic::GradePoints(2, custom), 3u);
+	EXPECT_EQ(EscapeLogic::GradePoints(4, custom), 27u);
+
+	auto parse = [](const string& value, OUT string& err)
+	{
+		EscapeConfig c;
+		return c.Parse("key,value\ntelemetry_grade_points," + value + "\n", OUT err) && c.Validate(OUT err);
+	};
+	EXPECT_FALSE(parse("1;2;4", OUT error));					// 3개
+	EXPECT_FALSE(parse("1;2;4;8;16", OUT error));				// 5개
+	EXPECT_FALSE(parse("1;2;;8", OUT error));					// 빈 값
+	EXPECT_FALSE(parse("1;2;x;8", OUT error));
+	EXPECT_FALSE(parse("1;2;2;8", OUT error));					// 같은 점수 - 등급 구분이 사라진다
+	EXPECT_FALSE(parse("0;1;2;3", OUT error));					// 0 점 등급
+	EXPECT_FALSE(parse("1;2;4;1001", OUT error));				// 상한
+	EXPECT_TRUE(parse("1;2;4;1000", OUT error)) << error;
+}
+
 TEST(TowerTable, 탈출_규칙_층당_3에서_4개_간격_해안선_검사_AC_ET_13)
 {
 	// 해안선은 WallTable 이 쥔다 - 다른 테스트가 남긴 표에 기대지 않게 해안선 없는 표로 시작한다
