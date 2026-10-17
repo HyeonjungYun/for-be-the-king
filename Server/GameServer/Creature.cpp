@@ -250,6 +250,11 @@ void Creature::ApplyHardCc(Protocol::CcType type, uint64 nowUs, uint32 effective
 
 	if (endUs > *slot)
 		*slot = endUs;
+
+	// 밀려난 마지막 시각 - knockbackEndUs 는 CC 가 끝나면 0 으로 지워진다 (UpdateCc). 탈출 망설임 지표가 "밀려 나갔다" 를 가르려면
+	// 끝난 뒤에도 남는 값이 필요하다 (escape-timer OQ-7, 2026-10-18 - 예전엔 넉백 뒤 이탈이 거의 다 "자발" 로 셌다)
+	if (type == Protocol::CC_TYPE_KNOCKBACK || type == Protocol::CC_TYPE_LAUNCH)
+		lastDisplacedEndUs = (std::max)(lastDisplacedEndUs, endUs);
 }
 
 void Creature::ApplySoftCc(Protocol::CcType type, uint64 nowUs, uint32 effectiveMs, float magnitude)

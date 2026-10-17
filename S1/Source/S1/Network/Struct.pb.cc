@@ -50,6 +50,7 @@ PROTOBUF_CONSTEXPR ObjectInfo::ObjectInfo(
   , /*decltype(_impl_.max_hp_)*/0
   , /*decltype(_impl_.weapon_type_id_)*/0u
   , /*decltype(_impl_.betrayer_)*/false
+  , /*decltype(_impl_.bag_kind_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct ObjectInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR ObjectInfoDefaultTypeInternal()
@@ -417,6 +418,7 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
   PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.max_hp_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.weapon_type_id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.betrayer_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::ObjectInfo, _impl_.bag_kind_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::AttackInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -637,24 +639,24 @@ const uint32_t TableStruct_Struct_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(p
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::Protocol::PosInfo)},
   { 12, -1, -1, sizeof(::Protocol::ObjectInfo)},
-  { 27, -1, -1, sizeof(::Protocol::AttackInfo)},
-  { 37, -1, -1, sizeof(::Protocol::DamageInfo)},
-  { 50, -1, -1, sizeof(::Protocol::CcEventInfo)},
-  { 61, -1, -1, sizeof(::Protocol::KnockbackInfo)},
-  { 73, -1, -1, sizeof(::Protocol::CcSlot)},
-  { 82, -1, -1, sizeof(::Protocol::CcStateInfo)},
-  { 91, -1, -1, sizeof(::Protocol::DiedInfo)},
-  { 100, -1, -1, sizeof(::Protocol::SkillInfo)},
-  { 110, -1, -1, sizeof(::Protocol::SkillCastInfo)},
-  { 119, -1, -1, sizeof(::Protocol::SkillHitInfo)},
-  { 132, -1, -1, sizeof(::Protocol::StatusInfo)},
-  { 145, -1, -1, sizeof(::Protocol::ProjectileInfo)},
-  { 162, -1, -1, sizeof(::Protocol::ProjectileEndInfo)},
-  { 173, -1, -1, sizeof(::Protocol::ZoneInfo)},
-  { 192, -1, -1, sizeof(::Protocol::CharacterInfo)},
-  { 203, -1, -1, sizeof(::Protocol::ItemInstance)},
-  { 218, -1, -1, sizeof(::Protocol::VisionSource)},
-  { 233, -1, -1, sizeof(::Protocol::PartyMember)},
+  { 28, -1, -1, sizeof(::Protocol::AttackInfo)},
+  { 38, -1, -1, sizeof(::Protocol::DamageInfo)},
+  { 51, -1, -1, sizeof(::Protocol::CcEventInfo)},
+  { 62, -1, -1, sizeof(::Protocol::KnockbackInfo)},
+  { 74, -1, -1, sizeof(::Protocol::CcSlot)},
+  { 83, -1, -1, sizeof(::Protocol::CcStateInfo)},
+  { 92, -1, -1, sizeof(::Protocol::DiedInfo)},
+  { 101, -1, -1, sizeof(::Protocol::SkillInfo)},
+  { 111, -1, -1, sizeof(::Protocol::SkillCastInfo)},
+  { 120, -1, -1, sizeof(::Protocol::SkillHitInfo)},
+  { 133, -1, -1, sizeof(::Protocol::StatusInfo)},
+  { 146, -1, -1, sizeof(::Protocol::ProjectileInfo)},
+  { 163, -1, -1, sizeof(::Protocol::ProjectileEndInfo)},
+  { 174, -1, -1, sizeof(::Protocol::ZoneInfo)},
+  { 193, -1, -1, sizeof(::Protocol::CharacterInfo)},
+  { 204, -1, -1, sizeof(::Protocol::ItemInstance)},
+  { 219, -1, -1, sizeof(::Protocol::VisionSource)},
+  { 234, -1, -1, sizeof(::Protocol::PartyMember)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -684,85 +686,86 @@ const char descriptor_table_protodef_Struct_2eproto[] PROTOBUF_SECTION_VARIABLE(
   "\n\014Struct.proto\022\010Protocol\032\nEnum.proto\"n\n\007"
   "PosInfo\022\021\n\tobject_id\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n"
   "\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\022\"\n\005stat"
-  "e\030\006 \001(\0162\023.Protocol.MoveState\"\375\001\n\nObjectI"
+  "e\030\006 \001(\0162\023.Protocol.MoveState\"\242\002\n\nObjectI"
   "nfo\022\021\n\tobject_id\030\001 \001(\004\022)\n\013object_type\030\002 "
   "\001(\0162\024.Protocol.ObjectType\022#\n\010pos_info\030\003 "
   "\001(\0132\021.Protocol.PosInfo\022-\n\rcreature_type\030"
   "\004 \001(\0162\026.Protocol.CreatureType\022\027\n\017monster"
   "_type_id\030\005 \001(\r\022\n\n\002hp\030\006 \001(\005\022\016\n\006max_hp\030\007 \001"
   "(\005\022\026\n\016weapon_type_id\030\010 \001(\r\022\020\n\010betrayer\030\t"
-  " \001(\010\"\\\n\nAttackInfo\022\023\n\013attacker_id\030\001 \001(\004\022"
-  "\021\n\ttarget_id\030\002 \001(\004\022\021\n\twindup_ms\030\003 \001(\004\022\023\n"
-  "\013interval_ms\030\004 \001(\r\"\246\001\n\nDamageInfo\022\023\n\013att"
-  "acker_id\030\001 \001(\004\022\021\n\ttarget_id\030\002 \001(\004\022\016\n\006dam"
-  "age\030\003 \001(\005\022\024\n\014remaining_hp\030\004 \001(\005\022\017\n\007is_cr"
-  "it\030\005 \001(\010\022)\n\013damage_type\030\006 \001(\0162\024.Protocol"
-  ".DamageType\022\016\n\006max_hp\030\007 \001(\005\"\202\001\n\013CcEventI"
-  "nfo\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\rinstigator_id\030"
-  "\002 \001(\004\022!\n\007cc_type\030\003 \001(\0162\020.Protocol.CcType"
-  "\022\023\n\013duration_ms\030\004 \001(\r\022\021\n\tmagnitude\030\005 \001(\002"
-  "\"x\n\rKnockbackInfo\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\r"
-  "instigator_id\030\002 \001(\004\022\r\n\005dir_x\030\003 \001(\002\022\r\n\005di"
-  "r_y\030\004 \001(\002\022\020\n\010distance\030\005 \001(\002\022\r\n\005speed\030\006 \001"
-  "(\002\"T\n\006CcSlot\022!\n\007cc_type\030\001 \001(\0162\020.Protocol"
-  ".CcType\022\024\n\014remaining_ms\030\002 \001(\r\022\021\n\tmagnitu"
-  "de\030\003 \001(\002\"V\n\013CcStateInfo\022\021\n\ttarget_id\030\001 \001"
-  "(\004\022\037\n\005slots\030\002 \003(\0132\020.Protocol.CcSlot\022\023\n\013a"
-  "ctive_slow\030\003 \001(\002\"Y\n\010DiedInfo\022\021\n\tvictim_i"
-  "d\030\001 \001(\004\022\025\n\rinstigator_id\030\002 \001(\004\022#\n\005cause\030"
-  "\003 \001(\0162\024.Protocol.DeathCause\"\227\001\n\tSkillInf"
-  "o\022!\n\004slot\030\001 \001(\0162\023.Protocol.EquipSlot\022\020\n\010"
-  "skill_id\030\002 \001(\r\022+\n\nbind_state\030\003 \001(\0162\027.Pro"
-  "tocol.SlotBindState\022(\n\013shadowed_by\030\004 \001(\016"
-  "2\023.Protocol.EquipSlot\"L\n\rSkillCastInfo\022\021"
-  "\n\tcaster_id\030\001 \001(\004\022\025\n\ris_stationary\030\002 \001(\010"
-  "\022\021\n\tmotion_id\030\003 \001(\r\"\211\001\n\014SkillHitInfo\022\021\n\t"
-  "caster_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\tta"
-  "rget_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impac"
-  "t_y\030\005 \001(\002\022\r\n\005aim_x\030\006 \001(\002\022\r\n\005aim_y\030\007 \001(\002\""
-  "\242\001\n\nStatusInfo\022\021\n\ttarget_id\030\001 \001(\004\022\"\n\004kin"
-  "d\030\002 \001(\0162\024.Protocol.StatusKind\022\r\n\005param\030\003"
-  " \001(\t\022\016\n\006stacks\030\004 \001(\r\022\024\n\014remaining_ms\030\005 \001"
-  "(\r\022\021\n\tmagnitude\030\006 \001(\002\022\025\n\rinstigator_id\030\007"
-  " \001(\004\"\314\001\n\016ProjectileInfo\022\025\n\rprojectile_id"
-  "\030\001 \001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030\003"
-  " \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\r\n\005dir_x\030\006 \001("
-  "\002\022\r\n\005dir_y\030\007 \001(\002\022\021\n\tspeed_cms\030\010 \001(\002\022\020\n\010r"
-  "ange_cm\030\t \001(\002\022\021\n\tradius_cm\030\n \001(\002\022\021\n\ttarg"
-  "et_id\030\013 \001(\004\"|\n\021ProjectileEndInfo\022\025\n\rproj"
-  "ectile_id\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\'\n"
-  "\006reason\030\004 \001(\0162\027.Protocol.ProjectileEnd\022\021"
-  "\n\ttarget_id\030\005 \001(\004\"\356\001\n\010ZoneInfo\022\017\n\007zone_i"
-  "d\030\001 \001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030"
-  "\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\021\n\tradius_cm"
-  "\030\006 \001(\002\022\023\n\013duration_ms\030\007 \001(\r\022\r\n\005param\030\010 \001"
-  "(\t\022\013\n\003yaw\030\t \001(\002\022\023\n\013half_length\030\n \001(\002\022\026\n\016"
-  "half_thickness\030\013 \001(\002\022\021\n\tangle_deg\030\014 \001(\002\022"
-  "\021\n\tfollow_id\030\r \001(\004\"v\n\rCharacterInfo\022)\n\013o"
-  "bject_info\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014"
-  "\n\004name\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005"
-  "\022\020\n\010floor_id\030\005 \001(\r\"\200\002\n\014ItemInstance\022\023\n\013i"
-  "nstance_id\030\001 \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\""
-  "\n\005grade\030\003 \001(\0162\023.Protocol.ItemGrade\022\r\n\005le"
-  "vel\030\004 \001(\r\022\"\n\005state\030\005 \001(\0162\023.Protocol.Item"
-  "State\022!\n\004slot\030\006 \001(\0162\023.Protocol.EquipSlot"
-  "\022#\n\006skills\030\007 \003(\0132\023.Protocol.SkillInfo\022\021\n"
-  "\tlone_path\030\010 \001(\010\022\023\n\013stack_count\030\t \001(\r\"\252\001"
-  "\n\014VisionSource\022\021\n\tsource_id\030\001 \001(\004\022\021\n\tfol"
-  "low_id\030\002 \001(\004\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tra"
-  "dius_cm\030\005 \001(\002\022\024\n\014remaining_ms\030\006 \001(\r\022\021\n\tn"
-  "eeds_los\030\007 \001(\010\022\024\n\014sees_stealth\030\010 \001(\010\022\014\n\004"
-  "kind\030\t \001(\t\"l\n\013PartyMember\022\024\n\014character_i"
-  "d\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\016\n\006leader\030\003 \001(\010\022)\n"
-  "\005state\030\004 \001(\0162\032.Protocol.PartyMemberState"
-  "b\006proto3"
+  " \001(\010\022#\n\010bag_kind\030\n \001(\0162\021.Protocol.BagKin"
+  "d\"\\\n\nAttackInfo\022\023\n\013attacker_id\030\001 \001(\004\022\021\n\t"
+  "target_id\030\002 \001(\004\022\021\n\twindup_ms\030\003 \001(\004\022\023\n\013in"
+  "terval_ms\030\004 \001(\r\"\246\001\n\nDamageInfo\022\023\n\013attack"
+  "er_id\030\001 \001(\004\022\021\n\ttarget_id\030\002 \001(\004\022\016\n\006damage"
+  "\030\003 \001(\005\022\024\n\014remaining_hp\030\004 \001(\005\022\017\n\007is_crit\030"
+  "\005 \001(\010\022)\n\013damage_type\030\006 \001(\0162\024.Protocol.Da"
+  "mageType\022\016\n\006max_hp\030\007 \001(\005\"\202\001\n\013CcEventInfo"
+  "\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\rinstigator_id\030\002 \001"
+  "(\004\022!\n\007cc_type\030\003 \001(\0162\020.Protocol.CcType\022\023\n"
+  "\013duration_ms\030\004 \001(\r\022\021\n\tmagnitude\030\005 \001(\002\"x\n"
+  "\rKnockbackInfo\022\021\n\ttarget_id\030\001 \001(\004\022\025\n\rins"
+  "tigator_id\030\002 \001(\004\022\r\n\005dir_x\030\003 \001(\002\022\r\n\005dir_y"
+  "\030\004 \001(\002\022\020\n\010distance\030\005 \001(\002\022\r\n\005speed\030\006 \001(\002\""
+  "T\n\006CcSlot\022!\n\007cc_type\030\001 \001(\0162\020.Protocol.Cc"
+  "Type\022\024\n\014remaining_ms\030\002 \001(\r\022\021\n\tmagnitude\030"
+  "\003 \001(\002\"V\n\013CcStateInfo\022\021\n\ttarget_id\030\001 \001(\004\022"
+  "\037\n\005slots\030\002 \003(\0132\020.Protocol.CcSlot\022\023\n\013acti"
+  "ve_slow\030\003 \001(\002\"Y\n\010DiedInfo\022\021\n\tvictim_id\030\001"
+  " \001(\004\022\025\n\rinstigator_id\030\002 \001(\004\022#\n\005cause\030\003 \001"
+  "(\0162\024.Protocol.DeathCause\"\227\001\n\tSkillInfo\022!"
+  "\n\004slot\030\001 \001(\0162\023.Protocol.EquipSlot\022\020\n\010ski"
+  "ll_id\030\002 \001(\r\022+\n\nbind_state\030\003 \001(\0162\027.Protoc"
+  "ol.SlotBindState\022(\n\013shadowed_by\030\004 \001(\0162\023."
+  "Protocol.EquipSlot\"L\n\rSkillCastInfo\022\021\n\tc"
+  "aster_id\030\001 \001(\004\022\025\n\ris_stationary\030\002 \001(\010\022\021\n"
+  "\tmotion_id\030\003 \001(\r\"\211\001\n\014SkillHitInfo\022\021\n\tcas"
+  "ter_id\030\001 \001(\004\022\021\n\teffect_id\030\002 \001(\r\022\021\n\ttarge"
+  "t_id\030\003 \001(\004\022\020\n\010impact_x\030\004 \001(\002\022\020\n\010impact_y"
+  "\030\005 \001(\002\022\r\n\005aim_x\030\006 \001(\002\022\r\n\005aim_y\030\007 \001(\002\"\242\001\n"
+  "\nStatusInfo\022\021\n\ttarget_id\030\001 \001(\004\022\"\n\004kind\030\002"
+  " \001(\0162\024.Protocol.StatusKind\022\r\n\005param\030\003 \001("
+  "\t\022\016\n\006stacks\030\004 \001(\r\022\024\n\014remaining_ms\030\005 \001(\r\022"
+  "\021\n\tmagnitude\030\006 \001(\002\022\025\n\rinstigator_id\030\007 \001("
+  "\004\"\314\001\n\016ProjectileInfo\022\025\n\rprojectile_id\030\001 "
+  "\001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030\003 \001("
+  "\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\r\n\005dir_x\030\006 \001(\002\022\r"
+  "\n\005dir_y\030\007 \001(\002\022\021\n\tspeed_cms\030\010 \001(\002\022\020\n\010rang"
+  "e_cm\030\t \001(\002\022\021\n\tradius_cm\030\n \001(\002\022\021\n\ttarget_"
+  "id\030\013 \001(\004\"|\n\021ProjectileEndInfo\022\025\n\rproject"
+  "ile_id\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\'\n\006re"
+  "ason\030\004 \001(\0162\027.Protocol.ProjectileEnd\022\021\n\tt"
+  "arget_id\030\005 \001(\004\"\356\001\n\010ZoneInfo\022\017\n\007zone_id\030\001"
+  " \001(\004\022\021\n\tcaster_id\030\002 \001(\004\022\021\n\teffect_id\030\003 \001"
+  "(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\021\n\tradius_cm\030\006 "
+  "\001(\002\022\023\n\013duration_ms\030\007 \001(\r\022\r\n\005param\030\010 \001(\t\022"
+  "\013\n\003yaw\030\t \001(\002\022\023\n\013half_length\030\n \001(\002\022\026\n\016hal"
+  "f_thickness\030\013 \001(\002\022\021\n\tangle_deg\030\014 \001(\002\022\021\n\t"
+  "follow_id\030\r \001(\004\"v\n\rCharacterInfo\022)\n\013obje"
+  "ct_info\030\001 \001(\0132\024.Protocol.ObjectInfo\022\014\n\004n"
+  "ame\030\002 \001(\t\022\n\n\002hp\030\003 \001(\005\022\016\n\006max_hp\030\004 \001(\005\022\020\n"
+  "\010floor_id\030\005 \001(\r\"\200\002\n\014ItemInstance\022\023\n\013inst"
+  "ance_id\030\001 \001(\004\022\024\n\014item_type_id\030\002 \001(\r\022\"\n\005g"
+  "rade\030\003 \001(\0162\023.Protocol.ItemGrade\022\r\n\005level"
+  "\030\004 \001(\r\022\"\n\005state\030\005 \001(\0162\023.Protocol.ItemSta"
+  "te\022!\n\004slot\030\006 \001(\0162\023.Protocol.EquipSlot\022#\n"
+  "\006skills\030\007 \003(\0132\023.Protocol.SkillInfo\022\021\n\tlo"
+  "ne_path\030\010 \001(\010\022\023\n\013stack_count\030\t \001(\r\"\252\001\n\014V"
+  "isionSource\022\021\n\tsource_id\030\001 \001(\004\022\021\n\tfollow"
+  "_id\030\002 \001(\004\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\021\n\tradiu"
+  "s_cm\030\005 \001(\002\022\024\n\014remaining_ms\030\006 \001(\r\022\021\n\tneed"
+  "s_los\030\007 \001(\010\022\024\n\014sees_stealth\030\010 \001(\010\022\014\n\004kin"
+  "d\030\t \001(\t\"l\n\013PartyMember\022\024\n\014character_id\030\001"
+  " \001(\004\022\014\n\004name\030\002 \001(\t\022\016\n\006leader\030\003 \001(\010\022)\n\005st"
+  "ate\030\004 \001(\0162\032.Protocol.PartyMemberStateb\006p"
+  "roto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Struct_2eproto_deps[1] = {
   &::descriptor_table_Enum_2eproto,
 };
 static ::_pbi::once_flag descriptor_table_Struct_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Struct_2eproto = {
-    false, false, 2968, descriptor_table_protodef_Struct_2eproto,
+    false, false, 3005, descriptor_table_protodef_Struct_2eproto,
     "Struct.proto",
     &descriptor_table_Struct_2eproto_once, descriptor_table_Struct_2eproto_deps, 1, 20,
     schemas, file_default_instances, TableStruct_Struct_2eproto::offsets,
@@ -1165,6 +1168,7 @@ ObjectInfo::ObjectInfo(const ObjectInfo& from)
     , decltype(_impl_.max_hp_){}
     , decltype(_impl_.weapon_type_id_){}
     , decltype(_impl_.betrayer_){}
+    , decltype(_impl_.bag_kind_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -1172,8 +1176,8 @@ ObjectInfo::ObjectInfo(const ObjectInfo& from)
     _this->_impl_.pos_info_ = new ::Protocol::PosInfo(*from._impl_.pos_info_);
   }
   ::memcpy(&_impl_.object_id_, &from._impl_.object_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.betrayer_) -
-    reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.betrayer_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.bag_kind_) -
+    reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.bag_kind_));
   // @@protoc_insertion_point(copy_constructor:Protocol.ObjectInfo)
 }
 
@@ -1191,6 +1195,7 @@ inline void ObjectInfo::SharedCtor(
     , decltype(_impl_.max_hp_){0}
     , decltype(_impl_.weapon_type_id_){0u}
     , decltype(_impl_.betrayer_){false}
+    , decltype(_impl_.bag_kind_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -1224,8 +1229,8 @@ void ObjectInfo::Clear() {
   }
   _impl_.pos_info_ = nullptr;
   ::memset(&_impl_.object_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.betrayer_) -
-      reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.betrayer_));
+      reinterpret_cast<char*>(&_impl_.bag_kind_) -
+      reinterpret_cast<char*>(&_impl_.object_id_)) + sizeof(_impl_.bag_kind_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -1306,6 +1311,15 @@ const char* ObjectInfo::_InternalParse(const char* ptr, ::_pbi::ParseContext* ct
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 72)) {
           _impl_.betrayer_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // .Protocol.BagKind bag_kind = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 80)) {
+          uint64_t val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+          _internal_set_bag_kind(static_cast<::Protocol::BagKind>(val));
         } else
           goto handle_unusual;
         continue;
@@ -1395,6 +1409,13 @@ uint8_t* ObjectInfo::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteBoolToArray(9, this->_internal_betrayer(), target);
   }
 
+  // .Protocol.BagKind bag_kind = 10;
+  if (this->_internal_bag_kind() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteEnumToArray(
+      10, this->_internal_bag_kind(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1460,6 +1481,12 @@ size_t ObjectInfo::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // .Protocol.BagKind bag_kind = 10;
+  if (this->_internal_bag_kind() != 0) {
+    total_size += 1 +
+      ::_pbi::WireFormatLite::EnumSize(this->_internal_bag_kind());
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -1506,6 +1533,9 @@ void ObjectInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PRO
   if (from._internal_betrayer() != 0) {
     _this->_internal_set_betrayer(from._internal_betrayer());
   }
+  if (from._internal_bag_kind() != 0) {
+    _this->_internal_set_bag_kind(from._internal_bag_kind());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -1524,8 +1554,8 @@ void ObjectInfo::InternalSwap(ObjectInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(ObjectInfo, _impl_.betrayer_)
-      + sizeof(ObjectInfo::_impl_.betrayer_)
+      PROTOBUF_FIELD_OFFSET(ObjectInfo, _impl_.bag_kind_)
+      + sizeof(ObjectInfo::_impl_.bag_kind_)
       - PROTOBUF_FIELD_OFFSET(ObjectInfo, _impl_.pos_info_)>(
           reinterpret_cast<char*>(&_impl_.pos_info_),
           reinterpret_cast<char*>(&other->_impl_.pos_info_));

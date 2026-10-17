@@ -75,6 +75,32 @@ inline bool ObjectType_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<ObjectType>(
     ObjectType_descriptor(), name, value);
 }
+enum BagKind : int {
+  BAG_KIND_NONE = 0,
+  BAG_KIND_DEATH = 1,
+  BAG_KIND_MONSTER = 2,
+  BagKind_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  BagKind_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool BagKind_IsValid(int value);
+constexpr BagKind BagKind_MIN = BAG_KIND_NONE;
+constexpr BagKind BagKind_MAX = BAG_KIND_MONSTER;
+constexpr int BagKind_ARRAYSIZE = BagKind_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* BagKind_descriptor();
+template<typename T>
+inline const std::string& BagKind_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, BagKind>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function BagKind_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    BagKind_descriptor(), enum_t_value);
+}
+inline bool BagKind_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, BagKind* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<BagKind>(
+    BagKind_descriptor(), name, value);
+}
 enum CreatureType : int {
   CREATE_TYPE_NONE = 0,
   CREATE_TYPE_PLAYER = 1,
@@ -644,6 +670,11 @@ template <> struct is_proto_enum< ::Protocol::ObjectType> : ::std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::ObjectType>() {
   return ::Protocol::ObjectType_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::BagKind> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::BagKind>() {
+  return ::Protocol::BagKind_descriptor();
 }
 template <> struct is_proto_enum< ::Protocol::CreatureType> : ::std::true_type {};
 template <>

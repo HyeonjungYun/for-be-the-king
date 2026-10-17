@@ -75,6 +75,7 @@ struct PendingTelegraph
 	uint32 itemLevel = 0;
 	bool targetsOnly = false;		// 벽력일창 - 도약은 이미 시작했고 내리찍기(대상 효과)만 뒤에
 	float bonusDamageMod = 0.f;		// 건곤일척 - 발동 때 소모한 배율 (예고 뒤에도 그대로)
+	bool recast = false;			// 재입력의 도착 피해 (피의 궤적 1038) - requires=recast 효과를 고른다 (2026-10-18)
 };
 
 // 핏자국 (4 단계) - 과다 출혈 중인 적이 남긴다. 주인이 밟으면 이속 버프, 아니면 지속 뒤 사라진다. 클라는 S_ZONE "blood" 로 그린다

@@ -10,6 +10,14 @@ enum ObjectType
 	OBJECT_TYPE_BAG = 4;
 }	
 
+// What dropped a bag (monster-ai.md OQ-3, 2026-10-18) - a death bag is P4 information ("someone died here"), a monster bag is not
+enum BagKind
+{
+	BAG_KIND_NONE = 0;
+	BAG_KIND_DEATH = 1;
+	BAG_KIND_MONSTER = 2;
+}
+
 enum CreatureType
 {
 	CREATE_TYPE_NONE = 0;

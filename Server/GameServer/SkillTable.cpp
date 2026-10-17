@@ -1181,7 +1181,7 @@ void SkillTable::Init()
 		"1001,skill.1001,ad,active,300,8000,0,0,single,target,400,0,0,0,1,0,0\n"
 		"2001,skill.2001,none,active,60,6000,0,0,circle_self,direction,400,0,0,0,0,0,0\n"
 		"3001,skill.3001,ad,active,0,5000,0,1000,circle_self,self_area,250,0,250,0,0,0,0\n"
-		"9001,skill.9001,ad,active,600,8000,0,1450,circle_self,self_area,400,0,400,0,0,0,0\n";
+		"9001,skill.9001,ad,active,600,8000,0,1900,circle_self,self_area,400,0,400,0,0,0,0\n";
 
 	const string effects =
 		"skill_id,seq,effect,who,requires,ad_ratio,ap_ratio,hits,interval_ms,cc_type,duration_ms,magnitude,dist_cm,speed_cms,ignores_walls,stat,per_level,radius_cm,param\n"

@@ -466,6 +466,7 @@ class ObjectInfo final :
     kMaxHpFieldNumber = 7,
     kWeaponTypeIdFieldNumber = 8,
     kBetrayerFieldNumber = 9,
+    kBagKindFieldNumber = 10,
   };
   // .Protocol.PosInfo pos_info = 3;
   bool has_pos_info() const;
@@ -557,6 +558,15 @@ class ObjectInfo final :
   void _internal_set_betrayer(bool value);
   public:
 
+  // .Protocol.BagKind bag_kind = 10;
+  void clear_bag_kind();
+  ::Protocol::BagKind bag_kind() const;
+  void set_bag_kind(::Protocol::BagKind value);
+  private:
+  ::Protocol::BagKind _internal_bag_kind() const;
+  void _internal_set_bag_kind(::Protocol::BagKind value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.ObjectInfo)
  private:
   class _Internal;
@@ -574,6 +584,7 @@ class ObjectInfo final :
     int32_t max_hp_;
     uint32_t weapon_type_id_;
     bool betrayer_;
+    int bag_kind_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -4668,6 +4679,26 @@ inline void ObjectInfo::_internal_set_betrayer(bool value) {
 inline void ObjectInfo::set_betrayer(bool value) {
   _internal_set_betrayer(value);
   // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.betrayer)
+}
+
+// .Protocol.BagKind bag_kind = 10;
+inline void ObjectInfo::clear_bag_kind() {
+  _impl_.bag_kind_ = 0;
+}
+inline ::Protocol::BagKind ObjectInfo::_internal_bag_kind() const {
+  return static_cast< ::Protocol::BagKind >(_impl_.bag_kind_);
+}
+inline ::Protocol::BagKind ObjectInfo::bag_kind() const {
+  // @@protoc_insertion_point(field_get:Protocol.ObjectInfo.bag_kind)
+  return _internal_bag_kind();
+}
+inline void ObjectInfo::_internal_set_bag_kind(::Protocol::BagKind value) {
+  
+  _impl_.bag_kind_ = value;
+}
+inline void ObjectInfo::set_bag_kind(::Protocol::BagKind value) {
+  _internal_set_bag_kind(value);
+  // @@protoc_insertion_point(field_set:Protocol.ObjectInfo.bag_kind)
 }
 
 // -------------------------------------------------------------------

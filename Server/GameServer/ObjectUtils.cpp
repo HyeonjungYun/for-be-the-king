@@ -441,6 +441,9 @@ BagRef ObjectUtils::CreateBag(uint64 bagId, uint32 floorId, float x, float y, fl
 	bag->expiresAtUs = expiresAtUs;
 	bag->ownerCharacterId = ownerCharacterId;
 
+	// 가방 종류 (monster-ai.md OQ-3, 2026-10-18) - 주인이 있으면 사망 가방. 몬스터 드랍은 만든 쪽(OnMonsterDied)이 MONSTER 로 바꾼다. 상자는 NONE
+	bag->objectInfo->set_bag_kind(ownerCharacterId != 0 ? Protocol::BAG_KIND_DEATH : Protocol::BAG_KIND_NONE);
+
 	return bag;
 }
 

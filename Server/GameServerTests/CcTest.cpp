@@ -219,3 +219,21 @@ TEST(CreatureCc, 도발은_전투_상태_초기화로_풀린다)
 	EXPECT_FALSE(target.IsTaunted(AtMs(1)));
 	EXPECT_EQ(target.tauntSourceId, 0u);
 }
+
+// escape-timer.md OQ-7 (2026-10-18) - 탈출 구역의 "밀려 나갔다" 판정은 넉백이 끝난 뒤 1 초를 본다.
+// knockbackEndUs 는 CC 가 풀리면 Room::UpdateCc 가 0 으로 지운다 - 예전엔 그 값을 봐서 넉백 뒤 이탈이 거의 다 "자발" 로 셌다
+TEST(Cc, 넉백이_끝나도_마지막으로_밀려난_시각은_남는다_OQ_7)
+{
+	Creature target;
+	target.ApplyHardCc(Protocol::CC_TYPE_KNOCKBACK, AtMs(0), 300);
+	EXPECT_EQ(target.lastDisplacedEndUs, AtMs(300));
+
+	target.knockbackEndUs = 0;				// UpdateCc 가 CC 를 끝낸 뒤
+	EXPECT_EQ(target.lastDisplacedEndUs, AtMs(300));
+
+	target.ApplyHardCc(Protocol::CC_TYPE_LAUNCH, AtMs(1000), 500);
+	EXPECT_EQ(target.lastDisplacedEndUs, AtMs(1500));
+
+	target.ApplyHardCc(Protocol::CC_TYPE_STUN, AtMs(2000), 2000);	// 기절은 밀려난 것이 아니다
+	EXPECT_EQ(target.lastDisplacedEndUs, AtMs(1500));
+}

@@ -320,6 +320,8 @@ void US1ItemSubsystem::OnBagSpawned(const Protocol::ObjectInfo& Info)
 
 	FS1BagView& Bag = Bags.FindOrAdd(BagId);
 	Bag.BagId = BagId;
+	Bag.Kind = (Info.bag_kind() == Protocol::BAG_KIND_MONSTER) ? ES1BagKind::Monster
+		: (Info.bag_kind() == Protocol::BAG_KIND_DEATH) ? ES1BagKind::Death : ES1BagKind::Unknown;
 	Bag.bHasLocation = true;
 	Bag.Location = FVector(Pos.x(), Pos.y(), Pos.z());
 

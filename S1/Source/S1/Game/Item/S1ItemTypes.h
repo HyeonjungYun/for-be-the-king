@@ -129,9 +129,18 @@ struct FS1ItemView
  *
  * The location comes from S_SPAWN. Contents exist only after this client opened it.
  */
+/** Mirrors Protocol::BagKind - what dropped the bag (monster-ai.md OQ-3, 2026-10-18). */
+enum class ES1BagKind : uint8
+{
+	Unknown = 0,	// a chest, or an old server
+	Death,			// a player died here - P4 information
+	Monster,		// a monster's drop - not "someone died here"
+};
+
 struct FS1BagView
 {
 	uint64					BagId = 0;
+	ES1BagKind				Kind = ES1BagKind::Unknown;
 
 	bool					bHasLocation = false;
 	FVector					Location = FVector::ZeroVector;

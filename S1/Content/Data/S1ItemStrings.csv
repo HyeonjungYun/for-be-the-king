@@ -25,6 +25,10 @@ cc.silence,침묵,CC words
 cc.slow,둔화,CC words
 bag.title_bag,가방,S2 header
 bag.title_chest,상자,S2 header
+bag.title_death,유해,S2 header - a player died here (monster-ai.md OQ-3)
+bag.title_monster,몬스터 전리품,S2 header - a monster dropped it (monster-ai.md OQ-3)
+bag.prompt_death,유해,F badge suffix - death bag
+bag.prompt_monster,전리품,F badge suffix - monster drop
 bag.opening,여는 중,shown after 300 ms
 bag.my_bag,내 가방,S2 header - your own carried count
 label.full,가득 참,25/25 header

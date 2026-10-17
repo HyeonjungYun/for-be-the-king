@@ -24,6 +24,7 @@ message ObjectInfo
 	int32 max_hp = 7;
 	uint32 weapon_type_id = 8;			// item_types.csv id of the equipped weapon (0 = none). Picks the stance / swing clips (anim, 2026-10-12)
 	bool betrayer = 9;					// left a dungeon party during this run - everyone sees the mark until the run ends (party-betrayal 2026-10-12)
+	BagKind bag_kind = 10;				// BAG only - death bag vs monster drop bag (monster-ai.md OQ-3, 2026-10-18). 0 = old server (treat as death)
 }
 
 message AttackInfo

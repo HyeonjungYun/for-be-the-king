@@ -129,6 +129,7 @@ public:
 	uint64				rootEndUs = 0;
 	uint64				knockbackEndUs = 0;
 	uint64				launchEndUs = 0;
+	uint64				lastDisplacedEndUs = 0;		// 마지막 넉백 · 띄움이 끝나는 시각 - CC 가 풀려도 지우지 않는다 (탈출 망설임 지표 OQ-7)
 	uint64				silenceEndUs = 0;
 	uint64				healReductionEndUs = 0;
 	float				healReductionMagnitude = 0.f;

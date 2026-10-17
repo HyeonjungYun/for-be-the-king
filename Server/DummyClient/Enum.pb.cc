@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[20];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[21];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -32,75 +32,77 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "\n\nEnum.proto\022\010Protocol*\202\001\n\nObjectType\022\024\n"
   "\020OBJECT_TYPE_NONE\020\000\022\030\n\024OBJECT_TYPE_CREAT"
   "URE\020\001\022\032\n\026OBJECT_TYPE_PROJECTILE\020\002\022\023\n\017OBJ"
-  "ECT_TYPE_ENV\020\003\022\023\n\017OBJECT_TYPE_BAG\020\004*j\n\014C"
-  "reatureType\022\024\n\020CREATE_TYPE_NONE\020\000\022\026\n\022CRE"
-  "ATE_TYPE_PLAYER\020\001\022\027\n\023CREATE_TYPE_MONSTER"
-  "\020\002\022\023\n\017CREATE_TYPE_NPC\020\003*h\n\nPlayerType\022\024\n"
-  "\020PLAYER_TYPE_NONE\020\000\022\026\n\022PLAYER_TYPE_KNIGH"
-  "T\020\001\022\024\n\020PLAYER_TYPE_MAGE\020\002\022\026\n\022PLAYER_TYPE"
-  "_ARCHER\020\003*_\n\tMoveState\022\023\n\017MOVE_STATE_NON"
-  "E\020\000\022\023\n\017MOVE_STATE_IDLE\020\001\022\022\n\016MOVE_STATE_R"
-  "UN\020\002\022\024\n\020MOVE_STATE_SKILL\020\003*=\n\nDamageType"
-  "\022\030\n\024DAMAGE_TYPE_PHYSICAL\020\000\022\025\n\021DAMAGE_TYP"
-  "E_MAGIC\020\001*\324\001\n\006CcType\022\020\n\014CC_TYPE_NONE\020\000\022\020"
-  "\n\014CC_TYPE_STUN\020\001\022\020\n\014CC_TYPE_ROOT\020\002\022\025\n\021CC"
-  "_TYPE_KNOCKBACK\020\004\022\022\n\016CC_TYPE_LAUNCH\020\010\022\020\n"
-  "\014CC_TYPE_SLOW\020\020\022\032\n\026CC_TYPE_HEAL_REDUCTIO"
-  "N\020 \022\023\n\017CC_TYPE_SILENCE\020@\022\022\n\rCC_TYPE_BLIN"
-  "D\020\200\001\022\022\n\rCC_TYPE_TAUNT\020\200\002*S\n\nDeathCause\022\024"
-  "\n\020DEATH_CAUSE_NONE\020\000\022\026\n\022DEATH_CAUSE_PLAY"
-  "ER\020\001\022\027\n\023DEATH_CAUSE_MONSTER\020\002*\221\001\n\tEquipS"
-  "lot\022\r\n\tSLOT_NONE\020\000\022\027\n\023SLOT_WEAPON_PRIMAR"
-  "Y\020\001\022\031\n\025SLOT_WEAPON_SECONDARY\020\002\022\017\n\013SLOT_H"
-  "ELMET\020\003\022\016\n\nSLOT_ARMOR\020\004\022\016\n\nSLOT_BOOTS\020\005\022"
-  "\020\n\014SLOT_TRINKET\020\006*D\n\rSlotBindState\022\020\n\014BI"
-  "ND_UNBOUND\020\000\022\016\n\nBIND_BOUND\020\001\022\021\n\rBIND_SHA"
-  "DOWED\020\002*n\n\013GrantResult\022\014\n\010GRANT_OK\020\000\022\021\n\r"
-  "GRANT_ALREADY\020\001\022\023\n\017GRANT_NO_TARGET\020\002\022\022\n\016"
-  "GRANT_DB_ERROR\020\003\022\025\n\021GRANT_BAD_REQUEST\020\004*"
-  "{\n\tItemGrade\022\023\n\017ITEM_GRADE_NONE\020\000\022\025\n\021ITE"
-  "M_GRADE_COMMON\020\001\022\023\n\017ITEM_GRADE_RARE\020\002\022\023\n"
-  "\017ITEM_GRADE_EPIC\020\003\022\030\n\024ITEM_GRADE_LEGENDA"
-  "RY\020\004*\200\001\n\tItemState\022\023\n\017ITEM_STATE_NONE\020\000\022"
-  "\026\n\022ITEM_STATE_CARRIED\020\001\022\027\n\023ITEM_STATE_EQ"
-  "UIPPED\020\002\022\026\n\022ITEM_STATE_VAULTED\020\003\022\025\n\021ITEM"
-  "_STATE_IN_BAG\020\004*z\n\020EscapeGaugeState\022\025\n\021E"
-  "SCAPE_GAUGE_IDLE\020\000\022\030\n\024ESCAPE_GAUGE_FILLI"
-  "NG\020\001\022\031\n\025ESCAPE_GAUGE_DRAINING\020\002\022\032\n\026ESCAP"
-  "E_GAUGE_COMPLETED\020\003*J\n\014RunEndReason\022\020\n\014R"
-  "UN_END_NONE\020\000\022\023\n\017RUN_END_ESCAPED\020\001\022\023\n\017RU"
-  "N_END_EXPIRED\020\002*\320\001\n\nItemResult\022\013\n\007ITEM_O"
-  "K\020\000\022\020\n\014ITEM_ALREADY\020\001\022\022\n\016ITEM_NOT_FOUND\020"
-  "\002\022\026\n\022ITEM_INVALID_STATE\020\003\022\027\n\023ITEM_INVENT"
-  "ORY_FULL\020\004\022\024\n\020ITEM_BAD_REQUEST\020\005\022\021\n\rITEM"
-  "_DB_ERROR\020\006\022\033\n\027ITEM_LONE_PATH_IN_PARTY\020\007"
-  "\022\030\n\024ITEM_NOT_ENOUGH_GOLD\020\010*\347\001\n\nStatusKin"
-  "d\022\017\n\013STATUS_NONE\020\000\022\016\n\nSTATUS_DOT\020\001\022\017\n\013ST"
-  "ATUS_BUFF\020\002\022\017\n\013STATUS_MARK\020\003\022\021\n\rSTATUS_S"
-  "TANCE\020\004\022\021\n\rSTATUS_INVULN\020\005\022\022\n\016STATUS_COU"
-  "NTER\020\006\022\020\n\014STATUS_PARRY\020\007\022\017\n\013STATUS_HOLD\020"
-  "\010\022\020\n\014STATUS_DECOY\020\t\022\022\n\016STATUS_STEALTH\020\n\022"
-  "\023\n\017STATUS_COOLDOWN\020\013*u\n\rProjectileEnd\022\032\n"
-  "\026PROJECTILE_END_EXPIRED\020\000\022\026\n\022PROJECTILE_"
-  "END_HIT\020\001\022\027\n\023PROJECTILE_END_WALL\020\002\022\027\n\023PR"
-  "OJECTILE_END_LOST\020\003*`\n\007RunMode\022\020\n\014RUN_MO"
-  "DE_PVP\020\000\022\025\n\021RUN_MODE_PVE_SOLO\020\001\022\025\n\021RUN_M"
-  "ODE_PVE_COOP\020\002\022\025\n\021RUN_MODE_BASECAMP\020\003*\306\002"
-  "\n\013PartyResult\022\014\n\010PARTY_OK\020\000\022\023\n\017PARTY_NOT"
-  "_FOUND\020\001\022\016\n\nPARTY_FULL\020\002\022\032\n\026PARTY_ALREAD"
-  "Y_IN_PARTY\020\003\022\022\n\016PARTY_DECLINED\020\004\022\021\n\rPART"
-  "Y_EXPIRED\020\005\022\024\n\020PARTY_NOT_LEADER\020\006\022\016\n\nPAR"
-  "TY_BUSY\020\007\022\016\n\nPARTY_SELF\020\010\022\025\n\021PARTY_NO_IN"
-  "STANCE\020\t\022\031\n\025PARTY_ALREADY_ENTERED\020\n\022\023\n\017P"
-  "ARTY_COOP_ONLY\020\013\022\025\n\021PARTY_NOT_VISIBLE\020\014\022"
-  "\030\n\024PARTY_NO_KICK_IN_RUN\020\r\022\023\n\017PARTY_LONE_"
-  "PATH\020\016*`\n\020PartyMemberState\022\031\n\025PARTY_MEMB"
-  "ER_BASECAMP\020\000\022\027\n\023PARTY_MEMBER_IN_RUN\020\001\022\030"
-  "\n\024PARTY_MEMBER_OFFLINE\020\002b\006proto3"
+  "ECT_TYPE_ENV\020\003\022\023\n\017OBJECT_TYPE_BAG\020\004*F\n\007B"
+  "agKind\022\021\n\rBAG_KIND_NONE\020\000\022\022\n\016BAG_KIND_DE"
+  "ATH\020\001\022\024\n\020BAG_KIND_MONSTER\020\002*j\n\014CreatureT"
+  "ype\022\024\n\020CREATE_TYPE_NONE\020\000\022\026\n\022CREATE_TYPE"
+  "_PLAYER\020\001\022\027\n\023CREATE_TYPE_MONSTER\020\002\022\023\n\017CR"
+  "EATE_TYPE_NPC\020\003*h\n\nPlayerType\022\024\n\020PLAYER_"
+  "TYPE_NONE\020\000\022\026\n\022PLAYER_TYPE_KNIGHT\020\001\022\024\n\020P"
+  "LAYER_TYPE_MAGE\020\002\022\026\n\022PLAYER_TYPE_ARCHER\020"
+  "\003*_\n\tMoveState\022\023\n\017MOVE_STATE_NONE\020\000\022\023\n\017M"
+  "OVE_STATE_IDLE\020\001\022\022\n\016MOVE_STATE_RUN\020\002\022\024\n\020"
+  "MOVE_STATE_SKILL\020\003*=\n\nDamageType\022\030\n\024DAMA"
+  "GE_TYPE_PHYSICAL\020\000\022\025\n\021DAMAGE_TYPE_MAGIC\020"
+  "\001*\324\001\n\006CcType\022\020\n\014CC_TYPE_NONE\020\000\022\020\n\014CC_TYP"
+  "E_STUN\020\001\022\020\n\014CC_TYPE_ROOT\020\002\022\025\n\021CC_TYPE_KN"
+  "OCKBACK\020\004\022\022\n\016CC_TYPE_LAUNCH\020\010\022\020\n\014CC_TYPE"
+  "_SLOW\020\020\022\032\n\026CC_TYPE_HEAL_REDUCTION\020 \022\023\n\017C"
+  "C_TYPE_SILENCE\020@\022\022\n\rCC_TYPE_BLIND\020\200\001\022\022\n\r"
+  "CC_TYPE_TAUNT\020\200\002*S\n\nDeathCause\022\024\n\020DEATH_"
+  "CAUSE_NONE\020\000\022\026\n\022DEATH_CAUSE_PLAYER\020\001\022\027\n\023"
+  "DEATH_CAUSE_MONSTER\020\002*\221\001\n\tEquipSlot\022\r\n\tS"
+  "LOT_NONE\020\000\022\027\n\023SLOT_WEAPON_PRIMARY\020\001\022\031\n\025S"
+  "LOT_WEAPON_SECONDARY\020\002\022\017\n\013SLOT_HELMET\020\003\022"
+  "\016\n\nSLOT_ARMOR\020\004\022\016\n\nSLOT_BOOTS\020\005\022\020\n\014SLOT_"
+  "TRINKET\020\006*D\n\rSlotBindState\022\020\n\014BIND_UNBOU"
+  "ND\020\000\022\016\n\nBIND_BOUND\020\001\022\021\n\rBIND_SHADOWED\020\002*"
+  "n\n\013GrantResult\022\014\n\010GRANT_OK\020\000\022\021\n\rGRANT_AL"
+  "READY\020\001\022\023\n\017GRANT_NO_TARGET\020\002\022\022\n\016GRANT_DB"
+  "_ERROR\020\003\022\025\n\021GRANT_BAD_REQUEST\020\004*{\n\tItemG"
+  "rade\022\023\n\017ITEM_GRADE_NONE\020\000\022\025\n\021ITEM_GRADE_"
+  "COMMON\020\001\022\023\n\017ITEM_GRADE_RARE\020\002\022\023\n\017ITEM_GR"
+  "ADE_EPIC\020\003\022\030\n\024ITEM_GRADE_LEGENDARY\020\004*\200\001\n"
+  "\tItemState\022\023\n\017ITEM_STATE_NONE\020\000\022\026\n\022ITEM_"
+  "STATE_CARRIED\020\001\022\027\n\023ITEM_STATE_EQUIPPED\020\002"
+  "\022\026\n\022ITEM_STATE_VAULTED\020\003\022\025\n\021ITEM_STATE_I"
+  "N_BAG\020\004*z\n\020EscapeGaugeState\022\025\n\021ESCAPE_GA"
+  "UGE_IDLE\020\000\022\030\n\024ESCAPE_GAUGE_FILLING\020\001\022\031\n\025"
+  "ESCAPE_GAUGE_DRAINING\020\002\022\032\n\026ESCAPE_GAUGE_"
+  "COMPLETED\020\003*J\n\014RunEndReason\022\020\n\014RUN_END_N"
+  "ONE\020\000\022\023\n\017RUN_END_ESCAPED\020\001\022\023\n\017RUN_END_EX"
+  "PIRED\020\002*\320\001\n\nItemResult\022\013\n\007ITEM_OK\020\000\022\020\n\014I"
+  "TEM_ALREADY\020\001\022\022\n\016ITEM_NOT_FOUND\020\002\022\026\n\022ITE"
+  "M_INVALID_STATE\020\003\022\027\n\023ITEM_INVENTORY_FULL"
+  "\020\004\022\024\n\020ITEM_BAD_REQUEST\020\005\022\021\n\rITEM_DB_ERRO"
+  "R\020\006\022\033\n\027ITEM_LONE_PATH_IN_PARTY\020\007\022\030\n\024ITEM"
+  "_NOT_ENOUGH_GOLD\020\010*\347\001\n\nStatusKind\022\017\n\013STA"
+  "TUS_NONE\020\000\022\016\n\nSTATUS_DOT\020\001\022\017\n\013STATUS_BUF"
+  "F\020\002\022\017\n\013STATUS_MARK\020\003\022\021\n\rSTATUS_STANCE\020\004\022"
+  "\021\n\rSTATUS_INVULN\020\005\022\022\n\016STATUS_COUNTER\020\006\022\020"
+  "\n\014STATUS_PARRY\020\007\022\017\n\013STATUS_HOLD\020\010\022\020\n\014STA"
+  "TUS_DECOY\020\t\022\022\n\016STATUS_STEALTH\020\n\022\023\n\017STATU"
+  "S_COOLDOWN\020\013*u\n\rProjectileEnd\022\032\n\026PROJECT"
+  "ILE_END_EXPIRED\020\000\022\026\n\022PROJECTILE_END_HIT\020"
+  "\001\022\027\n\023PROJECTILE_END_WALL\020\002\022\027\n\023PROJECTILE"
+  "_END_LOST\020\003*`\n\007RunMode\022\020\n\014RUN_MODE_PVP\020\000"
+  "\022\025\n\021RUN_MODE_PVE_SOLO\020\001\022\025\n\021RUN_MODE_PVE_"
+  "COOP\020\002\022\025\n\021RUN_MODE_BASECAMP\020\003*\306\002\n\013PartyR"
+  "esult\022\014\n\010PARTY_OK\020\000\022\023\n\017PARTY_NOT_FOUND\020\001"
+  "\022\016\n\nPARTY_FULL\020\002\022\032\n\026PARTY_ALREADY_IN_PAR"
+  "TY\020\003\022\022\n\016PARTY_DECLINED\020\004\022\021\n\rPARTY_EXPIRE"
+  "D\020\005\022\024\n\020PARTY_NOT_LEADER\020\006\022\016\n\nPARTY_BUSY\020"
+  "\007\022\016\n\nPARTY_SELF\020\010\022\025\n\021PARTY_NO_INSTANCE\020\t"
+  "\022\031\n\025PARTY_ALREADY_ENTERED\020\n\022\023\n\017PARTY_COO"
+  "P_ONLY\020\013\022\025\n\021PARTY_NOT_VISIBLE\020\014\022\030\n\024PARTY"
+  "_NO_KICK_IN_RUN\020\r\022\023\n\017PARTY_LONE_PATH\020\016*`"
+  "\n\020PartyMemberState\022\031\n\025PARTY_MEMBER_BASEC"
+  "AMP\020\000\022\027\n\023PARTY_MEMBER_IN_RUN\020\001\022\030\n\024PARTY_"
+  "MEMBER_OFFLINE\020\002b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 2712, descriptor_table_protodef_Enum_2eproto,
+    false, false, 2784, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -131,9 +133,24 @@ bool ObjectType_IsValid(int value) {
   }
 }
 
-const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CreatureType_descriptor() {
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* BagKind_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
   return file_level_enum_descriptors_Enum_2eproto[1];
+}
+bool BagKind_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CreatureType_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[2];
 }
 bool CreatureType_IsValid(int value) {
   switch (value) {
@@ -149,7 +166,7 @@ bool CreatureType_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PlayerType_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[2];
+  return file_level_enum_descriptors_Enum_2eproto[3];
 }
 bool PlayerType_IsValid(int value) {
   switch (value) {
@@ -165,7 +182,7 @@ bool PlayerType_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* MoveState_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[3];
+  return file_level_enum_descriptors_Enum_2eproto[4];
 }
 bool MoveState_IsValid(int value) {
   switch (value) {
@@ -181,7 +198,7 @@ bool MoveState_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DamageType_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[4];
+  return file_level_enum_descriptors_Enum_2eproto[5];
 }
 bool DamageType_IsValid(int value) {
   switch (value) {
@@ -195,7 +212,7 @@ bool DamageType_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* CcType_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[5];
+  return file_level_enum_descriptors_Enum_2eproto[6];
 }
 bool CcType_IsValid(int value) {
   switch (value) {
@@ -217,7 +234,7 @@ bool CcType_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DeathCause_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[6];
+  return file_level_enum_descriptors_Enum_2eproto[7];
 }
 bool DeathCause_IsValid(int value) {
   switch (value) {
@@ -232,7 +249,7 @@ bool DeathCause_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* EquipSlot_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[7];
+  return file_level_enum_descriptors_Enum_2eproto[8];
 }
 bool EquipSlot_IsValid(int value) {
   switch (value) {
@@ -251,7 +268,7 @@ bool EquipSlot_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* SlotBindState_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[8];
+  return file_level_enum_descriptors_Enum_2eproto[9];
 }
 bool SlotBindState_IsValid(int value) {
   switch (value) {
@@ -266,7 +283,7 @@ bool SlotBindState_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* GrantResult_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[9];
+  return file_level_enum_descriptors_Enum_2eproto[10];
 }
 bool GrantResult_IsValid(int value) {
   switch (value) {
@@ -283,7 +300,7 @@ bool GrantResult_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemGrade_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[10];
+  return file_level_enum_descriptors_Enum_2eproto[11];
 }
 bool ItemGrade_IsValid(int value) {
   switch (value) {
@@ -300,7 +317,7 @@ bool ItemGrade_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemState_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[11];
+  return file_level_enum_descriptors_Enum_2eproto[12];
 }
 bool ItemState_IsValid(int value) {
   switch (value) {
@@ -317,7 +334,7 @@ bool ItemState_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* EscapeGaugeState_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[12];
+  return file_level_enum_descriptors_Enum_2eproto[13];
 }
 bool EscapeGaugeState_IsValid(int value) {
   switch (value) {
@@ -333,7 +350,7 @@ bool EscapeGaugeState_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunEndReason_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[13];
+  return file_level_enum_descriptors_Enum_2eproto[14];
 }
 bool RunEndReason_IsValid(int value) {
   switch (value) {
@@ -348,7 +365,7 @@ bool RunEndReason_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ItemResult_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[14];
+  return file_level_enum_descriptors_Enum_2eproto[15];
 }
 bool ItemResult_IsValid(int value) {
   switch (value) {
@@ -369,7 +386,7 @@ bool ItemResult_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* StatusKind_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[15];
+  return file_level_enum_descriptors_Enum_2eproto[16];
 }
 bool StatusKind_IsValid(int value) {
   switch (value) {
@@ -393,7 +410,7 @@ bool StatusKind_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* ProjectileEnd_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[16];
+  return file_level_enum_descriptors_Enum_2eproto[17];
 }
 bool ProjectileEnd_IsValid(int value) {
   switch (value) {
@@ -409,7 +426,7 @@ bool ProjectileEnd_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RunMode_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[17];
+  return file_level_enum_descriptors_Enum_2eproto[18];
 }
 bool RunMode_IsValid(int value) {
   switch (value) {
@@ -425,7 +442,7 @@ bool RunMode_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyResult_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[18];
+  return file_level_enum_descriptors_Enum_2eproto[19];
 }
 bool PartyResult_IsValid(int value) {
   switch (value) {
@@ -452,7 +469,7 @@ bool PartyResult_IsValid(int value) {
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyMemberState_descriptor() {
   ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
-  return file_level_enum_descriptors_Enum_2eproto[19];
+  return file_level_enum_descriptors_Enum_2eproto[20];
 }
 bool PartyMemberState_IsValid(int value) {
   switch (value) {

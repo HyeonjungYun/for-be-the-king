@@ -1175,7 +1175,8 @@ void AS1Player::PlaySkillEffect(UWorld* World, uint32 EffectId, const FVector& I
 	// The boss telegraph keeps its own look: it is the warning, not the hit (monster-ai.md Core Rule 18 · F10)
 	if (EffectId == 9001)
 	{
-		constexpr float TelegraphSec = 1.45f;
+		// skills.csv telegraph_ms - 2026-10-18 1450 → 1900 (감속 40 % 에서도 피할 수 있게, monster-ai.md F10)
+		const float TelegraphSec = (Def != nullptr && Def->TelegraphMs > 0) ? Def->TelegraphMs / 1000.f : 1.9f;
 		DrawDebugCircle(World, Ground, 400.f, 64, FColor(230, 60, 40),
 			false, TelegraphSec, 0, 10.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
 		DrawDebugCircle(World, Ground, 200.f, 40, FColor(150, 40, 30),

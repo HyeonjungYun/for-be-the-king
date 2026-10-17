@@ -199,7 +199,11 @@ void US1ItemHudRootWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 		return;
 	}
 
-	PromptText->SetText(FText::Format(INVTEXT("[{0}]"), OpenKeyName ? OpenKeyName() : FText::AsCultureInvariant(TEXT("F"))));
+	// The key, plus what dropped it - a death bag ("유해") and a monster's drop ("전리품") must not look alike (monster-ai.md OQ-3).
+	// Still nothing about what is inside (P4)
+	const FText Key = OpenKeyName ? OpenKeyName() : FText::AsCultureInvariant(TEXT("F"));
+	const TCHAR* KindKey = (Bag->Kind == ES1BagKind::Death) ? TEXT("bag.prompt_death") : (Bag->Kind == ES1BagKind::Monster) ? TEXT("bag.prompt_monster") : nullptr;
+	PromptText->SetText(KindKey != nullptr ? FText::Format(INVTEXT("[{0}] {1}"), Key, S1ItemUIStyle::Text(KindKey)) : FText::Format(INVTEXT("[{0}]"), Key));
 	if (UCanvasPanelSlot* PromptSlot = Cast<UCanvasPanelSlot>(PromptBadge->Slot))
 		PromptSlot->SetPosition(ScreenPosition);
 	PromptBadge->SetVisibility(ESlateVisibility::HitTestInvisible);

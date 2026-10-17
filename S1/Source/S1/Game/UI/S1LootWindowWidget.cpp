@@ -204,6 +204,11 @@ void US1LootWindowWidget::RefreshHeader()
 	// Until the contents arrive we cannot tell, so it reads "가방" for that moment.
 	const bool bChest = Bag != nullptr && Bag->bHasContents && Bag->RemainingMsAtReceive == 0;
 	FText Title = Text(bChest ? TEXT("bag.title_chest") : TEXT("bag.title_bag"));
+	// A death bag and a monster's drop read differently - "someone died here" is information (monster-ai.md OQ-3, 2026-10-18)
+	if (bChest == false && Bag != nullptr && Bag->Kind == ES1BagKind::Death)
+		Title = Text(TEXT("bag.title_death"));
+	else if (bChest == false && Bag != nullptr && Bag->Kind == ES1BagKind::Monster)
+		Title = Text(TEXT("bag.title_monster"));
 	bool bUrgent = false;
 	if (Bag != nullptr && Bag->bHasContents && Bag->RemainingMsAtReceive > 0)
 	{

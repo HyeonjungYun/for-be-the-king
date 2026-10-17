@@ -28,9 +28,11 @@ bool FS1MonsterCatalogLiveTest::RunTest(const FString& Parameters)
 	FString Error;
 	const FString Directory = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../Server/Data")));
 	TestTrue(*FString::Printf(TEXT("load %s: %s"), *Directory, *Error), Catalog.LoadFromDirectory(Directory, Error));
-	TestEqual(TEXT("types (7 + the base-camp scarecrow, 2026-10-17)"), Catalog.Num(), 8);
+	TestEqual(TEXT("types (7 + the base-camp scarecrow + the husk archer, 2026-10-17)"), Catalog.Num(), 9);
 	if (const FS1MonsterTypeDef* Scarecrow = Catalog.Find(90); TestNotNull(TEXT("scarecrow"), Scarecrow))
 		TestEqual(TEXT("scarecrow name key"), Scarecrow->NameKey, FString(TEXT("monster.scarecrow")));
+	if (const FS1MonsterTypeDef* Archer = Catalog.Find(8); TestNotNull(TEXT("husk archer (monster-ai.md § L)"), Archer))
+		TestEqual(TEXT("archer name key"), Archer->NameKey, FString(TEXT("monster.husk_archer")));
 
 	// A pack leader reads bigger than its followers on screen (radius → scale)
 	const FS1MonsterTypeDef* Alpha = Catalog.Find(5);

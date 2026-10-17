@@ -1674,6 +1674,55 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		}
 	}
 
+	// 다가가서 치는 돌진 (skills.csv tags "arrive", 2026-10-18 사용자: "'다가가서' 뉘앙스면 도착 시점에 피해") - 기습 · 일도양단 · 일권 ·
+	// 결정타 · 붕권 · 열화 · 피의 궤적(재입력). 이동(클라가 옮긴다)은 지금, 대상 효과는 도착할 때. 예전엔 시전 끝에 바로 맞았다 -
+	// 몸이 닿기도 전에 숫자가 떴고, 돌진 중에 비켜도 맞았다. 지나가며 베는 것(그림자 베기 · 질풍노도)은 태그가 없다 - 그대로
+	const SkillEffect* arriveMove = nullptr;
+	uint32 arriveMs = 0;
+	if (leap == nullptr && def.HasTag("arrive"))
+	{
+		for (const SkillEffect& e : def.effects)
+		{
+			if (e.type == SkillEffectType::Movement && e.self && e.speedCms > 0.f
+				&& (recast ? e.condition == SkillRequire::Recast : e.condition != SkillRequire::Recast))
+			{
+				arriveMove = &e;
+				break;
+			}
+		}
+
+		if (arriveMove != nullptr)
+		{
+			constexpr float ARRIVE_STOP_CM = 90.f;		// 클라 to_target 이 대상 앞에서 멈추는 거리 (S1MyPlayer StopShortCm)
+			const float reach = arriveMove->distCm * MoveDistScale(caster);
+			float dist = reach;
+
+			auto distTo = [&](const CreatureRef& c)
+				{
+					const float dx = c->posInfo->x() - originX;
+					const float dy = c->posInfo->y() - originY;
+					return (std::max)(0.f, ::sqrtf(dx * dx + dy * dy) - ARRIVE_STOP_CM);
+				};
+
+			if (arriveMove->param == "to_target" || recast)
+			{
+				auto targetIt = _objects.find(castTargetId);
+				if (CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr)
+					dist = (std::min)(reach, distTo(target));
+			}
+			else
+			{
+				// 직선 돌진 - 경로 위 가장 가까운 적에게 닿을 때 (붕권 "닿으면 그 자리에서 멈추고"). 아무도 없으면 끝까지
+				vector<CreatureRef> onLine;
+				CollectSkillTargets(caster, def, originX, originY, castTargetId, aimX, aimY, OUT onLine);
+				for (const CreatureRef& c : onLine)
+					dist = (std::min)(dist, distTo(c));
+			}
+
+			arriveMs = SkillKinematics::TravelMs(dist, arriveMove->speedCms);
+		}
+	}
+
 	// 후딜 (2026-10-15 사용자) - 치는 때(돌진 · 도약 · 착지 뒤 지연 포함)부터 recovery_ms(애니메이션이 끝날 때까지) 동안
 	// 이동 · 평타 · 다른 스킬을 막는다. 클라는 자기 스킬에 같은 계산으로 입력을 막는다 - 서버는 지연 몫만큼 일찍 풀어
 	// 클라가 먼저 움직여 되돌림을 받는 일이 없게 한다
@@ -1730,6 +1779,40 @@ void Room::FireSkill(const CreatureRef& caster, const SkillDef& def, Protocol::E
 		pending.bonusDamageMod = stillBonus;
 
 		LOG_LINE << "[LEAP] char=" << casterId << " skill=" << def.skillId << " lands in=" << leapMs << "ms hit +" << afterLandingMs << "ms" << '\n';
+	}
+	else if (arriveMove != nullptr)
+	{
+		// 다가가서 치는 돌진 - 자기 효과(이동 · 경로 장판)는 지금, 대상 효과는 도착할 때 (위 arriveMove)
+		SkillContext ctx;
+		ctx.casterId = casterId;
+		ctx.originX = originX;
+		ctx.originY = originY;
+		ctx.aimX = aimX;
+		ctx.aimY = aimY;
+		ctx.itemLevel = caster->castItemLevel;
+		ctx.slot = slot;
+		ctx.targetId = castTargetId;
+		ctx.recast = recast;
+		ctx.bonusDamageMod = stillBonus;
+
+		vector<CreatureRef> none;
+		ApplySkillEffects(caster, def, none, ctx, nowUs);
+
+		PendingTelegraph& pending = _pendingTelegraphs.emplace_back();
+		pending.casterId = casterId;
+		pending.skillId = def.skillId;
+		pending.fireAtUs = nowUs + static_cast<uint64>(arriveMs) * 1000;
+		pending.targetId = castTargetId;
+		pending.originX = originX;
+		pending.originY = originY;
+		pending.aimX = aimX;
+		pending.aimY = aimY;
+		pending.itemLevel = caster->castItemLevel;
+		pending.targetsOnly = true;
+		pending.bonusDamageMod = stillBonus;
+		pending.recast = recast;
+
+		LOG_LINE << "[ARRIVE] char=" << casterId << " skill=" << def.skillId << (recast ? " recast" : "") << " strikes in=" << arriveMs << "ms" << '\n';
 	}
 	else if (def.telegraphMs == 0 || recast)
 	{
@@ -1889,6 +1972,7 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		const uint32 itemLevel = pending.itemLevel;
 		const bool targetsOnly = pending.targetsOnly;
 		const float bonusDamageMod = pending.bonusDamageMod;
+		const bool recastStrike = pending.recast;
 
 		_pendingTelegraphs.erase(_pendingTelegraphs.begin() + i);
 
@@ -1920,6 +2004,7 @@ void Room::ResolveTelegraphs(uint64 nowUs)
 		ctx.targetsOnly = targetsOnly;
 		ctx.targetId = targetId;
 		ctx.bonusDamageMod = bonusDamageMod;
+		ctx.recast = recastStrike;
 		if (targetsOnly)
 		{
 			caster->leapUntilUs = 0;		// 내리찍었다 - 더는 도약 중이 아니다
@@ -7997,6 +8082,7 @@ void Room::OnMonsterDied(const MonsterRef& monster, uint64 instigatorId, uint64 
 
 			BagRef bag = ObjectUtils::CreateBag(GNextBagId.fetch_add(1), _floorId, bx, by, monster->posInfo->z(),
 				nowUs + MonsterConfig::DROP_BAG_LIFETIME_US, /*owner*/ 0);
+			bag->objectInfo->set_bag_kind(Protocol::BAG_KIND_MONSTER);		// 사망 가방과 다르게 보인다 (OQ-3) - "저기서 누가 죽었다" 신호에 섞이지 않게
 			bag->items = move(items);
 			dropped = bag->items.size();
 			AddBag(bag);
@@ -8177,8 +8263,9 @@ void Room::UpdateEscapeTowers(uint64 nowUs)
 			else if (in == false && wasIn)
 			{
 				p->zoneTower = -1;
-				// 나가기 직전 1 초 안에 넉백을 받았으면 밀려난 것 (텔레메트리 망설임 지표, § G)
-				if (p->knockbackEndUs + 1'000'000 > nowUs)
+				// 나가기 직전 1 초 안에 넉백 · 띄움이 끝났으면 밀려난 것 (텔레메트리 망설임 지표, § G · OQ-7).
+				// knockbackEndUs 는 CC 가 끝나면 0 으로 지워져서 쓸 수 없다 - 남는 값 lastDisplacedEndUs 로 본다 (2026-10-18)
+				if (p->lastDisplacedEndUs != 0 && p->lastDisplacedEndUs + 1'000'000 > nowUs)
 					p->statZoneLeavesForced++;
 				else
 					p->statZoneLeavesVoluntary++;
@@ -8307,6 +8394,14 @@ void Room::UpdateEscapeTowers(uint64 nowUs)
 					despawnPkt.add_object_ids(id);
 				SEND_PACKET_DECLARATION(despawnPkt);
 				Broadcast(sendBuffer);
+			}
+
+			// 나간 사람은 이 틱의 다음 탑 계산(점유자 · 게이지 받는 사람)에서 뺀다 (TD-006, 2026-10-18) - 예전엔 탈출한 클라가
+			// 같은 틱에 다른 탑의 게이지 패킷을 받았다
+			if (leaving.empty() == false)
+			{
+				players.erase(remove_if(players.begin(), players.end(), [&leaving](const PlayerRef& p)
+					{ return find(leaving.begin(), leaving.end(), p->objectInfo->object_id()) != leaving.end(); }), players.end());
 			}
 
 			const uint64 doneUs = Utils::NowMicroseconds();
