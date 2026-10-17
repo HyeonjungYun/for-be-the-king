@@ -17,7 +17,7 @@ GlobalQueue::~GlobalQueue()
 
 void GlobalQueue::Push(JobQueueRef jobQueue)
 {
-	_jobQueues.Push(jobQueue);
+	_jobQueues.Push(std::move(jobQueue));
 }
 
 JobQueueRef GlobalQueue::Pop()

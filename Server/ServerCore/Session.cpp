@@ -34,7 +34,8 @@ Session::~Session()
 
 void Session::Send(SendBufferRef sendBuffer)
 {
-	if (IsConnected() == false)
+	// MakeSendBuffer 는 uint16 에 안 들어가는 패킷을 만들지 않고 null 을 준다 (보안 점검 C2)
+	if (sendBuffer == nullptr || IsConnected() == false)
 		return;
 
 	// 패킷 종류별 송신량 (SV-5 아이템 몫). 버퍼에 통계 칸이 지정돼 있으면 그쪽으로 센다
@@ -46,19 +47,32 @@ void Session::Send(SendBufferRef sendBuffer)
 	}
 
 	bool registerSend = false;
+	bool overflow = false;
 
 	// 현재 RegisterSend가 걸리지 않은 상태라면, 걸어준다
 	{
 		WRITE_LOCK;
 
-		_sendQueue.push(sendBuffer);
+		// 읽지 않는 상대 - 더 쌓지 않고 끊는다 (Session.h MAX_PENDING_SEND_BYTES)
+		_pendingSendBytes += sendBuffer->WriteSize();
+		if (_pendingSendBytes > MAX_PENDING_SEND_BYTES)
+		{
+			overflow = true;
+		}
+		else
+		{
+			_sendQueue.push(std::move(sendBuffer));
 
-		if (_sendRegistered.exchange(true) == false)
-			registerSend = true;
+			if (_sendRegistered.exchange(true) == false)
+				registerSend = true;
 
-		if (registerSend)
-			RegisterSend();
+			if (registerSend)
+				RegisterSend();
+		}
 	}
+
+	if (overflow)
+		Disconnect(L"send queue full");
 }
 
 bool Session::Connect()
@@ -173,6 +187,8 @@ void Session::RegisterRecv()
 		if (errorCode != WSA_IO_PENDING)
 		{
 			HandleError(errorCode);
+			// HandleError 가 끊지 않는 오류(WSAENETRESET · WSAENOTCONN …)면 수신이 다시 걸리지 않은 채 "연결됨" 으로 남는다. 이미 끊었으면 아무것도 안 한다
+			Disconnect(L"RegisterRecv");
 			_recvEvent.owner = nullptr; // RELEASE_REF
 		}
 	}
@@ -187,26 +203,17 @@ void Session::RegisterSend()
 	_sendEvent.owner = shared_from_this(); // ADD_REF
 
 	// 보낼 데이터를 sendEvent에 등록
+	// 호출자(Send · ProcessSend)가 락을 잡고 있다. 옮긴다 - 참조 카운트를 올렸다 내리지 않는다
+	while (_sendQueue.empty() == false)
 	{
-		//WRITE_LOCK;
-
-		int32 writeSize = 0;
-		while (_sendQueue.empty() == false)
-		{
-			SendBufferRef sendBuffer = _sendQueue.front();
-
-			writeSize += sendBuffer->WriteSize();
-			// TODO : 예외 체크
-
-			_sendQueue.pop();
-			_sendEvent.sendBuffers.push_back(sendBuffer);
-		}
+		_sendEvent.sendBuffers.push_back(std::move(_sendQueue.front()));
+		_sendQueue.pop();
 	}
 
 	// Scatter-Gather (흩어져 있는 데이터들을 모아서 한 방에 보낸다)
 	vector<WSABUF> wsaBufs;
 	wsaBufs.reserve(_sendEvent.sendBuffers.size());
-	for (SendBufferRef sendBuffer : _sendEvent.sendBuffers)
+	for (const SendBufferRef& sendBuffer : _sendEvent.sendBuffers)
 	{
 		WSABUF wsaBuf;
 		wsaBuf.buf = reinterpret_cast<char*>(sendBuffer->Buffer());
@@ -287,6 +294,9 @@ void Session::ProcessRecv(int32 numOfBytes)
 void Session::ProcessSend(int32 numOfBytes)
 {
 	_sendEvent.owner = nullptr; // RELEASE_REF
+	int64 completedBytes = 0;
+	for (const SendBufferRef& sendBuffer : _sendEvent.sendBuffers)
+		completedBytes += sendBuffer->WriteSize();
 	_sendEvent.sendBuffers.clear(); // RELEASE_REF
 
 	if (numOfBytes == 0)
@@ -300,6 +310,8 @@ void Session::ProcessSend(int32 numOfBytes)
 	OnSend(numOfBytes);
 
 	WRITE_LOCK;
+
+	_pendingSendBytes -= completedBytes;		// 보낸 만큼 내린다 (Send 가 올렸다)
 
 	if (_sendQueue.empty())
 		_sendRegistered.store(false);
@@ -347,6 +359,10 @@ int32 PacketSession::OnRecv(BYTE* buffer, int32 len)
 			break;
 
 		PacketHeader header = *(reinterpret_cast<PacketHeader*>(&buffer[processLen]));
+		// 헤더보다 작은 크기는 잘못된 패킷이다 - 0 이면 processLen 이 늘지 않아 IOCP 스레드가 영원히 돈다. -1 → ProcessRecv 가 끊는다
+		if (header.size < sizeof(PacketHeader))
+			return -1;
+
 		// 헤더에 기록된 패킷 크기를 파싱할 수 있어야 한다
 		if (dataSize < header.size)
 			break;

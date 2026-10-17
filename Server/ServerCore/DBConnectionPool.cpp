@@ -17,7 +17,8 @@ bool DBConnectionPool::Connect(int32 connectionCount, const char* host, uint32 p
 		if (connection->Connect(host, port, user, password, schema) == false)
 		{
 			// 하나라도 실패하면 전부 접는다. 절반만 연결된 풀은 나중에
-			LOG_LINE << "[DB] connect failed: " << connection->GetError() << '\n';
+			// 연결이 없으면 GetError 는 고정 문구뿐이다 - 오류 번호를 남긴다
+			LOG_LINE << "[DB] connect failed: errno=" << connection->GetLastErrorNo() << " " << connection->GetError() << '\n';
 			delete connection;
 
 			for (DBConnection* c : _connections)

@@ -104,8 +104,10 @@ uint64 DBConnection::GetAffectedRows() const
 
 string DBConnection::Escape(const string& value) const
 {
+	// 예전엔 nullptr 를 돌려줬다 - string(nullptr) 는 정의되지 않은 동작(strlen 크래시)이다. 재연결이 실패한 채 다음 작업이 오면
+	// 서버가 죽었다. 빈 문자열이면 뒤따르는 쿼리가 연결 오류로 실패하고 워커가 재연결한다
 	if (_conn == nullptr)
-		return nullptr;
+		return string();
 
 	string escaped;
 	escaped.resize(value.size() * 2 + 1);

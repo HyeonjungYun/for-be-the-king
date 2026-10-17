@@ -9,6 +9,12 @@
 class DBConnection
 {
 public:
+	// MYSQL* 를 가진다 - 복사하면 두 번 닫는다. 닫지 않고 버리면 새는 것을 막는다 (Close 는 여러 번 불러도 된다)
+	DBConnection() = default;
+	~DBConnection() { Close(); }
+	DBConnection(const DBConnection&) = delete;
+	DBConnection& operator=(const DBConnection&) = delete;
+
 	bool			Connect(const char* host, uint32 port, const char* user, const char* password, const char* schema);
 	void			Close();
 

@@ -28,7 +28,8 @@ void RecvBuffer::Clean()
 		// 여유 공간이 버퍼 1개 크기 미만이면, 데이터를 앞으로 땅긴다.
 		if (FreeSize() < _bufferSize)
 		{
-			::memcpy(&_buffer[0], &_buffer[_readPos], dataSize);
+			// 남은 데이터가 _readPos 보다 길면 두 구간이 겹친다 - memcpy 는 겹침을 보장하지 않는다
+			::memmove(&_buffer[0], &_buffer[_readPos], dataSize);
 			_readPos = 0;
 			_writePos = dataSize;
 		}

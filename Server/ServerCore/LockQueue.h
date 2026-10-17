@@ -7,7 +7,7 @@ public:
 	void Push(T item)
 	{
 		WRITE_LOCK;
-		_items.push(item);
+		_items.push(std::move(item));
 	}
 
 	T Pop()
@@ -21,7 +21,7 @@ public:
 		if (_items.empty())
 			return T();
 
-		T ret = _items.front();
+		T ret = std::move(_items.front());
 		_items.pop();
 		return ret;
 	}
@@ -30,7 +30,7 @@ public:
 	{
 		WRITE_LOCK;
 		while (T item = PopNoLock())
-			items.push_back(item);
+			items.push_back(std::move(item));
 	}
 
 	void Clear()

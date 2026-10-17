@@ -6,7 +6,7 @@ class SendBufferChunk;
 	SendBuffer
 -----------------*/
 
-class SendBuffer : enable_shared_from_this<SendBuffer>
+class SendBuffer
 {
 public:
 	SendBuffer(int32 bufferSize);

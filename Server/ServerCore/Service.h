@@ -28,7 +28,6 @@ public:
 	virtual void		CloseService();
 	void				SetSessionFactory(SessionFactory func) { _sessionFactory = func; }
 
-	void				Broadcast(SendBufferRef sendBuffer);
 	SessionRef			CreateSession();
 	void				AddSession(SessionRef session);
 	void				ReleaseSession(SessionRef session);
@@ -47,7 +46,7 @@ protected:
 	IocpCoreRef			_iocpCore;
 
 	set<SessionRef>		_sessions;
-	int32				_sessionCount = 0;
+	atomic<int32>		_sessionCount = 0;		// 락 안에서 쓰고 주 스레드가 락 없이 읽는다 (통계)
 	int32				_maxSessionCount = 0;
 	SessionFactory		_sessionFactory;
 };

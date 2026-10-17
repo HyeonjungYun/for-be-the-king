@@ -2,7 +2,7 @@
 
 struct JobData
 {
-	JobData(weak_ptr<JobQueue> owner, JobRef job) : owner(owner), job(job)
+	JobData(weak_ptr<JobQueue> owner, JobRef job) : owner(std::move(owner)), job(std::move(job))
 	{
 
 	}

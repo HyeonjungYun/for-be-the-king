@@ -9,7 +9,7 @@
 void JobTimer::Reserve(uint64 tickAfter, weak_ptr<JobQueue> owner, JobRef job)
 {
 	const uint64 executeTick = ::GetTickCount64() + tickAfter;
-	JobData* jobData = new JobData(owner, job);
+	JobData* jobData = new JobData(std::move(owner), std::move(job));
 
 	WRITE_LOCK;
 
@@ -41,7 +41,7 @@ void JobTimer::Distribute(uint64 now)
 	for (TimerItem& item : items)
 	{
 		if (JobQueueRef owner = item.jobData->owner.lock())
-			owner->Push(item.jobData->job);
+			owner->Push(std::move(item.jobData->job));
 
 		delete item.jobData;		
 	}

@@ -22,15 +22,6 @@ void Service::CloseService()
 	// TODO
 }
 
-void Service::Broadcast(SendBufferRef sendBuffer)
-{
-	WRITE_LOCK;
-	for (const auto& session : _sessions)
-	{
-		session->Send(sendBuffer);
-	}
-}
-
 SessionRef Service::CreateSession()
 {
 	SessionRef session = _sessionFactory();
@@ -74,7 +65,7 @@ bool ClientService::Start()
 	for (int32 i = 0; i < sessionCount; i++)
 	{
 		SessionRef session = CreateSession();
-		if (session->Connect() == false)
+		if (session == nullptr || session->Connect() == false)		// IOCP 등록 실패면 null 이다
 			return false;
 	}
 

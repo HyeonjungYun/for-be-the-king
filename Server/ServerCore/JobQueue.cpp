@@ -12,7 +12,7 @@
 void JobQueue::Push(JobRef job, bool pushOnly)
 {
 	const int32 prevCount = _jobCount.fetch_add(1);
-	_jobs.Push(job); // WRITE_LOCK
+	_jobs.Push(std::move(job)); // WRITE_LOCK
 
 	// 첫번째 Job을 넣은 쓰레드가 실행까지 담당
 	if (prevCount == 0)
@@ -67,15 +67,19 @@ void JobQueue::Execute()
 {
 	LCurrentJobQueue = this;
 
+	// 루프마다 새로 잡지 않는다 - clear 는 용량을 남긴다
+	vector<JobRef> jobs;
+
 	while (true)
 	{
-		vector<JobRef> jobs;
+		jobs.clear();
 		_jobs.PopAll(OUT jobs);
 
 		const int32 jobCount = static_cast<int32>(jobs.size());
 
-		const uint64 flushStartUs = Utils::NowMicroseconds();
-		const uint64 flushStartCycles = ThreadCycles();
+		// 잡이 없으면(Push 의 fetch_add 와 큐 넣기 사이) 시간을 재지 않는다 - QueryThreadCycleTime 은 시스템 호출이다
+		const uint64 flushStartUs = (jobCount > 0) ? Utils::NowMicroseconds() : 0;
+		const uint64 flushStartCycles = (jobCount > 0) ? ThreadCycles() : 0;
 
 		uint64 slowestUs = 0;
 		const char* slowestTag = nullptr;

@@ -83,6 +83,11 @@ private:
 	queue<SendBufferRef>	_sendQueue;
 	atomic<bool>			_sendRegistered = false;
 
+	// 큐에 쌓였거나 보내는 중인 바이트 (락 안에서만 바꾼다). 소켓을 읽지 않는 클라에게 방송이 끝없이 쌓여 메모리가 자랐다 -
+	// 넘으면 끊는다 (2026-10-17 보안 점검 H3). 정상 클라는 초당 수십 KB 라 8 MB 는 몇 분을 멈춰 있어야 찬다
+	static constexpr int64	MAX_PENDING_SEND_BYTES = 8 * 1024 * 1024;
+	int64					_pendingSendBytes = 0;
+
 private:
 						/* IocpEvent 재사용 */
 	ConnectEvent		_connectEvent;

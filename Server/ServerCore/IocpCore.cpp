@@ -9,7 +9,7 @@
 IocpCore::IocpCore()
 {
 	_iocpHandle = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
-	ASSERT_CRASH(_iocpHandle != INVALID_HANDLE_VALUE);
+	ASSERT_CRASH(_iocpHandle != NULL);		// CreateIoCompletionPort 는 실패하면 NULL 이다 (INVALID_HANDLE_VALUE 가 아니다)
 }
 
 IocpCore::~IocpCore()
