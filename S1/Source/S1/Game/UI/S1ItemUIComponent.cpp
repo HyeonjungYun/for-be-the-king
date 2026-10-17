@@ -112,6 +112,14 @@ void US1ItemUIComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Root = nullptr;
 	}
 
+	// 던전 파티 창(P)도 몸과 같이 간다 - 예전엔 열린 채 탈출 · 사망하면 베이스캠프 화면(Z 20) 위(Z 30)에 남아
+	// 전체 화면 어둠이 클릭을 삼켰고, 다음 몸이 창을 하나 더 만들었다 (2026-10-17 리뷰)
+	if (PartyPanel != nullptr)
+	{
+		PartyPanel->Close();
+		PartyPanel = nullptr;
+	}
+
 	if (const APlayerController* PC = GetLocalController())
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Input = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))

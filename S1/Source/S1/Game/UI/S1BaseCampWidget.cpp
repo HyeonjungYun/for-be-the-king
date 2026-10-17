@@ -452,8 +452,7 @@ void US1BaseCampWidget::NativeOnInitialized()
 	EnterButton->SetContent(EnterText);
 	Column[2]->AddChildToVerticalBox(EnterButton);
 
-	SetSection(Section);
-	Refresh();
+	SetSection(Section);		// 화면에 붙기 전이다 - 첫 Refresh 는 NativeConstruct 가 한다
 }
 
 void US1BaseCampWidget::SetSection(ES1CampSection InSection)
@@ -487,7 +486,9 @@ void US1BaseCampWidget::SetSection(ES1CampSection InSection)
 
 	// A pick-only window never leaves a discard waiting
 	CancelConfirm();
-	Refresh();
+	// 화면에 붙기 전이면 NativeConstruct 가 곧 새로 그린다 - 처음 열 때 Refresh 가 다섯 번 돌았다 (2026-10-17 리뷰)
+	if (IsInViewport())
+		Refresh();
 }
 
 FReply US1BaseCampWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -848,9 +849,9 @@ void US1BaseCampWidget::RefreshEnter()
 	// base-camp sync is in, so a half-loaded S3 never promises a kit the server will not give
 	const US1ItemSubsystem* Items = GetItems();
 	const bool bOwnsNothing = Items != nullptr
-		&& Items->GetByState(ES1ItemState::Vaulted).Num() == 0
-		&& Items->GetByState(ES1ItemState::Carried).Num() == 0
-		&& Items->GetByState(ES1ItemState::Equipped).Num() == 0;
+		&& Items->CountByState(ES1ItemState::Vaulted) == 0
+		&& Items->CountByState(ES1ItemState::Carried) == 0
+		&& Items->CountByState(ES1ItemState::Equipped) == 0;
 	const bool bReady = BaseCamp != nullptr && BaseCamp->IsInventoryReady();
 	StarterNotice->SetVisibility(bReady && bOwnsNothing && ShowsEnter() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 }
@@ -1014,8 +1015,11 @@ FReply US1BaseCampWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 void US1BaseCampWidget::HandleSlotHovered(uint64 InstanceId)
 {
 	HoveredId = InstanceId;
-	if (InstanceId != 0)
-		ShownId = InstanceId;		// sticky - 상세와 [강화] 버튼은 마우스가 떠나도 마지막 아이템을 본다 (item-enhance 2026-10-12)
+	// sticky - 상세와 [강화] 버튼은 마우스가 떠나도 마지막 아이템을 본다 (item-enhance 2026-10-12).
+	// 떠날 때(0) · 같은 칸에 다시 들어올 때는 보여 줄 것이 그대로다 - 칸을 넘을 때마다 상세를 두 번 새로 만들었다 (2026-10-17)
+	if (InstanceId == 0 || InstanceId == ShownId)
+		return;
+	ShownId = InstanceId;
 	RefreshDetail();
 }
 

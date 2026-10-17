@@ -11,7 +11,7 @@
 #include "Game/S1MyPlayer.h"
 #include "S1GameInstance.h"
 
-PacketHandlerFunc GPacketHandler[UINT16_MAX];
+PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 {
@@ -339,6 +339,10 @@ bool Handle_S_CC_STATE(PacketSessionRef& session, Protocol::S_CC_STATE& pkt)
 		GameInstance->HandleCcState(pkt);		
 	}
 
+	// Verbose 는 기본으로 걸러진다 - 그래도 문자열은 스냅샷마다 만들었다. 켜져 있을 때만 만든다 (2026-10-17)
+	if (UE_LOG_ACTIVE(LogTemp, Verbose) == false)
+		return true;
+
 	for (const Protocol::CcStateInfo& State : pkt.states())
 	{
 		FString Slots;
@@ -373,8 +377,6 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt)
 {
-	auto Msg = pkt.msg();
-
 	return true;
 }
 

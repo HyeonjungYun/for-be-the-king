@@ -324,6 +324,10 @@ void AS1Player::TickDamagePopups()
 	if (World == nullptr || DamagePopups.Num() == 0)
 		return;
 
+	// 숫자는 풀로 다시 쓴다(배열이 줄지 않는다) - 한 번 맞은 뒤로는 떠 있는 숫자가 없어도 매 프레임 카메라 계산을 했다 (2026-10-17)
+	if (DamagePopups.ContainsByPredicate([](const FDamagePopup& Popup) { return Popup.bActive; }) == false)
+		return;
+
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (PC == nullptr)
 		return;
@@ -947,8 +951,22 @@ bool AS1Player::PlayAnimClip(const FString& Key, float Rate, bool bLoop, ES1Anim
 
 bool AS1Player::PlayDirectionalLocomotion(float SpeedCms)
 {
+	// Keys are built once - this runs every frame for every moving body (2026-10-17: it allocated a new FString per lookup)
+	static const FString RunF(TEXT("run_f"));
+	static const FString WalkF(TEXT("walk_f"));
+	static const TArray<FString> DirKeys = []()
+	{
+		TArray<FString> Keys;
+		for (const TCHAR* Gait : { TEXT("walk_"), TEXT("run_") })
+		{
+			for (int32 Sector = 0; Sector < 8; Sector++)
+				Keys.Add(FString(Gait) + S1LocoLogic::SectorSuffix(Sector));
+		}
+		return Keys;
+	}();
+
 	FS1AnimCatalog& Catalog = FS1AnimCatalog::Get();
-	if (Catalog.FindExact(TEXT("run_f"), AnimWeaponKey) == nullptr || Catalog.FindExact(TEXT("walk_f"), AnimWeaponKey) == nullptr)
+	if (Catalog.FindExact(RunF, AnimWeaponKey) == nullptr || Catalog.FindExact(WalkF, AnimWeaponKey) == nullptr)
 		return false;		// this weapon has no 8-direction set yet
 
 	// Direction = where the body moves relative to where it faces (the cursor for me, the server yaw for others)
@@ -956,7 +974,7 @@ bool AS1Player::PlayDirectionalLocomotion(float SpeedCms)
 	const float RelYaw = FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, MoveYaw);
 	const int32 Sector = S1LocoLogic::DirectionSector(RelYaw, LocoSector, ANIM_DIR_HYSTERESIS_DEG);
 	const bool bRun = S1LocoLogic::IsRunGait(SpeedCms, bLocoRun, ANIM_RUN_ENTER_CMS, ANIM_RUN_EXIT_CMS);
-	const FString Key = FString(bRun ? TEXT("run_") : TEXT("walk_")) + S1LocoLogic::SectorSuffix(Sector);
+	const FString& Key = DirKeys[(bRun ? 8 : 0) + ((Sector % 8) + 8) % 8];		// same string as "run_"/"walk_" + SectorSuffix
 
 	const FS1AnimClip* Clip = Catalog.FindExact(Key, AnimWeaponKey);
 	if (Clip == nullptr)
@@ -999,7 +1017,9 @@ void AS1Player::PlayLocomotionClip(bool bMoving, float SpeedCms)
 		LocoSector = -1;		// standing still - the next start picks its direction fresh
 
 	// The server moves everyone at 340 cm/s (less under a slow) - the run clip is stretched to the real speed
-	const FString Key = bMoving ? TEXT("run") : TEXT("idle");
+	static const FString RunKey(TEXT("run"));
+	static const FString IdleKey(TEXT("idle"));
+	const FString& Key = bMoving ? RunKey : IdleKey;
 	const float Rate = bMoving ? FMath::Clamp(SpeedCms / BaseWalkSpeed, ANIM_RUN_RATE_MIN, ANIM_RUN_RATE_MAX) : 1.f;
 	if (ActiveLayer == ES1AnimLayer::Locomotion && ActiveClipKey == Key)
 	{

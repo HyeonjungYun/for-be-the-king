@@ -8,24 +8,34 @@
 
 namespace S1ItemUIStyle
 {
-	FLinearColor PanelBackground()	{ return FLinearColor(FColor::FromHex(TEXT("1A1A19EB"))); }
-	FLinearColor CellBackground()	{ return FLinearColor(FColor::FromHex(TEXT("262624FF"))); }
-	FLinearColor CellHover()		{ return FLinearColor(FColor::FromHex(TEXT("383835FF"))); }
-	FLinearColor Divider()			{ return FLinearColor(FColor::FromHex(TEXT("383835FF"))); }
-	FLinearColor TextPrimary()		{ return FLinearColor(FColor::FromHex(TEXT("FFFFFFFF"))); }
-	FLinearColor TextSecondary()	{ return FLinearColor(FColor::FromHex(TEXT("C3C2B7FF"))); }
-	FLinearColor TextTertiary()		{ return FLinearColor(FColor::FromHex(TEXT("898781FF"))); }
-	FLinearColor TextShadowed()		{ return FLinearColor(FColor::FromHex(TEXT("55544FFF"))); }
-	FLinearColor BetrayerRed()		{ return FLinearColor(FColor::FromHex(TEXT("E54B3CFF"))); }		// party-betrayal R6 · R10
+	// 16진 문자열은 처음 한 번만 해석한다 - 칸마다 매 프레임(NativePaint) 불린다 (2026-10-17). 값은 예전과 같다
+	namespace
+	{
+		FLinearColor Hex(const TCHAR* Code) { return FLinearColor(FColor::FromHex(Code)); }
+	}
+
+	FLinearColor PanelBackground()	{ static const FLinearColor C = Hex(TEXT("1A1A19EB")); return C; }
+	FLinearColor CellBackground()	{ static const FLinearColor C = Hex(TEXT("262624FF")); return C; }
+	FLinearColor CellHover()		{ static const FLinearColor C = Hex(TEXT("383835FF")); return C; }
+	FLinearColor Divider()			{ static const FLinearColor C = Hex(TEXT("383835FF")); return C; }
+	FLinearColor TextPrimary()		{ static const FLinearColor C = Hex(TEXT("FFFFFFFF")); return C; }
+	FLinearColor TextSecondary()	{ static const FLinearColor C = Hex(TEXT("C3C2B7FF")); return C; }
+	FLinearColor TextTertiary()		{ static const FLinearColor C = Hex(TEXT("898781FF")); return C; }
+	FLinearColor TextShadowed()		{ static const FLinearColor C = Hex(TEXT("55544FFF")); return C; }
+	FLinearColor BetrayerRed()		{ static const FLinearColor C = Hex(TEXT("E54B3CFF")); return C; }		// party-betrayal R6 · R10
 
 	FLinearColor GradeColor(ES1ItemGrade Grade)
 	{
+		static const FLinearColor Common = Hex(TEXT("9AA0A6FF"));		// art-bible
+		static const FLinearColor Rare = Hex(TEXT("C9A227FF"));			// TEMP
+		static const FLinearColor Epic = Hex(TEXT("A06CD5FF"));			// TEMP
+		static const FLinearColor Legendary = Hex(TEXT("E66767FF"));	// art-bible
 		switch (Grade)
 		{
-		case ES1ItemGrade::Common:		return FLinearColor(FColor::FromHex(TEXT("9AA0A6FF")));	// art-bible
-		case ES1ItemGrade::Rare:		return FLinearColor(FColor::FromHex(TEXT("C9A227FF")));	// TEMP
-		case ES1ItemGrade::Epic:		return FLinearColor(FColor::FromHex(TEXT("A06CD5FF")));	// TEMP
-		case ES1ItemGrade::Legendary:	return FLinearColor(FColor::FromHex(TEXT("E66767FF")));	// art-bible
+		case ES1ItemGrade::Common:		return Common;
+		case ES1ItemGrade::Rare:		return Rare;
+		case ES1ItemGrade::Epic:		return Epic;
+		case ES1ItemGrade::Legendary:	return Legendary;
 		default:						return Divider();
 		}
 	}

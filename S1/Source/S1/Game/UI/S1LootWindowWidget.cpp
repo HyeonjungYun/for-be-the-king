@@ -216,7 +216,7 @@ void US1LootWindowWidget::RefreshHeader()
 	TitleText->SetText(Title);
 	TitleText->SetFont(Font(bUrgent ? FontEmphasis + 3 : FontEmphasis));
 
-	const int32 Carried = Items->GetByState(ES1ItemState::Carried).Num();
+	const int32 Carried = Items->CountByState(ES1ItemState::Carried);
 	const int32 Capacity = Items->GetCarriedCapacity();
 	FText Mine = FText::Format(INVTEXT("{0} {1}/{2}"), Text(TEXT("bag.my_bag")), FText::AsNumber(Carried), FText::AsNumber(Capacity));
 	if (Carried >= Capacity)

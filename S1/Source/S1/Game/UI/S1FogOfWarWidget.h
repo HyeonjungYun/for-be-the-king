@@ -47,6 +47,7 @@ private:
 	/** Grid in widget-local units, rebuilt every tick; NativePaint only transforms and draws. */
 	TArray<FVector2f> GridLocal;
 	TArray<FColor> GridColour;
+	mutable TArray<FSlateVertex> VertexScratch;		// NativePaint 가 매 프레임 채운다 - 할당을 다시 쓴다
 	TArray<SlateIndex> Indices;
 	int32 Cols = 0;
 	int32 Rows = 0;

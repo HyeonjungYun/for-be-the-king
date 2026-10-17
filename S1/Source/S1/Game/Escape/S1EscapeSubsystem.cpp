@@ -72,6 +72,9 @@ void US1EscapeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void US1EscapeSubsystem::Deinitialize()
 {
 	bInitialized = false;
+	// 다른 서브시스템(파티 · 베이스캠프 · 아이템)처럼 알림 타이머를 지운다 - 내려간 뒤 람다가 불리지 않게 (2026-10-17 리뷰)
+	if (UGameInstance* GameInstance = GetGameInstance())
+		GameInstance->GetTimerManager().ClearTimer(NoticeTimer);
 	if (Hud != nullptr)
 		Hud->RemoveFromParent();
 	if (Radar != nullptr)

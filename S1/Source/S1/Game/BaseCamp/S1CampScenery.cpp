@@ -4,6 +4,8 @@
 #include "Game/BaseCamp/S1CampLayout.h"
 #include "Game/S1Player.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -239,7 +241,15 @@ void AS1CampScenery::SetShown(bool bShown)
 	for (const FS1CampNpcBody& Npc : NpcBodies)
 	{
 		if (AS1Player* Body = Npc.Body.Get())
+		{
 			Body->SetActorHiddenInGame(bShown == false);
+			// 숨겨도 틱은 돌았다(애니메이션 · 보간) - 던전에 있는 내내 NPC 네 명이 포즈를 계산했다. 같이 멈추고 같이 깨운다 (2026-10-17)
+			Body->SetActorTickEnabled(bShown);
+			if (USkeletalMeshComponent* Mesh = Body->GetMesh())
+				Mesh->SetComponentTickEnabled(bShown);
+			if (UCharacterMovementComponent* Movement = Body->GetCharacterMovement())
+				Movement->SetComponentTickEnabled(bShown);
+		}
 	}
 }
 

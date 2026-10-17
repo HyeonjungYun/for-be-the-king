@@ -250,6 +250,10 @@ UAnimSequenceBase* FS1AnimCatalog::Load(const FS1AnimClip& Clip, USkeleton* Targ
 			}
 			return nullptr;
 		}
+		// 카탈로그는 프로세스와 같이 산다 - 약한 참조뿐이라 -game 에선 몽타주가 바뀐 뒤 GC 가 시퀀스를 풀고, 다음 재생이
+		// 전투 중에 디스크에서 동기 로드했다(끊김). 에디터(PIE)는 로드한 에셋을 붙잡아 드러나지 않았다 (2026-10-17 리뷰)
+		if (GIsEditor == false)
+			Sequence->AddToRoot();
 		LoadedAssets.Add(PathKey, Sequence);
 	}
 

@@ -172,7 +172,7 @@ namespace S1LevelBuild
 		Color->Constant = SeaColor;
 		Material->GetExpressionCollection().AddExpression(Color);
 		Material->GetEditorOnlyData()->BaseColor.Connect(0, Color);
-		Material->bUsedWithInstancedStaticMeshes = true;
+		Material->SetUsageByFlag(MATUSAGE_InstancedStaticMeshes, true);		// 5.8: 필드 직접 쓰기는 deprecated (C4996). PostEditChange 가 다시 컴파일한다
 		Material->PostEditChange();
 
 		FSavePackageArgs Args;

@@ -309,6 +309,13 @@ void US1PartyPanelWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	// [배신하고 나가기] 확인 창이 지나면 글자를 되돌린다 - Refresh 는 파티가 바뀔 때만 불려 "한 번 더 누르면 배신" 이 남아 있었다 (2026-10-17 리뷰)
+	if (LeaveArmedAt > 0.0 && FPlatformTime::Seconds() - LeaveArmedAt >= S1PartyLayout::LeaveArmWindowSec)
+	{
+		LeaveArmedAt = 0.0;
+		Refresh();
+	}
+
 	const US1PartySubsystem* Party = GetParty();
 	if (Party == nullptr || ResultLine == nullptr)
 		return;

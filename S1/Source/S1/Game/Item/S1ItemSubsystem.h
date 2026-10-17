@@ -107,6 +107,9 @@ public:
 	/** Sorted by instance id so a grid does not reshuffle between redraws. */
 	TArray<const FS1ItemView*> GetByState(ES1ItemState State) const;
 
+	/** How many items are in this state — no array, no sort (GetByState(...).Num() did both just to count). */
+	int32 CountByState(ES1ItemState State) const;
+
 	const FS1ItemView* GetEquipped(int32 Slot) const;
 
 	const FS1BagView* FindBag(uint64 BagId) const;

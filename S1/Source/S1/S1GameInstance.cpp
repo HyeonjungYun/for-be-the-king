@@ -104,7 +104,8 @@ void US1GameInstance::HandleRecvPackets()
 
 void US1GameInstance::SendPacket(SendBufferRef SendBuffer)
 {
-	if (Socket == nullptr || GameServerSession == nullptr)
+	// MakeSendBuffer 는 uint16 에 안 들어가는 패킷이면 null 을 준다 (2026-10-17 보안 점검 C2 - 생성 템플릿 공용)
+	if (Socket == nullptr || GameServerSession == nullptr || SendBuffer == nullptr)
 		return;
 
 	GameServerSession->SendPacket(SendBuffer);
@@ -186,6 +187,8 @@ void US1GameInstance::HandleSpawn(const Protocol::ObjectInfo& objectInfo, bool I
 	if (IsMine)
 	{
 		auto* PC = UGameplayStatics::GetPlayerController(this, 0);
+		if (PC == nullptr)		// 로딩 · 이동 중 컨트롤러가 아직 없을 수 있다 (2026-10-17 리뷰)
+			return;
 		AS1Player* Player = Cast<AS1Player>(PC->GetPawn());
 		if (Player == nullptr)
 			return;

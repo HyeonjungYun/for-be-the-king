@@ -513,6 +513,14 @@ TArray<const FS1ItemView*> US1ItemSubsystem::GetByState(ES1ItemState State) cons
 	return Out;
 }
 
+int32 US1ItemSubsystem::CountByState(ES1ItemState State) const
+{
+	int32 Count = 0;
+	for (const TPair<uint64, FS1ItemView>& Pair : Items)
+		Count += (Pair.Value.State == State) ? 1 : 0;
+	return Count;
+}
+
 const FS1ItemView* US1ItemSubsystem::GetEquipped(int32 Slot) const
 {
 	for (const TPair<uint64, FS1ItemView>& Pair : Items)

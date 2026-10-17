@@ -43,8 +43,12 @@ float US1FogOfWarWidget::FogAt(const FVector2D& Ground) const
 
 	for (const FSourceView& View : Views)
 	{
+		// 반경 밖이면 제곱근 없이 거른다 - 격자 점 × 시야원마다 불린다. 경계에서는 어느 쪽이든 보임이 0 이다 (2026-10-17)
 		const FVector2D D = Ground - View.Pos;
-		const float Dist = static_cast<float>(D.Size());
+		const double DistSq = D.SizeSquared();
+		if (DistSq > FMath::Square(static_cast<double>(View.RadiusCm)))
+			continue;
+		const float Dist = static_cast<float>(FMath::Sqrt(DistSq));
 		if (Dist > View.RadiusCm)
 			continue;
 
@@ -230,11 +234,11 @@ int32 US1FogOfWarWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Al
 	const FSlateResourceHandle Handle = FSlateApplication::Get().GetRenderer()->GetResourceHandle(*Brush);
 	const FSlateRenderTransform& Transform = AllottedGeometry.GetAccumulatedRenderTransform();
 
-	TArray<FSlateVertex> Vertices;
-	Vertices.SetNumUninitialized(GridLocal.Num());
+	// 매 프레임 격자 크기(720p 에 약 3,700 점)의 배열을 새로 잡았다 - 멤버 하나를 다시 쓴다 (MakeCustomVerts 가 복사한다, 2026-10-17)
+	VertexScratch.SetNumUninitialized(GridLocal.Num(), EAllowShrinking::No);
 	for (int32 i = 0; i < GridLocal.Num(); i++)
-		Vertices[i] = FSlateVertex::Make<ESlateVertexRounding::Disabled>(Transform, GridLocal[i], FVector2f(0.5f, 0.5f), GridColour[i]);
+		VertexScratch[i] = FSlateVertex::Make<ESlateVertexRounding::Disabled>(Transform, GridLocal[i], FVector2f(0.5f, 0.5f), GridColour[i]);
 
-	FSlateDrawElement::MakeCustomVerts(OutDrawElements, Layer + 1, Handle, Vertices, Indices, nullptr, 0, 0);
+	FSlateDrawElement::MakeCustomVerts(OutDrawElements, Layer + 1, Handle, VertexScratch, Indices, nullptr, 0, 0);
 	return Layer + 1;
 }
