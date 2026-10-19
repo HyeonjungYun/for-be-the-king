@@ -16,6 +16,7 @@
 #include "ChestSpawnTable.h"
 #include "EntryPointTable.h"
 #include "StarterKitTable.h"
+#include "BotLoadoutTable.h"
 #include "WallTable.h"
 #include "Vision.h"
 #include "TowerTable.h"
@@ -191,6 +192,15 @@ int main()
 		}
 
 		LOG_LINE << "[BOOT] starter kit loaded - pieces=" << StarterKitTable::All().size() << '\n';
+
+		// 봇 스킬 셋 - 기본 장비와 같은 검사 (ItemTable 다음). 파일이 없으면 빈 표 (FBTK_BOT_LOADOUTS 가 켜져도 기본 장비로)
+		if (BotLoadoutTable::Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] bot loadouts invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+
+		LOG_LINE << "[BOOT] bot loadouts loaded - builds=" << BotLoadoutTable::All().size() << '\n';
 
 		// 상자 배치 - 층 풀 다음이어야 한다. 상자마다 그 층 · 등급의 풀이 있는지 검사한다.
 		if (ChestSpawnTable::Load(dataDir, FLOOR_COUNT, OUT error) == false)
@@ -601,6 +611,20 @@ int main()
 
 		if (GBotRegear.load())
 			LOG_LINE << "[BOOT] FBTK_BOT_REGEAR=1 - bare bot_ characters get the basic 3 pieces on enter (LOAD TEST ONLY)\n";
+	}
+
+	{
+		char* raw = nullptr;
+		size_t length = 0;
+
+		if (_dupenv_s(&raw, &length, "FBTK_BOT_LOADOUTS") == 0 && raw != nullptr)
+		{
+			GBotLoadouts.store(raw[0] == '1');
+			::free(raw);
+		}
+
+		if (GBotLoadouts.load())
+			LOG_LINE << "[BOOT] FBTK_BOT_LOADOUTS=1 - bare bot_ slots get a random build from bot_loadouts.csv on enter\n";
 	}
 
 	{

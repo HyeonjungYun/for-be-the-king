@@ -1235,6 +1235,7 @@ int main(int argc, char* argv[])
 					<< "   attacks = " << BotAiDriver::GAiAttacks.exchange(0) / sec << "/s"
 					<< "   skills = " << BotAiDriver::GAiSkills.exchange(0) / sec << "/s"
 					<< "   opens = " << BotAiDriver::GAiLootOpens.exchange(0) / sec << "/s"
+					<< "   blocked steps = " << BotAiDriver::GAiBlockedSteps.exchange(0) / sec << "/s"
 					<< "   escaped total = " << GLeaveEscaped.load() << "   expired total = " << GLeaveExpired.load() << '\n';
 			}
 

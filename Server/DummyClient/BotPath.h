@@ -24,4 +24,8 @@ namespace BotPath
 
 	// 걸을 수 있는 자리인가 - 섬 안(floor_outline.csv) 이고 벽에서 떨어진 칸. 격자가 없으면 늘 참 (BotAI::World::walkable, 2026-10-12)
 	bool	Walkable(float x, float y);
+
+	// 이 걸음이 서버 이동 검증을 통과하는가 - 서버와 같은 WallMap 으로 점(반지름 0) 쓸기 + 도착 자리가 섬 안 (2026-10-20).
+	// 격자 칸(1 m)만 보면 엄폐물 모서리를 스쳐 reason=wall 로 거부되고 안티치트 move_wall 점수가 쌓였다 (실기동: 봇 하나가 강제 종료)
+	bool	SegmentClear(float x0, float y0, float x1, float y1);
 }

@@ -14,6 +14,7 @@ struct BotAiCreature
 	bool	ally = false;
 	uint32	monsterTypeId = 0;
 	uint64	lastHitMeUs = 0;
+	uint64	firstSeenUs = 0;		// S_SPAWN 으로 처음 들어온 시각 (반응 지연)
 };
 
 struct BotAiState
@@ -52,8 +53,28 @@ struct BotAiState
 	float									scriptGoalX = 0.f;
 	float									scriptGoalY = 0.f;
 
+	// 2026-10-20 - 성격 · 손놀림 (틱 스레드 전용)
+	bool									personaSet = false;		// 이번 판의 성격을 정했다 (스킬 칸이 온 뒤 - 빌드로 고른다)
+	string									build;					// 맞춘 빌드 번호 ("S-1") - 없으면 빈 칸
+	uint64									recastAtUs = 0;			// 재입력 스킬의 둘째 누름 시각. 0 = 없음
+	uint32									recastSlot = 0;
+	uint64									recastTargetId = 0;
+	float									yaw = 0.f;				// 보내는 방향 (도) - 걸으면 걷는 쪽, 때리면 대상 쪽
+	uint64									skillLockUntilUs = 0;	// 이 시각 전엔 어떤 칸도 누르지 않는다 (회복 · 기본 공격만 버프) - itemLock 아래
+	float									dashSpeedCms = 0.f;		// 지금 나는 이동 스킬의 속도 (표) - 0 = 옛 흉내 1200
+	int32									rangeBuffCm = 0;		// 평타 사거리 버프 (통아 · 육량전 · 단창) - itemLock 아래
+	uint64									rangeBuffUntilUs = 0;
+	uint64									dashStartUs = 0;		// 시전이 끝나 날기 시작하는 시각
+	const char*								lastReason = nullptr;	// 추적 - 같은 가지 안에서 이유가 바뀌면 한 줄
+
 	void Reset()
 	{
+		personaSet = false;
+		build.clear();
+		recastAtUs = 0;
+		skillLockUntilUs = 0;
+		lastReason = nullptr;
+		rangeBuffUntilUs = 0;
 		creatures.clear();
 		gaugePermille = 0;
 		inZone = false;

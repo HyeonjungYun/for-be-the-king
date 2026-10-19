@@ -273,8 +273,9 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 	if (GTowerMode.load() && GItemBehavior.load() == false)
 		bot->reenterAtUs.store(Utils::NowMicroseconds() + BOT_REENTER_DELAY_US);
 
-	// 탈출 커밋이 끝났다 - 베이스캠프에서 잠깐 쉬고 다시 들어간다. 던전에서 본 가방은 이제 모른다
-	if (GItemBehavior.load())
+	// 탈출 커밋이 끝났다 - 베이스캠프에서 잠깐 쉬고 다시 들어간다. 던전에서 본 가방은 이제 모른다.
+	// -ai 도 같다 (2026-10-20) - 한 PC 묶음의 AddBots 봇이 탈출 · 시간 만료 뒤 베이스캠프에 영영 서 있지 않게
+	if (GItemBehavior.load() || BotAiDriver::GAi.load())
 	{
 		{
 			lock_guard<mutex> guard(bot->itemLock);
@@ -304,6 +305,8 @@ bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 		if (ai && info.object_type() != Protocol::OBJECT_TYPE_BAG && info.object_id() != bot->objectId.load())
 		{
 			BotAiCreature& c = bot->ai.creatures[info.object_id()];
+			if (c.firstSeenUs == 0)
+				c.firstSeenUs = Utils::NowMicroseconds();		// 반응 지연 - 다시 보이면 (FoW 재진입) 새로 센다: S_DESPAWN 이 지운다
 			c.monster = (info.creature_type() == Protocol::CREATE_TYPE_MONSTER);
 			c.x = info.pos_info().x();
 			c.y = info.pos_info().y();

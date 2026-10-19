@@ -10,6 +10,7 @@ namespace
 	constexpr float		CELL_CM				= 100.f;
 	constexpr int32		GRID				= static_cast<int32>(2.f * HALF_CM / CELL_CM);	// 60,000 / 100 = 600 (36만 칸)
 	constexpr float		CLEARANCE_CM		= 60.f;		// 칸 중심이 벽에서 이만큼 떨어져야 지나간다
+	constexpr float		SEGMENT_MARGIN_CM	= 5.f;		// SegmentClear - 서버(반지름 0)보다 조금 넓게
 	constexpr float		SMOOTH_RADIUS_CM	= 40.f;		// 건너뛸 때 이 굵기로 쓸어 본다 - 서버 검증(점)보다 굵게
 	constexpr int32		NEAREST_FREE_MAX	= 40;		// 도착점이 벽 안이면 이 칸 수 안에서 빈 칸을 찾는다 (타워 반지름 + 여유)
 
@@ -210,6 +211,18 @@ bool BotPath::Walkable(float x, float y)
 	if (std::isfinite(x) == false || std::isfinite(y) == false || std::fabs(x) >= HALF_CM || std::fabs(y) >= HALF_CM)
 		return false;
 	return s_blocked[Index(CellOf(x), CellOf(y))] == 0;
+}
+
+bool BotPath::SegmentClear(float x0, float y0, float x1, float y1)
+{
+	if (s_loaded == false)
+		return true;
+	if (std::isfinite(x1) == false || std::isfinite(y1) == false || std::fabs(x1) >= HALF_CM || std::fabs(y1) >= HALF_CM)
+		return false;
+	if (s_map.InsideFloor(x1, y1) == false)
+		return false;
+	// 서버는 반지름 0 으로 쓴다 - 봇은 5 cm 여유 (서버 자리와 봇 자리의 소수점 차)
+	return s_map.SweepBlocked(x0, y0, x1, y1, SEGMENT_MARGIN_CM) == false;
 }
 
 uint32 BotPath::LoadedFloor()

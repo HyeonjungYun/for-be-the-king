@@ -55,7 +55,12 @@ namespace BotAI
 		// ── 판단 조각 (테스트 · 다른 트리가 재사용) ──
 		static const Creature*	NearestThreat(const World& w, float radiusCm);		// 가장 가까운 적대 생물 (아군 제외)
 		static float			PowerOf(const World& w, const Creature& c, const BrainConfig& cfg);	// 적의 힘 (몬스터는 무리 수를 센다)
-		static const Creature*	BestTarget(const World& w, const BrainConfig& cfg);	// 싸울 만한 가장 좋은 적
+		// 싸울 만한 가장 좋은 적. persona 가 있으면 대상 선호 · 반응 지연을 더한다 (아직 반응하지 않은 적은 고르지 않는다)
+		static const Creature*	BestTarget(const World& w, const BrainConfig& cfg, const Persona* persona = nullptr);
+		static BrainConfig		Tuned(const BrainConfig& cfg, const Persona& p);	// 성격 배율을 적용한 수치
+		static float			AttackRange(const World& w, const BrainConfig& cfg);	// 무기 사거리 × 0.9 (모르면 attack_range_cm)
+		static int32			HostilePlayersNear(const World& w, float radiusCm, float& outX, float& outY);	// 수 · 무게중심
+		static const SkillSlot*	ReadyRole(const World& w, SkillRole role, float distCm);	// 그 쓰임의 준비된 칸 중 닿는 것 (가장 긴 쿨다운 먼저)
 		static const Loot*		NearestLoot(const World& w, float radiusCm);
 		static const Tower*		NearestTower(const World& w);
 		static const SkillSlot*	ReadySkill(const World& w, bool wantDamage, float distCm);	// 지금 쓸 수 있는 칸
@@ -69,9 +74,22 @@ namespace BotAI
 	};
 
 	// skills.csv 의 봇이 알아야 할 열만 (skill_id,kind,shape,aim,range_cm,cast_ms,cooldown_ms,power) - 장비 동기화의 스킬 id 를 SkillSlot 으로
+	// bot_personas.csv (2026-10-20) - 행 하나 = 성격 하나. 봇은 자기 빌드(bot_loadouts.csv)의 role 로 고르고 칠판 난수로 조금 흔든다
+	struct PersonaBook
+	{
+		struct Row { Persona base; uint64 reactionMinUs = 0; uint64 reactionMaxUs = 0; };
+		std::unordered_map<std::string, Row> byRole;
+
+		bool	Parse(const std::string& csv, std::string& error);
+		// role 이 없으면 balanced, 그것도 없으면 기본 성격. 배율 ±10 % · 반응 지연은 범위 안 무작위 (칠판 난수 - 결정적)
+		Persona	Make(const std::string& role, Blackboard& bb) const;
+	};
+
 	struct SkillBook
 	{
-		struct Entry { uint32 skillId = 0; float rangeCm = 0.f; uint32 castMs = 0; uint32 cooldownMs = 0; bool damage = false; bool movement = false; bool selfBuff = false; bool needsTarget = false; };
+		struct Entry { uint32 skillId = 0; float rangeCm = 0.f; uint32 castMs = 0; uint32 cooldownMs = 0; bool damage = false; bool movement = false; bool selfBuff = false; bool needsTarget = false;
+			SkillRole role = SkillRole::None; float reachCm = 0.f; bool recast = false; uint32 lockOthersMs = 0; int32 rangeBuffCm = 0; uint32 rangeBuffMs = 0;
+			DashMode dashMode = DashMode::None; float dashDistCm = 0.f; float dashSpeedCms = 0.f; };
 		std::unordered_map<uint32, Entry> entries;
 
 		bool	Parse(const std::string& skillsCsv, const std::string& effectsCsv, std::string& error);

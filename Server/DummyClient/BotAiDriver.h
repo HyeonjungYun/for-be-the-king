@@ -34,4 +34,5 @@ namespace BotAiDriver
 	extern atomic<uint64>	GAiAttacks;
 	extern atomic<uint64>	GAiSkills;
 	extern atomic<uint64>	GAiLootOpens;
+	extern atomic<uint64>	GAiBlockedSteps;		// 서버가 거부할 걸음을 보내지 않고 멈춘 수 (BotPath::SegmentClear)
 }

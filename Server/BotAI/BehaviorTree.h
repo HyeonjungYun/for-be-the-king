@@ -14,6 +14,31 @@
 
 namespace BotAI
 {
+	// 봇 한 명의 성격 (2026-10-20 · bot_personas.csv). 기본값 = 옛 두뇌 그대로 (배율 1 · 지연 0 · 옆걸음 없음)
+	struct Persona
+	{
+		std::string	name = "default";
+		float	fleeHpScale = 1.f;			// flee_hp_ratio × - 높으면 일찍 도망
+		float	engageHpScale = 1.f;		// engage_hp_ratio × - 낮으면 피가 적어도 덤빈다
+		float	avoidPowerScale = 1.f;		// avoid_power_ratio × - 높으면 센 적에게도 덤빈다
+		float	engageRadiusScale = 1.f;	// engage_radius_cm ×
+		float	lootRadiusScale = 1.f;		// loot_radius_cm ×
+		int32	lootGoalBonus = 0;			// loot_goal_value +
+		float	escapeEarlyScale = 1.f;		// escape_when_left_s ×
+		uint64	reactionUs = 0;				// 처음 본 적에게 반응하기까지 (나를 때린 적은 바로)
+		float	strafe = 0.f;				// 0..1 - 평타 사이 옆걸음 (근접은 돌고, 원거리는 비켜 선다)
+		float	exploreSpeed = 1.f;			// 둘러볼 때 걸음 (1 = 달리기)
+		float	preferPlayers = 0.f;		// 싸움 대상 점수 + (플레이어)
+		float	preferMonsters = 0.f;		// 싸움 대상 점수 + (몬스터)
+		float	pauseChance = 0.f;			// 탐색 지점에 닿았을 때 멈춰 둘러볼 확률
+		uint64	pauseMinUs = 0;
+		uint64	pauseMaxUs = 0;
+		float	poiBias = 0.f;				// 탐색 지점을 상자 자리 · 집 · 타워에서 고를 확률
+		float	woundedEscapeHp = 0.f;		// 이 아래 체력 + 소지품이 있으면 탈출 (0 = 안 함)
+		int32	outnumberedAt = 0;			// 적 플레이어가 이 수 이상 몰려 있으면 싸우지 않고 피한다 (0 = 세지 않음)
+		uint64	chaseMemoryUs = 0;			// 시야에서 사라진 대상을 마지막 자리까지 쫓는 시간 (0 = 안 쫓음)
+	};
+
 	struct Blackboard
 	{
 		uint64	targetId = 0;			// 쫓는 대상
@@ -27,6 +52,17 @@ namespace BotAI
 		uint64	lastSkillUs = 0;
 		std::string	lastBranch;			// 지난 틱의 가지 (바뀔 때만 로그)
 		uint32	seed = 1;				// 탐색 난수 (결정적)
+
+		// 2026-10-20 - 성격 · 기억
+		Persona	persona;
+		float	lastSeenX = 0.f;		// 싸우던 대상을 마지막으로 본 자리 (시야 밖으로 사라지면 거기까지 가 본다)
+		float	lastSeenY = 0.f;
+		uint64	lastSeenUs = 0;
+		uint64	lastSeenId = 0;
+		uint64	pauseUntilUs = 0;		// 탐색 지점에서 멈춰 둘러보는 중
+		float	strafeSign = 1.f;		// 옆걸음 방향 (가끔 뒤집는다)
+		uint64	strafeFlipUs = 0;
+		uint64	lastPoiIndex = UINT64_MAX;	// 방금 다녀온 곳은 다시 고르지 않는다
 
 		uint32	NextRandom() { seed = seed * 1664525u + 1013904223u; return seed; }
 		float	Random01() { return static_cast<float>(NextRandom() % 10000u) / 10000.f; }

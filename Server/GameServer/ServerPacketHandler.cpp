@@ -867,6 +867,14 @@ namespace
 					return;
 				}
 
+				// 봇 스킬 셋 (FBTK_BOT_LOADOUTS) - 맨몸 부위를 무작위 빌드로. 아래 두 경로보다 먼저 - 채워지면 그쪽은 채울 부위가 없다
+				if (GBotLoadouts.load())
+				{
+					string code;
+					if (const int32 filled = EquipBotLoadout(*player, name, OUT code); filled > 0)
+						LOG_LINE << "[BOT LOADOUT] char=" << player->objectInfo->object_id() << " build=" << code << " filled=" << filled << '\n';
+				}
+
 				// 부하 측정 전용 - 맨몸 봇에 기본 3점 (FBTK_BOT_REGEAR).
 				// 기본 장비보다 먼저 - 봇이 채워지면 아래는 채울 부위가 없어 [REGEAR] 집계가 예전 측정과 같다
 				if (GBotRegear.load())

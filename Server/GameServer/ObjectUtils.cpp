@@ -8,6 +8,7 @@
 #include "ItemTable.h"
 #include "ChestSpawnTable.h"
 #include "StarterKitTable.h"
+#include "BotLoadoutTable.h"
 #include "Economy.h"
 #include "DBError.h"
 #include <thread>
@@ -18,6 +19,7 @@ atomic<bool> GFailDeathCommit = false;
 atomic<uint32> GDeathCommitDelayMs = 0;
 atomic<uint32> GBaseCampDelayMs = 0;
 atomic<bool> GBotRegear = false;
+atomic<bool> GBotLoadouts = false;
 atomic<int32> GFakeLoginFail = 0;
 atomic<uint32> GLoginDelayMs = 0;
 atomic<bool> GEntryFromDb = false;
@@ -1410,6 +1412,23 @@ int32 RegearBot(Player& player, const string& characterName)
 
 	// 기본 장비 표(starter_kit.csv)와 같다 - reset_bots.sql 이 처음에 입히는 3점이기도 해서 재지급 전후로 봇의 전투가 달라지지 않는다
 	return EquipStarterKit(player);
+}
+
+int32 EquipBotLoadout(Player& player, const string& characterName, OUT string& pickedCode)
+{
+	pickedCode.clear();
+	if (characterName.rfind("bot_", 0) != 0)
+		return 0;
+
+	const uint32 weaponTypeId = player.equipped[Protocol::SLOT_WEAPON_PRIMARY - 1].itemTypeId;
+	const BotLoadout* loadout = BotLoadoutTable::Pick(weaponTypeId, Utils::GetRandom<uint64>(0, UINT64_MAX));
+	if (loadout == nullptr && weaponTypeId != 0)
+		loadout = BotLoadoutTable::Pick(0, Utils::GetRandom<uint64>(0, UINT64_MAX));		// 표에 없는 무기 - 나머지 부위만 아무 빌드로
+	if (loadout == nullptr)
+		return 0;
+
+	pickedCode = loadout->code;
+	return BotLoadoutTable::EquipInto(*loadout, player.equipped, SKILL_SLOT_COUNT, [] { return GNextInstanceId.fetch_add(1); });
 }
 
 int32 EquipStarterKit(Player& player)

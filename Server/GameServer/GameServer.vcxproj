@@ -158,6 +158,7 @@
     <ClCompile Include="ChestSpawnTable.cpp" />
     <ClCompile Include="EntryPointTable.cpp" />
     <ClCompile Include="StarterKitTable.cpp" />
+    <ClCompile Include="BotLoadoutTable.cpp" />
     <ClCompile Include="WallMap.cpp" />
     <ClCompile Include="Vision.cpp" />
     <ClCompile Include="RoomCheat.cpp" />
@@ -227,6 +228,7 @@
     <ClInclude Include="ChestSpawnTable.h" />
     <ClInclude Include="EntryPointTable.h" />
     <ClInclude Include="StarterKitTable.h" />
+    <ClInclude Include="BotLoadoutTable.h" />
     <ClInclude Include="MoveClock.h" />
     <ClInclude Include="FloorBounds.h" />
     <ClInclude Include="SpawnPlacement.h" />

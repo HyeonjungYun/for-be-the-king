@@ -93,6 +93,9 @@
     <ClCompile Include="StarterKitTable.cpp">
       <Filter>Data</Filter>
     </ClCompile>
+    <ClCompile Include="BotLoadoutTable.cpp">
+      <Filter>Data</Filter>
+    </ClCompile>
     <ClCompile Include="WallMap.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -219,6 +222,9 @@
       <Filter>Data</Filter>
     </ClInclude>
     <ClInclude Include="StarterKitTable.h">
+      <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="BotLoadoutTable.h">
       <Filter>Data</Filter>
     </ClInclude>
     <ClInclude Include="MoveClock.h">
