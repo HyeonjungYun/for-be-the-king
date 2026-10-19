@@ -74,6 +74,34 @@ S1/                  Unreal Engine 5.8 클라이언트
 4  클라    S1\S1.uproject
 ```
 
+## 패키징 빌드 (클라이언트)
+
+Win64 · **Development** 로 만듭니다. 보스 예고 · 투사체 · 장판 표시가 아직 디버그 그리기라 Shipping 에서는 화면에서 사라집니다.
+
+```
+전제     에디터를 닫는다 (열려 있으면 빌드 · 쿡이 파일 잠금에 걸린다)
+         애니메이션 팩 7 개(Archer · BCD_Anims · Dagger · Fighter_Animations · Spear · EssentialAnimation ·
+         GhostSamurai_Bundle)는 마켓플레이스 에셋이라 저장소에 없다 — S1\Content\ 에 따로 설치해야 동작이 나온다
+
+1  빌드 · 쿡 · pak
+   C:\Unreal5.8\UE_5.8\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun -project="<저장소>\S1\S1.uproject" ^
+       -noP4 -utf8output -platform=Win64 -clientconfig=Development ^
+       -build -cook -stage -pak -archive -archivedirectory="<출력 폴더>" -prereqs
+
+2  서버 데이터 동봉 — 클라가 실행 중에 S1 폴더 옆 Server\Data 의 CSV 를 읽는다
+   robocopy Server\Data "<출력 폴더>\Windows\Server\Data" *.csv
+
+3  실행 — 서버 주소는 명령줄로 덮어쓴다 (기본값 127.0.0.1)
+   "<출력 폴더>\Windows\S1.exe" -windowed -ResX=1280 -ResY=720 ^
+       "-ini:Game:[/Script/S1.S1LoginSubsystem]:AuthServerUrl=\"http://<호스트 IP>:8080\"" ^
+       "-ini:Game:[/Script/S1.S1LoginSubsystem]:GameServerHost=<호스트 IP>"
+```
+
+- 결과는 약 1.1 GB 입니다. 테스터 PC 에는 `Windows` 폴더만 복사하면 되고 UE 는 필요 없습니다. VC++ 런타임이 없다는 오류가 나면 `Engine\Extras\Redist\en-us\vc_redist.x64.exe` 를 설치합니다.
+- 호스트는 위 **빌드 · 실행**의 1~3(DB · 게임 서버 · 인증 서버)을 띄웁니다. 다른 PC 에서 붙으려면 `FBTK_BIND_ADDRESS=0.0.0.0` 으로 게임 서버를 띄우고, 인증 서버는 `Kestrel__Endpoints__Http__Url=http://0.0.0.0:8080` 으로 띄운 뒤 방화벽에서 TCP 7777 · 8080 을 엽니다.
+- 쿡 대상은 `S1/Config/DefaultGame.ini` 에 정해 두었습니다. 맵은 `Floor1` 하나만 쿡하고, CSV 경로로만 불리는 애니메이션 151 개 폴더는 항상 쿡합니다(쿠커가 스스로 찾지 못한다). 개발용 로그인 토큰은 `IniKeyDenylist` 로 패키지에서 뺍니다.
+- 🔴 인증이 http 라 비밀번호가 평문으로 오갑니다. 같은 공간의 LAN 플레이테스트까지만 씁니다.
+
 ## AI 도구 사용 경계
 
 개발에 AI 코딩 에이전트(Claude Code)를 썼습니다. 어디까지 맡겼는지 밝힙니다.
