@@ -13,8 +13,10 @@ param(
     [string] $Database = 'forbetheking',
     [switch] $NoSeed,
     [switch] $WithTestItems,
-    [string] $MySql = 'C:\mysql-8.0.46-winx64\bin\mysql.exe'
+    [string] $MySql = 'C:\mysql-8.0.46-winx64\bin\mysql.exe',
+    [int] $Port = 3306      # 실행 묶음(tools/package-bundle.ps1)의 DB 는 3307 (2026-10-19)
 )
+$conn = @('-h', '127.0.0.1', '-P', "$Port", '-u', 'root', "-p$Password")
 
 if ([string]::IsNullOrEmpty($Password)) {
     Write-Host "[DB] no password - pass -Password or set FBTK_DB_PASSWORD" -ForegroundColor Red
@@ -60,7 +62,7 @@ foreach ($file in $files) {
         $sql = "USE $Database;`n" + $sql       # 시드 몇 개는 USE 가 없다 - 대상 DB 를 박아 준다
     }
 
-    $out = $sql | & $MySql -u root "-p$Password" --default-character-set=utf8mb4 2>&1 |
+    $out = $sql | & $MySql @conn --default-character-set=utf8mb4 2>&1 |
         Where-Object { $_ -notmatch 'Warning.*command line interface' }
     if ($LASTEXITCODE -ne 0) {
         $out | ForEach-Object { Write-Host "  $_" }
@@ -74,5 +76,5 @@ $q = "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA 
      "(SELECT COUNT(*) FROM accounts WHERE username LIKE 'bot%') AS bot_accounts, " +
      "(SELECT COUNT(*) FROM accounts WHERE username = 'dev_1') AS dev, " +
      "(SELECT COUNT(*) FROM login_sessions) AS tokens;"
-& $MySql -u root "-p$Password" -D $Database -e $q 2>&1 | Where-Object { $_ -notmatch 'Warning.*command line interface' }
+& $MySql @conn -D $Database -e $q 2>&1 | Where-Object { $_ -notmatch 'Warning.*command line interface' }
 exit 0

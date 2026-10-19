@@ -633,11 +633,26 @@ int main()
 
 	constexpr int32 DB_THREAD_COUNT = 4;
 
-	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", 3306, "root", dbPassword.c_str(), "forbetheking") == false)
+	// FBTK_DB_PORT - 기본 3306. 실행 묶음(tools/package-bundle.ps1)은 테스터 PC 의 MySQL 과 겹치지 않게 3307 을 쓴다 (2026-10-19)
+	uint32 dbPort = 3306;
 	{
-		LOG_LINE << "[DB] pool connect failed" << '\n';
+		char* raw = nullptr;
+		size_t length = 0;
+		if (_dupenv_s(&raw, &length, "FBTK_DB_PORT") == 0 && raw != nullptr)
+		{
+			const int32 parsed = ::atoi(raw);
+			::free(raw);
+			if (parsed > 0 && parsed <= 65535)
+				dbPort = static_cast<uint32>(parsed);
+		}
+	}
+
+	if (GDBPool.Connect(DB_THREAD_COUNT, "127.0.0.1", dbPort, "root", dbPassword.c_str(), "forbetheking") == false)
+	{
+		LOG_LINE << "[DB] pool connect failed - 127.0.0.1:" << dbPort << '\n';
 		return -1;
 	}
+	LOG_LINE << "[DB] pool connected - 127.0.0.1:" << dbPort << " threads=" << DB_THREAD_COUNT << '\n';
 
 	// 기다리는 런 끝 저장의 기록 (CommitJournal.h, 2026-10-08) - 그 사이 서버가 꺼지면 아래 재처리가 접속을 받기 전에 끝낸다
 	{
