@@ -156,6 +156,9 @@ extern S_INVENTORY_SYNCDefaultTypeInternal _S_INVENTORY_SYNC_default_instance_;
 class S_ITEM_RESULT;
 struct S_ITEM_RESULTDefaultTypeInternal;
 extern S_ITEM_RESULTDefaultTypeInternal _S_ITEM_RESULT_default_instance_;
+class S_KICK;
+struct S_KICKDefaultTypeInternal;
+extern S_KICKDefaultTypeInternal _S_KICK_default_instance_;
 class S_LEAVE_GAME;
 struct S_LEAVE_GAMEDefaultTypeInternal;
 extern S_LEAVE_GAMEDefaultTypeInternal _S_LEAVE_GAME_default_instance_;
@@ -242,6 +245,7 @@ template<> ::Protocol::S_ESCAPE_GAUGE* Arena::CreateMaybeMessage<::Protocol::S_E
 template<> ::Protocol::S_GRANT_REWARD* Arena::CreateMaybeMessage<::Protocol::S_GRANT_REWARD>(Arena*);
 template<> ::Protocol::S_INVENTORY_SYNC* Arena::CreateMaybeMessage<::Protocol::S_INVENTORY_SYNC>(Arena*);
 template<> ::Protocol::S_ITEM_RESULT* Arena::CreateMaybeMessage<::Protocol::S_ITEM_RESULT>(Arena*);
+template<> ::Protocol::S_KICK* Arena::CreateMaybeMessage<::Protocol::S_KICK>(Arena*);
 template<> ::Protocol::S_LEAVE_GAME* Arena::CreateMaybeMessage<::Protocol::S_LEAVE_GAME>(Arena*);
 template<> ::Protocol::S_LOGIN* Arena::CreateMaybeMessage<::Protocol::S_LOGIN>(Arena*);
 template<> ::Protocol::S_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MOVE>(Arena*);
@@ -9009,6 +9013,165 @@ class C_SELL final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_KICK final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_KICK) */ {
+ public:
+  inline S_KICK() : S_KICK(nullptr) {}
+  ~S_KICK() override;
+  explicit PROTOBUF_CONSTEXPR S_KICK(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_KICK(const S_KICK& from);
+  S_KICK(S_KICK&& from) noexcept
+    : S_KICK() {
+    *this = ::std::move(from);
+  }
+
+  inline S_KICK& operator=(const S_KICK& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_KICK& operator=(S_KICK&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_KICK& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_KICK* internal_default_instance() {
+    return reinterpret_cast<const S_KICK*>(
+               &_S_KICK_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    52;
+
+  friend void swap(S_KICK& a, S_KICK& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_KICK* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_KICK* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_KICK* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_KICK>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_KICK& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_KICK& from) {
+    S_KICK::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_KICK* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_KICK";
+  }
+  protected:
+  explicit S_KICK(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kBannedUntilFieldNumber = 2,
+    kReasonFieldNumber = 1,
+  };
+  // uint64 banned_until = 2;
+  void clear_banned_until();
+  uint64_t banned_until() const;
+  void set_banned_until(uint64_t value);
+  private:
+  uint64_t _internal_banned_until() const;
+  void _internal_set_banned_until(uint64_t value);
+  public:
+
+  // .Protocol.KickReason reason = 1;
+  void clear_reason();
+  ::Protocol::KickReason reason() const;
+  void set_reason(::Protocol::KickReason value);
+  private:
+  ::Protocol::KickReason _internal_reason() const;
+  void _internal_set_reason(::Protocol::KickReason value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_KICK)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t banned_until_;
+    int reason_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -12768,9 +12931,55 @@ inline void C_SELL::set_instance_id(uint64_t value) {
   // @@protoc_insertion_point(field_set:Protocol.C_SELL.instance_id)
 }
 
+// -------------------------------------------------------------------
+
+// S_KICK
+
+// .Protocol.KickReason reason = 1;
+inline void S_KICK::clear_reason() {
+  _impl_.reason_ = 0;
+}
+inline ::Protocol::KickReason S_KICK::_internal_reason() const {
+  return static_cast< ::Protocol::KickReason >(_impl_.reason_);
+}
+inline ::Protocol::KickReason S_KICK::reason() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_KICK.reason)
+  return _internal_reason();
+}
+inline void S_KICK::_internal_set_reason(::Protocol::KickReason value) {
+  
+  _impl_.reason_ = value;
+}
+inline void S_KICK::set_reason(::Protocol::KickReason value) {
+  _internal_set_reason(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_KICK.reason)
+}
+
+// uint64 banned_until = 2;
+inline void S_KICK::clear_banned_until() {
+  _impl_.banned_until_ = uint64_t{0u};
+}
+inline uint64_t S_KICK::_internal_banned_until() const {
+  return _impl_.banned_until_;
+}
+inline uint64_t S_KICK::banned_until() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_KICK.banned_until)
+  return _internal_banned_until();
+}
+inline void S_KICK::_internal_set_banned_until(uint64_t value) {
+  
+  _impl_.banned_until_ = value;
+}
+inline void S_KICK::set_banned_until(uint64_t value) {
+  _internal_set_banned_until(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_KICK.banned_until)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

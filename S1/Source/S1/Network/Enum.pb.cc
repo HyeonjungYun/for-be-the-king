@@ -22,7 +22,7 @@ namespace _pbi = _pb::internal;
 
 namespace Protocol {
 }  // namespace Protocol
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[21];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_Enum_2eproto[22];
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Enum_2eproto = nullptr;
 const uint32_t TableStruct_Enum_2eproto::offsets[1] = {};
 static constexpr ::_pbi::MigrationSchema* schemas = nullptr;
@@ -98,11 +98,13 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "_NO_KICK_IN_RUN\020\r\022\023\n\017PARTY_LONE_PATH\020\016*`"
   "\n\020PartyMemberState\022\031\n\025PARTY_MEMBER_BASEC"
   "AMP\020\000\022\027\n\023PARTY_MEMBER_IN_RUN\020\001\022\030\n\024PARTY_"
-  "MEMBER_OFFLINE\020\002b\006proto3"
+  "MEMBER_OFFLINE\020\002*Y\n\nKickReason\022\024\n\020KICK_R"
+  "EASON_NONE\020\000\022\035\n\031KICK_REASON_CHEAT_SUSPEC"
+  "T\020\001\022\026\n\022KICK_REASON_BANNED\020\002b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 2784, descriptor_table_protodef_Enum_2eproto,
+    false, false, 2875, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -472,6 +474,21 @@ const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* PartyMemberState_descriptor() {
   return file_level_enum_descriptors_Enum_2eproto[20];
 }
 bool PartyMemberState_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* KickReason_descriptor() {
+  ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(&descriptor_table_Enum_2eproto);
+  return file_level_enum_descriptors_Enum_2eproto[21];
+}
+bool KickReason_IsValid(int value) {
   switch (value) {
     case 0:
     case 1:

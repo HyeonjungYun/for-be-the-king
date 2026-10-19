@@ -160,6 +160,7 @@
     <ClCompile Include="StarterKitTable.cpp" />
     <ClCompile Include="WallMap.cpp" />
     <ClCompile Include="Vision.cpp" />
+    <ClCompile Include="RoomCheat.cpp" />
     <ClCompile Include="RoomVision.cpp" />
     <ClCompile Include="RoomSkills2.cpp" />
     <ClCompile Include="RoomSkills3.cpp" />
@@ -168,6 +169,7 @@
     <ClCompile Include="WallTable.cpp" />
     <ClCompile Include="TowerTable.cpp" />
     <ClCompile Include="MonsterTable.cpp" />
+    <ClCompile Include="CheatGuard.cpp" />
     <ClCompile Include="MonsterBrain.cpp" />
     <ClCompile Include="MonsterPack.cpp" />
     <ClCompile Include="NavGrid.cpp" />
@@ -232,6 +234,7 @@
     <ClInclude Include="WallTable.h" />
     <ClInclude Include="TowerTable.h" />
     <ClInclude Include="MonsterTable.h" />
+    <ClInclude Include="CheatGuard.h" />
     <ClInclude Include="MonsterBrain.h" />
     <ClInclude Include="MonsterPack.h" />
     <ClInclude Include="NavGrid.h" />

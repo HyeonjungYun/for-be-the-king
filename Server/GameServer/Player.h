@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Creature.h"
 #include "MoveClock.h"
+#include "CheatGuard.h"
 #include "EquipStats.h"
 #include "Vision.h"
 
@@ -100,6 +101,7 @@ public:
 	uint32					moveLogCount = 0;
 	uint32					moveLogSuppressed = 0;
 	MoveClock				moveClock;		// 이동 검증 경과 시간 - C_MOVE.client_ms 기준 (MoveClock.h)
+	CheatGuard				cheat;			// 안티치트 위반 점수 (CheatGuard.h) - 방 스레드에서만
 	float					moveExceptionSpeed = 0.f;
 	uint64					moveExceptionEndUs = 0;
 	uint64					moveIgnoresWallsUntilUs = 0;	// 벽을 지나는 이동 스킬(effect.ignores_walls) 창 - 그동안 C_MOVE 벽 검사를 건너뛴다

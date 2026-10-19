@@ -205,3 +205,11 @@ enum PartyMemberState
 	PARTY_MEMBER_IN_RUN = 1;
 	PARTY_MEMBER_OFFLINE = 2;
 }
+
+// Why the server is closing this connection - S_KICK (anti-cheat 2026-10-19, design/quick-specs/anticheat-2026-10-19.md)
+enum KickReason
+{
+	KICK_REASON_NONE = 0;
+	KICK_REASON_CHEAT_SUSPECT = 1;	// too many rejected actions in a short time (CheatGuard kick score)
+	KICK_REASON_BANNED = 2;			// the account is suspended until banned_until
+}

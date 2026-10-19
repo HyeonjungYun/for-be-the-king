@@ -42,6 +42,9 @@ namespace
 	constexpr uint32	MOVE_LOG_PER_SEC = 5;
 	constexpr uint64	MOVE_LOG_WINDOW_US = 1'000'000;
 
+	// 쿨다운이 이만큼 안 남았으면 지연으로 본다 - 클라 쿨다운 표시는 서버 S_SKILL_HIT 기준이라 한 왕복만큼 이를 수 있다 (안티치트 2026-10-19)
+	constexpr uint64	SKILL_COOLDOWN_GRACE_US = 150'000;
+
 	bool AllowMoveLog(Player& player, uint64 nowUs)
 	{
 		if (nowUs - player.moveLogWindowUs >= MOVE_LOG_WINDOW_US)
@@ -834,6 +837,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 			remainMs = (player->skillLockUntilUs - blockCheckUs) / 1000;
 
 		GStats.AddMoveBlocked();
+		ReportCheat(player, Violation::MoveWhileLocked, blockCheckUs);		// 가중치 낮음 - CC 시작 순간 지연으로 정상 클라도 몇 개는 보낸다
 
 		if (AllowMoveLog(*player, blockCheckUs))
 			LOG_LINE << "[MOVE BLOCKED] id=" << objectId
@@ -896,10 +900,16 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		const double deltaSec = player->moveClock.Interval(serverDtUs, pkt.client_ms());
 		player->lastMoveUs = nowUs;
 
+		// 패킷 하나가 서버 간격보다 0.25 초 넘게 앞선 시각을 주장했다 - 정상 클라는 보낸 간격 그대로다 (MoveClock 안티치트)
+		if (player->moveClock.lastStepClamped)
+			ReportCheat(player, Violation::MoveClock, nowUs);
+
 		// 속도 상한도 "보낸 때" 기준 - 늦게 도착한 패킷은 뒤처진 만큼 이른 시각으로 본다. 대시 창이 끝난 뒤 처리된
 		// 대시 중 이동이 일반 속도로 검사되지 않게 (leadUs < 0 = 클라가 뒤처졌다 = 패킷이 늦게 왔다)
 		const int64 leadUs = player->moveClock.leadUs;
-		const uint64 sentUs = (leadUs < 0) ? nowUs - min<uint64>(static_cast<uint64>(-leadUs), nowUs) : nowUs;
+		// 되돌리는 폭은 MAX_SENT_REWIND (0.75 s) 까지 - 뒤처짐 2 초를 다 쓰면 대시 속도 창을 2 초 늘려 쓸 수 있었다 (2026-10-19 안티치트 감사 4)
+		const uint64 rewindUs = min<uint64>(static_cast<uint64>(leadUs < 0 ? -leadUs : 0), static_cast<uint64>(MoveClock::MAX_SENT_REWIND_US));
+		const uint64 sentUs = nowUs - min<uint64>(rewindUs, nowUs);
 		const double ceiling = player->GetSpeedCeiling(sentUs) * VALIDATION_MARGIN;
 
 		player->moveBudget += ceiling * deltaSec;
@@ -913,6 +923,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		if (Walls().InsideFloor(pkt.info().x(), pkt.info().y()) == false)
 		{
 			rejected = true;
+			ReportCheat(player, Violation::MoveBounds, nowUs);
 
 			if (AllowMoveLog(*player, nowUs))
 				LOG_LINE << "[MOVE REJECT] id=" << objectId
@@ -933,6 +944,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		else if (distance > player->moveBudget)
 		{
 			rejected = true;
+			ReportCheat(player, Violation::MoveSpeed, nowUs);
 
 			if (AllowMoveLog(*player, nowUs))
 				LOG_LINE << "[MOVE REJECT] id=" << objectId
@@ -961,6 +973,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 			{
 				rejected = true;
 				wallRejected = true;
+				ReportCheat(player, Violation::MoveWall, nowUs);
 
 				if (AllowMoveLog(*player, nowUs))
 					LOG_LINE << "[MOVE REJECT] id=" << objectId
@@ -1118,11 +1131,15 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 
 	// 대상 락 시점에도 사거리 · 시선을 본다. 히트 시점에 한 번 더 재검증 (유령 신부의 축복은 벽을 무시한다)
 	if (IsInAttackRange(attacker, target) == false)
+	{
+		ReportCheat(attacker, Violation::AttackRange, nowUs);		// 가중치 낮음 - 대상이 막 사거리 밖으로 나간 경우가 흔하다
 		return;
+	}
 
 	if (IgnoresWalls(attacker) == false && IsAttackLineClear(Walls(), attacker, target) == false)
 	{
 		GStats.AddAttackWallBlocked();
+		ReportCheat(attacker, Violation::AttackWall, nowUs);
 		return;
 	}
 
@@ -1130,6 +1147,7 @@ void Room::HandleAttack(uint64 attackerId, uint64 targetId, float aimX, float ai
 	if (CanTarget(attacker, target, nowUs) == false)
 	{
 		LOG_LINE << "[FOW] attack rejected - target not visible. attacker=" << attackerId << " target=" << targetId << '\n';
+		ReportCheat(attacker, Violation::AttackHidden, nowUs);
 		return;
 	}
 
@@ -1223,8 +1241,13 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		return;
 	}
 
+	// 쿨다운 전 - 클라도 쿨다운을 그린다. 지연 몫(SKILL_COOLDOWN_GRACE 150 ms)보다 이르면 위반으로 센다
 	if (nowUs < skillSlot->cooldownEndUs)
+	{
+		if (skillSlot->cooldownEndUs - nowUs > SKILL_COOLDOWN_GRACE_US)
+			ReportCheat(caster, Violation::SkillCooldown, nowUs);
 		return;
+	}
 
 	if (caster->CanUseSkill(nowUs) == false)
 		return;
@@ -1274,12 +1297,16 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		}
 
 		if (IsInSkillRange(caster, target, def->rangeCm) == false)
+		{
+			ReportCheat(caster, Violation::SkillRange, nowUs);
 			return;
+		}
 
 		// 벽 너머는 지정할 수 없다 - 유령 신부의 축복만 예외 (2026-10-11). 쿨다운 없이 거부한다
 		if (HasLineOfAttack(caster, caster->posInfo->x(), caster->posInfo->y(), target) == false)
 		{
 			LOG_LINE << "[SKILL REJECT] caster=" << casterId << " skill=" << def->skillId << " reason=wall target=" << pkt.target_id() << '\n';
+			ReportCheat(caster, Violation::SkillWall, nowUs);
 			return;
 		}
 
@@ -1287,6 +1314,7 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		if (CanTarget(caster, target, nowUs) == false)
 		{
 			LOG_LINE << "[FOW] skill rejected - target not visible. caster=" << casterId << " skill=" << def->skillId << " target=" << pkt.target_id() << '\n';
+			ReportCheat(caster, Violation::SkillHidden, nowUs);
 			return;
 		}
 	}
@@ -2220,6 +2248,18 @@ void Room::HandleEquip(GameSessionRef session, string requestId, uint64 instance
 		return;
 	}
 
+	// 시전 · 평타 준비 · 후딜 · 유지 · 하드 CC 중엔 장비를 바꿀 수 없다 - 바꾸면 이미 판정 중인 스킬 · 평타가 새 장비 수치로 나갔다 (안티치트 감사 6, 2026-10-19)
+	{
+		const uint64 lockUs = Utils::NowMicroseconds();
+		if (player->IsCasting() || player->IsHolding() || player->attackHitAtUs != 0 || player->IsSkillLocked(lockUs) || player->CanAttack(lockUs) == false)
+		{
+			LOG_LINE << "[ITEM] equip rejected - busy (cast / attack / recovery / cc). char=" << player->objectInfo->object_id() << " item=" << instanceId << '\n';
+			ReportCheat(player, Violation::ActionWhileLocked, lockUs);
+			session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE, {});
+			return;
+		}
+	}
+
 	if (slot < Protocol::SLOT_WEAPON_PRIMARY || slot > Protocol::SLOT_TRINKET)
 	{
 		session->SendItemResult(requestId, Protocol::ITEM_BAD_REQUEST, {});
@@ -2292,6 +2332,18 @@ void Room::HandleUnequip(GameSessionRef session, string requestId, uint64 instan
 		return;
 	}
 
+	// 시전 · 평타 준비 · 후딜 · 유지 · 하드 CC 중엔 장비를 바꿀 수 없다 - 바꾸면 이미 판정 중인 스킬 · 평타가 새 장비 수치로 나갔다 (안티치트 감사 6, 2026-10-19)
+	{
+		const uint64 lockUs = Utils::NowMicroseconds();
+		if (player->IsCasting() || player->IsHolding() || player->attackHitAtUs != 0 || player->IsSkillLocked(lockUs) || player->CanAttack(lockUs) == false)
+		{
+			LOG_LINE << "[ITEM] unequip rejected - busy (cast / attack / recovery / cc). char=" << player->objectInfo->object_id() << " item=" << instanceId << '\n';
+			ReportCheat(player, Violation::ActionWhileLocked, lockUs);
+			session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
+			return;
+		}
+	}
+
 	int32 foundIdx = -1;
 	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
 	{
@@ -2350,6 +2402,15 @@ void Room::HandleBagOpen(GameSessionRef session, uint64 bagId)
 	if (IsInLootRange(player, bag) == false)
 	{
 		LOG_LINE << "[LOOT] open rejected - char=" << playerId << " bag=" << bagId << " reason=range\n";
+		ReportCheat(player, Violation::LootRange, Utils::NowMicroseconds());
+		return;
+	}
+
+	// 벽 너머 가방은 열 수 없다 (시야 질의 - 낮은 엄폐물 너머는 손이 닿는다) - 거리(2 m)만 보던 때는 집 벽을 사이에 두고 상자를 열 수 있었다 (안티치트 감사 5, 2026-10-19)
+	if (GWallCheck.load(memory_order_relaxed) && Walls().SightBlocked(player->posInfo->x(), player->posInfo->y(), bag->posInfo->x(), bag->posInfo->y()))
+	{
+		LOG_LINE << "[LOOT] open rejected - char=" << playerId << " bag=" << bagId << " reason=wall\n";
+		ReportCheat(player, Violation::LootRange, Utils::NowMicroseconds());
 		return;
 	}
 
@@ -2397,8 +2458,10 @@ void Room::HandleLoot(GameSessionRef session, string requestId, uint64 bagId, ui
 	}
 
 	BagRef bag = bagIt->second;
-	if (IsInLootRange(player, bag) == false)
+	if (IsInLootRange(player, bag) == false
+		|| (GWallCheck.load(memory_order_relaxed) && Walls().SightBlocked(player->posInfo->x(), player->posInfo->y(), bag->posInfo->x(), bag->posInfo->y())))
 	{
+		ReportCheat(player, Violation::LootRange, Utils::NowMicroseconds());		// 거리 밖 · 벽 너머 (안티치트 2026-10-19)
 		session->SendItemResult(requestId, Protocol::ITEM_INVALID_STATE);
 		return;
 	}
@@ -2953,6 +3016,9 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	const uint64 nowUs = Utils::NowMicroseconds();
 	body->lastMoveUs = nowUs;
 	body->moveClock.Reset();		// 새 접속의 클라 시계는 이전 것과 이어지지 않는다
+	// 안티치트 - 새 접속은 점수를 새로 센다. 끊긴 몸에 다시 붙으면 '이미 끊었음' 표시가 남아 다시는 끊기지 않았다 (2026-10-19 실측).
+	// 끊을 때마다 strike 가 DB 에 남으므로 누적 판정(정지)은 그쪽이 한다
+	body->cheat.Reset();
 	body->moveBudget = body->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
 
 	Protocol::S_ENTER_GAME enterPkt;

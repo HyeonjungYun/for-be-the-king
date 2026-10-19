@@ -64,6 +64,13 @@ public:
 	/** S_LOGIN succeeded — S3 takes the screen. US1BaseCampSubsystem::HandleLogin. */
 	void HandleGameLoginSucceeded();
 
+	/**
+	 * S_KICK (anti-cheat 2026-10-19) — the server is about to close the connection. Reason = Protocol::KickReason,
+	 * BannedUntil = unix seconds (0 = not suspended). On the login screen the reason shows there; in game the level
+	 * reloads (a clean world) and the login screen comes back with the reason.
+	 */
+	void HandleKicked(int32 Reason, uint64 BannedUntil);
+
 	// ── For the widget ───────────────────────────────────────────────────
 
 	ES1LoginPage GetPage() const { return Page; }
@@ -86,6 +93,9 @@ private:
 
 	/** The refused connection, closed a tick after S_LOGIN - never from inside the packet loop. */
 	void DisconnectGame();
+
+	/** Kicked in game: close the connection and reload the level - BeginLogin then shows PendingMessage. */
+	void ReloadToLogin();
 
 	void ShowScreen();
 	void HideScreen();
@@ -113,6 +123,7 @@ private:
 	FDelegateHandle			WorldBeginPlayHandle;
 	ES1LoginPage			Page = ES1LoginPage::Credentials;
 	FText					Message;
+	FText					PendingMessage;		// survives the level reload after a kick - BeginLogin shows it
 	FString					Token;
 	bool					bBusy = false;
 	bool					bActive = false;		// The product flow runs this session (no dev token)

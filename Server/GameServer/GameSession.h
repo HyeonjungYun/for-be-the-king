@@ -38,9 +38,18 @@ public:
 			return false;
 
 		WRITE_LOCK;
-		if (_handleRequests.size() >= MAX_TRACKED_REQUESTS)
-			_handleRequests.clear();		// 재전송 창 = 최근 4096 개. 재전송은 몇 초 안에 온다
-		return _handleRequests.insert(requestId).second;
+		if (_handleRequests.insert(requestId).second == false)
+			return false;
+
+		// 재전송 창 = 최근 4096 개, 가장 오래된 것부터 하나씩 뺀다. 예전엔 꽉 차면 통째로 비워서 그 순간 바로 전의 id 를
+		// 다시 보내면 받아 줬다 (안티치트 감사 7, 2026-10-19). 진짜 멱등은 DB 상태가 맡는다 - 이건 재전송 방지다
+		_requestOrder.push_back(requestId);
+		if (_requestOrder.size() > MAX_TRACKED_REQUESTS)
+		{
+			_handleRequests.erase(_requestOrder.front());
+			_requestOrder.pop_front();
+		}
+		return true;
 	}
 
 public:
@@ -87,6 +96,7 @@ public:
 private:
 	USE_LOCK;
 	unordered_set<string> _handleRequests;
+	deque<string>		_requestOrder;		// _handleRequests 에 넣은 순서 - 오래된 것부터 뺀다
 
 	struct TokenBucket
 	{

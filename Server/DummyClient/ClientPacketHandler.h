@@ -62,6 +62,7 @@ enum : uint16
 	PKT_C_ENHANCE = 1049,
 	PKT_S_PARTY_BETRAYED = 1050,
 	PKT_C_SELL = 1051,
+	PKT_S_KICK = 1052,
 };
 
 // Custom Handlers
@@ -98,6 +99,7 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 bool Handle_S_PARTY_STATE(PacketSessionRef& session, Protocol::S_PARTY_STATE& pkt);
 bool Handle_S_WEAPON_CHANGE(PacketSessionRef& session, Protocol::S_WEAPON_CHANGE& pkt);
 bool Handle_S_PARTY_BETRAYED(PacketSessionRef& session, Protocol::S_PARTY_BETRAYED& pkt);
+bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt);
 
 class ClientPacketHandler
 {
@@ -138,6 +140,7 @@ public:
 		GPacketHandler[PKT_S_PARTY_STATE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PARTY_STATE>(Handle_S_PARTY_STATE, session, buffer, len); };
 		GPacketHandler[PKT_S_WEAPON_CHANGE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_WEAPON_CHANGE>(Handle_S_WEAPON_CHANGE, session, buffer, len); };
 		GPacketHandler[PKT_S_PARTY_BETRAYED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PARTY_BETRAYED>(Handle_S_PARTY_BETRAYED, session, buffer, len); };
+		GPacketHandler[PKT_S_KICK] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_KICK>(Handle_S_KICK, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

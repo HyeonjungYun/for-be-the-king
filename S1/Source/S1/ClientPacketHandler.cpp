@@ -51,6 +51,14 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 	return true;
 }
 
+bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt)
+{
+	// 안티치트 (2026-10-19) - 서버가 곧 연결을 닫는다. 이유를 보여 주고 로그인 화면으로 (S1LoginSubsystem::HandleKicked)
+	if (US1LoginSubsystem* Login = US1LoginSubsystem::Get())
+		Login->HandleKicked(static_cast<int32>(pkt.reason()), pkt.banned_until());
+	return true;
+}
+
 bool Handle_S_PARTY_BETRAYED(PacketSessionRef& session, Protocol::S_PARTY_BETRAYED& pkt)
 {
 	// 던전 파티 배신 - 방 전체 방송: 토스트 · 배신자 표식 (party-betrayal-2026-10-12 R5 · R6, YOLO 위임)

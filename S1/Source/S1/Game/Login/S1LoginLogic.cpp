@@ -20,6 +20,7 @@ namespace S1LoginLogic
 		if (ErrorCode == TEXT("invalid_token"))			return TEXT("login.error.expired");
 		if (ErrorCode == TEXT("invalid_name"))			return TEXT("character.error.invalid_name");
 		if (ErrorCode == TEXT("name_taken"))			return TEXT("character.error.name_taken");
+		if (ErrorCode == TEXT("account_suspended"))		return TEXT("login.error.suspended_login");	// 403 - anti-cheat ban (2026-10-19)
 
 		return TEXT("login.error.unknown");
 	}

@@ -31,6 +31,7 @@ bool FS1LoginErrorKeyTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("401 invalid_token"), FString(S1LoginLogic::ErrorKey(401, TEXT("invalid_token"))), FString(TEXT("login.error.expired")));
 	TestEqual(TEXT("400 invalid_name"), FString(S1LoginLogic::ErrorKey(400, TEXT("invalid_name"))), FString(TEXT("character.error.invalid_name")));
 	TestEqual(TEXT("409 name_taken"), FString(S1LoginLogic::ErrorKey(409, TEXT("name_taken"))), FString(TEXT("character.error.name_taken")));
+	TestEqual(TEXT("403 account_suspended"), FString(S1LoginLogic::ErrorKey(403, TEXT("account_suspended"))), FString(TEXT("login.error.suspended_login")));
 
 	// A code the client does not know still says something rather than nothing
 	TestEqual(TEXT("500"), FString(S1LoginLogic::ErrorKey(500, FString())), FString(TEXT("login.error.unknown")));

@@ -644,6 +644,32 @@ inline bool PartyMemberState_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<PartyMemberState>(
     PartyMemberState_descriptor(), name, value);
 }
+enum KickReason : int {
+  KICK_REASON_NONE = 0,
+  KICK_REASON_CHEAT_SUSPECT = 1,
+  KICK_REASON_BANNED = 2,
+  KickReason_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
+  KickReason_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
+};
+bool KickReason_IsValid(int value);
+constexpr KickReason KickReason_MIN = KICK_REASON_NONE;
+constexpr KickReason KickReason_MAX = KICK_REASON_BANNED;
+constexpr int KickReason_ARRAYSIZE = KickReason_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* KickReason_descriptor();
+template<typename T>
+inline const std::string& KickReason_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, KickReason>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function KickReason_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    KickReason_descriptor(), enum_t_value);
+}
+inline bool KickReason_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, KickReason* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<KickReason>(
+    KickReason_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -770,6 +796,11 @@ template <> struct is_proto_enum< ::Protocol::PartyMemberState> : ::std::true_ty
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::PartyMemberState>() {
   return ::Protocol::PartyMemberState_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::KickReason> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::KickReason>() {
+  return ::Protocol::KickReason_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE

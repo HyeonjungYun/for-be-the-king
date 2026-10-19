@@ -556,20 +556,42 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 			// 클라는 원래 토큰을 보내고, 인증 서버(AuthServer)도 저장할 때 같은 해시를 쓴다. migrate_hash_tokens.sql
 			const string safeToken = conn->Escape(Utils::Sha256Hex(token));
 
-			char query[256];
+			// 정지 여부도 같이 본다 (안티치트 2026-10-19 - accounts.banned_until). 시계는 MySQL 하나
+			char query[512];
 			::snprintf(query, sizeof(query),
-				"SELECT account_id FROM login_sessions "
-				"WHERE token = '%s' AND expires_at > NOW()",
+				"SELECT s.account_id, IFNULL(UNIX_TIMESTAMP(a.banned_until), 0), UNIX_TIMESTAMP(NOW()) "
+				"FROM login_sessions s JOIN accounts a ON a.account_id = s.account_id "
+				"WHERE s.token = '%s' AND s.expires_at > NOW()",
 				safeToken.c_str());
 
 			uint64 accountId = 0;
+			uint64 bannedUntil = 0;
+			uint64 dbNow = 0;
 
 			if (MYSQL_RES* result = conn->Query(query))
 			{
 				if (MYSQL_ROW row = ::mysql_fetch_row(result))
+				{
 					accountId = ::strtoull(row[0], nullptr, 10);
+					bannedUntil = row[1] ? ::strtoull(row[1], nullptr, 10) : 0;
+					dbNow = row[2] ? ::strtoull(row[2], nullptr, 10) : 0;
+				}
 
 				conn->FreeResult(result);
+			}
+
+			// 정지된 계정 - 이유와 끝 시각을 알리고 끊는다. 인증 서버도 로그인에서 막지만, 이미 받은 토큰이 남아 있을 수 있다
+			if (accountId != 0 && bannedUntil > dbNow)
+			{
+				LOG_LINE << "[CHEAT] login refused - banned account=" << accountId << " until_unix=" << bannedUntil
+					<< " (" << (bannedUntil - dbNow) / 60 << " min left)\n";
+				Protocol::S_KICK kickPkt;
+				kickPkt.set_reason(Protocol::KICK_REASON_BANNED);
+				kickPkt.set_banned_until(bannedUntil);
+				SEND_PACKET_DECLARATION(kickPkt);
+				gameSession->Send(sendBuffer);
+				gameSession->Disconnect(L"account suspended");
+				return;
 			}
 			if (accountId != 0 && GAccountManager.TryLogin(accountId) == false)
 			{
@@ -1147,6 +1169,21 @@ static void HandleTestCommand(const RoomRef& room, uint64 playerId, const string
 			return;
 		}
 		room->DoAsync(&Room::TestSpawnDummies, playerId, typeId, count, ai != 0, x, y);
+		return;
+	}
+
+	// /t cheat <위반 번호> <횟수> - 안티치트 처리 경로(경고 · S_KICK · strike · 정지)를 위반을 직접 넣어 시험한다 (2026-10-19, 테스트 모드 전용)
+	if (command == "cheat")
+	{
+		uint32 violation = 0;
+		int32 count = 1;
+		in >> violation >> count;
+		if (in.fail() || violation >= static_cast<uint32>(Violation::Count) || count < 1 || count > 1000)
+		{
+			LOG_LINE << "[TEST] /t cheat needs <violation 0.." << static_cast<uint32>(Violation::Count) - 1 << "> <count 1..1000>. char=" << playerId << '\n';
+			return;
+		}
+		room->DoAsync(&Room::TestCheat, playerId, violation, count);
 		return;
 	}
 

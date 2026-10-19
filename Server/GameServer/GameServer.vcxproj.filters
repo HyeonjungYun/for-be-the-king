@@ -99,6 +99,9 @@
     <ClCompile Include="Vision.cpp">
       <Filter>Game</Filter>
     </ClCompile>
+    <ClCompile Include="RoomCheat.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
     <ClCompile Include="RoomVision.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -122,6 +125,9 @@
     </ClCompile>
     <ClCompile Include="MonsterTable.cpp">
       <Filter>Data</Filter>
+    </ClCompile>
+    <ClCompile Include="CheatGuard.cpp">
+      <Filter>Game\Object</Filter>
     </ClCompile>
     <ClCompile Include="MonsterBrain.cpp">
       <Filter>Game\Object</Filter>
@@ -238,6 +244,9 @@
     </ClInclude>
     <ClInclude Include="MonsterTable.h">
       <Filter>Data</Filter>
+    </ClInclude>
+    <ClInclude Include="CheatGuard.h">
+      <Filter>Game\Object</Filter>
     </ClInclude>
     <ClInclude Include="MonsterBrain.h">
       <Filter>Game\Object</Filter>

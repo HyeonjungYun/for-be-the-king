@@ -763,8 +763,22 @@ struct C_SELLDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 C_SELLDefaultTypeInternal _C_SELL_default_instance_;
+PROTOBUF_CONSTEXPR S_KICK::S_KICK(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.banned_until_)*/uint64_t{0u}
+  , /*decltype(_impl_.reason_)*/0
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct S_KICKDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR S_KICKDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~S_KICKDefaultTypeInternal() {}
+  union {
+    S_KICK _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 S_KICKDefaultTypeInternal _S_KICK_default_instance_;
 }  // namespace Protocol
-static ::_pb::Metadata file_level_metadata_Protocol_2eproto[52];
+static ::_pb::Metadata file_level_metadata_Protocol_2eproto[53];
 static constexpr ::_pb::EnumDescriptor const** file_level_enum_descriptors_Protocol_2eproto = nullptr;
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_Protocol_2eproto = nullptr;
 
@@ -1200,6 +1214,14 @@ const uint32_t TableStruct_Protocol_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE
   ~0u,  // no _inlined_string_donated_
   PROTOBUF_FIELD_OFFSET(::Protocol::C_SELL, _impl_.request_id_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_SELL, _impl_.instance_id_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_KICK, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_KICK, _impl_.reason_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_KICK, _impl_.banned_until_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::Protocol::C_LOGIN)},
@@ -1254,6 +1276,7 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 405, -1, -1, sizeof(::Protocol::C_ENHANCE)},
   { 413, -1, -1, sizeof(::Protocol::S_PARTY_BETRAYED)},
   { 423, -1, -1, sizeof(::Protocol::C_SELL)},
+  { 431, -1, -1, sizeof(::Protocol::S_KICK)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -1309,6 +1332,7 @@ static const ::_pb::Message* const file_default_instances[] = {
   &::Protocol::_C_ENHANCE_default_instance_._instance,
   &::Protocol::_S_PARTY_BETRAYED_default_instance_._instance,
   &::Protocol::_C_SELL_default_instance_._instance,
+  &::Protocol::_S_KICK_default_instance_._instance,
 };
 
 const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -1403,7 +1427,9 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "BETRAYED\022\023\n\013betrayer_id\030\001 \001(\004\022\025\n\rbetraye"
   "r_name\030\002 \001(\t\022\020\n\010party_id\030\003 \001(\004\022\024\n\014victim"
   "_names\030\004 \003(\t\"1\n\006C_SELL\022\022\n\nrequest_id\030\001 \001"
-  "(\t\022\023\n\013instance_id\030\002 \001(\004b\006proto3"
+  "(\t\022\023\n\013instance_id\030\002 \001(\004\"D\n\006S_KICK\022$\n\006rea"
+  "son\030\001 \001(\0162\024.Protocol.KickReason\022\024\n\014banne"
+  "d_until\030\002 \001(\004b\006proto3"
   ;
 static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -1411,9 +1437,9 @@ static const ::_pbi::DescriptorTable* const descriptor_table_Protocol_2eproto_de
 };
 static ::_pbi::once_flag descriptor_table_Protocol_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Protocol_2eproto = {
-    false, false, 3671, descriptor_table_protodef_Protocol_2eproto,
+    false, false, 3741, descriptor_table_protodef_Protocol_2eproto,
     "Protocol.proto",
-    &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 52,
+    &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 53,
     schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
     file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto,
     file_level_service_descriptors_Protocol_2eproto,
@@ -13145,6 +13171,220 @@ void C_SELL::InternalSwap(C_SELL* other) {
       file_level_metadata_Protocol_2eproto[51]);
 }
 
+// ===================================================================
+
+class S_KICK::_Internal {
+ public:
+};
+
+S_KICK::S_KICK(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:Protocol.S_KICK)
+}
+S_KICK::S_KICK(const S_KICK& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  S_KICK* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.banned_until_){}
+    , decltype(_impl_.reason_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&_impl_.banned_until_, &from._impl_.banned_until_,
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.reason_) -
+    reinterpret_cast<char*>(&_impl_.banned_until_)) + sizeof(_impl_.reason_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.S_KICK)
+}
+
+inline void S_KICK::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.banned_until_){uint64_t{0u}}
+    , decltype(_impl_.reason_){0}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+}
+
+S_KICK::~S_KICK() {
+  // @@protoc_insertion_point(destructor:Protocol.S_KICK)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void S_KICK::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+}
+
+void S_KICK::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void S_KICK::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.S_KICK)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&_impl_.banned_until_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&_impl_.reason_) -
+      reinterpret_cast<char*>(&_impl_.banned_until_)) + sizeof(_impl_.reason_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* S_KICK::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // .Protocol.KickReason reason = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
+          uint64_t val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+          _internal_set_reason(static_cast<::Protocol::KickReason>(val));
+        } else
+          goto handle_unusual;
+        continue;
+      // uint64 banned_until = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
+          _impl_.banned_until_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* S_KICK::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.S_KICK)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // .Protocol.KickReason reason = 1;
+  if (this->_internal_reason() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteEnumToArray(
+      1, this->_internal_reason(), target);
+  }
+
+  // uint64 banned_until = 2;
+  if (this->_internal_banned_until() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteUInt64ToArray(2, this->_internal_banned_until(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.S_KICK)
+  return target;
+}
+
+size_t S_KICK::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.S_KICK)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // uint64 banned_until = 2;
+  if (this->_internal_banned_until() != 0) {
+    total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(this->_internal_banned_until());
+  }
+
+  // .Protocol.KickReason reason = 1;
+  if (this->_internal_reason() != 0) {
+    total_size += 1 +
+      ::_pbi::WireFormatLite::EnumSize(this->_internal_reason());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData S_KICK::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    S_KICK::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*S_KICK::GetClassData() const { return &_class_data_; }
+
+
+void S_KICK::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<S_KICK*>(&to_msg);
+  auto& from = static_cast<const S_KICK&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:Protocol.S_KICK)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from._internal_banned_until() != 0) {
+    _this->_internal_set_banned_until(from._internal_banned_until());
+  }
+  if (from._internal_reason() != 0) {
+    _this->_internal_set_reason(from._internal_reason());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void S_KICK::CopyFrom(const S_KICK& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.S_KICK)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool S_KICK::IsInitialized() const {
+  return true;
+}
+
+void S_KICK::InternalSwap(S_KICK* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(S_KICK, _impl_.reason_)
+      + sizeof(S_KICK::_impl_.reason_)
+      - PROTOBUF_FIELD_OFFSET(S_KICK, _impl_.banned_until_)>(
+          reinterpret_cast<char*>(&_impl_.banned_until_),
+          reinterpret_cast<char*>(&other->_impl_.banned_until_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata S_KICK::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_Protocol_2eproto_getter, &descriptor_table_Protocol_2eproto_once,
+      file_level_metadata_Protocol_2eproto[52]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
@@ -13355,6 +13595,10 @@ Arena::CreateMaybeMessage< ::Protocol::S_PARTY_BETRAYED >(Arena* arena) {
 template<> PROTOBUF_NOINLINE ::Protocol::C_SELL*
 Arena::CreateMaybeMessage< ::Protocol::C_SELL >(Arena* arena) {
   return Arena::CreateMessageInternal< ::Protocol::C_SELL >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::S_KICK*
+Arena::CreateMaybeMessage< ::Protocol::S_KICK >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::S_KICK >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

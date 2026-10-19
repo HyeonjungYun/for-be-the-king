@@ -11,6 +11,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HttpModule.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/DateTime.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Serialization/JsonReader.h"
@@ -86,6 +88,14 @@ bool US1LoginSubsystem::BeginLogin(UWorld* World)
 
 	bActive = true;
 	LoginWorld = World;
+
+	// Back from a kick (HandleKicked reloaded the level) - the reason waits on L1
+	if (PendingMessage.IsEmpty() == false)
+	{
+		Page = ES1LoginPage::Credentials;
+		Message = PendingMessage;
+		PendingMessage = FText::GetEmpty();
+	}
 
 	// 🔴 Not now. AS1MyPlayer::SetupLocalController sets FInputModeGameAndUI in its own BeginPlay, and which
 	//    BeginPlay runs first is not defined — shown now, the screen could lose its UI-only mode with WASD live
@@ -318,6 +328,61 @@ void US1LoginSubsystem::DisconnectGame()
 {
 	if (US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
 		GameInstance->DisconnectFromGameServer();
+}
+
+void US1LoginSubsystem::HandleKicked(int32 Reason, uint64 BannedUntil)
+{
+	// The message: suspended (with the minutes left on the server's clock - the local clock may be off, so the
+	// difference is all that is shown) or kicked for suspicious actions
+	FText Shown;
+	if (Reason == 2 /*KICK_REASON_BANNED*/ && BannedUntil > 0)
+	{
+		const int64 NowUnix = FDateTime::UtcNow().ToUnixTimestamp();
+		const int64 Minutes = FMath::Max<int64>(1, (static_cast<int64>(BannedUntil) - NowUnix + 59) / 60);
+		Shown = FText::Format(Text(TEXT("login.error.suspended")), FText::AsNumber(Minutes));
+	}
+	else
+	{
+		Shown = Text(TEXT("login.error.kicked"));
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[LOGIN] kicked by the server - reason=%d banned_until=%llu"), Reason, BannedUntil);
+
+	// Dev logins (no screen) reconnect on their own - just drop the connection
+	if (bActive == false)
+	{
+		if (UGameInstance* GameInstance = GetGameInstance())
+			GameInstance->GetTimerManager().SetTimerForNextTick(this, &US1LoginSubsystem::DisconnectGame);
+		return;
+	}
+
+	Token.Reset();
+	bBusy = false;
+
+	// Still on the login screen (refused at S_LOGIN) - show it there, like a failed login
+	if (Widget != nullptr && Widget->IsInViewport())
+	{
+		if (UGameInstance* GameInstance = GetGameInstance())
+			GameInstance->GetTimerManager().SetTimerForNextTick(this, &US1LoginSubsystem::DisconnectGame);
+		Fail(Shown);
+		return;
+	}
+
+	// In game - a clean world, then L1 with the reason (BeginLogin). Not from inside the packet loop (see HandleGameLoginFailed)
+	PendingMessage = Shown;
+	if (UGameInstance* GameInstance = GetGameInstance())
+		GameInstance->GetTimerManager().SetTimerForNextTick(this, &US1LoginSubsystem::ReloadToLogin);
+}
+
+void US1LoginSubsystem::ReloadToLogin()
+{
+	DisconnectGame();
+
+	UWorld* World = LoginWorld.Get();
+	if (World == nullptr)
+		return;
+	World->OnWorldBeginPlay.Remove(WorldBeginPlayHandle);
+	Widget = nullptr;
+	UGameplayStatics::OpenLevel(World, FName(*UGameplayStatics::GetCurrentLevelName(World, true)));
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────

@@ -88,6 +88,7 @@
     <ClCompile Include="CcTest.cpp" />
     <ClCompile Include="ChestTest.cpp" />
     <ClCompile Include="EntryPointTest.cpp" />
+    <ClCompile Include="CheatGuardTest.cpp" />
     <ClCompile Include="MoveClockTest.cpp" />
     <ClCompile Include="LevelRulesTest.cpp" />
     <ClCompile Include="WallMapTest.cpp" />
@@ -148,6 +149,7 @@
     <ClCompile Include="..\GameServer\WallTable.cpp" />
     <ClCompile Include="..\GameServer\TowerTable.cpp" />
     <ClCompile Include="..\GameServer\MonsterTable.cpp" />
+    <ClCompile Include="..\GameServer\CheatGuard.cpp" />
     <ClCompile Include="..\GameServer\MonsterBrain.cpp" />
     <ClCompile Include="..\GameServer\MonsterPack.cpp" />
     <ClCompile Include="..\GameServer\NavGrid.cpp" />

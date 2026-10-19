@@ -8,6 +8,7 @@
 #include "MonsterPack.h"
 #include "EscapeLogic.h"
 #include "KillBatch.h"
+#include "CheatGuard.h"
 #include <random>
 
 struct DeathSnapshot;
@@ -327,6 +328,10 @@ public:
 	bool	RemoveBag(uint64 bagId);
 	void	DebugDropBag(uint64 playerId);
 	void	DebugKill(uint64 playerId);
+
+	// 안티치트 (RoomCheat.cpp · CheatGuard.h, 2026-10-19) - 거부 지점이 부른다. 점수가 기준을 넘으면 경고 로그 · S_KICK + 끊기 + DB strike(+정지)
+	void	ReportCheat(const CreatureRef& creature, Violation violation, uint64 nowUs);
+	void	TestCheat(uint64 playerId, uint32 violation, int32 count);		// /t cheat - 테스트 모드에서 위반을 직접 넣는다
 
 	void	BeginDeathCommit(const CreatureRef& victim);
 	void	OnBagCreated(DeathSnapshot snap, bool ok);

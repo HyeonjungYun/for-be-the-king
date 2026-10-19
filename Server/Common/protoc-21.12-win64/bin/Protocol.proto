@@ -342,3 +342,11 @@ message C_SELL
 	string request_id = 1;
 	uint64 instance_id = 2;
 }
+
+// Anti-cheat (2026-10-19, design/quick-specs/anticheat-2026-10-19.md) - sent right before the server closes the connection,
+// so the client can say why instead of a bare "connection lost". banned_until = unix seconds, 0 = not suspended
+message S_KICK
+{
+	KickReason reason = 1;
+	uint64 banned_until = 2;
+}

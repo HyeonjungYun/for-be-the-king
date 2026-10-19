@@ -132,3 +132,72 @@ TEST(MoveClock, 시각을_낮췄다_높였다_번갈아도_상한을_다시_받�
 	EXPECT_LE(claimed, real + MoveClock::MAX_LEAD_US / 1'000'000.0 + 0.05);
 	EXPECT_LE(clock.leadUs, MoveClock::MAX_LEAD_US);
 }
+
+// ── 안티치트 (2026-10-19 감사 1 · 4) ──
+
+TEST(MoveClock, 거대한_시각으로_넘치게_해도_한_패킷이_서버_간격_더하기_상한만_받는다)
+{
+	MoveClock clock;
+	clock.Interval(TICK_US, START_MS);
+
+	// 예전 공격: (clientMs - last) * 1000 이 int64 를 넘치게 하는 시각 - leadUs 가 감겨 예산을 통째로 받았다
+	const uint64 hugeMs = START_MS + 9'300'000'000'000'000ull;
+	const double step = clock.Interval(TICK_US, hugeMs);
+
+	EXPECT_TRUE(clock.lastStepClamped);
+	EXPECT_LE(step, (TICK_US + MoveClock::MAX_STEP_EXCESS_US) / 1'000'000.0 + 1e-9);
+	EXPECT_GE(step, 0.0);
+	EXPECT_LE(clock.leadUs, MoveClock::MAX_LEAD_US);
+	EXPECT_GE(clock.leadUs, -MoveClock::MAX_LAG_US);
+}
+
+TEST(MoveClock, 넘침_공격을_100번_되풀이해도_누적_이득은_상한_한_번이다)
+{
+	MoveClock clock;
+	clock.Interval(TICK_US, START_MS);
+
+	double claimed = 0.0;
+	double real = 0.0;
+	uint64 ms = START_MS;
+	for (int i = 0; i < 100; i++)
+	{
+		// 낮은 시각(기준 되돌리기) → +4 초 → 넘치는 시각, 감사 보고서의 3 패킷 순환
+		claimed += clock.Interval(10'000, START_MS);
+		claimed += clock.Interval(10'000, START_MS + 4000);
+		claimed += clock.Interval(10'000, START_MS + 9'300'000'000'000'000ull);
+		real += 0.03;
+		(void)ms;
+	}
+	// 모든 패킷이 서버 간격 + 0.25 초로 잘리고 앞섬 누적은 2 초로 묶인다
+	EXPECT_LE(claimed, real + MoveClock::MAX_LEAD_US / 1'000'000.0 + 0.05);
+}
+
+TEST(MoveClock, 시각을_멈춰_둔_채_보내도_뒤처짐이_쌓이지_않는다)
+{
+	MoveClock clock;
+	clock.Interval(TICK_US, START_MS);
+
+	// 빚 쌓기: 2 초 동안 30 Hz 로 보내며 시각은 그대로 → 정상 경로는 늦게 도착한 패킷만 뒤처짐으로 본다
+	for (int i = 0; i < 60; i++)
+		clock.Interval(TICK_US, START_MS);
+	EXPECT_EQ(clock.leadUs, 0);
+
+	// 그 뒤 몰아 쓰기: 서버 간격 0 으로 0.25 초씩 주장 - 앞섬이 바로 쌓여 2 초에서 막힌다
+	double claimed = 0.0;
+	for (int i = 1; i <= 40; i++)
+		claimed += clock.Interval(0, START_MS + i * 250);
+	EXPECT_LE(claimed, MoveClock::MAX_LEAD_US / 1'000'000.0 + 1e-6);
+	EXPECT_EQ(clock.leadUs, MoveClock::MAX_LEAD_US);
+}
+
+TEST(MoveClock, 정상_30Hz_이동은_자르지_않는다)
+{
+	MoveClock clock;
+	clock.Interval(TICK_US, START_MS);
+	for (int i = 1; i <= 300; i++)
+	{
+		EXPECT_DOUBLE_EQ(clock.Interval(TICK_US, START_MS + i * TICK_MS), 0.033);
+		EXPECT_FALSE(clock.lastStepClamped);
+	}
+	EXPECT_EQ(clock.leadUs, 0);
+}

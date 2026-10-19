@@ -25,11 +25,26 @@ struct MoveClock
 	static constexpr int64	MAX_LEAD_US = 2'000'000;	// 기준 패킷 지연 몫 + 스피드핵이 얻을 수 있는 누적 이득의 상한
 	static constexpr int64	MAX_LAG_US = 2'000'000;		// 몰아 보낸 이동을 받아 주는 한계
 
+	// 안티치트 (2026-10-19 감사 1 · 4) ─────────────────────────────────────────────────────────────────────────
+	// 🔴 예전 코드는 (clientMs - lastClientMs) * 1000 을 상한 없이 했다. 거대한 client_ms 로 int64 를 넘치게 하면
+	//    leadUs 가 음수로 감겨 -MAX_LAG 로 다시 잡히고, 그 패킷은 이동 예산을 통째로 받았다 (모델 계산 약 33 배속).
+	//  - 패킷 하나가 주장할 수 있는 경과 = 서버가 본 간격 + MAX_STEP_EXCESS_US. 곱하기 전에 ms 로 자른다 - 넘침이 없다.
+	//    정상 30 Hz 클라 · 몰려 도착한 패킷은 각자 33 ms 만 주장하므로 걸리지 않는다
+	//  - 뒤처짐(leadUs < 0)은 "실제로 늦게 도착한" 패킷 - 서버 간격이 주장보다 LATE_ARRIVAL_US 넘게 긴 패킷 - 에서만 쌓인다.
+	//    30 Hz 로 계속 보내며 시각만 멈춰 두는 '빚 쌓기' 는 뒤처짐이 되지 않는다. 남는 것은 침묵 뒤 몰아 보내기뿐 -
+	//    그 동안 서 있었으므로 평균 속도 이득이 없다 (design/quick-specs/anticheat-2026-10-19.md 알려진 한계)
+	static constexpr int64	MAX_STEP_EXCESS_US = 250'000;
+	static constexpr int64	LATE_ARRIVAL_US = 150'000;
+	// 늦게 처리된 패킷의 속도 상한을 "보낸 때" 로 되돌려 보는 한계 - 대시 창을 2 초나 늘려 쓰지 못하게 (감사 4, Room::HandleMove)
+	static constexpr int64	MAX_SENT_REWIND_US = 750'000;
+
+	bool	lastStepClamped = false;	// 직전 Interval 이 주장 경과를 잘랐다 - 위반 기록(CheatGuard)이 본다
+
 	uint64	lastClientMs = 0;
 	int64	leadUs = 0;			// 누적(클라 경과 - 서버 경과). 양수 = 클라가 앞섰다
 	bool	announced = false;	// 이 접속의 첫 이동을 로그로 남겼다 (Room::HandleMove)
 
-	void	Reset() { lastClientMs = 0; leadUs = 0; announced = false; }
+	void	Reset() { lastClientMs = 0; leadUs = 0; announced = false; lastStepClamped = false; }
 
 	// 이번 패킷에 쓸 경과 시간(초). serverDtUs = 직전 패킷부터 서버 수신(처리) 간격
 	double	Interval(uint64 serverDtUs, uint64 clientMs)
@@ -43,10 +58,17 @@ struct MoveClock
 			return static_cast<double>(serverDtUs) / 1'000'000.0;
 		}
 
-		int64 clientDtUs = static_cast<int64>(clientMs - lastClientMs) * 1000;
+		// 곱하기 전에 ms 단위로 자른다 (넘침 방지) - 상한 = 서버 간격 + MAX_STEP_EXCESS
+		const uint64 claimedMs = clientMs - lastClientMs;
+		const uint64 capMs = serverDtUs / 1000 + static_cast<uint64>(MAX_STEP_EXCESS_US / 1000);
+		lastStepClamped = (claimedMs > capMs);
+		int64 clientDtUs = static_cast<int64>(lastStepClamped ? capMs : claimedMs) * 1000;
 		lastClientMs = clientMs;
 
-		leadUs += clientDtUs - static_cast<int64>(serverDtUs);
+		const int64 drift = clientDtUs - static_cast<int64>(serverDtUs);
+		// 뒤처짐은 늦게 도착한 패킷에서만 - 그 밖의 음수 drift 는 버린다 (빚 쌓기 차단)
+		if (drift >= 0 || -drift > LATE_ARRIVAL_US)
+			leadUs += drift;
 
 		if (leadUs > MAX_LEAD_US)
 		{

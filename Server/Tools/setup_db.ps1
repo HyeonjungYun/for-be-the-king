@@ -36,7 +36,8 @@ $files = @(
     'schema_commit_journal.sql',   # applied_commits (ADR-0010 6)
     'migrate_lone_path.sql',       # 옛 DB 에 lone_path 열 (있으면 건너뜀)
     'migrate_economy.sql',         # 옛 DB 에 stack_count 열 (있으면 건너뜀)
-    'migrate_hash_tokens.sql'      # 토큰 해시 저장 - schema_migrations 표시로 한 번만
+    'migrate_hash_tokens.sql',     # 토큰 해시 저장 - schema_migrations 표시로 한 번만
+    'migrate_anticheat.sql'        # accounts.banned_until · cheat_strikes (안티치트 2026-10-19)
 )
 if (-not $NoSeed) {
     $files += 'seed_bots.sql'      # bot_1 .. bot_120 (부하 하네스)

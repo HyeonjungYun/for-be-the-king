@@ -80,6 +80,15 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 	return true;
 }
 
+// 안티치트 (2026-10-19) - 서버가 끊기 직전에 이유를 보낸다. 봇은 남기기만 한다 (다시 붙는 것은 접속 보충이 한다)
+bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt)
+{
+	auto bot = static_pointer_cast<BotSession>(session);
+	LOG_LINE << "[BOT KICK] idx=" << bot->botIndex << " char=" << bot->characterId.load() << " reason=" << Protocol::KickReason_Name(pkt.reason())
+		<< " banned_until=" << pkt.banned_until() << '\n';
+	return true;
+}
+
 bool Handle_S_PARTY_BETRAYED(PacketSessionRef& session, Protocol::S_PARTY_BETRAYED& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);

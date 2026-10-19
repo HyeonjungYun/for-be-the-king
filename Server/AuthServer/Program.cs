@@ -94,11 +94,13 @@ app.MapPost("/auth/login", async (Credentials body, MySqlDataSource db) =>
     byte[] storedHash = [];
     byte[] salt = [];
     int iterations = Auth.Iterations;
+    long bannedUntil = 0;     // unix s - 지금보다 뒤면 정지 중 (안티치트 2026-10-19, accounts.banned_until)
 
     await using (var select = conn.CreateCommand())
     {
         select.CommandText = """
-            SELECT account_id, password_hash, password_salt, password_iterations
+            SELECT account_id, password_hash, password_salt, password_iterations,
+                   IF(banned_until > NOW(), UNIX_TIMESTAMP(banned_until), 0)
             FROM accounts WHERE username = @username
             """;
         select.Parameters.AddWithValue("@username", body.Username ?? "");
@@ -110,6 +112,7 @@ app.MapPost("/auth/login", async (Credentials body, MySqlDataSource db) =>
             storedHash = (byte[])reader[1];
             salt = (byte[])reader[2];
             iterations = reader.GetInt32(3);
+            bannedUntil = reader.IsDBNull(4) ? 0 : Convert.ToInt64(reader.GetValue(4));
         }
     }
 
@@ -126,6 +129,10 @@ app.MapPost("/auth/login", async (Credentials body, MySqlDataSource db) =>
     // 바이트 단위 조기 반환이 없는 비교. == 로 비교하면 앞자리부터 맞춰 나갈 수 있다
     if (CryptographicOperations.FixedTimeEquals(computed, storedHash) == false)
         return Results.Json(new { error = "invalid_credentials" }, statusCode: 401);
+
+    // 정지 중 - 비밀번호가 맞은 뒤에만 알린다 (틀린 비밀번호로 계정의 정지 여부를 캐지 못하게). 토큰은 주지 않는다
+    if (bannedUntil > 0)
+        return Results.Json(new { error = "account_suspended", until = bannedUntil }, statusCode: 403);
 
     string token = Auth.NewToken();
 

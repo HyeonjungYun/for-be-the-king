@@ -27,6 +27,7 @@
 #include "Monster.h"
 #include "EscapeLogic.h"
 #include "LonePath.h"
+#include "CheatGuard.h"
 #include "Economy.h"
 #include "BaseCampTable.h"
 #include "Telemetry.h"
@@ -160,6 +161,18 @@ int main()
 		}
 		LOG_LINE << "[BOOT] lone path - roll=" << LonePathRules::Get().rollPct << "% max_pieces=" << LonePathRules::Get().maxPieces
 			<< " outnumber=" << LonePathRules::Get().outnumberEnemies << "@" << LonePathRules::Get().outnumberRadiusCm << "cm\n";
+
+		// 안티치트 (2026-10-19) - 위반 가중치 · 경고 / 끊기 점수 · 정지 규칙. 파일이 없으면 기본값
+		if (CheatRules::Get().Load(dataDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] anticheat invalid - " << error << " (dir=" << dataDir << ")\n";
+			return -1;
+		}
+		{
+			const CheatRules& ac = CheatRules::Get();
+			LOG_LINE << "[BOOT] anticheat - " << (ac.enabled ? "on" : "OBSERVE ONLY") << " warn=" << ac.warnScore << " kick=" << ac.kickScore
+				<< " decay=" << ac.decayPerSec << "/s ban=" << ac.strikesForBan << " strikes in " << ac.banWindowHours << "h -> " << ac.banMinutes << " min\n";
+		}
 
 		// 층 아이템 풀 - ItemTable 다음이어야 한다. 부위 · 물리/마법 행에 뽑을 종류가 있는지 ItemTable 로 검사한다.
 		if (FloorItemPool::Load(dataDir, OUT error) == false)
