@@ -96,6 +96,24 @@ S1/                  Unreal Engine 5.8 클라이언트
 .github/workflows/   CI — push 마다 서버 빌드 · 테스트 · 스트레스 100회 반복
 ```
 
+## 받아서 실행해 보기 (한 PC 묶음)
+
+빌드 없이 플레이해 볼 수 있는 묶음을 [Releases](../../releases) 에 올려 두었습니다 (zip 약 550 MB, 풀면 1.2 GB).
+게임 서버 · 인증 서버 · MySQL · 클라이언트가 한 폴더에 들어 있고, **설치 없이 이 PC 안에서만** 돌아갑니다.
+
+```
+1  zip 을 풀고 Start.bat      DB(3307) → 인증 서버(8080) → 게임 서버(7777) → 클라이언트
+2  로그인 화면에서 [가입]      아이디 · 비밀번호 → 캐릭터 이름
+3  베이스캠프                  길드장(위쪽 붉은 문 옆)에게 F → 1 → [입장] → 진입 지점 (R = 무작위)
+4  AddBots.bat                 봇 30명이 같은 층에 들어온다 (PvP 상대)
+5  Stop.bat                    전부 종료
+```
+
+- 필요: Windows 10/11 64비트 · DirectX 12 그래픽 카드. VC++ 런타임 오류가 나면 `client\Engine\Extras\Redist\en-us\vc_redist.x64.exe`
+- 조작: WASD 이동 · 우클릭 유지 평타 · Shift / Q / E / R / Z / X 스킬 · F 대화 · 줍기 · Tab 소지품
+- 묶음은 `tools/package-bundle.ps1`(로컬 전용 도구)로 만들었습니다 — 클라 패키지 + `GameServer.exe` · `DummyClient.exe` + 인증 서버(.NET 런타임 포함 배포) + MySQL 8.0(필요한 파일만 · 스키마와 시드를 미리 넣은 DB)
+- MySQL 8.0 Community Server 는 GPL v2 입니다 (`mysql\LICENSE`)
+
 ## 빌드 · 실행
 
 ```
