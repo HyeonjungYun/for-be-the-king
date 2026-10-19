@@ -102,17 +102,6 @@
 | CI | 깨끗한 러너가 드러낸 저장소 무결성 문제 3건 |
 | 사망 · 가방 · 루팅 | DB 우선 사망 트랜잭션 · 크래시 후 루팅 아이템 자기치유 · 부팅 복구 |
 
-## 직접 작성한 대표 코드
-
-아래 링크는 **2026-10-03 시점 커밋(`32e6332`)에 고정**했습니다 — 그 뒤 위임한 작업(아래 **개발 방식**)이 섞이지 않은 판입니다.
-
-| 코드 | 무엇을 보여 주나 |
-|---|---|
-| [멱등 지급 트랜잭션 `Handle_C_GRANT_REWARD`](../../blob/32e6332ceae9edf5f1c16a45a7ad8a9a0fa0be67/Server/GameServer/ServerPacketHandler.cpp#L751-L889) | 위 3번 — INSERT 우선 · `FOR UPDATE` 잠금 순서 · 중복 키로 멱등 |
-| [서버 계측 `ServerStats.cpp`](../../blob/32e6332ceae9edf5f1c16a45a7ad8a9a0fa0be67/Server/ServerCore/ServerStats.cpp) · [`.h`](../../blob/32e6332ceae9edf5f1c16a45a7ad8a9a0fa0be67/Server/ServerCore/ServerStats.h) | 10초 창마다 P95 / P99 / 최대 · 대역폭 · 메모리를 재서 예산 대비 PASS / FAIL 출력 |
-| [다중 스레드 스트레스 테스트 `StressTest.cpp`](../../blob/32e6332ceae9edf5f1c16a45a7ad8a9a0fa0be67/Server/ServerCoreSTests/StressTest.cpp) | 단위 테스트로는 못 잡는 경쟁 조건 — CI 에서 100회 반복 |
-| [DB 연결 풀 `DBConnectionPool.cpp`](../../blob/32e6332ceae9edf5f1c16a45a7ad8a9a0fa0be67/Server/ServerCore/DBConnectionPool.cpp) · [회귀 테스트 `DBTest.cpp`](../../blob/32e6332ceae9edf5f1c16a45a7ad8a9a0fa0be67/Server/ServerCoreSTests/DBTest.cpp) | 위 4번 — 고친 연결 실패 경로와 그 테스트 |
-
 ## 개발 방식
 
 - **2026-06 ~ 10-03** — 게임 서버 코어 · 넷코드 · DB 연동 · 지급 트랜잭션 · 계측 · 테스트와 CI 를 직접 작성했습니다. IOCP · 세션 · JobQueue 뼈대는 온라인 게임 서버 강의에서 배운 구조를 따랐고, 그 위의 계측 · 부하 봇 · 이동 검증 · 비동기 DB · 멱등 지급 · 테스트는 직접 설계했습니다. 이 기간 AI 코딩 에이전트(Claude Code)는 설계 문서 · 코드 리뷰 · 수정 제안에 쓰고, 적용은 읽고 판단한 뒤 손으로 했습니다.
