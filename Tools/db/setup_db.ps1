@@ -60,6 +60,7 @@ foreach ($file in $files) {
         $sql = $sql.Replace('CREATE DATABASE IF NOT EXISTS forbetheking', "CREATE DATABASE IF NOT EXISTS $Database")
         $sql = $sql.Replace('USE forbetheking;', "USE $Database;")
         $sql = $sql.Replace("TABLE_SCHEMA = 'forbetheking'", "TABLE_SCHEMA = '$Database'")
+        $sql = $sql.Replace('ON forbetheking.*', "ON $Database.*")     # fbtk_app 권한도 그 DB 로 (검증 툴의 격리 스모크가 fbtk_app 으로 붙는다, 2026-10-21)
     }
     if ($sql -notmatch '(?im)^\s*USE\s') {
         $sql = "USE $Database;`n" + $sql       # 시드 몇 개는 USE 가 없다 - 대상 DB 를 박아 준다

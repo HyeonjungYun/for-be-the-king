@@ -60,6 +60,7 @@ bool Listener::StartAccept(ServerServiceRef service)
 
 void Listener::CloseSocket()
 {
+	_closed.store(true);
 	SocketUtils::Close(_socket);
 }
 
@@ -80,6 +81,8 @@ void Listener::RegisterAccept(AcceptEvent* acceptEvent)
 	// 예전엔 실패하면 자기를 다시 불렀다 - 실패가 계속되면(리슨 소켓 닫힘 · 자원 고갈) 스택이 넘치고 세션(640 KB)을 계속 만들었다.
 	// CreateSession 이 null(IOCP 등록 실패)이면 바로 역참조했다. 이제 몇 번만 다시 해 본다
 	constexpr int32 MAX_ATTEMPTS = 8;
+	if (_closed.load())
+		return;		// 닫는 중 - 슬롯을 다시 걸지도, 보관하지도 않는다
 	for (int32 attempt = 0; attempt < MAX_ATTEMPTS; attempt++)
 	{
 		SessionRef session = _service->CreateSession(); // Register IOCP
@@ -128,6 +131,11 @@ int32 Listener::LostAcceptCount()
 void Listener::ProcessAccept(AcceptEvent* acceptEvent)
 {
 	SessionRef session = acceptEvent->session;
+	if (_closed.load())
+	{
+		acceptEvent->session = nullptr;		// 닫는 중에 돌아온 슬롯 - 세션을 놓아 준다
+		return;
+	}
 
 	if (false == SocketUtils::SetUpdateAcceptSocket(session->GetSocket(), _socket))
 	{

@@ -196,9 +196,15 @@ void DoWorkerJob(ServerServiceRef& service)
 	}
 }
 
-int main()
+int main(int argc, char* argv[])
 {
 	::setvbuf(stdout, nullptr, _IONBF, 0);
+
+	// --validate (2026-10-21 검증 툴 - Tools/verify/verify-server.ps1) - 부팅 데이터 검사만 하고 끝낸다. DB · 소켓 · 파일 기록(통계 CSV · 텔레메트리)을 열지 않는다.
+	// 성공 0 · 실패는 아래 [BOOT] … invalid 줄과 0 이 아닌 종료 코드
+	bool validateOnly = false;
+	for (int i = 1; i < argc; i++)
+		validateOnly = validateOnly || ::strcmp(argv[i], "--validate") == 0;
 
 	// 설정 - 환경변수 FBTK_* 한 번에 (ServerConfig.h). 예전엔 main 이 블록 26 벌로 하나씩 읽었다
 	const ServerConfig config = ServerConfig::FromEnv();
@@ -220,7 +226,7 @@ int main()
 	GStats.SetExtraLine([]() { return "death_commits=" + to_string(GDeathCommits.Count()) + " instances=" + to_string(GInstances.LiveCount()); });
 
 	// 통계 CSV - 사람이 읽는 블록과 같은 값을 행으로 (그래프 · 전후 비교). 못 열어도 서버는 돈다
-	if (config.metricsDir.empty() == false)
+	if (config.metricsDir.empty() == false && validateOnly == false)
 	{
 		if (GStats.EnableCsv(config.metricsDir))
 			LOG_LINE << "[STATS] csv -> " << config.metricsDir << '\n';
@@ -570,7 +576,9 @@ int main()
 #endif
 
 		// 측정 전용 - 못 열어도 서버는 돈다
-		if (GTelemetry.Open(config.telemetryDir))
+		if (validateOnly)
+			;		// 검사만 - 기록 파일을 만들지 않는다
+		else if (GTelemetry.Open(config.telemetryDir))
 			LOG_LINE << "[TELEM] writing " << config.telemetryDir << " boot=" << GTelemetry.BootId() << '\n';
 		else
 			LOG_LINE << "[TELEM] cannot open " << config.telemetryDir << " - telemetry off\n";
@@ -593,6 +601,15 @@ int main()
 			GRooms[spawn.floorId]->DoAsync(&Room::AddBag, ObjectUtils::CreateChest(spawn));
 
 		LOG_LINE << "[BOOT] chests spawned - " << ChestSpawnTable::All().size() << '\n';
+	}
+
+	if (validateOnly)
+	{
+		LOG_LINE << "[VALIDATE] OK - boot data checks passed: skills=" << SkillTable::All().size() << " item_types=" << ItemTable::All().size()
+			<< " entry_points=" << EntryPointTable::All().size() << " towers=" << TowerTable::All().size() << " monster_types=" << MonsterTable::TypeCount()
+			<< " chests=" << ChestSpawnTable::All().size() << " bot_builds=" << BotLoadoutTable::All().size() << " (no DB, no socket)\n";
+		GetLogger().Flush();
+		return 0;
 	}
 
 	if (config.dbPassword.empty())

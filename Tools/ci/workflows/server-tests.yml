@@ -25,6 +25,17 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v3
 
+      # 서버 검증 툴의 정적 검사 - 빌드 전에 몇 초 (Tools/verify/verify-server.ps1 -Stage static 과 같은 검사, 2026-10-21).
+      # 워크플로 사본 · 줄끝 · 인코딩 · 패킷 생성물이 .proto 와 맞는지. GameServer --validate 는 로컬 검증 툴에서 (Release exe 가 필요하다)
+      - name: Static checks (verify-server)
+        run: |
+          .\Tools\ci\sync-workflows.ps1 -Check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python -I Tools/verify/check_text.py . text.json
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python -I Tools/verify/check_proto.py . proto.json
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
       # gtest 는 NuGet 패키지다. Server/packages/ 를 저장소에 두었지만
       # vcxproj 가 참조하는 경로가 맞는지 복원으로 한 번 확인한다
       - name: Restore NuGet packages

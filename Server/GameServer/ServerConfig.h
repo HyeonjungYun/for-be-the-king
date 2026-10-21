@@ -28,7 +28,7 @@ struct ServerConfig
 	// ── 디렉터리 (dataDir 는 FBTK_DATA_DIR - ItemTable::DefaultDataDir) ──
 	string		dataDir;
 	string		journalDir;						// FBTK_JOURNAL_DIR - 런 끝 저장의 write-ahead 기록 (기본 Logs/pending-commits)
-	string		telemetryDir;					// Logs/telemetry
+	string		telemetryDir;					// FBTK_TELEMETRY_DIR - 기본 Logs/telemetry
 	string		metricsDir;						// FBTK_METRICS_DIR - ServerStats CSV (기본 Logs/metrics, "0" 이면 끔)
 	string		crashDir;						// FBTK_CRASH_DIR - 미니덤프 (기본 Logs/crash)
 

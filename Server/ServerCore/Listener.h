@@ -41,5 +41,9 @@ protected:
 
 	USE_LOCK;
 	vector<AcceptEvent*> _lostAccepts;		// 8 번 연속 실패한 슬롯 - 예전엔 영영 잃었다 (자원 고갈이 풀리면 다시 건다)
+
+	// CloseSocket 뒤 - 걸려 있던 AcceptEx 가 전부 실패로 돌아온다. 그때는 다시 걸지 않는다 (2026-10-21 검증 툴 스모크:
+	// Ctrl+C 종료마다 슬롯 수 × "[ACCEPT] accept slot failed 8 times" 100 줄 + 닫힌 소켓에 세션 800 개를 만들었다)
+	atomic<bool> _closed = false;
 };
 

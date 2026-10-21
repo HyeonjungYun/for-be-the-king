@@ -1,0 +1,14 @@
+{
+  "_comment": "verify-server.ps1 smoke stage pass lines (2026-10-21). Sources: technical-preferences.md Server Frame Budget (flush P95 16.6 / P99 33 / max 100 ms) and Memory Ceiling (512 MB @ 120). The rest came from the 2026-10-20 bot runs (30 bots x 240 s: cheat kicks 0, move rejects ~0.4 / bot-minute).",
+  "flush_p95_ms": 16.6,
+  "flush_p99_ms": 33.0,
+  "flush_max_ms": 100.0,
+  "commit_mb_max": 512,
+  "cheat_kicks_max": 0,
+  "cheat_bans_max": 0,
+  "move_rejects_per_bot_minute_max": 3.0,
+  "error_lines_max": 0,
+  "entered_ratio_min": 0.9,
+  "shutdown_exit_seconds_max": 20,
+  "warmup_rows_skipped": 1
+}

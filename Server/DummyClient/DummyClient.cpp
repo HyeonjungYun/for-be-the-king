@@ -37,6 +37,7 @@ atomic<bool> GIdleOne = false;
 atomic<bool> GIdleAll = false;
 atomic<int32> GForceFloor = -1;
 int32 GBotBase = 0;
+uint16 GServerPort = 7777;		// -port N (2026-10-21) - 검증 툴의 격리 스모크 서버는 다른 포트에서 돈다 (Tools/verify/verify-server.ps1)
 bool GRawWalk = false;	// -rawwalk 1: 하네스 걸음이 벽을 모르던 예전 방식 (비교용, 2026-10-18)		// -botbase N: bot_{N+1} 부터 쓴다 - 두 하네스를 함께 돌릴 때 계정이 겹치지 않게 (2026-10-18 PVE 40 판 + PvP 120)
 float GTowerX = 0.f;
 float GTowerY = 0.f;
@@ -1001,6 +1002,8 @@ int main(int argc, char* argv[])
 			GRawWalk = (::atoi(argv[i + 1]) != 0);
 		else if (::strcmp(argv[i], "-botbase") == 0)
 			GBotBase = (std::max)(0, ::atoi(argv[i + 1]));
+		else if (::strcmp(argv[i], "-port") == 0)
+			GServerPort = static_cast<uint16>((std::clamp)(::atoi(argv[i + 1]), 1, 65535));
 		else if (::strcmp(argv[i], "-floor") == 0)
 			GForceFloor.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-mode") == 0)
@@ -1151,7 +1154,7 @@ int main(int argc, char* argv[])
 	ClientPacketHandler::Init();
 
 	ClientServiceRef service = make_shared<ClientService>(
-		NetAddress(L"127.0.0.1", 7777),
+		NetAddress(L"127.0.0.1", GServerPort),
 		make_shared<IocpCore>(),
 		[]() {return make_shared<BotSession>(); },
 		botCount

@@ -1,14 +1,14 @@
--- °³¹ßÀÚ Å×½ºÆ® °èÁ¤. º¿(bot_%)°ú °ãÄ¡Áö ¾ÊÀ¸¹Ç·Î º¿À» µ¹¸®¸é¼­ °°ÀÌ Á¢¼ÓÇÒ ¼ö ÀÖ´Ù.
+-- ê°œë°œì í…ŒìŠ¤íŠ¸ ê³„ì •. ë´‡(bot_%)ê³¼ ê²¹ì¹˜ì§€ ì•Šìœ¼ë¯€ë¡œ ë´‡ì„ ëŒë¦¬ë©´ì„œ ê°™ì´ ì ‘ì†í•  ìˆ˜ ìˆë‹¤.
 USE forbetheking;
 
 START TRANSACTION;
 
--- Àç½ÇÇà °¡´ÉÇÏ°Ô ¸ÕÀú Áö¿î´Ù.
--- characters ¡¤ login_sessions ´Â account_id FK ON DELETE CASCADE ¶ó ÇÔ²² »ç¶óÁø´Ù
+-- ì¬ì‹¤í–‰ ê°€ëŠ¥í•˜ê²Œ ë¨¼ì € ì§€ìš´ë‹¤.
+-- characters Â· login_sessions ëŠ” account_id FK ON DELETE CASCADE ë¼ í•¨ê»˜ ì‚¬ë¼ì§„ë‹¤
 DELETE FROM accounts WHERE username = 'dev_1';
 
--- password_hash / salt ´Â °ÔÀÓ ¼­¹ö°¡ ¾²Áö ¾Ê´Â´Ù(ÅäÅ«¸¸ °ËÁõ).
--- À¥ ¼­¹ö°¡ »ı±â¸é ±×ÂÊÀÌ Ã¤¿î´Ù. Áö±İÀº ÀÚ¸®¸¸ Ã¤¿ö µĞ´Ù
+-- password_hash / salt ëŠ” ê²Œì„ ì„œë²„ê°€ ì“°ì§€ ì•ŠëŠ”ë‹¤(í† í°ë§Œ ê²€ì¦).
+-- ì›¹ ì„œë²„ê°€ ìƒê¸°ë©´ ê·¸ìª½ì´ ì±„ìš´ë‹¤. ì§€ê¸ˆì€ ìë¦¬ë§Œ ì±„ì›Œ ë‘”ë‹¤
 INSERT INTO accounts (username, password_hash, password_salt)
 VALUES ('dev_1', UNHEX(SHA2('dev_1_placeholder', 256)), UNHEX(REPEAT('00', 16)));
 
@@ -17,13 +17,13 @@ SET @account_id = LAST_INSERT_ID();
 INSERT INTO characters (account_id, name, hp, max_hp, floor_id, pos_x, pos_y, pos_z, yaw)
 VALUES (@account_id, 'dev_1', 500, 500, 0, 200.0, 200.0, 100.0, 0.0);
 
--- ÅäÅ« = SHA2('dev_1', 256). º¿°ú °°Àº ±ÔÄ¢ÀÌ¶ó °è»ê ¹æ½ÄÀ» ±â¾ïÇÒ ÇÊ¿ä°¡ ¾ø´Ù
+-- í† í° = SHA2('dev_1', 256). ë´‡ê³¼ ê°™ì€ ê·œì¹™ì´ë¼ ê³„ì‚° ë°©ì‹ì„ ê¸°ì–µí•  í•„ìš”ê°€ ì—†ë‹¤
 INSERT INTO login_sessions (token, account_id, expires_at)
-VALUES (SHA2(SHA2('dev_1', 256), 256), @account_id, DATE_ADD(NOW(), INTERVAL 1 YEAR));	-- DB ¿¡´Â ÅäÅ«ÀÇ ÇØ½Ã (2026-10-17 migrate_hash_tokens.sql)
+VALUES (SHA2(SHA2('dev_1', 256), 256), @account_id, DATE_ADD(NOW(), INTERVAL 1 YEAR));	-- DB ì—ëŠ” í† í°ì˜ í•´ì‹œ (2026-10-17 migrate_hash_tokens.sql)
 
 COMMIT;
 
--- Ã³À½ºÎÅÍ ÇØ½Ã·Î ³Ö¾ú´Ù - ÀÌÀü ½ºÅ©¸³Æ®(migrate_hash_tokens.sql)°¡ ´Ù½Ã ÇØ½ÃÇÏÁö ¾Ê°Ô
+-- ì²˜ìŒë¶€í„° í•´ì‹œë¡œ ë„£ì—ˆë‹¤ - ì´ì „ ìŠ¤í¬ë¦½íŠ¸(migrate_hash_tokens.sql)ê°€ ë‹¤ì‹œ í•´ì‹œí•˜ì§€ ì•Šê²Œ
 CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(64) NOT NULL PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);
 INSERT IGNORE INTO schema_migrations (name) VALUES ('hash_login_tokens');
 

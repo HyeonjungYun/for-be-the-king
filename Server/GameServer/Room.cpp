@@ -1249,7 +1249,12 @@ void Room::HandleSkill(uint64 casterId, Protocol::C_SKILL pkt)
 		caster->castItemLevel = caster->IsPlayer() ? static_pointer_cast<Player>(caster)->ItemLevelOfSlot(pkt.slot()) : 0;
 
 		LOG_LINE << "[SKILL RECAST] caster=" << casterId << " skill=" << def->skillId << " target=" << targetId << '\n';
+
+		// 재입력은 전투 Flush 를 기다리지 않고 바로 친다 - HandleMove 의 이동 스킬처럼 사망을 KillBatch 로 모았다가 푼다.
+		// 예전엔 닫힌 채로 DealDamage 가 불려 [ASSERT] "DealDamage outside a combat flush" (2026-10-21 검증 툴 스모크 - 봇이 찌르고 베기를 재입력)
+		_kills.Begin();
 		FireSkill(caster, *def, pkt.slot(), targetId, aimX, aimY, /*recast*/ true, nowUs);
+		ProcessKillBatch(nowUs);
 		return;
 	}
 

@@ -96,7 +96,7 @@ ServerConfig ServerConfig::FromEnv()
 
 	c.dataDir = ItemTable::DefaultDataDir();
 	c.journalDir = EnvStr("FBTK_JOURNAL_DIR", c.dataDir + "\\..\\Logs\\pending-commits");
-	c.telemetryDir = c.dataDir + "\\..\\Logs\\telemetry";
+	c.telemetryDir = EnvStr("FBTK_TELEMETRY_DIR", c.dataDir + "\\..\\Logs\\telemetry");		// 검증 툴의 격리 스모크가 보고서 폴더로 돌린다 (2026-10-21)
 	c.metricsDir = EnvStr("FBTK_METRICS_DIR", c.dataDir + "\\..\\Logs\\metrics");
 	if (c.metricsDir == "0")
 		c.metricsDir.clear();
