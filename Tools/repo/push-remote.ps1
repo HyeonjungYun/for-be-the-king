@@ -61,6 +61,9 @@ if ($DryRun) {
     return
 }
 
+# git push 는 성공해도 진행 메시지("To https://...")를 stderr 에 쓴다. PS 5.1 + Stop 은 그걸 예외로 바꿔
+# 성공한 푸시를 실패로 보고했다 (2026-10-21). 여기서부터는 $LASTEXITCODE 로만 판정한다
+$ErrorActionPreference = 'Continue'
 if ($ForceWithLease) {
     git -C $work push "--force-with-lease=refs/heads/master:$ForceWithLease" $Url HEAD:refs/heads/master
 }
