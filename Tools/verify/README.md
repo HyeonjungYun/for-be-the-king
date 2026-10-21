@@ -19,7 +19,7 @@ DB 는 임시 스키마 `fbtk_verify_*` 를 만들었다 지우고, 스모크 �
 | | 줄끝 · 인코딩 (`check_text.py`) | 한 파일에 CRLF · LF 가 섞였다 · UTF-8 이 아니다 · 한글이 든 Tools 의 ps1 에 BOM 이 없다 |
 | | 패킷 생성물 (`check_proto.py`) | GameServer · DummyClient · S1 의 `*.pb.*` · 패킷 핸들러가 지금 `.proto` 로 만든 것과 다르다 |
 | | 부팅 데이터 (`GameServer --validate`) | 부팅 검사(데이터 CSV 36 개 · 벽 · 순찰 길 …) 실패. DB · 소켓 · 기록 파일을 열지 않는다 |
-| **build** | ServerCore (Release · Debug) · GameServer · DummyClient · GameServerTests · ServerCoreSTests · 인증 서버 | 빌드 오류 (경고 수는 보고만) |
+| **build** | ServerCore (Release · Debug) · GameServer · DummyClient · GameServerTests · ServerCoreSTests · 인증 서버 · 디버깅 툴 (`Tools/ServerMonitor`) | 빌드 오류 (경고 수는 보고만) |
 | | GameServerTests · ServerCoreSTests | 실패 1 개 이상 |
 | | 커버리지 (OpenCppCoverage) | ServerCore 라인 < 70 % (제외 목록은 technical-preferences.md 와 같다) |
 | **db** | 빈 DB 에 `setup_db` | 스크립트 오류 |

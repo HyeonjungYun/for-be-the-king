@@ -65,6 +65,13 @@ TEST(EventLog, 행위자와_대상_계정을_키로_가른다)
 	ASSERT_EQ(odd.actors.size(), 1u);
 	EXPECT_EQ(odd.actors[0], 12u);
 	EXPECT_TRUE(odd.targets.empty());
+	// id= 는 다른 행위자 키가 없을 때만 - 장판 · 투사체 id 가 플레이어로 섞이면 플레이어별 필터에 남의 줄이 뜬다
+	const Parsed zone = ParseLogLine("[ZONE] place id=119 caster=2 skill=1063 r=45", Rules());
+	ASSERT_EQ(zone.actors.size(), 1u);
+	EXPECT_EQ(zone.actors[0], 2u);
+	const Parsed bare = ParseLogLine("[SESSION] released id=41", Rules());
+	ASSERT_EQ(bare.actors.size(), 1u);
+	EXPECT_EQ(bare.actors[0], 41u);
 }
 
 TEST(EventLog, JSON_한_줄은_따옴표_역슬래시_제어문자를_이스케이프한다)

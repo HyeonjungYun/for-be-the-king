@@ -63,7 +63,8 @@ namespace EventFormat
 		bool IsDigit(char ch) { return ch >= '0' && ch <= '9'; }
 
 		// 행위자 · 대상 키 - 로그가 쓰는 이름 그대로 (PROTOCOL.md). 나머지 키(bag= · item= · type= …)는 msg 에만 남는다
-		const char* const ACTOR_KEYS[] = { "char", "caster", "attacker", "owner", "by", "killer", "player", "from", "leader", "inviter", "id", "instigator", "kicker", "self" };
+		// id= 는 다른 행위자 키가 없을 때만 행위자다 - [ZONE] place id=119 caster=2 · [PROJ] launch id=5000000106 caster=66 의 id 는 장판 · 투사체
+		const char* const ACTOR_KEYS[] = { "char", "caster", "attacker", "owner", "by", "killer", "player", "from", "leader", "inviter", "instigator", "kicker", "self" };
 		const char* const TARGET_KEYS[] = { "target", "victim", "to", "invitee", "member", "kicked", "hit", "other" };
 
 		bool InList(const string& key, const char* const* list, size_t n)
@@ -133,6 +134,7 @@ namespace EventFormat
 		}
 
 		// key=value - 값이 숫자면 id, room= 은 글자 그대로
+		uint64 bareId = 0;
 		for (size_t i = 0; i < line.size(); i++)
 		{
 			if (line[i] != '=' || i == 0)
@@ -164,11 +166,15 @@ namespace EventFormat
 			const uint64 id = ::_strtoui64(value.c_str(), nullptr, 10);
 			if (key == "account" || key == "acc")
 				e.account = (e.account == 0) ? id : e.account;
+			else if (key == "id")
+				bareId = (bareId == 0) ? id : bareId;
 			else if (InList(key, ACTOR_KEYS, size(ACTOR_KEYS)))
 				AddUnique(e.actors, id);
 			else if (InList(key, TARGET_KEYS, size(TARGET_KEYS)))
 				AddUnique(e.targets, id);
 		}
+		if (bareId != 0 && e.actors.empty())
+			e.actors.push_back(bareId);
 		return e;
 	}
 

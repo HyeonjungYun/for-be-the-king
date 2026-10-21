@@ -44,5 +44,5 @@
 
 - **태그 13 종** (`Server/Data/event_tags.csv` — 로그 줄머리 + 핵심어 → 태그 · 하위 종류): `connect` 접속 · `move` 이동 · `combat` 전투 · `status` 상태이상 ·
   `item` 아이템 · `storage` 창고 · `economy` 경제 · `party` 파티 · `escape` 탈출 · `cheat` 안티치트 · `monster` 몬스터 · `db` DB 커밋 · `system` 시스템
-- `src` — `log` 는 서버 텍스트 로그 한 줄을 구조화한 것 (`a` · `tg` 는 줄 안의 `char=` · `caster=` · `victim=` 같은 키에서), `ev` 는 텍스트 로그가 없는 사건을 서버가 직접 낸 것 (피해 · CC · 관리 명령)
+- `src` — `log` 는 서버 텍스트 로그 한 줄을 구조화한 것 (`a` · `tg` 는 줄 안의 `char=` · `caster=` · `victim=` 같은 키에서. `id=` 는 다른 행위자 키가 없을 때만 행위자 — 장판 · 투사체 id 를 걸러낸다), `ev` 는 텍스트 로그가 없는 사건을 서버가 직접 낸 것 (피해 · CC · 관리 명령)
 - 같은 내용이 `Logs/events/events-<부팅 시각>.jsonl` 에 `t` 없이 한 줄씩 남는다 — ServerMonitor 의 "지난 로그 열기" 가 이 파일을 읽는다

@@ -153,6 +153,12 @@ if (Has 'build') {
         $code = Invoke-Logged 'dotnet' @('build', (Join-Path $serverDir 'AuthServer'), '-c', 'Release', '--nologo', '-v', 'q') $log
         if ($code -eq 0) { @{ Status = 'PASS'; Detail = 'AuthServer Release' } } else { @{ Status = 'FAIL'; Detail = (Tail $log 3) } }
     }
+    Step '빌드' '디버깅 툴 (ServerMonitor)' {
+        # 관리 포트 프로토콜(EventLog · AdminServer)과 함께 바뀌는 앱 - 서버만 고치고 앱이 깨지는 걸 막는다
+        $log = Join-Path $Out 'build-monitor.log'
+        $code = Invoke-Logged 'dotnet' @('build', (Join-Path $repo 'Tools\ServerMonitor'), '-c', 'Release', '--nologo', '-v', 'q') $log
+        if ($code -eq 0) { @{ Status = 'PASS'; Detail = 'ServerMonitor Release' } } else { @{ Status = 'FAIL'; Detail = (Tail $log 3) } }
+    }
     foreach ($t in @(@{ Name = 'GameServerTests'; Exe = (Join-Path $rel 'GameServerTests.exe') }, @{ Name = 'ServerCoreSTests'; Exe = (Join-Path $dbg 'ServerCoreSTests.exe') })) {
         $spec = $t
         Step '테스트' $spec.Name {
