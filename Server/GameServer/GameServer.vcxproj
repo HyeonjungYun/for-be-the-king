@@ -258,6 +258,7 @@
     <ClInclude Include="Telemetry.h" />
     <ClInclude Include="Creature.h" />
     <ClInclude Include="CsvTable.h" />
+    <ClInclude Include="DamageMath.h" />
     <ClInclude Include="Enum.pb.h" />
     <ClInclude Include="GameSession.h" />
     <ClInclude Include="GameSessionManager.h" />

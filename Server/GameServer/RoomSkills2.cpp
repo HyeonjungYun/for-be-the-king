@@ -5,6 +5,7 @@
 #include "Decoy.h"
 #include "SkillTable.h"
 #include "SkillKinematics.h"
+#include "DamageMath.h"
 #include "WallTable.h"
 #include "BaseCampTable.h"
 #include "NavGrid.h"
@@ -238,8 +239,9 @@ void Room::UpdateDynamicWalls(uint64 nowUs)
 
 void Room::StartVolley(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
-	// 발 수 = hits + per_level × 강화 레벨 (그림자 던지기 "아이템 레벨이 높을수록 단검 수가 늘어난다"). 상한 12
-	const uint32 count = (std::min)(12u, e.hits + static_cast<uint32>(e.perLevel * static_cast<float>(ctx.itemLevel)));
+	// 발 수 = hits + per_level × 강화 레벨 (그림자 던지기 "아이템 레벨이 높을수록 단검 수가 늘어난다"). 상한 12.
+	// 증가분이 음수면 더하지 않는다 (DamageMath - 음수 float → uint32 캐스트를 막는다, 2026-10-21)
+	const uint32 count = DamageMath::ScaledCount(e.hits, e.perLevel, ctx.itemLevel, 12u);
 
 	PendingVolley v;
 	v.casterId = ctx.casterId;

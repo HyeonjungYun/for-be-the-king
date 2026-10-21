@@ -87,6 +87,7 @@
   <ItemGroup>
     <ClCompile Include="CcTest.cpp" />
     <ClCompile Include="ChestTest.cpp" />
+    <ClCompile Include="DamageMathTest.cpp" />
     <ClCompile Include="EntryPointTest.cpp" />
     <ClCompile Include="CheatGuardTest.cpp" />
     <ClCompile Include="MoveClockTest.cpp" />

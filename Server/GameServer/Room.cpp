@@ -18,6 +18,7 @@
 #include "TowerTable.h"
 #include "Telemetry.h"
 #include "SkillKinematics.h"
+#include "DamageMath.h"
 #include "Decoy.h"
 #include "ChestSpawnTable.h"
 #include "InstanceManager.h"
@@ -520,7 +521,32 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		LOG_LINE << "[ENTER] placed char=" << object->objectInfo->object_id() << " at=(" << spawnX << "," << spawnY
 			<< ") point=(" << pointX << "," << pointY << ") hp=" << entering->hp << '\n';
 	}
-	bool success = AddObject(object);
+	// 같은 id 가 이미 방에 있다 - 아무것도 바꾸지 않고 거절한다. 예전엔 실패해도 전투 상태 · 장비 스탯 · 런 시계 · 세션 동기화를 전부
+	// 바꾸고 스폰 큐에 넣어, 기존 몸의 S_SPAWN 이 전원에게 한 번 더 나갔다 (2026-10-21 리뷰)
+	if (AddObject(object) == false)
+	{
+		LOG_LINE << "[ENTER] refused - id already in room id=" << object->objectInfo->object_id() << " room=" << Tag() << '\n';
+
+		if (auto player = AsPlayer(object))
+		{
+			if (auto session = player->session.lock())
+			{
+				// 베이스캠프 방은 세션 place 를 건드리지 않는다 (아래 성공 경로와 같은 규칙)
+				if (IsBaseCamp() == false)
+				{
+					SessionPlace expected = SessionPlace::Entering;
+					session->place.compare_exchange_strong(expected, SessionPlace::BaseCamp);
+				}
+
+				Protocol::S_ENTER_GAME rejectPkt;
+				rejectPkt.set_success(false);
+				rejectPkt.set_mode(RunModeOf());
+				SendBufferRef sendBuffer = ServerPacketHandler::MakeSendBuffer(rejectPkt);
+				session->Send(sendBuffer);
+			}
+		}
+		return false;
+	}
 
 	// 랜덤 위치
 	if (randPos)
@@ -531,7 +557,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		object->posInfo->set_yaw(Utils::GetRandom(0.f, 100.f));
 	}
 
-	// 입장 사실을 신입 플레이어에게 알린다.
+	// 입장 사실을 신입 플레이어에게 알린다. 여기부터는 입장이 확정됐다
 	if (auto player = AsPlayer(object))
 	{
 		const uint64 enterUs = Utils::NowMicroseconds();
@@ -571,14 +597,14 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		LogStats(player, "enter");
 
 		// PVE 인스턴스 (ADR-0014) - 팀은 들어오는 순간 정해지고 그 런 동안 그대로다(D6). 한 캐릭터는 한 인스턴스에 한 번(D3)
-		if (success && IsInstance())
+		if (IsInstance())
 		{
 			player->teamId = _teamId;
 			_enteredOnce.insert(player->objectInfo->object_id());
 		}
 
 		// 베이스캠프는 런이 아니다 - 체류 타이머 · 진입 무적 · 텔레메트리 없음
-		if (success && IsBaseCamp())
+		if (IsBaseCamp())
 		{
 			player->runStartUs = enterUs;
 			player->runDeadlineUs = 0;
@@ -586,7 +612,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		}
 
 		// 체류 타이머는 방에 놓인 순간부터 - DB 적재 지연이 30 분을 깎지 않는다 (escape-timer.md Core Rule 13)
-		if (success && IsBaseCamp() == false)
+		if (IsBaseCamp() == false)
 		{
 			player->runStartUs = enterUs;
 			player->runDeadlineUs = enterUs + EscapeConfig::Get().runLimitUs;
@@ -612,24 +638,14 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 
 		// 베이스캠프 방은 세션 place 를 건드리지 않는다 - BaseCamp 그대로라 창고 · 강화 · 착용 · 입장이 예전처럼 돈다
 		if (auto session = player->session.lock(); session != nullptr && IsBaseCamp() == false)
-		{
-			if (success)
-			{
-				session->place.store(SessionPlace::Dungeon);
-			}
-			else
-			{
-				SessionPlace expected = SessionPlace::Entering;
-				session->place.compare_exchange_strong(expected, SessionPlace::BaseCamp);
-			}
-		}
+			session->place.store(SessionPlace::Dungeon);
 
 		player->moveBudget = player->GetSpeedCeiling(enterUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
 
 		Protocol::S_ENTER_GAME enterGamePkt;
-		enterGamePkt.set_success(success);
+		enterGamePkt.set_success(true);
 		enterGamePkt.set_mode(RunModeOf());
-		if (success && IsBaseCamp() == false)
+		if (IsBaseCamp() == false)
 			enterGamePkt.set_run_remaining_ms(static_cast<uint32>(EscapeConfig::Get().runLimitUs / 1000));
 
 		Protocol::ObjectInfo* playerInfo = new Protocol::ObjectInfo();
@@ -641,7 +657,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		if (auto session = player->session.lock())
 			session->Send(sendBuffer);
 
-		if (success && IsBaseCamp() == false)
+		if (IsBaseCamp() == false)
 		{
 			SendChestSnapshot(player);
 			SendDynamicWalls(player, enterUs);		// 지각변동 벽이 서 있으면 - 지형이라 보이든 말든 안다
@@ -658,13 +674,13 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		}
 
 		// 협동 - 파티원 화면의 상태(던전)를 바꾼다
-		if (success && _kind == RoomKind::PveCoop)
+		if (_kind == RoomKind::PveCoop)
 			GParties.NotifyChanged(player->objectInfo->object_id());
 	}
 
 	_pendingSpawns.push_back(object->objectInfo->object_id());
 
-	return success;
+	return true;
 }
 
 bool Room::LeaveRoom(ObjectRef object)
@@ -869,7 +885,16 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 			const float beforeY = player->posInfo->y();
 
 			player->castEndAtUs = min(player->castEndAtUs, dueUs);
+
+			// 전투 Flush 밖에서 시전을 푸는 유일한 길 - 사망은 Flush 와 같은 규칙(KillBatch · 동시 치사 TR-combat-022)으로 모았다가 푼다.
+			// 예전엔 _kills 가 닫힌 채라 여기서 난 사망은 KillCreature 가 바로 OnCreatureKilled 로 떨어졌다 (2026-10-21)
+			_kills.Begin();
 			ResolveCasts(dueUs);
+			ProcessKillBatch(dueUs);
+
+			// 그 시전이 자기 자신을 죽였다 (배수진 만료 등) - 죽은 몸은 움직이지 않는다
+			if (player->IsAlive() == false)
+				return;
 
 			// 서버가 옮기는 이동 스킬(벽 차기 · 회귀 · 블링크)이 방금 자리를 바꿨다 - 이 패킷은 옮기기 전 자리에서 보낸 것이다.
 			// 검사하면 거리 초과로 되돌림 S_MOVE 가 나가 클라가 끝점으로 순간이동한 뒤 넉백 연출로 한 번 더 밀린다 (2026-10-11 벽 차기 실기동). 버린다
@@ -1403,7 +1428,8 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 			LOG_LINE << "[IMMUNE] target=" << targetId << " ignored slow" << '\n';
 			return;
 		}
-		baseDurationMs = static_cast<uint32>(baseDurationMs * (1.f - target->CcResistOf("slow")));
+		// 저항을 [0, 1] 로 잘라 곱한다 (DamageMath) - 1 을 넘는 값이 오면 음수 float 를 uint32 로 캐스트하던 자리 (2026-10-21)
+		baseDurationMs = DamageMath::ResistedMs(baseDurationMs, target->CcResistOf("slow"));
 	}
 
 	// 고독한 길 (2026-10-17) - 착용 수만큼, 적에게 둘러싸였을 때만 CC 가 짧아진다 (자기 CC 는 그대로)
@@ -1413,7 +1439,7 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 		if (lone > 0)
 		{
 			const LonePathRules& rules = LonePathRules::Get();
-			baseDurationMs = static_cast<uint32>(baseDurationMs * LonePath::CcDurationMult(lone, CountEnemiesNear(target, rules.outnumberRadiusCm), rules));
+			baseDurationMs = DamageMath::ScaleMs(baseDurationMs, LonePath::CcDurationMult(lone, CountEnemiesNear(target, rules.outnumberRadiusCm), rules));
 		}
 	}
 
@@ -3194,17 +3220,7 @@ void Room::FlushCombat()
 	ResolvePendingHits(nowUs);
 	ResolveBursts(nowUs);
 
-	for (const auto& kill : _kills.End())
-	{
-		if (kill.mutual && kill.victimId < kill.instigatorId)
-		{
-			GStats.AddMutualKill();
-			LOG_LINE << "[DIED] mutual " << kill.victimId << " <-> " << kill.instigatorId << '\n';
-		}
-
-		_attackers.erase(kill.victimId);
-		OnCreatureKilled(kill.victim, kill.instigator, kill.instigatorId, nowUs);
-	}
+	ProcessKillBatch(nowUs);
 
 	// ── 방송 - 받는 사람마다 아는 생물의 사건만 (FoW, fog-of-war.md § Detailed Rules 13). 전부 보이는 사람은 버퍼 하나를 함께 쓴다 ──
 	auto selfId = [](const PlayerRef& v) { return v->objectInfo->object_id(); };
@@ -4710,6 +4726,11 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 	if (target == nullptr || target->IsAlive() == false)
 		return 0;
 
+	// 모든 피해는 KillBatch 가 열린 동안만 - 전투 Flush 안, 또는 HandleMove 가 이동 스킬을 풀며 연 동안. 그래야 사망이 Flush 끝으로
+	// 모여 동시 치사(TR-combat-022)가 성립하고, _objects 를 도는 중에 처치가 컨테이너를 바꾸지 않는다. 예전엔 "오늘은 모든 호출자가
+	// 지킨다" 로만 지켜졌다 - 디버그는 그 자리에서 멈추고, 릴리스는 처음 한 번 [ASSERT] 를 남긴다 (2026-10-21)
+	ASSERT_DEBUG(_kills.IsOpen(), "DealDamage outside a combat flush (KillBatch closed)");
+
 	if (damage < 0)
 		damage = 0;
 
@@ -4724,8 +4745,8 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 		return target->hp;
 	}
 
-	// 모자 로스터 - 일편단심 · 피해 배율 · 면역 · 염두
-	damage = ApplyDamageMods(attacker, target, damage, src, nowUs);
+	// 모자 로스터 - 일편단심 · 피해 배율 · 면역 · 염두. 배율이 어떻든 0 아래로 내려가지 않는다 (DamageMath - 음수는 회복으로 그려졌다)
+	damage = max(0, ApplyDamageMods(attacker, target, damage, src, nowUs));
 
 	// 벽력일창 - 도약 중에 맞으면 추락: 예고된 내리찍기를 지운다 (4 단계). 피해는 그대로 받는다
 	if (target->IsLeaping(nowUs))
@@ -6716,11 +6737,12 @@ int32 Room::ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& targ
 		}
 	}
 
-	damage = static_cast<int32>(::lroundf(damage * mult));
+	// 배율 합의 하한은 0 (DamageMath::Scale) - 음수 damage_mod 가 쌓여도 피해가 음수(= 클라 회복 표시)가 되지 않는다 (2026-10-21)
+	damage = DamageMath::Scale(damage, mult);
 
 	// 받는 쪽 - 맨발(받는 피해 증가) · 철벽진(앞에서 오는 피해 감소), 2026-10-11 3차 로스터
 	if (attacker != target)
-		damage = static_cast<int32>(::lroundf(damage * IncomingDamageMult(attacker, target)));
+		damage = DamageMath::Scale(damage, IncomingDamageMult(attacker, target));
 
 	// 고독한 길 (2026-10-17) - 착용 수만큼, 적에게 둘러싸였을 때만 받는 피해가 준다
 	if (attacker != target && target->IsPlayer())
@@ -6729,7 +6751,7 @@ int32 Room::ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& targ
 		if (lone > 0)
 		{
 			const LonePathRules& rules = LonePathRules::Get();
-			damage = static_cast<int32>(::lroundf(damage * LonePath::DamageTakenMult(lone, CountEnemiesNear(target, rules.outnumberRadiusCm), rules)));
+			damage = DamageMath::Scale(damage, LonePath::DamageTakenMult(lone, CountEnemiesNear(target, rules.outnumberRadiusCm), rules));
 		}
 	}
 
@@ -6757,7 +6779,7 @@ int32 Room::ApplyDamageMods(const CreatureRef& attacker, const CreatureRef& targ
 
 			slot.cooldownEndUs = nowUs + static_cast<uint64>(reduce->durationMs) * 1000;
 			const int32 before = damage;
-			damage = static_cast<int32>(::lroundf(damage * (1.f - reduce->magnitude)));
+			damage = DamageMath::Scale(damage, 1.f - reduce->magnitude);
 			LOG_LINE << "[REDUCE] target=" << target->objectInfo->object_id() << " skill=" << def->skillId << " " << before << " -> " << damage << '\n';
 			NotifyPassiveTrigger(target, def->skillId);		// 클라 슬롯에 쿨다운이 돈다 (2026-10-11 "염두 쿨다운 적용되는 거 안 보여")
 			break;
@@ -7604,6 +7626,29 @@ void Room::UpdateSaves(uint64 nowUs)
 	}
 }
 
+void Room::SaveAllPlayers()
+{
+	JOB_TAG();
+	if (IsBaseCamp())
+		return;
+
+	const uint64 nowUs = Utils::NowMicroseconds();
+	int32 saved = 0;
+
+	for (auto& item : _objects)
+	{
+		PlayerRef player = AsPlayer(item.second);
+		if (player == nullptr)
+			continue;
+
+		player->lastSaveUs = nowUs;
+		SavePlayer(player);			// 끊긴 몸(세션 없음)도 저장한다 - SavePlayer 는 세션을 보지 않는다
+		saved++;
+	}
+
+	LOG_LINE << "[SHUTDOWN] room=" << Tag() << " saved players=" << saved << '\n';
+}
+
 void Room::UpdateBagExpiry(uint64 nowUs)
 {
 	vector<uint64> bagIds;
@@ -7737,6 +7782,21 @@ void Room::KillCreature(const CreatureRef& victim, const CreatureRef& instigator
 
 	_attackers.erase(victim->objectInfo->object_id());
 	OnCreatureKilled(victim, instigator, instigatorId, nowUs);
+}
+
+void Room::ProcessKillBatch(uint64 nowUs)
+{
+	for (const auto& kill : _kills.End())
+	{
+		if (kill.mutual && kill.victimId < kill.instigatorId)
+		{
+			GStats.AddMutualKill();
+			LOG_LINE << "[DIED] mutual " << kill.victimId << " <-> " << kill.instigatorId << '\n';
+		}
+
+		_attackers.erase(kill.victimId);
+		OnCreatureKilled(kill.victim, kill.instigator, kill.instigatorId, nowUs);
+	}
 }
 
 bool Room::CanStillStrike(const CreatureRef& creature) const

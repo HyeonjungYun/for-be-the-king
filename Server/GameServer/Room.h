@@ -375,6 +375,11 @@ public:
 	void	FlushCombat();
 	void	FlushSpawns();
 
+	// 종료 경로 (2026-10-21) - 방의 모든 플레이어를 지금 저장한다 (UpdateSaves 와 같은 SavePlayer, 1 분 주기 · 틱당 2 명 상한 없이).
+	// 방 큐 안에서 돈다 - GameServer 가 접속을 닫은 뒤 room->DoAsync(&Room::SaveAllPlayers) 로 부른다. 타이머 · 방송 없음.
+	// 베이스캠프 방은 바로 돌아간다 (런 상태가 아니라 SavePlayer 도 저장하지 않는다)
+	void	SaveAllPlayers();
+
 	RoomRef	GetRoomRef();
 
 private:
@@ -522,6 +527,10 @@ private:
 
 	// 체력 0 이 된 순간 부른다. 전투 Flush 안이면 Flush 끝으로 미루고(동시 치사, KillBatch), 밖이면 바로 OnCreatureKilled
 	void	KillCreature(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
+
+	// 열린 KillBatch 를 닫고 모인 사망을 기록 순서대로 처리한다 - FlushCombat 끝과 HandleMove 의 이동 스킬 해소 뒤 (2026-10-21).
+	// 예전엔 FlushCombat 에만 있어 HandleMove 경로의 사망은 동시 치사 규칙(TR-combat-022)을 받지 않았다
+	void	ProcessKillBatch(uint64 nowUs);
 
 	// 살아 있거나, 이번 전투 Flush 에 막 죽어 아직 자기 히트가 남은 쪽 (TR-combat-022)
 	bool	CanStillStrike(const CreatureRef& creature) const;
