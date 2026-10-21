@@ -201,6 +201,7 @@
     <ClCompile Include="ItemRoller.cpp" />
     <ClCompile Include="ItemTable.cpp" />
     <ClCompile Include="Monster.cpp" />
+    <ClCompile Include="MovementValidator.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="ObjectUtils.cpp" />
     <ClCompile Include="pch.cpp">
@@ -265,6 +266,7 @@
     <ClInclude Include="ItemRoller.h" />
     <ClInclude Include="ItemTable.h" />
     <ClInclude Include="Monster.h" />
+    <ClInclude Include="MovementValidator.h" />
     <ClInclude Include="Object.h" />
     <ClInclude Include="ObjectUtils.h" />
     <ClInclude Include="pch.h" />

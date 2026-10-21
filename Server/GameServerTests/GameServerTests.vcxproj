@@ -91,6 +91,7 @@
     <ClCompile Include="EntryPointTest.cpp" />
     <ClCompile Include="CheatGuardTest.cpp" />
     <ClCompile Include="MoveClockTest.cpp" />
+    <ClCompile Include="MovementValidatorTest.cpp" />
     <ClCompile Include="LevelRulesTest.cpp" />
     <ClCompile Include="WallMapTest.cpp" />
     <ClCompile Include="VisionTest.cpp" />
@@ -135,6 +136,7 @@
          그 시점이 오면 GameServer 를 lib + exe 로 나눈다.
     -->
     <ClCompile Include="..\GameServer\Object.cpp" />
+    <ClCompile Include="..\GameServer\MovementValidator.cpp" />
     <ClCompile Include="..\GameServer\Creature.cpp" />
     <ClCompile Include="..\GameServer\SkillTable.cpp" />
     <ClCompile Include="..\GameServer\StatusEffects.cpp" />

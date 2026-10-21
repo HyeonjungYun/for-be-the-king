@@ -19,6 +19,7 @@
 #include "Telemetry.h"
 #include "SkillKinematics.h"
 #include "DamageMath.h"
+#include "MovementValidator.h"
 #include "Decoy.h"
 #include "ChestSpawnTable.h"
 #include "InstanceManager.h"
@@ -28,8 +29,7 @@
 
 namespace
 {
-	constexpr double	VALIDATION_MARGIN = 1.15;	// validation_margin
-	constexpr double	MAX_BUDGET_SEC = 0.5;
+	// 이동 예산 상수(VALIDATION_MARGIN · MAX_BUDGET_SEC)는 MovementValidator.h MoveRules 로 옮겼다 (2026-10-21)
 	constexpr uint64	MOVE_FLUSH_MS = 33;
 	constexpr uint64	COMBAT_FLUSH_MS = 33;
 	constexpr uint64	SPAWN_FLUSH_MS = 33;
@@ -652,7 +652,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		if (auto session = player->session.lock(); session != nullptr && IsBaseCamp() == false)
 			session->place.store(SessionPlace::Dungeon);
 
-		player->moveBudget = player->GetSpeedCeiling(enterUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
+		player->moveBudget = MoveRules::FullBudget(player->GetSpeedCeiling(enterUs));
 
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(true);
@@ -940,18 +940,32 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		// 되돌리는 폭은 MAX_SENT_REWIND (0.75 s) 까지 - 뒤처짐 2 초를 다 쓰면 대시 속도 창을 2 초 늘려 쓸 수 있었다 (2026-10-19 안티치트 감사 4)
 		const uint64 rewindUs = min<uint64>(static_cast<uint64>(leadUs < 0 ? -leadUs : 0), static_cast<uint64>(MoveClock::MAX_SENT_REWIND_US));
 		const uint64 sentUs = nowUs - min<uint64>(rewindUs, nowUs);
-		const double ceiling = player->GetSpeedCeiling(sentUs) * VALIDATION_MARGIN;
 
-		player->moveBudget += ceiling * deltaSec;
+		// 규칙은 MovementValidator (순수 함수 - 예산 적립 × 1.15 · 상한 0.5 s 분량 · 층 밖/NaN · 거리 > 예산 · 벽, ADR-0007 § ②). 여기서는
+		// 입력을 모으고 결과로 위반 기록 · 로그만 한다 (2026-10-21 분리). 벽을 지나는 이동 스킬(유령 신랑의 저주) 창 동안은 벽을 건너뛴다 -
+		// 속도 창과 같은 "보낸 때" 기준. 벽 데이터가 없는 층(TEMP)은 빈 맵이라 늘 통과한다
+		const bool passesWalls = (player->moveIgnoresWallsUntilUs != 0 && sentUs < player->moveIgnoresWallsUntilUs);
 
-		const double maxBudget = ceiling * MAX_BUDGET_SEC;
-		if (player->moveBudget > maxBudget)
-			player->moveBudget = maxBudget;
+		MoveCheckInput in;
+		in.fromX = player->posInfo->x();
+		in.fromY = player->posInfo->y();
+		in.toX = pkt.info().x();
+		in.toY = pkt.info().y();
+		in.deltaSec = deltaSec;
+		in.speedCeiling = player->GetSpeedCeiling(sentUs);
+		in.budget = player->moveBudget;
+		in.checkWalls = (passesWalls == false) && GWallCheck.load(memory_order_relaxed);
 
-		// 층 밖 · NaN · 무한대 - 예산을 쓰지 않고 거부한다 (FloorBounds.h, level-map.md AC-LM-02).
-		// 섬은 해안선 밖(바다)도 층 밖이다 - 벽을 건너뛰는 유령 대시 창 안에서도 (2026-10-11, ADR-0013)
-		if (Walls().InsideFloor(pkt.info().x(), pkt.info().y()) == false)
+		WallKind hitKind = WallKind::Wall;
+		const MoveCheckResult check = CheckMove(in,
+			[&](float x, float y) { return Walls().InsideFloor(x, y); },
+			[&](float x0, float y0, float x1, float y1) { return Walls().SweepBlocked(x0, y0, x1, y1, 0.f, OUT &hitKind); });
+		player->moveBudget = check.budget;
+
+		switch (check.verdict)
 		{
+		case MoveVerdict::RejectBounds:
+			// 층 밖 · NaN · 무한대 - 예산을 쓰지 않고 거부한다 (FloorBounds.h, level-map.md AC-LM-02). 섬은 해안선 밖(바다)도 층 밖이다 (ADR-0013)
 			rejected = true;
 			ReportCheat(player, Violation::MoveBounds, nowUs);
 
@@ -960,64 +974,40 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 					<< " reason=bounds"
 					<< " x=" << pkt.info().x()
 					<< " y=" << pkt.info().y() << '\n';
-		}
+			break;
 
-		// XY 평면 거리만 본다.
-		const double dx = static_cast<double>(pkt.info().x()) - player->posInfo->x();
-		const double dy = static_cast<double>(pkt.info().y()) - player->posInfo->y();
-		const double distance = std::sqrt(dx * dx + dy * dy);
-
-		if (rejected)
-		{
-			// 경계 거부 - 이미 남겼다
-		}
-		else if (distance > player->moveBudget)
-		{
+		case MoveVerdict::RejectSpeed:
 			rejected = true;
 			ReportCheat(player, Violation::MoveSpeed, nowUs);
 
 			if (AllowMoveLog(*player, nowUs))
 				LOG_LINE << "[MOVE REJECT] id=" << objectId
 					<< " reason=speed"
-					<< " dist=" << distance
-					<< " budget=" << player->moveBudget
+					<< " dist=" << check.distance
+					<< " budget=" << check.budget
 					<< " dt=" << deltaSec
 					<< " server_dt=" << (serverDtUs / 1'000'000.0)
 					<< " lead_ms=" << (player->moveClock.leadUs / 1000) << '\n';
-		}
-		else
-		{
-			// 벽 - 속도 다음이다. 속도 검사가 선분 길이를 묶어 둬야 벽 질의가 보는 격자 칸 수가 묶인다 (ADR-0006 § ⑥).
-			// 캐릭터 중심 경로(r = 0)만 본다 - 정상 클라의 캡슐 중심은 벽면에서 42 cm 밖에 있으므로 중심이 벽 안으로
-			// 들어가면 조작이다. 벽 데이터가 없는 층(TEMP)은 빈 맵이라 늘 통과한다.
-			const float x0 = player->posInfo->x();
-			const float y0 = player->posInfo->y();
-			WallKind hitKind = WallKind::Wall;
+			break;
 
-			// 벽을 지나는 이동 스킬(유령 신랑의 저주) 창 동안은 건너뛴다 - 속도 창과 같은 "보낸 때" 기준
-			const bool passesWalls = (player->moveIgnoresWallsUntilUs != 0 && sentUs < player->moveIgnoresWallsUntilUs);
+		case MoveVerdict::RejectWall:
+			// 캐릭터 중심 경로(r = 0)만 본다 - 정상 클라의 캡슐 중심은 벽면에서 42 cm 밖에 있으므로 중심이 벽 안으로 들어가면 조작이다 (ADR-0006 § ⑥)
+			rejected = true;
+			wallRejected = true;
+			ReportCheat(player, Violation::MoveWall, nowUs);
 
-			if (passesWalls == false
-				&& GWallCheck.load(memory_order_relaxed)
-				&& Walls().SweepBlocked(x0, y0, pkt.info().x(), pkt.info().y(), 0.f, OUT &hitKind))
-			{
-				rejected = true;
-				wallRejected = true;
-				ReportCheat(player, Violation::MoveWall, nowUs);
+			if (AllowMoveLog(*player, nowUs))
+				LOG_LINE << "[MOVE REJECT] id=" << objectId
+					<< " reason=wall"
+					<< " x0=" << in.fromX
+					<< " y0=" << in.fromY
+					<< " x1=" << pkt.info().x()
+					<< " y1=" << pkt.info().y()
+					<< " kind=" << WallKindName(hitKind) << '\n';
+			break;
 
-				if (AllowMoveLog(*player, nowUs))
-					LOG_LINE << "[MOVE REJECT] id=" << objectId
-						<< " reason=wall"
-						<< " x0=" << x0
-						<< " y0=" << y0
-						<< " x1=" << pkt.info().x()
-						<< " y1=" << pkt.info().y()
-						<< " kind=" << WallKindName(hitKind) << '\n';
-			}
-			else
-			{
-				player->moveBudget -= distance;
-			}
+		default:
+			break;
 		}
 	}
 
@@ -3028,7 +3018,7 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	// 안티치트 - 새 접속은 점수를 새로 센다. 끊긴 몸에 다시 붙으면 '이미 끊었음' 표시가 남아 다시는 끊기지 않았다 (2026-10-19 실측).
 	// 끊을 때마다 strike 가 DB 에 남으므로 누적 판정(정지)은 그쪽이 한다
 	body->cheat.Reset();
-	body->moveBudget = body->GetSpeedCeiling(nowUs) * VALIDATION_MARGIN * MAX_BUDGET_SEC;
+	body->moveBudget = MoveRules::FullBudget(body->GetSpeedCeiling(nowUs));
 
 	Protocol::S_ENTER_GAME enterPkt;
 	enterPkt.set_success(true);
