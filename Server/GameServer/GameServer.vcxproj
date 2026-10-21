@@ -70,6 +70,10 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <!-- 시험 전용 훅 (ServerConfig.h). 기본 1. 배포 묶음은 msbuild /p:FbtkTestHooks=0 으로 만든다 (2026-10-21) -->
+  <PropertyGroup>
+    <FbtkTestHooks Condition="'$(FbtkTestHooks)'==''">1</FbtkTestHooks>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)Binaries\$(Configuration)\</OutDir>
   </PropertyGroup>
@@ -108,7 +112,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;FBTK_TEST_HOOKS=$(FbtkTestHooks);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)ServerCore\;$(SolutionDir)Libraries\Include\;</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -131,7 +135,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;FBTK_TEST_HOOKS=$(FbtkTestHooks);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)ServerCore\;$(SolutionDir)Libraries\Include\;</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -213,6 +217,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Room.cpp" />
+    <ClCompile Include="ServerConfig.cpp" />
     <ClCompile Include="ServerPacketHandler.cpp" />
     <ClCompile Include="SkillTable.cpp" />
     <ClCompile Include="StatusEffects.cpp" />
@@ -270,6 +275,7 @@
     <ClInclude Include="Player.h" />
     <ClInclude Include="Protocol.pb.h" />
     <ClInclude Include="Room.h" />
+    <ClInclude Include="ServerConfig.h" />
     <ClInclude Include="ServerPacketHandler.h" />
     <ClInclude Include="SkillTable.h" />
     <ClInclude Include="StatusEffects.h" />

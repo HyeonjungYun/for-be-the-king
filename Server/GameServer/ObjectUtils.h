@@ -90,11 +90,16 @@ public:
 	bool TryBegin(uint64 characterId);
 	void End(uint64 characterId);
 	bool IsPending(uint64 characterId);
+	int32 Count();		// 진행 중인 사망 저장 수 - ServerStats 의 db queue 줄 (2026-10-21)
 
 private:
 	USE_LOCK;
 	unordered_set<uint64> _pending;
 };
+
+// 창고 골드 상한 (2026-10-21) - gold 열은 BIGINT UNSIGNED 인데 더하는 문장에 상한이 없었다. 엄격 단계가 1690(넘침)으로 실패하면
+// 관대 단계의 UPDATE IGNORE 가 조용히 잘라 커밋했다. 이제 더하는 모든 문장이 LEAST(gold + x, GOLD_CAP) 다. 1 경 = 사람이 닿을 수 없는 값
+constexpr uint64 GOLD_CAP = 10'000'000'000'000'000ull;
 
 extern DeathCommitTracker GDeathCommits;
 extern atomic<uint32> GDeathCommitDelayMs;

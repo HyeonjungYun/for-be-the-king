@@ -89,6 +89,20 @@ int32 GameSessionManager::DropUnauthenticated(uint64 nowUs, uint64 timeoutUs)
 	return static_cast<int32>(idle.size());
 }
 
+int32 GameSessionManager::DisconnectAll(const WCHAR* cause)
+{
+	vector<GameSessionRef> all;
+	{
+		WRITE_LOCK;
+		all.assign(_sessions.begin(), _sessions.end());
+	}
+
+	// 락 밖에서 끊는다 (DropUnauthenticated 와 같은 이유)
+	for (const GameSessionRef& session : all)
+		session->Disconnect(cause);
+	return static_cast<int32>(all.size());
+}
+
 GameSessionRef GameSessionManager::FindByCharacter(uint64 characterId)
 {
 	WRITE_LOCK;

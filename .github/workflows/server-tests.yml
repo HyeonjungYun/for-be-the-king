@@ -63,6 +63,30 @@ jobs:
       - name: Stress tests × 100
         run: Server\Binaries\Debug\ServerCoreSTests.exe --gtest_filter=Stress.* --gtest_repeat=100
 
+      # Release 로도 한 번 (2026-10-21) - 서버는 Release 로 돈다. 최적화 · NDEBUG 에서만 드러나는 것(assert 뒤의 부작용 · UB)을 Debug 만으로는 못 본다.
+      # ServerCore 는 /W4 /WX 라 경고 하나가 빌드를 깬다 - 두 구성 모두에서
+      - name: Build + run tests (Release)
+        run: |
+          msbuild Server\Server.sln /t:ServerCore /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          msbuild Server\Server.sln /t:ServerCoreSTests /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          msbuild Server\Server.sln /t:GameServerTests /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          Copy-Item Server\Libraries\Bin\MySQL\*.dll Server\Binaries\Release\ -Force
+          Server\Binaries\Release\ServerCoreSTests.exe
+          Server\Binaries\Release\GameServerTests.exe
+
+      # AddressSanitizer (2026-10-21) - 공유 자료구조의 스트레스 테스트를 ASan 으로 10 번. 힙 오염 · use-after-free 는 크래시가 나기 전엔 안 보인다.
+      # 별도 출력 폴더에 빌드한다 (Debug 바이너리와 섞이지 않게). ASan 런타임 DLL 은 VC 도구 폴더에 있다
+      - name: Stress tests × 10 under AddressSanitizer
+        shell: pwsh
+        run: |
+          msbuild Server\Server.sln /t:ServerCoreSTests /p:Configuration=Debug /p:Platform=x64 /p:EnableASAN=true "/p:OutDir=$env:GITHUB_WORKSPACE\Server\Binaries\Asan\" /m /v:minimal
+          Copy-Item Server\Libraries\Bin\MySQL\*.dll Server\Binaries\Asan\ -Force
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $asan = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll" | Select-Object -Last 1
+          $env:PATH = "$($asan.DirectoryName);$env:PATH"
+          & "$env:GITHUB_WORKSPACE\Server\Binaries\Asan\ServerCoreSTests.exe" --gtest_filter=Stress.*:LockQueue.*:RecvBuffer.*:Buffer.*:JobTimer.* --gtest_repeat=10
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
       # 커버리지 게이트 (technical-preferences § Testing - ServerCore 라인 70 %, 2026-10-18 CI 에 넣음).
       # 제외는 문서와 같은 둘(SocketUtils · DBConnection.cpp) + 테스트 자신. 로컬 실측 2026-10-18 77.5 % (894/1154)
       - name: Install OpenCppCoverage

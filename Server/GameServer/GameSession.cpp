@@ -127,11 +127,37 @@ void GameSession::OnDisconnected()
 	player.store(nullptr);
 }
 
+bool GameSession::AllowedBeforeLogin(uint16 packetId)
+{
+	switch (packetId)
+	{
+	case PKT_C_LOGIN:
+		return true;
+	default:
+		return false;
+	}
+}
+
 void GameSession::OnRecvPacket(BYTE* buffer, int32 len)
 {
+	const uint16 packetId = reinterpret_cast<PacketHeader*>(buffer)->id;
+
 	// 속도 제한 - 넘으면 버리거나 끊는다 (AdmitPacket)
-	if (AdmitPacket(reinterpret_cast<PacketHeader*>(buffer)->id) == false)
+	if (AdmitPacket(packetId) == false)
 		return;
+
+	lastRecvUs.store(Utils::NowMicroseconds());
+
+	// 중앙 인증 게이트 - 로그인 전에는 C_LOGIN 만. 핸들러의 accountId 검사는 2 중 방어로 남는다
+	if (accountId.load() == 0 && AllowedBeforeLogin(packetId) == false)
+	{
+		if (++_preLoginDrops >= PRE_LOGIN_DROPS_BEFORE_DISCONNECT)
+		{
+			LOG_LINE << "[RATE] packets before login - disconnect last_id=" << packetId << '\n';
+			Disconnect(L"packets before login");
+		}
+		return;
+	}
 
 	PacketSessionRef session = GetPacketSessionRef();
 

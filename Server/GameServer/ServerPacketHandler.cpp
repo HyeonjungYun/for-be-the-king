@@ -14,6 +14,7 @@
 #include "PartyManager.h"
 #include "BaseCampTable.h"
 #include "Economy.h"
+#include "DBError.h"
 #include <sstream>
 #include <thread>
 
@@ -104,9 +105,18 @@ namespace
 			const int32 state = ::atoi(row[COL_STATE]);
 			const int32 slot = ::atoi(row[COL_SLOT]);
 
-			if (state == Protocol::ITEM_STATE_EQUIPPED && slot >= Protocol::SLOT_WEAPON_PRIMARY && slot <= Protocol::SLOT_TRINKET)
+			if (state == Protocol::ITEM_STATE_EQUIPPED && slot >= Protocol::SLOT_WEAPON_PRIMARY && slot <= Protocol::SLOT_TRINKET
+				&& player->equipped[slot - 1].instanceId == 0)
 			{
 				player->equipped[slot - 1] = e;
+			}
+			else if (state == Protocol::ITEM_STATE_EQUIPPED && slot >= Protocol::SLOT_WEAPON_PRIMARY && slot <= Protocol::SLOT_TRINKET)
+			{
+				// 같은 칸에 착용 행이 둘 - 예전엔 뒤 행이 앞 행을 메모리에서 조용히 덮어썼다 (2026-10-21). 뒤 행은 소지품으로 들고 들어간다 -
+				// 다음 런 끝 저장이 CARRIED 로 쓰면서 표가 스스로 고쳐진다. 표의 uk_equip_slot 이 새 중복은 막는다
+				LOG_LINE << "[ENTER] 🔴 duplicate equipped slot " << slot << " - instance=" << e.instanceId << " kept as carried (already " << player->equipped[slot - 1].instanceId
+					<< ") char=" << player->objectInfo->object_id() << '\n';
+				player->inventory.push_back(e);
 			}
 			else if (state == Protocol::ITEM_STATE_CARRIED)
 			{
@@ -140,8 +150,9 @@ namespace
 		}
 	}
 
-	// 아이템 한 행을 잠그며 읽는다. 조건에 맞는 행이 없으면 found = false. 쿼리가 실패하면 false
-	bool LockItemRow(DBConnection* conn, const string& where, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
+	// 아이템 한 행을 잠그며 읽는다. 조건에 맞는 행이 없으면 found = false. 쿼리가 실패하면 false.
+	// WHERE 절은 아래 두 진입점이 숫자만으로 만든다 - 문자열을 그대로 받던 예전 모양(SQL 조각을 호출자가 조립)은 없앴다 (2026-10-21)
+	bool LockItemRowWhere(DBConnection* conn, const string& where, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
 	{
 		const string query =
 			"SELECT instance_id, item_type_id, grade, level, state, slot, skill_id_primary, skill_id_secondary, lone_path, stack_count "
@@ -168,6 +179,19 @@ namespace
 		}
 		conn->FreeResult(res);
 		return true;
+	}
+
+	// 내 아이템 한 행 (instance_id · 주인)
+	bool LockOwnedItemRow(DBConnection* conn, uint64 instanceId, uint64 ownerId, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
+	{
+		return LockItemRowWhere(conn, "instance_id = " + to_string(instanceId) + " AND owner_character_id = " + to_string(ownerId), OUT e, OUT state, OUT slot, OUT found);
+	}
+
+	// 그 칸에 착용 중인 내 아이템 (착용 교체로 밀려날 것)
+	bool LockEquippedRow(DBConnection* conn, uint64 ownerId, int32 equipSlot, OUT ItemEntry& e, OUT int32& state, OUT int32& slot, OUT bool& found)
+	{
+		return LockItemRowWhere(conn, "owner_character_id = " + to_string(ownerId) + " AND state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED))
+			+ " AND slot = " + to_string(equipSlot), OUT e, OUT state, OUT slot, OUT found);
 	}
 
 	// 캐릭터가 가진 state 아이템 개수 - 용량 검사용. 쿼리가 실패하면 false
@@ -244,10 +268,11 @@ namespace
 			return Protocol::ITEM_INVALID_STATE;
 		}
 
-		// 검증 전용 - 잠금은 쥔 채 늦춰, 입장 적재가 이 커밋을 기다리는지 본다.
-		const uint32 delayMs = GBaseCampDelayMs.load();
-		if (delayMs > 0)
+#if FBTK_TEST_HOOKS
+		// 검증 전용 - 잠금은 쥔 채 늦춰, 입장 적재가 이 커밋을 기다리는지 본다. 시험 훅 빌드만 (배포 빌드의 트랜잭션 안에는 sleep 이 없다)
+		if (const uint32 delayMs = GBaseCampDelayMs.load(); delayMs > 0)
 			this_thread::sleep_for(chrono::milliseconds(delayMs));
+#endif
 
 		// 아이템 현재 상태 (행 잠금)
 		ItemEntry e;
@@ -255,7 +280,7 @@ namespace
 		int32 slot = 0;
 		bool found = false;
 
-		if (LockItemRow(conn, "instance_id = " + to_string(instanceId) + " AND owner_character_id = " + to_string(ownerId), OUT e, OUT state, OUT slot, OUT found) == false)
+		if (LockOwnedItemRow(conn, instanceId, ownerId, OUT e, OUT state, OUT slot, OUT found) == false)
 		{
 			conn->Rollback();
 			return Protocol::ITEM_DB_ERROR;
@@ -344,11 +369,7 @@ namespace
 			int32 outState = 0;
 			int32 outSlot = 0;
 			bool occupied = false;
-			if (LockItemRow(conn,
-				"owner_character_id = " + to_string(ownerId)
-				+ " AND state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED))
-				+ " AND slot = " + to_string(targetSlot),
-				OUT outgoing, OUT outState, OUT outSlot, OUT occupied) == false)
+			if (LockEquippedRow(conn, ownerId, targetSlot, OUT outgoing, OUT outState, OUT outSlot, OUT occupied) == false)
 			{
 				result = Protocol::ITEM_DB_ERROR;
 			}
@@ -423,10 +444,10 @@ namespace
 			ok = conn->Excute(query) && conn->GetAffectedRows() == 1;
 		}
 
-		// 골드 - 매입은 더하고 강화는 뺀다 (같은 트랜잭션 · 캐릭터 행은 위에서 잠갔다)
+		// 골드 - 매입은 더하고 강화는 뺀다 (같은 트랜잭션 · 캐릭터 행은 위에서 잠갔다). 상한 GOLD_CAP (ObjectUtils.h)
 		if (ok && (op == BaseCampOp::Sell || op == BaseCampOp::Enhance))
 		{
-			const uint64 newGold = (op == BaseCampOp::Sell) ? gold + price : gold - price;
+			const uint64 newGold = (op == BaseCampOp::Sell) ? min<uint64>(gold + price, GOLD_CAP) : gold - price;
 			::snprintf(query, sizeof(query), "UPDATE characters SET gold = %llu WHERE character_id = %llu", newGold, ownerId);
 			ok = conn->Excute(query);
 			goldAfter = static_cast<int64>(newGold);
@@ -524,13 +545,14 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 		return true;
 	}
 
-	// 🔴 연결 하나에 로그인은 하나 (ADR-0011 Migration 2 · AC-AL-07). 이미 로그인했거나 처리 중이면 거절한다.
+	// 🔴 연결 하나에 로그인은 하나 (ADR-0011 Migration 2 · AC-AL-07). 이미 로그인했거나 처리 중이면 무시한다.
 	//    전에는 두 번째 C_LOGIN 이 다른 계정으로 accountId 를 덮어써서, 끊길 때 두 번째 계정만 풀리고 첫 계정은
-	//    서버를 다시 켤 때까지 "already online" 으로 잠겼다. 실패한 로그인은 이 표시를 되돌려 다시 시도할 수 있다
+	//    서버를 다시 켤 때까지 "already online" 으로 잠겼다. 실패한 로그인은 이 표시를 되돌려 다시 시도할 수 있다.
+	//    2026-10-21: 거절(S_LOGIN false)이 아니라 무시한다 - 처리 중에 재전송된 두 번째 C_LOGIN 에 실패를 답하면
+	//    클라가 첫 응답(성공)보다 먼저 실패 화면을 봤다. 답은 첫 요청의 DB 작업이 한 번만 보낸다
 	if (gameSession->loginStarted.exchange(true))
 	{
-		LOG_LINE << "[LOGIN] rejected - this connection already logged in or is logging in. account=" << gameSession->accountId.load() << '\n';
-		reject();
+		LOG_LINE << "[LOGIN] ignored - this connection already logged in or is logging in. account=" << gameSession->accountId.load() << '\n';
 		return true;
 	}
 
@@ -545,9 +567,11 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 				~TimingLine() { LOG_LINE << "[LOGIN] timing wait_us=" << (start - queued) << " db_us=" << (Utils::NowMicroseconds() - start) << '\n'; }
 			} timing{ queuedUs, startUs };
 
-			// 검증 전용 (FBTK_LOGIN_DELAY_MS) - 이 사이에 접속을 끊어 아래 회수 경로를 시험한다
+#if FBTK_TEST_HOOKS
+			// 검증 전용 (FBTK_LOGIN_DELAY_MS) - 이 사이에 접속을 끊어 아래 회수 경로를 시험한다 (시험 훅 빌드만)
 			if (const uint32 delayMs = GLoginDelayMs.load(); delayMs > 0)
 				this_thread::sleep_for(chrono::milliseconds(delayMs));
+#endif
 
 			Protocol::S_LOGIN loginPkt;
 			loginPkt.set_success(false);
@@ -612,9 +636,11 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 				bool loaded = false;
 
 				MYSQL_RES* result = nullptr;
+#if FBTK_TEST_HOOKS
 				if (GFakeLoginFail.load() > 0 && GFakeLoginFail.fetch_sub(1) > 0)
 					LOG_LINE << "[LOGIN] injected character query failure - account=" << accountId << " (FBTK_FAKE_LOGIN_FAIL)\n";
 				else
+#endif
 					result = conn->Query(query);
 
 				if (result == nullptr)
@@ -1465,8 +1491,8 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 				const uint32 errorNo = conn->GetLastErrorNo();
 				conn->Rollback();
 
-				// 1062 = ER_DUP_ENTRY. 이미 처리된 요청.
-				if (errorNo == 1062)
+				// 중복 키 = 이미 처리된 요청 (request_id 가 PRIMARY KEY - 멱등의 전부)
+				if (errorNo == DBError::DUP_ENTRY)
 				{
 					// 이미 지급됐으므로 현재 잔액을 읽어 돌려준다.
 					::snprintf(query, sizeof(query),
@@ -1492,8 +1518,8 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 				return;
 			}
 
-			// 잔액을 올린다.
-			::snprintf(query, sizeof(query), "UPDATE characters SET gold = gold + %llu WHERE character_id = %llu", gold, characterId);
+			// 잔액을 올린다 - 상한 GOLD_CAP (넘침 없이)
+			::snprintf(query, sizeof(query), "UPDATE characters SET gold = LEAST(gold + %llu, %llu) WHERE character_id = %llu", gold, GOLD_CAP, characterId);
 
 			if (conn->Excute(query) == false)
 			{

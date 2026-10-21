@@ -37,7 +37,9 @@ $files = @(
     'migrate_lone_path.sql',       # 옛 DB 에 lone_path 열 (있으면 건너뜀)
     'migrate_economy.sql',         # 옛 DB 에 stack_count 열 (있으면 건너뜀)
     'migrate_hash_tokens.sql',     # 토큰 해시 저장 - schema_migrations 표시로 한 번만
-    'migrate_anticheat.sql'        # accounts.banned_until · cheat_strikes (안티치트 2026-10-19)
+    'migrate_anticheat.sql',       # accounts.banned_until · cheat_strikes (안티치트 2026-10-19)
+    'migrate_equip_slot_unique.sql', # 착용 칸 유일 인덱스 (2026-10-21 리뷰 후속)
+    'schema_app_user.sql'          # 전용 DB 계정 fbtk_app - 두 서버가 root 대신 쓴다 (2026-10-21). 비밀번호는 -Password 와 같다
 )
 if (-not $NoSeed) {
     $files += 'seed_bots.sql'      # bot_1 .. bot_120 (부하 하네스)
@@ -62,6 +64,8 @@ foreach ($file in $files) {
     if ($sql -notmatch '(?im)^\s*USE\s') {
         $sql = "USE $Database;`n" + $sql       # 시드 몇 개는 USE 가 없다 - 대상 DB 를 박아 준다
     }
+    # 전용 계정의 비밀번호 - 작은따옴표는 SQL 문자열을 깨므로 이스케이프한다
+    $sql = $sql.Replace('__APP_PASSWORD__', $Password.Replace("'", "''"))
 
     $out = $sql | & $MySql @conn --default-character-set=utf8mb4 2>&1 |
         Where-Object { $_ -notmatch 'Warning.*command line interface' }

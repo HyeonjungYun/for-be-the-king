@@ -172,7 +172,7 @@ namespace
 			return MarkResult::Marked;
 
 		// 이미 있다 = 이 기록은 전에 커밋됐다 (커밋 뒤 파일을 지우기 전에 서버가 꺼졌다). 지금 트랜잭션은 버리고 성공으로 친다 - 두 번 적용하지 않는다
-		if (conn->GetLastErrorNo() == 1062)
+		if (conn->GetLastErrorNo() == DBError::DUP_ENTRY)
 			return MarkResult::AlreadyApplied;
 
 		return MarkResult::Failed;
@@ -213,15 +213,37 @@ namespace
 	}
 
 	// 검증 전용 (FBTK_FAKE_ACK_LOSS=N) - 처음 N 번의 커밋은 DB 에선 됐는데 응답을 잃은 것처럼 연결 끊김으로 돌려준다.
-	// 재시도가 표시를 보고 두 번 적용하지 않는지 본다 (2026-10-08 리뷰 ①)
+	// 재시도가 표시를 보고 두 번 적용하지 않는지 본다 (2026-10-08 리뷰 ①). 시험 훅 빌드에만 있다 (FBTK_TEST_HOOKS)
 	bool FakeAckLoss(const char* tag, uint64 characterId)
 	{
+#if FBTK_TEST_HOOKS
 		if (GFakeCommitAckLoss.load() <= 0 || GFakeCommitAckLoss.fetch_sub(1) <= 0)
 			return false;
 
 		LOG_LINE << "[" << tag << "] injected ack loss - committed but reporting 2013 (TEST) char=" << characterId << '\n';
 		t_commitErrno = 2013;
 		return true;
+#else
+		(void)tag;
+		(void)characterId;
+		return false;
+#endif
+	}
+
+	// 검증 전용 (FBTK_FAIL_ESCAPE_COMMIT=N) - 처음 N 번의 탈출 · 만료 저장을 쓰기 뒤에 일시 실패로 돌린다 (AC-ET-24 롤백)
+	bool InjectEscapeFailure(const char* tag, uint64 characterId)
+	{
+#if FBTK_TEST_HOOKS
+		if (GFailEscapeCommits.fetch_sub(1) > 0)
+		{
+			LOG_LINE << "[" << tag << "] injected failure - char=" << characterId << '\n';
+			return true;
+		}
+#else
+		(void)tag;
+		(void)characterId;
+#endif
+		return false;
 	}
 
 	// 이미 적용된 사망 저장 - 그때 실제로 가방에 들어간 것만 메모리 가방에 담는다. 관대 단계였으면 일부만 들어갔을 수 있다
@@ -377,11 +399,11 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 			return RollbackAndClassify(conn);
 	}
 
-	// 런 골드 전액 (escape-timer.md Core Rule 18) - 정상 플레이에서는 0 이라 문장을 보내지 않는다
+	// 런 골드 전액 (escape-timer.md Core Rule 18) - 정상 플레이에서는 0 이라 문장을 보내지 않는다. 상한은 GOLD_CAP (넘침 없이)
 	if (snap.gold > 0)
 	{
-		::snprintf(query, sizeof(query), "%s characters SET gold = gold + %llu WHERE character_id = %llu",
-			lenient ? "UPDATE IGNORE" : "UPDATE", snap.gold, characterId);
+		::snprintf(query, sizeof(query), "%s characters SET gold = LEAST(gold + %llu, %llu) WHERE character_id = %llu",
+			lenient ? "UPDATE IGNORE" : "UPDATE", snap.gold, GOLD_CAP, characterId);
 		if (conn->Excute(query) == false)
 			return RollbackAndClassify(conn);
 	}
@@ -401,10 +423,9 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 			LOG_LINE << "[ESCAPE] " << (lenient ? "🔴 lenient - " : "") << "owned count mismatch - expected=" << expected << " actual=" << actual << " char=" << characterId << '\n';
 	}
 
-	// 검증 전용 - 쓰기를 다 한 뒤에 실패시켜 롤백과 재시도를 본다. 일시적 실패를 흉내 낸다 (AC-ET-24)
-	if (GFailEscapeCommits.fetch_sub(1) > 0)
+	// 검증 전용 - 쓰기를 다 한 뒤에 실패시켜 롤백과 재시도를 본다. 일시적 실패를 흉내 낸다 (AC-ET-24, 시험 훅 빌드만)
+	if (InjectEscapeFailure("ESCAPE", characterId))
 	{
-		LOG_LINE << "[ESCAPE] injected failure - char=" << characterId << '\n';
 		conn->Rollback();
 		return CommitOutcome::Transient;
 	}
@@ -597,6 +618,25 @@ bool ValidateItemRows(DBConnection* conn)
 	}
 
 	conn->FreeResult(res);
+
+	// 같은 캐릭터 · 같은 칸에 착용 행이 둘 (2026-10-21) - 입장 적재가 뒤 행으로 앞 행을 덮어썼다. 표의 uk_equip_slot 이 막지만
+	// (migrate_equip_slot_unique.sql) 인덱스가 없는 옛 DB 를 위해 여기서도 본다. 있으면 띄우지 않는다
+	if (MYSQL_RES* dup = conn->Query(
+		"SELECT owner_character_id, slot, COUNT(*) FROM item_instances WHERE state = 2 AND owner_character_id IS NOT NULL "
+		"GROUP BY owner_character_id, slot HAVING COUNT(*) > 1"))
+	{
+		while (MYSQL_ROW row = ::mysql_fetch_row(dup))
+		{
+			LOG_LINE << "[BOOT] duplicate equipped slot - char=" << row[0] << " slot=" << row[1] << " rows=" << row[2] << '\n';
+			valid = false;
+		}
+		conn->FreeResult(dup);
+	}
+	else
+	{
+		LOG_LINE << "[BOOT] duplicate slot query failed: " << conn->GetError() << '\n';
+		return false;
+	}
 
 	LOG_LINE << "[BOOT] item rows checked - " << (valid ? "ok" : "INVALID") << " warnings=" << warnings << '\n';
 	return valid;
@@ -848,7 +888,8 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		conn->FreeResult(res);
 	}
 
-	// 검증 전용 - 커밋을 늦춰 재입장 가드(DeathCommitTracker)가 실제로 발동하는지 본다.
+#if FBTK_TEST_HOOKS
+	// 검증 전용 - 커밋을 늦춰 재입장 가드(DeathCommitTracker)가 실제로 발동하는지 본다. 시험 훅 빌드만 - 배포 빌드의 DB 트랜잭션 안에는 sleep 이 없다
 	if (const uint32 delayMs = GDeathCommitDelayMs.load(); delayMs > 0)
 		this_thread::sleep_for(chrono::milliseconds(delayMs));
 
@@ -861,6 +902,7 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		conn->Rollback();
 		return CommitOutcome::Permanent;
 	}
+#endif
 
 	if (conn->Commit() == false)
 		return RollbackAndClassify(conn);
@@ -1049,16 +1091,15 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 
 	if (snap.goldKept > 0)
 	{
-		::snprintf(query, sizeof(query), "%s characters SET gold = gold + %llu WHERE character_id = %llu",
-			lenient ? "UPDATE IGNORE" : "UPDATE", snap.goldKept, snap.characterId);
+		::snprintf(query, sizeof(query), "%s characters SET gold = LEAST(gold + %llu, %llu) WHERE character_id = %llu",
+			lenient ? "UPDATE IGNORE" : "UPDATE", snap.goldKept, GOLD_CAP, snap.characterId);
 		if (conn->Excute(query) == false)
 			return RollbackAndClassify(conn);
 	}
 
-	// 검증 전용 - 탈출 커밋 실패 주입과 같은 자리 (AC-ET-24 롤백). 일시적 실패를 흉내 낸다
-	if (GFailEscapeCommits.fetch_sub(1) > 0)
+	// 검증 전용 - 탈출 커밋 실패 주입과 같은 자리 (AC-ET-24 롤백). 일시적 실패를 흉내 낸다 (시험 훅 빌드만)
+	if (InjectEscapeFailure("EXPIRE", snap.characterId))
 	{
-		LOG_LINE << "[EXPIRE] injected failure - char=" << snap.characterId << '\n';
 		conn->Rollback();
 		return CommitOutcome::Transient;
 	}
@@ -1091,8 +1132,11 @@ namespace
 		function<void(DBConnection*, bool, CommitMode)>						finish;
 	};
 
-	// 재시도로 들어가는 순간 한 번 - 평소 저장(첫 시도 성공)은 디스크를 건드리지 않는다 (사용자 결정 2026-10-08 ①)
-	void WriteJournalOnce(const shared_ptr<CommitTask>& task)
+	// 스냅샷을 디스크에 남긴다 - 큐에 넣기 전(write-ahead)에 한 번, 그때 못 썼으면 재시도로 들어갈 때 다시 (2026-10-21).
+	// 🔴 2026-10-08 ① 의 "첫 시도가 실패한 뒤에만 쓴다" 를 뒤집었다: 그 방식은 스냅샷이 DB 큐에 들어간 직후 프로세스가 죽으면
+	//    (강제 종료 · 크래시 · Stop.bat) 파일도 표시도 없이 저장이 증발했다 - 죽은 사람이 장비를 지킨 채 재시작됐다.
+	//    대가는 런 끝마다 작은 파일 하나(DB 스레드, 수십 µs) 이고 성공하면 바로 지운다. ahead 면 조용히, 재시도 경로면 한 줄 남긴다
+	void WriteJournalOnce(const shared_ptr<CommitTask>& task, bool ahead = false)
 	{
 		if (task->journalWritten || GCommitJournalDir.empty())
 			return;
@@ -1100,13 +1144,14 @@ namespace
 		string error;
 		if (CommitJournal::Write(GCommitJournalDir, task->journal, OUT error) == false)
 		{
-			// 기록 없이도 재시도는 계속한다 - 그동안 서버가 꺼지면 예전처럼 이 저장은 사라진다
+			// 기록 없이도 저장은 계속한다 - 그동안 서버가 꺼지면 예전처럼 이 저장은 사라진다
 			LOG_LINE << "[JOURNAL] 🔴 cannot write " << task->journal.id << " - " << error << '\n';
 			return;
 		}
 
 		task->journalWritten = true;
-		LOG_LINE << "[JOURNAL] wrote " << task->journalId << " (a restart will finish this commit)\n";
+		if (ahead == false)
+			LOG_LINE << "[JOURNAL] wrote " << task->journalId << " (a restart will finish this commit)\n";
 	}
 
 	void RunCommit(const shared_ptr<CommitTask>& task, DBConnection* conn)
@@ -1204,6 +1249,9 @@ void QueueCommit(JournalEntry journal,
 	task->journalId = task->journal.id;
 	task->attempt = move(attempt);
 	task->finish = move(finish);
+
+	// write-ahead - 큐에 들어가기 전에 디스크에 있다. 여기서 못 썼으면 RunCommit 의 재시도 경로가 다시 시도한다
+	WriteJournalOnce(task, /*ahead*/ true);
 
 	GDBQueue.Push([task](DBConnection* conn) { RunCommit(task, conn); });
 }
@@ -1375,6 +1423,12 @@ bool DeathCommitTracker::IsPending(uint64 characterId)
 {
 	WRITE_LOCK;
 	return _pending.find(characterId) != _pending.end();
+}
+
+int32 DeathCommitTracker::Count()
+{
+	WRITE_LOCK;
+	return static_cast<int32>(_pending.size());
 }
 
 void DetachedBodies::Add(uint64 characterId, PlayerRef body)

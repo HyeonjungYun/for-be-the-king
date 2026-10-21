@@ -25,6 +25,9 @@ public:
 	// 연결만 하고 C_LOGIN 을 보내지 않은 지 timeoutUs 가 지난 세션을 끊는다 - 메인 루프가 10 초마다 (2026-10-17 사용자 결정). 끊은 수
 	int32 DropUnauthenticated(uint64 nowUs, uint64 timeoutUs);
 
+	// 정상 종료 (2026-10-21) - 모든 세션을 끊는다. 던전의 몸은 유예 몸으로 남고(DB 없음), 베이스캠프 몸은 사라진다. 끊은 수
+	int32 DisconnectAll(const WCHAR* cause);
+
 private:
 	USE_LOCK;
 	set<GameSessionRef> _sessions;
