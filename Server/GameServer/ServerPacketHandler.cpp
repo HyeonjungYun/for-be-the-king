@@ -491,7 +491,10 @@ namespace
 				int64 goldAfter = -1;
 				const Protocol::ItemResult result = RunBaseCampItemOp(conn, session, instanceId, op, slot, OUT changed, OUT goldAfter);
 
-				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " item=" << instanceId << " slot=" << slot << " result=" << result << " changed=" << changed.size() <<'\n';
+				// char= · account= (2026-10-21) - 이벤트 로그가 창고 조작을 그 플레이어에게 붙인다 (예전엔 누구의 조작인지 줄에 없었다)
+				const uint64 ownerChar = session->characters.empty() ? 0 : session->characters[0].object_info().object_id();
+				LOG_LINE << "[BASECAMP] " << BaseCampOpName(op) << " char=" << ownerChar << " account=" << session->accountId.load() << " item=" << instanceId
+					<< " slot=" << slot << " result=" << result << " changed=" << changed.size() << '\n';
 
 				session->SendItemResult(requestId, result, changed, goldAfter);
 
@@ -754,6 +757,9 @@ namespace
 						return;
 					}
 
+					// 로그인 성공 줄 (2026-10-21) - 예전엔 실패만 남아 "누가 언제 들어왔는가" 를 로그로 알 수 없었다 (이벤트 로그 · ServerMonitor 의 접속 태그)
+					LOG_LINE << "[LOGIN] ok account=" << accountId << " char=" << (loginPkt.characters().empty() ? 0 : loginPkt.characters(0).object_info().object_id())
+						<< " name=" << (loginPkt.characters().empty() ? string("-") : loginPkt.characters(0).name()) << " characters=" << loginPkt.characters_size() << '\n';
 					loginPkt.set_success(true);
 				}
 			}

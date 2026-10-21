@@ -16,6 +16,9 @@
 #include "EntryPointTable.h"
 #include "StarterKitTable.h"
 #include "BotLoadoutTable.h"
+#include "EventLog.h"
+#include "CsvTable.h"
+#include "AdminServer.h"
 #include "WallTable.h"
 #include "Vision.h"
 #include "TowerTable.h"
@@ -173,6 +176,8 @@ namespace
 		LOG_LINE << "[SHUTDOWN] done - sessions_dropped=" << dropped << " db_drained=" << (drained ? "yes" : "TIMEOUT")
 			<< " took=" << (Utils::NowMicroseconds() - startUs) / 1000 << "ms\n";
 		GetLogger().Flush();
+		GAdmin.Stop();
+		GEvents.Flush();
 		GShutdownDone.store(true);
 	}
 }
@@ -211,6 +216,21 @@ int main(int argc, char* argv[])
 
 	// 크래시 덤프 - 처리되지 않은 예외 · ASSERT_CRASH · terminate 가 Logs/crash 에 .dmp 를 남긴다 (예전엔 덤프 없이 사라졌다)
 	CrashDump::Install(config.crashDir, "GameServer");
+
+	// 구조화 이벤트 로그 (2026-10-21 · EventLog.h) - 텍스트 로그 한 줄마다 태그를 붙여 JSONL · 관리 포트로. 부팅 줄부터 담으려고 맨 먼저.
+	// event_tags.csv 가 틀리면 서버를 열지 않는다 (--validate 도 같은 검사 - 파일은 쓰지 않는다)
+	{
+		string text, error;
+		if (Csv::ReadFile(config.dataDir + "\\event_tags.csv", OUT text) == false
+			|| GEvents.Init(text, validateOnly ? string() : config.eventsDir, OUT error) == false)
+		{
+			LOG_LINE << "[BOOT] event tags invalid - " << (error.empty() ? "cannot read event_tags.csv" : error) << " (dir=" << config.dataDir << ")\n";
+			GetLogger().Flush();
+			return -1;
+		}
+		GetLogger().SetObserver([](const std::string& line, bool toStderr) { GEvents.FromLogLine(line, toStderr); });
+	}
+
 	LOG_LINE << "[BOOT] crash dumps -> " << config.crashDir << '\n';
 	config.LogSummary();
 
@@ -675,7 +695,22 @@ int main(int argc, char* argv[])
 		100);
 
 	ASSERT_CRASH(service->Start());
-	LOG_LINE << "[BOOT] listen port=" << config.port << " - accepting clients (bind=" << config.bindAddress << ")\n";		// 검증 체크리스트 E1 이 찾는 줄 (2026-10-12)
+	LOG_LINE << "[BOOT] listen port=" << config.port << " - accepting clients (bind=" << config.bindAddress << ")\n";
+
+	// 관리 포트 (ServerMonitor) - 못 열어도 게임 서버는 돈다
+	if (config.adminPort != 0)
+	{
+		AdminConfig admin;
+		admin.port = config.adminPort;
+		admin.gamePort = config.port;
+		admin.infoFile = config.adminFile;
+		admin.dataDir = config.dataDir;
+		string error;
+		if (GAdmin.Start(admin, OUT error))
+			LOG_LINE << "[ADMIN] listening 127.0.0.1:" << config.adminPort << " - token in " << config.adminFile << '\n';
+		else
+			LOG_LINE << "[ADMIN] off - " << error << '\n';
+	}		// 검증 체크리스트 E1 이 찾는 줄 (2026-10-12)
 
 	for (int32 i = 0; i < config.workerThreads; i++)
 	{

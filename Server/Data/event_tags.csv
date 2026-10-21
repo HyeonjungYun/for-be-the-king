@@ -1,0 +1,139 @@
+prefix,keyword,tag,sub
+LOGIN,,connect,login
+ENTER,,connect,enter
+LEAVE,,connect,leave
+DISCONNECT,,connect,disconnect
+REATTACH,,connect,reattach
+DETACH,,connect,detach
+SESSION,,connect,session
+CAMP,enter,connect,camp_enter
+CAMP,,connect,camp
+INST,enter,connect,instance_enter
+INST,join,party,instance_join
+INST,,system,instance
+RATE,,cheat,rate_limit
+ACCEPT,,system,accept
+MOVE REJECT,,move,reject
+MOVE BLOCKED,,move,blocked
+MOVE,,move,move
+ARRIVE,,move,arrive
+DASH WINDOW,,move,dash_window
+DASH MARK,,combat,dash_mark
+DASH,,move,dash
+LEAP,,move,leap
+BLINK,,move,blink
+BEHIND,,move,behind
+TO_MARK,,move,to_mark
+REWIND,,move,rewind
+WALL KICK,,move,wall_kick
+PUSH,,move,push
+PULL,,move,pull
+VACUUM,,move,vacuum
+THROW,,move,throw
+SLAM,,move,slam
+LANDING,,move,landing
+ANCHOR,,move,anchor
+NAV,,move,nav
+FOW,,move,fow
+SKILL FIRE,,combat,skill_fire
+SKILL REJECT,,combat,skill_reject
+SKILL RECAST,,combat,skill_recast
+SKILL TELEGRAPH,,combat,telegraph
+SKILL,,combat,skill
+SPECIAL BASIC,,combat,special_basic
+HOLD,,combat,hold
+PROJ,,combat,projectile
+ZONE,,combat,zone
+VOLLEY,,combat,volley
+CHAIN,,combat,chain
+BURST,,combat,burst
+COUNTER,,combat,counter
+REFLECT,,combat,reflect
+THORNS,,combat,thorns
+PARRY,,combat,parry
+EXECUTE,,combat,execute
+DIED,,combat,died
+DOOM,,combat,doom
+LETHAL SAVE,,combat,lethal_save
+PROC,,combat,proc
+PASSIVE,,combat,passive
+SPIN,,combat,spin
+TRAIL,,combat,trail
+PUDDLE,,combat,puddle
+RECOVERY,,combat,recovery
+DECOY,,combat,decoy
+CLONE,,combat,clone
+HAWK,,combat,hawk
+MARK,,combat,mark
+DETECT,,combat,detect
+REVEAL,,combat,reveal
+FOOTPRINTS,,combat,footprints
+SCENT,,combat,scent
+STILL,,combat,still
+STANCE,,combat,stance
+MARCH,,combat,march
+TEMPUS,,combat,tempus
+FLUX,,combat,flux
+SCUTUM,,combat,scutum
+EXTEND,,combat,extend
+REDUCE,,combat,reduce
+TAUNT,,combat,taunt
+WALL,raise,combat,wall_raise
+WALL,fall,combat,wall_fall
+WALL,shove,move,wall_shove
+WALL,,system,wall
+BUFF,,status,buff
+SHIELD,,status,shield
+INVULN,,status,invuln
+IMMUNE,,status,immune
+STEALTH,,status,stealth
+CLEANSE,,status,cleanse
+DOT,,status,dot
+HEAL,,status,heal
+SELF CC,,status,self_cc
+DEBUG CC,,status,debug_cc
+PETRIFY,,status,petrify
+LOOT,,item,loot
+ITEM,,item,item
+BAG,,item,bag
+CHEST,,item,chest
+STARTER,,item,starter_kit
+REGEAR,,item,regear
+BOT LOADOUT,,item,bot_loadout
+BASECAMP,enhance,economy,enhance
+BASECAMP,sell,economy,sell
+BASECAMP,sync,storage,sync
+BASECAMP,run-end,storage,run_end
+BASECAMP,,storage,storage
+GOLD,,economy,gold
+GRANT AUDIT,,economy,grant_audit
+GRANT,,economy,grant
+PARTY,betray,party,betray
+PARTY,,party,party
+ALLY,,party,ally
+ESCAPE,,escape,escape
+EXPIRE,,escape,expire
+CHEAT,,cheat,cheat
+ID MISMATCH,,cheat,id_mismatch
+MON,,monster,monster
+PACK,,monster,pack
+ROUTE,,monster,route
+AOI,,monster,aoi
+DB,,db,db
+JOURNAL,,db,journal
+DEATH,,db,death_commit
+BOOT,,system,boot
+CONFIG,,system,config
+SHUTDOWN,,system,shutdown
+STATS,,system,stats
+TELEM,,system,telemetry
+CRASH,,system,crash
+ASSERT,,system,assert
+LOG,,system,log
+IOCP,,system,iocp
+VALIDATE,,system,validate
+TEST,,system,test_mode
+CHAT,,system,chat
+SLOW FLUSH,,system,slow_flush
+LEVEL,,system,level
+ADMIN,,system,admin

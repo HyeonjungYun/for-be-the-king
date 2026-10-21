@@ -163,6 +163,9 @@
     <ClCompile Include="EntryPointTable.cpp" />
     <ClCompile Include="StarterKitTable.cpp" />
     <ClCompile Include="BotLoadoutTable.cpp" />
+    <ClCompile Include="EventLog.cpp" />
+    <ClCompile Include="AdminServer.cpp" />
+    <ClCompile Include="RoomAdmin.cpp" />
     <ClCompile Include="WallMap.cpp" />
     <ClCompile Include="Vision.cpp" />
     <ClCompile Include="RoomCheat.cpp" />
@@ -235,6 +238,8 @@
     <ClInclude Include="EntryPointTable.h" />
     <ClInclude Include="StarterKitTable.h" />
     <ClInclude Include="BotLoadoutTable.h" />
+    <ClInclude Include="EventLog.h" />
+    <ClInclude Include="AdminServer.h" />
     <ClInclude Include="MoveClock.h" />
     <ClInclude Include="FloorBounds.h" />
     <ClInclude Include="SpawnPlacement.h" />

@@ -93,13 +93,14 @@ bool GameSession::AdmitPacket(uint16 packetId)
 
 void GameSession::OnDisconnected()
 {
-	LOG_LINE << "[DISCONNECT] enter\n";
-
 	GSessionManager.Remove(static_pointer_cast<GameSession>(shared_from_this()));
 
 	// PVE 협동 파티 (ADR-0014) - 베이스캠프에서 끊기면 파티에서 빠지고, 던전에서 끊기면 "접속 끊김" 으로 남는다.
 	// accountId 를 비우기 전에 캐릭터를 읽는다 (characters 는 accountId 보다 먼저 쓰였다)
 	const uint64 characterId = (accountId.load() != 0 && characters.empty() == false) ? characters[0].object_info().object_id() : 0;
+
+	// 누가 끊겼는지를 첫 줄에 (2026-10-21 - 예전 "[DISCONNECT] enter" 는 id 가 없어 이벤트 로그가 플레이어에 붙이지 못했다)
+	LOG_LINE << "[DISCONNECT] begin char=" << characterId << " account=" << accountId.load() << " place=" << static_cast<int32>(place.load()) << '\n';
 	GParties.OnDisconnected(characterId, place.load());
 
 	GAccountManager.LogOut(accountId.exchange(0), this);		// 주인이 나일 때만 - 중복 로그인으로 밀려난 옛 연결이 새 연결의 계정을 풀지 않게
@@ -112,11 +113,9 @@ void GameSession::OnDisconnected()
 		return;
 	}
 
-	LOG_LINE << "[DISCONNECT] player id=" << leavingPlayer->objectInfo->object_id() << '\n';
-
 	if (RoomRef room = leavingPlayer->room.load().lock())
 	{
-		LOG_LINE << "[DISCONNECT] room ok - DoAsync queued\n";
+		LOG_LINE << "[DISCONNECT] leaving char=" << leavingPlayer->objectInfo->object_id() << " room=" << room->Tag() << '\n';
 		room->DoAsync(&Room::HandleDisconnect, leavingPlayer);
 	}
 	else

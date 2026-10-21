@@ -96,6 +96,9 @@
     <ClCompile Include="BotLoadoutTable.cpp">
       <Filter>Data</Filter>
     </ClCompile>
+    <ClCompile Include="EventLog.cpp" />
+    <ClCompile Include="AdminServer.cpp" />
+    <ClCompile Include="RoomAdmin.cpp" />
     <ClCompile Include="WallMap.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -227,6 +230,8 @@
     <ClInclude Include="BotLoadoutTable.h">
       <Filter>Data</Filter>
     </ClInclude>
+    <ClInclude Include="EventLog.h" />
+    <ClInclude Include="AdminServer.h" />
     <ClInclude Include="MoveClock.h">
       <Filter>Game</Filter>
     </ClInclude>

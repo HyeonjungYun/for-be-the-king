@@ -103,6 +103,7 @@
     <ClCompile Include="SkillParamTest.cpp" />
     <ClCompile Include="BotBrainTest.cpp" />
     <ClCompile Include="BotLoadoutTest.cpp" />
+    <ClCompile Include="EventLogTest.cpp" />
     <ClCompile Include="..\BotAI\BotBrain.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
@@ -150,6 +151,7 @@
     <ClCompile Include="..\GameServer\EntryPointTable.cpp" />
     <ClCompile Include="..\GameServer\StarterKitTable.cpp" />
     <ClCompile Include="..\GameServer\BotLoadoutTable.cpp" />
+    <ClCompile Include="..\GameServer\EventLog.cpp" />
     <ClCompile Include="..\GameServer\WallMap.cpp" />
     <ClCompile Include="..\GameServer\Vision.cpp" />
     <ClCompile Include="..\GameServer\WallTable.cpp" />

@@ -604,6 +604,13 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt)
 {
+	// 서버 공지 (관리 포트, 2026-10-21) - 처음 몇 개만 남긴다 (봇 30 명이 같은 공지를 받는다)
+	static atomic<int32> logged = 0;
+	if (pkt.playerid() == 0 && logged.fetch_add(1) < 3)
+	{
+		auto bot = static_pointer_cast<BotSession>(session);
+		LOG_LINE << "[BOT NOTICE] char=" << bot->objectId.load() << " " << pkt.msg() << '\n';
+	}
 	return true;
 }
 

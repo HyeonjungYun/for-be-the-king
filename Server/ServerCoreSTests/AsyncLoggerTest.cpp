@@ -130,3 +130,33 @@ TEST(Stress, AsyncLogger_여러_스레드의_줄을_잃지_않고_스레드별_�
 
 	EXPECT_EQ(total, THREAD_COUNT * PER_THREAD);
 }
+
+// 관찰자 (2026-10-21 - GameServer 의 EventLog 가 텍스트 로그를 구조화 이벤트로 옮긴다). sink 다음에, 줄(Push 하나)마다 한 번 · 순서대로 · 표준 오류 여부와 함께
+TEST(AsyncLogger, 관찰자는_줄마다_한_번씩_순서대로_불린다)
+{
+	Captured captured;
+	std::mutex lock;
+	std::vector<std::pair<std::string, bool>> seen;
+	{
+		AsyncLogger logger(captured.MakeSink());
+		logger.SetObserver([&](const std::string& text, bool toStderr)
+			{
+				std::lock_guard<std::mutex> guard(lock);
+				seen.emplace_back(text, toStderr);
+			});
+		logger.Push("a\n");
+		logger.Push("b\n", true);
+		logger.Push("c\n");
+		logger.Flush();
+		logger.SetObserver(nullptr);		// 지운 뒤에는 불리지 않는다
+		logger.Push("d\n");
+		logger.Flush();
+	}
+	ASSERT_EQ(seen.size(), 3u);
+	EXPECT_EQ(seen[0].first, "a\n");
+	EXPECT_FALSE(seen[0].second);
+	EXPECT_EQ(seen[1].first, "b\n");
+	EXPECT_TRUE(seen[1].second);
+	EXPECT_EQ(seen[2].first, "c\n");
+	EXPECT_EQ(captured.out, "a\nc\nd\n");
+}

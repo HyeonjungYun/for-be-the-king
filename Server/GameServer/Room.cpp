@@ -1,4 +1,5 @@
 ﻿#include "pch.h"
+#include "EventLog.h"
 #include "Room.h"
 #include "Player.h"
 #include "SkillTable.h"
@@ -1440,6 +1441,14 @@ void Room::ApplyCc(uint64 targetId, uint64 instigatorId, Protocol::CcType type, 
 		return;
 
 	ApplyCcRaw(target, instigatorId, type, effectiveMs, magnitude, nowUs);
+
+	if (GEvents.Enabled())
+	{
+		char data[96];
+		::snprintf(data, sizeof(data), "{\"cc\":%d,\"ms\":%u,\"base_ms\":%u,\"mag\":%.2f}", static_cast<int32>(type), effectiveMs, baseDurationMs, magnitude);
+		GEvents.Emit("status", "cc", { instigatorId }, { targetId }, Tag(),
+			to_string(instigatorId) + " -> " + to_string(targetId) + " " + Protocol::CcType_Name(type) + " " + to_string(effectiveMs) + "ms", data);
+	}
 }
 
 int32 Room::CountEnemiesNear(const CreatureRef& who, float radiusCm)
@@ -4804,6 +4813,18 @@ int32 Room::DealDamage(const CreatureRef& attacker, uint64 attackerId, const Cre
 	dmg.set_remaining_hp(remainingHp);
 	dmg.set_is_crit(isCrit);
 	dmg.set_damage_type(type);
+
+	// 구조화 이벤트 (2026-10-21) - 피해는 텍스트 로그가 없다 (너무 잦다). ServerMonitor 의 전투 필터 · 플레이어별 로그가 이 줄을 본다
+	if (GEvents.Enabled())
+	{
+		char data[160];
+		::snprintf(data, sizeof(data), "{\"dmg\":%d,\"hp\":%d,\"mhp\":%d,\"skill\":%u,\"basic\":%d,\"tick\":%d,\"crit\":%d,\"type\":%d}",
+			shownDamage, remainingHp, target->maxHp, src.skillId, src.basic ? 1 : 0, src.tick ? 1 : 0, isCrit ? 1 : 0, static_cast<int32>(type));
+		const string what = src.basic ? string("basic") : (src.skillId != 0 ? "skill " + to_string(src.skillId) : string("effect"));
+		GEvents.Emit("combat", src.tick ? "damage_tick" : "damage", { attackerId }, { targetId }, Tag(),
+			to_string(attackerId) + " -> " + to_string(targetId) + " damage " + to_string(shownDamage) + (isCrit ? " crit" : "") + " (" + what + ") hp "
+			+ to_string(remainingHp) + "/" + to_string(target->maxHp), data);
+	}
 
 	// 안 보이는 적을 맞혔다 - 그 적만 잠깐 보인다 (2026-10-11). 틱(지속 피해 · 장판)은 맞힌 순간이 아니다
 	if (src.tick == false && shownDamage > 0 && attacker != nullptr && attacker->IsPlayer())

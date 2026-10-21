@@ -129,6 +129,12 @@ uint64 ServerStats::GetSentPacketBytes(uint16 id) const
 	return _sentByPacket[id < PACKET_ID_LIMIT ? id : 0].load();
 }
 
+ServerStats::Snapshot ServerStats::GetSnapshot() const
+{
+	lock_guard<mutex> guard(_snapLock);
+	return _snap;
+}
+
 void ServerStats::Dump(int32 sessionCount)
 {
 	const uint64 nowUs = Utils::NowMicroseconds();
@@ -301,6 +307,25 @@ void ServerStats::Dump(int32 sessionCount)
 		<< "  workingset=" << memMB << " MB\n";
 
 	out << "==========================================================\n\n";
+
+	{
+		lock_guard<mutex> snapGuard(_snapLock);
+		_snap.seq++;
+		_snap.sessions = sessionCount;
+		_snap.flushCount = flushTotal;
+		_snap.flushP95Us = p95;
+		_snap.flushP99Us = p99;
+		_snap.flushMaxUs = flushMax;
+		_snap.recvMbps = recvMbps;
+		_snap.sentMbps = sentMbps;
+		_snap.perClientKbps = perClientKbps;
+		_snap.moveRejects = moveRejects;
+		_snap.commitMB = commitMB;
+		_snap.workingSetMB = memMB;
+		_snap.dbPending = dbPending;
+		_snap.dbDelayed = dbDelayed;
+		_snap.extra = extra;
+	}
 
 	// CSV 한 행 - 그래프 · 비교용 (EnableCsv). 사람이 읽는 블록과 같은 값
 	lock_guard<mutex> guard(_csvLock);

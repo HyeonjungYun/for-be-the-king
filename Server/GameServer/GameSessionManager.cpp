@@ -89,6 +89,12 @@ int32 GameSessionManager::DropUnauthenticated(uint64 nowUs, uint64 timeoutUs)
 	return static_cast<int32>(idle.size());
 }
 
+vector<GameSessionRef> GameSessionManager::Snapshot()
+{
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
+	return vector<GameSessionRef>(_sessions.begin(), _sessions.end());
+}
+
 int32 GameSessionManager::DisconnectAll(const WCHAR* cause, const function<void(const GameSessionRef&)>& before)
 {
 	vector<GameSessionRef> all;

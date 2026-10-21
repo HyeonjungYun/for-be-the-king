@@ -65,6 +65,27 @@ public:
 
 	void			Dump(int32 sessionCount);
 
+	// 마지막 Dump 의 값 (2026-10-21 - 관리 포트 metrics). seq 0 = 아직 Dump 전. 아무 스레드 (복사본)
+	struct Snapshot
+	{
+		uint64	seq = 0;
+		int32	sessions = 0;
+		uint64	flushCount = 0;
+		uint64	flushP95Us = 0;
+		uint64	flushP99Us = 0;
+		uint64	flushMaxUs = 0;
+		double	recvMbps = 0.0;
+		double	sentMbps = 0.0;
+		double	perClientKbps = 0.0;
+		uint64	moveRejects = 0;
+		double	commitMB = 0.0;
+		double	workingSetMB = 0.0;
+		int32	dbPending = 0;
+		int32	dbDelayed = 0;
+		string	extra;
+	};
+	Snapshot		GetSnapshot() const;
+
 	static uint64	PercentileUpperUs(const uint64* buckets, uint64 total, double p);
 
 	void			SnapshotBuckets(uint64* outBuckets) const;
@@ -112,6 +133,8 @@ private:
 	mutex			_csvLock;
 	FILE*			_csv = nullptr;
 	uint64			_dumpSeq = 0;
+	mutable mutex	_snapLock;
+	Snapshot		_snap;			// _snapLock 아래
 
 	uint64			_lastDumpUs = 0;
 };

@@ -18,7 +18,7 @@ class GameSession : public PacketSession
 public:
 	~GameSession()
 	{
-		LOG_LINE << "~GameSession\n";		// endl 은 매번 플러시한다 - 봇 부하에서 세션마다
+		LOG_LINE << "[SESSION] released\n";		// 예전 "~GameSession" - 줄머리가 없어 이벤트 로그의 태그를 못 받았다 (2026-10-21)
 	}
 
 	virtual void OnConnected() override;

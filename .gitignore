@@ -103,3 +103,6 @@ S1/Content/GhostSamurai_Bundle/
 
 # 서버 검증 툴 보고서 (Tools/verify/verify-server.ps1) - 실행마다 새로 만든다
 Tools/verify/reports/
+# 디버깅 툴 빌드 산출물 (Tools/ServerMonitor)
+Tools/ServerMonitor/bin/
+Tools/ServerMonitor/obj/

@@ -87,7 +87,7 @@ void Session::Disconnect(const WCHAR* cause)
 	if (_connected.exchange(false) == false)
 		return;
 
-	LOG_LINE << "Disconnect : " << ToNarrow(cause) << '\n';
+	LOG_LINE << "[SESSION] disconnect cause=\"" << ToNarrow(cause) << "\"\n";		// 예전 "Disconnect : …" - 줄머리 없음 (2026-10-21 이벤트 로그)
 
 	// DisconnectEx 가 그 자리에서 실패하면 Disconnect 완료가 영영 오지 않는다 - 예전엔 그대로 돌아가 OnDisconnected · ReleaseSession 이
 	// 불리지 않았고, 세션과 계정이 관리자에 남아 서버를 다시 켤 때까지 "already online" 이었다. 소켓을 닫고 정리는 직접 한다 (2026-10-21).

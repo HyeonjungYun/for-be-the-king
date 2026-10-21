@@ -318,6 +318,12 @@ public:
 	Protocol::RunMode RunModeOf() const;
 	string	Tag() const;									// 로그용 - 층 방 "w0" · 인스턴스 "i17"
 
+	// 관리 포트 (2026-10-21 · AdminServer · Tools/ServerMonitor/PROTOCOL.md) - 방 잡 안에서만 부른다 (DoAsync). JSON 문자열을 돌려준다
+	string	AdminSummaryJson();								// {"tag","kind","floor","players","monsters","bags"}
+	string	AdminPlayersJson();								// [{"id","name",...}] - 이 방의 플레이어
+	string	AdminPlayerJson(uint64 characterId);			// 상세 - 이 방에 없으면 빈 칸
+	string	AdminMapJson(bool withRoutes);					// 맵 현황 - 생물 · 가방 · 장판 · 투사체 · 타워 (+ 무리 순찰 길)
+
 	bool	EnterRoom(ObjectRef object, bool randPos = true);
 	bool	LeaveRoom(ObjectRef object);
 

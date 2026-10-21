@@ -298,6 +298,7 @@ if (Has 'smoke') {
                 FBTK_DATA_DIR = (Join-Path $serverDir 'Data'); FBTK_DB_SCHEMA = $smokeDb; FBTK_DB_USER = 'fbtk_app'; FBTK_DB_PASSWORD = $DbPassword
                 FBTK_PORT = "$Port"; FBTK_ADMIN_PORT = "$AdminPort"; FBTK_METRICS_DIR = (Join-Path $sm 'metrics'); FBTK_JOURNAL_DIR = (Join-Path $sm 'journal')
                 FBTK_CRASH_DIR = (Join-Path $sm 'crash'); FBTK_TELEMETRY_DIR = (Join-Path $sm 'telemetry'); FBTK_EVENTS_DIR = (Join-Path $sm 'events'); FBTK_BOT_LOADOUTS = '1'
+                FBTK_ADMIN_FILE = (Join-Path $sm 'admin.json')
             }
             $saved = @{}
             foreach ($k in $set.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $set[$k]) }
@@ -325,16 +326,39 @@ if (Has 'smoke') {
                 $script:botProc = Start-Process -FilePath (Join-Path $rel 'DummyClient.exe') -ArgumentList @('-bots', "$Bots", '-ai', '-port', "$Port") -WorkingDirectory $rel `
                     -RedirectStandardOutput (Join-Path $sm 'bots.log') -RedirectStandardError (Join-Path $sm 'bots.err') -WindowStyle Hidden -PassThru
                 Remove-Item Env:\FBTK_DATA_DIR
-                $peakMb = 0; $end = (Get-Date).AddSeconds($Seconds)
+                $peakMb = 0; $begin = Get-Date; $end = $begin.AddSeconds($Seconds); $script:probeCode = $null
+                $probeAt = [math]::Min(20, [math]::Max(8, [int] ($Seconds / 3)))      # 봇이 다 들어온 뒤 - 관리 포트 탐침 (공지 · 강제 종료 포함)
                 while ((Get-Date) -lt $end) {
                     if ($script:srv.HasExited) { return @{ Status = 'FAIL'; Detail = "서버가 도중에 죽었다 (exit $($script:srv.ExitCode)) - $(Tail $srvLog 3)" } }
                     try { $peakMb = [math]::Max($peakMb, [math]::Round((Get-Process -Id $script:srv.Id).PrivateMemorySize64 / 1MB)) } catch {}
+                    if ($null -eq $script:probeCode -and ((Get-Date) - $begin).TotalSeconds -ge $probeAt) {
+                        $script:probeCode = Invoke-Logged 'python' @('-I', (Join-Path $PSScriptRoot 'admin_probe.py'), (Join-Path $sm 'admin.json'), (Join-Path $sm 'admin-probe.json'), '--notice', '--kick') (Join-Path $sm 'admin-probe.log')
+                    }
                     Start-Sleep -Seconds 2
                 }
                 $script:peakMb = $peakMb
                 $botsAlive = -not $script:botProc.HasExited
                 if (-not $botsAlive) { return @{ Status = 'FAIL'; Detail = "봇 프로세스가 도중에 끝났다 - $(Tail (Join-Path $sm 'bots.log') 3)" } }
                 @{ Status = 'PASS'; Detail = "서버 · 봇 끝까지 살아 있음 · 커밋 메모리 최대 $peakMb MB" }
+            }
+            Step '스모크' '관리 포트 (ServerMonitor 경로)' {
+                $json = Join-Path $sm 'admin-probe.json'
+                if ($null -eq $script:probeCode -or -not (Test-Path $json)) { return @{ Status = 'FAIL'; Detail = "탐침이 돌지 않았다 - $(Tail (Join-Path $sm 'admin-probe.log') 3)" } }
+                $r = Get-Content $json -Raw -Encoding UTF8 | ConvertFrom-Json
+                $names = @($r.checks.PSObject.Properties | ForEach-Object { $_.Name })
+                $okN = @($r.checks.PSObject.Properties | Where-Object { $_.Value.ok }).Count
+                if ($script:probeCode -eq 0) { @{ Status = 'PASS'; Detail = "$okN/$($names.Count) - 이벤트 $($r.events) · $($r.checks.map.detail)" } }
+                else { @{ Status = 'FAIL'; Detail = "$okN/$($names.Count) - $($r.errors[0])" } }
+            }
+            Step '스모크' '이벤트 로그 (JSONL)' {
+                $f = Get-ChildItem (Join-Path $sm 'events') -Filter *.jsonl -ErrorAction SilentlyContinue | Select-Object -First 1
+                if (-not $f) { return @{ Status = 'FAIL'; Detail = 'events/*.jsonl 이 없다' } }
+                $lines = @(Get-Content $f.FullName -Encoding UTF8)
+                $bad = 0; $tagCount = @{}
+                foreach ($l in $lines) { try { $e = $l | ConvertFrom-Json; $tagCount[$e.tag] = 1 + [int] $tagCount[$e.tag] } catch { $bad++ } }
+                $top = ($tagCount.GetEnumerator() | Sort-Object Value -Descending | Select-Object -First 6 | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ' · '
+                if ($bad -eq 0 -and $lines.Count -gt 0) { @{ Status = 'PASS'; Detail = "$($lines.Count) 줄 · 태그 $($tagCount.Count) 종 ($top)" } }
+                else { @{ Status = 'FAIL'; Detail = "JSON 이 아닌 줄 $bad / $($lines.Count)" } }
             }
             if ($script:botProc -and -not $script:botProc.HasExited) { Stop-Process -Id $script:botProc.Id -Force; Start-Sleep -Seconds 3 }
             Step '스모크' 'Ctrl+C 정상 종료' {

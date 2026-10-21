@@ -394,6 +394,14 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt)
 {
+	// 서버 공지 (2026-10-21 - 관리 포트 ServerMonitor 의 "전체 공지"). playerId 0 = 서버. 던전 HUD 알림으로 8 초 (베이스캠프에서는 HUD 가 없어 로그만)
+	if (pkt.playerid() == 0)
+	{
+		const FText Text = FText::FromString(FString(TEXT("[공지] ")) + UTF8_TO_TCHAR(pkt.msg().c_str()));
+		UE_LOG(LogTemp, Log, TEXT("[NOTICE] %s"), *Text.ToString());
+		if (US1EscapeSubsystem* Escape = US1EscapeSubsystem::Get())
+			Escape->ShowNotice(Text, 8.f, true);
+	}
 	return true;
 }
 

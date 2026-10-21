@@ -101,6 +101,11 @@ ServerConfig ServerConfig::FromEnv()
 	if (c.metricsDir == "0")
 		c.metricsDir.clear();
 	c.crashDir = EnvStr("FBTK_CRASH_DIR", c.dataDir + "\\..\\Logs\\crash");
+	c.eventsDir = EnvStr("FBTK_EVENTS_DIR", c.dataDir + "\\..\\Logs\\events");
+	if (c.eventsDir == "0")
+		c.eventsDir.clear();
+	c.adminPort = static_cast<uint16>((std::min)(EnvU32("FBTK_ADMIN_PORT", c.adminPort), 65535u));
+	c.adminFile = EnvStr("FBTK_ADMIN_FILE", c.dataDir + "\\..\\Logs\\admin.json");
 
 	c.fowEnabled = EnvOffSwitch("FBTK_FOW", true);
 	c.fowLogViewer = EnvU64("FBTK_FOW_LOG", 0);
@@ -151,6 +156,8 @@ void ServerConfig::LogSummary() const
 		<< " disconnect_grace=" << disconnectGraceUs / 1000 << "ms idle_timeout=" << idleTimeoutUs / 1000 << "ms shutdown_drain=" << shutdownDrainMs << "ms"
 		<< " route_seed=" << (routeSeed != 0 ? to_string(routeSeed) : string("boot-time")) << '\n';
 	LOG_LINE << "[CONFIG] journal=" << journalDir << " metrics=" << (metricsDir.empty() ? string("off") : metricsDir) << " crash=" << crashDir << '\n';
+	LOG_LINE << "[CONFIG] events=" << (eventsDir.empty() ? string("off (admin port only)") : eventsDir)
+		<< " admin=" << (adminPort == 0 ? string("off") : "127.0.0.1:" + to_string(adminPort) + " info=" + adminFile) << '\n';
 
 #if FBTK_TEST_HOOKS
 	LOG_LINE << "[CONFIG] test hooks compiled in (FBTK_TEST_HOOKS=1)" << (AnyHook() ? " - SOME ARE ON (see [BOOT] lines)" : " - none enabled") << '\n';

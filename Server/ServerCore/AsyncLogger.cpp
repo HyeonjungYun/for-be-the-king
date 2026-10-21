@@ -52,6 +52,7 @@ void AsyncLogger::Flush()
 void AsyncLogger::Run()
 {
 	std::deque<Entry> batch;
+	Observer observer;
 
 	while (true)
 	{
@@ -63,6 +64,7 @@ void AsyncLogger::Run()
 				return;
 
 			batch.swap(_pending);
+			observer = _observer;
 		}
 
 		// 대상별로 이어 붙여 한 번에 쓴다 - 줄마다 쓰기를 부르면 그만큼 느리고, 이 스레드가 밀리면 큐가 찬다
@@ -94,6 +96,12 @@ void AsyncLogger::Run()
 		if (err.empty() == false)
 			_sink(err, true);
 
+		if (observer)
+		{
+			for (const Entry& entry : batch)
+				observer(entry.text, entry.toStderr);
+		}
+
 		{
 			std::lock_guard<std::mutex> guard(_lock);
 			_written += batch.size();
@@ -102,6 +110,12 @@ void AsyncLogger::Run()
 		_drained.notify_all();
 		batch.clear();
 	}
+}
+
+void AsyncLogger::SetObserver(Observer observer)
+{
+	std::lock_guard<std::mutex> guard(_lock);
+	_observer = std::move(observer);
 }
 
 void AsyncLogger::WriteToStd(const std::string& text, bool toStderr)

@@ -31,6 +31,11 @@ struct ServerConfig
 	string		telemetryDir;					// FBTK_TELEMETRY_DIR - 기본 Logs/telemetry
 	string		metricsDir;						// FBTK_METRICS_DIR - ServerStats CSV (기본 Logs/metrics, "0" 이면 끔)
 	string		crashDir;						// FBTK_CRASH_DIR - 미니덤프 (기본 Logs/crash)
+	string		eventsDir;						// FBTK_EVENTS_DIR - 구조화 이벤트 로그 JSONL (기본 Logs/events, "0" 이면 파일 없음 - 관리 포트는 돈다)
+
+	// ── 관리 포트 (2026-10-21 · AdminServer · Tools/ServerMonitor) ──
+	uint16		adminPort = 7790;				// FBTK_ADMIN_PORT - 127.0.0.1 전용. 0 = 끔
+	string		adminFile;						// FBTK_ADMIN_FILE - 토큰 · 포트를 적는 정보 파일 (기본 Logs/admin.json)
 
 	// ── 운영 스위치 ──
 	bool		fowEnabled = true;				// FBTK_FOW (0 = 전원이 전부 본다 - A/B 비교 전용)

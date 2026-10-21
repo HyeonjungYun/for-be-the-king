@@ -26,6 +26,10 @@ class AsyncLogger
 public:
 	using Sink = std::function<void(const std::string& text, bool toStderr)>;
 
+	// 쓰기 스레드가 sink 다음에 줄(LogLine 하나)마다 부른다 - GameServer 의 EventLog 가 텍스트 로그를 구조화 이벤트로 옮긴다 (2026-10-21).
+	// 쓰기 스레드에서 돌므로 게임 스레드를 막지 않는다. 오래 걸리면 로그 큐가 찬다 - 가볍게
+	using Observer = std::function<void(const std::string& text, bool toStderr)>;
+
 	static constexpr size_t DEFAULT_MAX_PENDING = 100'000;
 
 	// sink 가 없으면 표준 출력 · 표준 오류에 쓴다. 테스트는 sink 를 넣어 받은 것을 확인한다
@@ -41,6 +45,8 @@ public:
 	void		Flush();
 
 	uint64		GetDroppedCount() const { return _dropped.load(); }
+
+	void		SetObserver(Observer observer);
 
 	// 검증 전용 - 쓰기 스레드가 periodMs 마다 stallMs 동안 멈춘다(디스크가 막힌 상황 흉내).
 	// 넣는 쪽(Room 잡)이 그동안 멈추지 않는지 보는 데 쓴다 (FBTK_LOG_STALL_MS, roadmap.md § 0-11)
@@ -67,6 +73,7 @@ private:
 	uint64					_written = 0;		// _lock 아래
 	bool					_stop = false;		// _lock 아래
 
+	Observer				_observer;		// _lock 아래 - 쓰기 스레드는 묶음마다 복사해 쓴다
 	std::atomic<uint64>		_dropped = 0;
 	uint64					_droppedReported = 0;	// 쓰기 스레드 전용
 
