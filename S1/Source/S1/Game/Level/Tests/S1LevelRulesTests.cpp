@@ -11,8 +11,8 @@
 /**
  * design/gdd/level-map.md § Acceptance Criteria — § B (exporter rules) and § C (formulas), BLOCKING.
  *
- * The golden fixture is the approved floor-1 layout (design/levels/floor-1.md): tools/level/floor1.json and
- * tools/level/houses/H{1,2,3}.txt. The Python tools under tools/level/ check the same file — both must pass it.
+ * The golden fixture is the approved floor-1 layout (design/levels/floor-1.md): Tools/level/floor1.json and
+ * Tools/level/houses/H{1,2,3}.txt. The Python tools under Tools/level/ check the same file — both must pass it.
  *
  * Run headless:
  *   UnrealEditor-Cmd.exe S1.uproject -ExecCmds="Automation RunTests S1.Level; Quit" -nullrhi -unattended
@@ -24,7 +24,7 @@ namespace
 
 	FString LevelToolsDir()
 	{
-		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../tools/level")));
+		return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../Tools/level")));
 	}
 
 	/** floor1.json — the island since 2026-10-11. The approved square it replaced stays as a regression fixture. */
@@ -81,7 +81,7 @@ namespace
 
 namespace
 {
-	/** Every rule passes, and the numbers match what tools/level/check_layout.py prints for the same file. */
+	/** Every rule passes, and the numbers match what Tools/level/check_layout.py prints for the same file. */
 	void CheckGoldenLayout(FAutomationTestBase& Test, const TCHAR* File, double CoverF5, const TCHAR* LanternCheck, double LanternLength)
 	{
 		FS1LevelLayout Layout;

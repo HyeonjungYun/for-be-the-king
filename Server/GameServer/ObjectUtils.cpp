@@ -1267,7 +1267,7 @@ void QueueCommit(JournalEntry journal,
 
 bool EnsureCommitJournalTable(DBConnection* conn)
 {
-	// Server/Tools/schema_commit_journal.sql 과 같은 정의 - 표가 있으면 아무 일도 하지 않는다
+	// Tools/db/schema_commit_journal.sql 과 같은 정의 - 표가 있으면 아무 일도 하지 않는다
 	if (conn->Execute(
 		"CREATE TABLE IF NOT EXISTS applied_commits ("
 		" journal_id   VARCHAR(64)     NOT NULL,"

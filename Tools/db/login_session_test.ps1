@@ -2,8 +2,8 @@
 # client does: two C_LOGIN on one connection, or hang up while the login is still in the DB queue. Boots GameServer.exe itself
 # once per scenario (each needs different test env vars) and stops it afterwards. Uses the seeded bot tokens (SHA256 of the name).
 #
-#   powershell -File Server\Tools\login_session_test.ps1                 # all scenarios (needs a binary with the test hooks)
-#   powershell -File Server\Tools\login_session_test.ps1 -Scenario double  # only the double-login one (works on any binary)
+#   powershell -File Tools\db\login_session_test.ps1                 # all scenarios (needs a binary with the test hooks)
+#   powershell -File Tools\db\login_session_test.ps1 -Scenario double  # only the double-login one (works on any binary)
 #
 # ASCII only - PowerShell 5.1 reads BOM-less files as cp949.
 param(

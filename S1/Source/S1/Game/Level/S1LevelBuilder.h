@@ -50,9 +50,9 @@ class S1_API AS1LevelBuilder : public AActor
 public:
 	AS1LevelBuilder();
 
-	/** Layout file, relative to the project directory (tools/level/floor1.json — the approved floor 1). */
+	/** Layout file, relative to the project directory (Tools/level/floor1.json — the approved floor 1). */
 	UPROPERTY(EditAnywhere, Category = "Level")
-	FString LayoutFile = TEXT("../tools/level/floor1.json");
+	FString LayoutFile = TEXT("../Tools/level/floor1.json");
 
 	/**
 	 * Where the export goes, relative to the project directory. Not Server/Data itself until activation

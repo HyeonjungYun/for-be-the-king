@@ -1,0 +1,147 @@
+name: server-tests
+
+# 원본은 Tools/ci/workflows/server-tests.yml - .github/workflows/ 사본은 Tools/ci/sync-workflows.ps1 이 만든다 (2026-10-21). 사본을 고치지 말 것
+
+# 🔴 SV-4 게이트가 요구하는 "8스레드 × 1000회 × 반복 100회 크래시 0건"을 자동화한다.
+#    스트레스 테스트는 비결정적이라 100번 중 1번만 실패할 수 있고,
+#    그것을 손으로 매번 돌릴 수는 없다.
+#
+#    측정(부하·지급 벤치마크)은 여기서 돌리지 않는다. CI 러너의 성능이
+#    매번 다르므로 처리량 수치를 비교할 수 없다 — 정확성만 본다.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+
+      # gtest 는 NuGet 패키지다. Server/packages/ 를 저장소에 두었지만
+      # vcxproj 가 참조하는 경로가 맞는지 복원으로 한 번 확인한다
+      - name: Restore NuGet packages
+        run: nuget restore Server\Server.sln
+        continue-on-error: true
+
+      # 🔴 ServerCoreSTests 는 pch.h 의 #pragma comment 로 ServerCore.lib 를
+      #    링크한다. 프로젝트 참조가 아니라 경로 참조이므로 순서를 명시해야 한다.
+      #    이 순서를 어기면 구버전 lib 가 링크되는 문제가 실제로 있었다.
+      - name: Build ServerCore
+        run: msbuild Server\Server.sln /t:ServerCore /p:Configuration=Debug /p:Platform=x64 /m /v:minimal
+
+      - name: Build ServerCoreSTests
+        run: msbuild Server\Server.sln /t:ServerCoreSTests /p:Configuration=Debug /p:Platform=x64 /m /v:minimal
+
+      # GameServer 로직(Creature · SkillTable) 테스트. GameServer 는 exe 라
+      # ..\GameServer\*.cpp 와 추적 중인 *.pb.cc 를 직접 컴파일한다.
+      # GameServer 프로젝트 자체는 빌드하지 않으므로 GenPackets 병렬 경합(/m)과 무관하다
+      - name: Build GameServerTests
+        run: msbuild Server\Server.sln /t:GameServerTests /p:Configuration=Debug /p:Platform=x64 /m /v:minimal
+
+      # ServerCore.lib 안의 DBConnection 이 libmysql 을 동적 로드한다.
+      # 실제 DB 연결은 필요 없지만 DLL 이 없으면 실행 자체가 안 된다
+      - name: Copy MySQL runtime
+        run: |
+          Copy-Item Server\Libraries\Bin\MySQL\*.dll Server\Binaries\Debug\ -Force
+          Get-ChildItem Server\Binaries\Debug\*.dll | Select-Object Name
+
+      - name: Run unit tests
+        run: Server\Binaries\Debug\ServerCoreSTests.exe --gtest_output=xml:test-results.xml
+
+      # M1 ④ 하드 CC 무기 전용 · ⑥ AC-5 · AC-6
+      - name: Run GameServer tests
+        run: Server\Binaries\Debug\GameServerTests.exe --gtest_output=xml:gameserver-test-results.xml
+
+      # SV-4 — 스트레스만 100회 반복. 데이터 레이스는 한 번에 드러나지 않는다
+      #    2026-10-18: Session 동시 Send (루프백 실 소켓) 가 들어왔다 - 반복마다 다른 포트를 쓴다
+      - name: Stress tests × 100
+        run: Server\Binaries\Debug\ServerCoreSTests.exe --gtest_filter=Stress.* --gtest_repeat=100
+
+      # Release 로도 한 번 (2026-10-21) - 서버는 Release 로 돈다. 최적화 · NDEBUG 에서만 드러나는 것(assert 뒤의 부작용 · UB)을 Debug 만으로는 못 본다.
+      # ServerCore 는 /W4 /WX 라 경고 하나가 빌드를 깬다 - 두 구성 모두에서
+      - name: Build + run tests (Release)
+        run: |
+          msbuild Server\Server.sln /t:ServerCore /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          msbuild Server\Server.sln /t:ServerCoreSTests /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          msbuild Server\Server.sln /t:GameServerTests /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          Copy-Item Server\Libraries\Bin\MySQL\*.dll Server\Binaries\Release\ -Force
+          Server\Binaries\Release\ServerCoreSTests.exe
+          Server\Binaries\Release\GameServerTests.exe
+
+      # AddressSanitizer (2026-10-21) - 공유 자료구조의 스트레스 테스트를 ASan 으로 10 번. 힙 오염 · use-after-free 는 크래시가 나기 전엔 안 보인다.
+      # 별도 출력 폴더에 빌드한다 (Debug 바이너리와 섞이지 않게). ASan 런타임 DLL 은 VC 도구 폴더에 있다
+      - name: Stress tests × 10 under AddressSanitizer
+        shell: pwsh
+        run: |
+          msbuild Server\Server.sln /t:ServerCoreSTests /p:Configuration=Debug /p:Platform=x64 /p:EnableASAN=true "/p:OutDir=$env:GITHUB_WORKSPACE\Server\Binaries\Asan\" /m /v:minimal
+          Copy-Item Server\Libraries\Bin\MySQL\*.dll Server\Binaries\Asan\ -Force
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $asan = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\clang_rt.asan_dynamic-x86_64.dll" | Select-Object -Last 1
+          $env:PATH = "$($asan.DirectoryName);$env:PATH"
+          & "$env:GITHUB_WORKSPACE\Server\Binaries\Asan\ServerCoreSTests.exe" --gtest_filter=Stress.*:LockQueue.*:RecvBuffer.*:Buffer.*:JobTimer.* --gtest_repeat=10
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # 커버리지 게이트 (technical-preferences § Testing - ServerCore 라인 70 %, 2026-10-18 CI 에 넣음).
+      # 제외는 문서와 같은 넷(SocketUtils · DBConnection.cpp · DBStatement.cpp · CrashDump.cpp) + 테스트 자신.
+      # DBStatement 는 실 DB 가 있어야(러너엔 없다 - 테스트가 건너뛴다), CrashDump 는 실제 크래시가 있어야 실행된다 (2026-10-21).
+      # 로컬 실측 2026-10-21 74.6 % (961/1288) - 두 파일을 빼지 않으면 DB 없는 러너에서 66.6 %
+      - name: Install OpenCppCoverage
+        run: choco install opencppcoverage -y --no-progress
+
+      - name: Coverage (ServerCore >= 70 %)
+        shell: pwsh
+        run: |
+          & "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe" `
+            --sources "$env:GITHUB_WORKSPACE\Server\ServerCore" `
+            --excluded_sources "ServerCoreSTests" `
+            --excluded_sources "SocketUtils" `
+            --excluded_sources "DBConnection.cpp" `
+            --excluded_sources "DBStatement.cpp" `
+            --excluded_sources "CrashDump.cpp" `
+            --export_type "cobertura:coverage.xml" `
+            --quiet `
+            -- "$env:GITHUB_WORKSPACE\Server\Binaries\Debug\ServerCoreSTests.exe"
+          [xml]$c = Get-Content coverage.xml
+          $rate = [double]$c.coverage.'line-rate'
+          Write-Host ("ServerCore line coverage {0:P1} ({1}/{2})" -f $rate, $c.coverage.'lines-covered', $c.coverage.'lines-valid')
+          if ($rate -lt 0.70) { Write-Error "coverage below 70 %"; exit 1 }
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: |
+            test-results.xml
+            gameserver-test-results.xml
+            coverage.xml
+
+  # UE 자동화 테스트 (S1.*, 2026-10-18 로컬 59/59). GitHub 호스트 러너에는 UE 5.8 이 없다 -
+  # UE 가 설치된 셀프 호스트 러너(라벨 ue58)를 붙이고 저장소 변수 UE_RUNNER=true 를 켜면 돈다. 꺼져 있으면 건너뛴다
+  ue-automation:
+    if: vars.UE_RUNNER == 'true'
+    runs-on: [self-hosted, windows, ue58]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build S1Editor
+        run: '& "C:\Unreal5.8\UE_5.8\Engine\Build\BatchFiles\Build.bat" S1Editor Win64 Development -Project="$env:GITHUB_WORKSPACE\S1\S1.uproject" -WaitMutex'
+
+      - name: Automation RunTests S1 (-nullrhi)
+        shell: pwsh
+        run: |
+          & "C:\Unreal5.8\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "$env:GITHUB_WORKSPACE\S1\S1.uproject" `
+            -ExecCmds="Automation RunTests S1; Quit" -unattended -nullrhi -nosplash -nosound -NoP4 -log="ci-automation.log"
+          $log = Get-Content "$env:GITHUB_WORKSPACE\S1\Saved\Logs\ci-automation.log"
+          $ok = @($log | Select-String 'Result=\{Success\}').Count
+          $fail = @($log | Select-String 'Result=\{Fail').Count
+          Write-Host "UE automation: success=$ok fail=$fail"
+          if ($fail -gt 0 -or $ok -eq 0) { $log | Select-String 'Result=\{Fail' | ForEach-Object { Write-Host $_.Line }; exit 1 }

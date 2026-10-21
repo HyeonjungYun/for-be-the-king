@@ -150,7 +150,7 @@ S1/                  Unreal Engine 5.8 클라이언트
 
 - 필요: Windows 10/11 64비트 · DirectX 12 그래픽 카드. VC++ 런타임 오류가 나면 `client\Engine\Extras\Redist\en-us\vc_redist.x64.exe`
 - 조작: WASD 이동 · 우클릭 유지 평타 · Shift / Q / E / R / Z / X 스킬 · F 대화 · 줍기 · Tab 소지품
-- 묶음은 `tools/package-bundle.ps1`(로컬 전용 도구)로 만들었습니다 — 클라 패키지 + `GameServer.exe` · `DummyClient.exe` + 인증 서버(.NET 런타임 포함 배포) + MySQL 8.0(필요한 파일만 · 스키마와 시드를 미리 넣은 DB)
+- 묶음은 `Tools/package/package-bundle.ps1`(로컬 전용 도구)로 만들었습니다 — 클라 패키지 + `GameServer.exe` · `DummyClient.exe` + 인증 서버(.NET 런타임 포함 배포) + MySQL 8.0(필요한 파일만 · 스키마와 시드를 미리 넣은 DB)
 - MySQL 8.0 Community Server 는 GPL v2 입니다 (`mysql\LICENSE`)
 
 ## 빌드 · 실행
@@ -158,7 +158,7 @@ S1/                  Unreal Engine 5.8 클라이언트
 ```
 필요       Visual Studio 2022 · MySQL 8.0 · .NET 10 SDK · Unreal Engine 5.8
 
-1  DB      powershell -ExecutionPolicy Bypass -File Server\Tools\setup_db.ps1 -Password <비번>
+1  DB      powershell -ExecutionPolicy Bypass -File Tools\db\setup_db.ps1 -Password <비번>
 2  서버    Server\Server.sln 빌드 → GameServer 실행   (환경변수 FBTK_DB_PASSWORD 필요)
 3  인증    cd Server\AuthServer && dotnet run          (http://127.0.0.1:8080)
 4  클라    S1\S1.uproject

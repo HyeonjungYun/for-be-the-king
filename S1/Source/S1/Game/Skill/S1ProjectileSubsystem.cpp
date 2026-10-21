@@ -655,7 +655,7 @@ bool US1ProjectileSubsystem::SpawnWaveVisual(FS1ClientProjectile& P, const FS1Pr
 		WaveMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FX/M_S1SwordWave.M_S1SwordWave"));
 	if (WaveMaterial == nullptr)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[VFX] /Game/FX/M_S1SwordWave is missing (tools/fx/make_sword_wave_material.py) - effect %u keeps the stock drawing"), P.EffectId);
+		UE_LOG(LogTemp, Warning, TEXT("[VFX] /Game/FX/M_S1SwordWave is missing (Tools/fx/make_sword_wave_material.py) - effect %u keeps the stock drawing"), P.EffectId);
 		return false;
 	}
 

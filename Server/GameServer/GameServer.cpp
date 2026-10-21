@@ -462,7 +462,7 @@ int main()
 						<< " coverage=" << ::lroundf(st.coveragePct) << "%" << " min_sep=" << ::lroundf(st.minSepCm / 100.f) << "m avg_len=" << ::lroundf(st.avgLengthM)
 						<< "m components=" << st.components << " dropped_cells=" << st.droppedCells << " attempts=" << st.attempts << " retries=" << st.retries
 						<< " took=" << st.elapsedUs / 1000 << "ms\n";
-					// 사람이 보는 사본 (증거 · tools/level/draw_routes.py) - 못 써도 부팅은 계속, 로그만
+					// 사람이 보는 사본 (증거 · Tools/level/draw_routes.py) - 못 써도 부팅은 계속, 로그만
 					const string routePath = routeDir + "\\routes-floor" + to_string(rules.floorId) + "-set" + to_string(k) + ".csv";
 					ofstream file(routePath, ios::binary | ios::trunc);
 					if (file.is_open())
@@ -646,7 +646,7 @@ int main()
 	::SetConsoleCtrlHandler(OnConsoleCtrl, TRUE);
 
 	// 바인드 주소 · 포트 (2026-10-18 플레이테스트 접속 환경) - 기본은 이 PC 만(127.0.0.1:7777). 같은 공간 LAN 플레이테스트는
-	// 호스트가 FBTK_BIND_ADDRESS=0.0.0.0 으로 켠다 (tools/playtest-host.ps1 · docs/playtest-network.md)
+	// 호스트가 FBTK_BIND_ADDRESS=0.0.0.0 으로 켠다 (Tools/dev/playtest-host.ps1 · docs/playtest-network.md)
 	wstring bindAddress;
 	for (char c : config.bindAddress)
 		bindAddress.push_back(static_cast<wchar_t>(c));

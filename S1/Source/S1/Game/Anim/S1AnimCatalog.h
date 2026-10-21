@@ -55,7 +55,7 @@ namespace S1LocoLogic
  * The packs reference their own skeleton copies. The first time a clip from a pack plays, its skeleton is registered as
  * compatible with the player's skeleton (USkeleton::AddCompatibleSkeleton) — no asset edit, works in -game and packaged.
  *
- * Data: Content/Data/anim_clips.csv (built by tools/anim/build_anim_clips.py), Server/Data/motions.csv (motion_id,key — the
+ * Data: Content/Data/anim_clips.csv (built by Tools/anim/build_anim_clips.py), Server/Data/motions.csv (motion_id,key — the
  * server sends the id, both sides read the same file).
  */
 class FS1AnimCatalog

@@ -4,7 +4,7 @@
 #                         -> enter again: no kit (owns 3)  -> /die + leave: rows go to the bag  -> enter: kit again
 #   B. one VAULTED row only (inserted while the server is down - item_rows_outside_game_server exception) -> enter: no kit
 #
-#   powershell -File Server\Tools\starter_kit_test.ps1
+#   powershell -File Tools\db\starter_kit_test.ps1
 # ASCII only - PowerShell 5.1 reads BOM-less files as cp949.
 param([string] $Bin = 'C:\Server\MMO\Server\Binaries\Release')
 

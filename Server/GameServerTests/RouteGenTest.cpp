@@ -451,7 +451,7 @@ TEST(PackRulesTable, 범위_밖과_중복_층은_부팅을_거부하고_경계�
 
 /*-------- 덤프 (증거 · 그림) --------*/
 
-// 도구 (테스트 아님 - DISABLED_, 검증자 수정 6): FBTK_ROUTE_DUMP="1,2,3" 으로 그 시드들의 길을 %TEMP%\rg\gen-<seed>.csv 로 쓴다 - tools/level/draw_routes.py 로 그린다.
+// 도구 (테스트 아님 - DISABLED_, 검증자 수정 6): FBTK_ROUTE_DUMP="1,2,3" 으로 그 시드들의 길을 %TEMP%\rg\gen-<seed>.csv 로 쓴다 - Tools/level/draw_routes.py 로 그린다.
 //   GameServerTests.exe --gtest_filter=*FBTK_ROUTE_DUMP* --gtest_also_run_disabled_tests
 TEST(RouteGen, DISABLED_덤프_FBTK_ROUTE_DUMP)
 {

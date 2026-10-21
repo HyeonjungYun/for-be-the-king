@@ -11,7 +11,7 @@
 --    가드: 옛 체계에만 있는 2xx 가 하나도 없으면 아무것도 바꾸지 않는다.
 --
 -- 사용법 (PowerShell)
---    Get-Content .\Server\Tools\migrate_item_type_ids.sql |
+--    Get-Content .\Tools\db\migrate_item_type_ids.sql |
 --        & "C:\mysql-8.0.46-winx64\bin\mysql.exe" -u root -p -D forbetheking
 USE forbetheking;
 

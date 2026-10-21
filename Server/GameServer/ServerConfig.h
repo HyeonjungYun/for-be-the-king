@@ -9,7 +9,7 @@
 //
 // 시험 전용 훅(FBTK_FAIL_DEATH_COMMIT · FBTK_FAKE_ACK_LOSS · FBTK_LOGIN_DELAY_MS …)은 FBTK_TEST_HOOKS 가 1 인 빌드에서만 읽고,
 // 그 효과를 내는 코드도 그 빌드에만 들어간다 (#if FBTK_TEST_HOOKS). 기본 빌드(개발 · CI · 하네스)는 1, 배포 묶음은
-// tools/package-bundle.ps1 이 /p:FbtkTestHooks=0 으로 만든다 - 배포 바이너리에는 DB 트랜잭션 안에서 자는 코드가 없다
+// Tools/package/package-bundle.ps1 이 /p:FbtkTestHooks=0 으로 만든다 - 배포 바이너리에는 DB 트랜잭션 안에서 자는 코드가 없다
 struct ServerConfig
 {
 	// ── 접속 ──
@@ -20,7 +20,7 @@ struct ServerConfig
 	// ── DB ──
 	string		dbHost = "127.0.0.1";			// FBTK_DB_HOST
 	uint32		dbPort = 3306;					// FBTK_DB_PORT - 실행 묶음은 3307
-	string		dbUser = "fbtk_app";			// FBTK_DB_USER - 전용 계정 (Server/Tools/schema_app_user.sql). 예전엔 root 가 박혀 있었다
+	string		dbUser = "fbtk_app";			// FBTK_DB_USER - 전용 계정 (Tools/db/schema_app_user.sql). 예전엔 root 가 박혀 있었다
 	string		dbPassword;						// FBTK_DB_PASSWORD - 필수
 	string		dbSchema = "forbetheking";		// FBTK_DB_SCHEMA
 	int32		dbThreads = 4;					// FBTK_DB_THREADS - DB 워커 = 커넥션 수 (ADR-0007)

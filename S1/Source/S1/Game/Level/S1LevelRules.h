@@ -7,9 +7,9 @@
 
 /*
  * Level rules — design/gdd/level-map.md Core Rules 4–11 · F1–F8 · Acceptance Criteria § B, ported from
- * tools/level/check_layout.py and check_house.py so the editor exporter refuses a level that breaks them.
+ * Tools/level/check_layout.py and check_house.py so the editor exporter refuses a level that breaks them.
  *
- * The Python tools stay the reference: tests run both on the golden fixture tools/level/floor1.json and the
+ * The Python tools stay the reference: tests run both on the golden fixture Tools/level/floor1.json and the
  * numbers must agree (S1.Level.Rules.*).
  */
 

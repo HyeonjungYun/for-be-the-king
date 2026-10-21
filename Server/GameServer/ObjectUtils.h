@@ -60,7 +60,7 @@ extern string GCommitJournalDir;
 // 검증 전용 (FBTK_FAKE_ACK_LOSS=N) - 처음 N 번의 런 끝 커밋은 DB 에선 됐는데 응답을 잃은 것처럼 일시 실패로 돌려준다
 extern atomic<int32> GFakeCommitAckLoss;
 
-// 부팅 - applied_commits 표가 없으면 만든다 (Server/Tools/schema_commit_journal.sql 과 같은 정의)
+// 부팅 - applied_commits 표가 없으면 만든다 (Tools/db/schema_commit_journal.sql 과 같은 정의)
 bool EnsureCommitJournalTable(DBConnection* conn);
 
 // 부팅 - 접속을 받기 전에 남은 기록을 처리한다 (RestoreIdCounters 뒤, PurgeExpiredBags · LoadLiveBags 앞).

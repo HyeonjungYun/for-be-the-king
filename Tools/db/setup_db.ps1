@@ -14,7 +14,7 @@ param(
     [switch] $NoSeed,
     [switch] $WithTestItems,
     [string] $MySql = 'C:\mysql-8.0.46-winx64\bin\mysql.exe',
-    [int] $Port = 3306      # 실행 묶음(tools/package-bundle.ps1)의 DB 는 3307 (2026-10-19)
+    [int] $Port = 3306      # 실행 묶음(Tools/package/package-bundle.ps1)의 DB 는 3307 (2026-10-19)
 )
 $conn = @('-h', '127.0.0.1', '-P', "$Port", '-u', 'root', "-p$Password")
 
@@ -43,7 +43,7 @@ $files = @(
 )
 if (-not $NoSeed) {
     $files += 'seed_bots.sql'      # bot_1 .. bot_120 (부하 하네스)
-    $files += 'seed_dev.sql'       # dev_1 (tools/dev-launch.ps1)
+    $files += 'seed_dev.sql'       # dev_1 (Tools/dev/dev-launch.ps1)
 }
 if ($WithTestItems) {
     $files += 'seed_test_items.sql'

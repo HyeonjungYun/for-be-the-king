@@ -9,7 +9,7 @@
 /**
  * Builds the floor graybox headless, checks the round trip and saves the map (design/levels/floor-1.md § 9).
  *
- *   UnrealEditor-Cmd.exe S1.uproject -run=S1LevelGraybox -Map=/Game/Maps/Floor1 [-Layout=../tools/level/floor1.json]
+ *   UnrealEditor-Cmd.exe S1.uproject -run=S1LevelGraybox -Map=/Game/Maps/Floor1 [-Layout=../Tools/level/floor1.json]
  *                        [-Export] [-NoSave] -unattended -nullrhi
  *   … -run=S1LevelGraybox -Map=/Game/Maps/Floor1 -Verify     (load the saved map, round trip + rules + server walls)
  *   … -run=S1LevelGraybox -Map=/Game/Maps/Floor1 -Parity=../Server/GameServerTests/Data/floor1_parity.csv

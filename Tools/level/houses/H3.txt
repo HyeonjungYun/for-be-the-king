@@ -1,0 +1,29 @@
++-+-+-+-+-+-+-+-+D+-+-+-+-+-+
+|A A A A|F F F F F F|E E E E|
++       +           +       +
+|A A A A|F F F F F FDE E E E|
++       +           +       +
+|A A A ADF F F c F F|E E E E|
++       +           +       +
+|A A A A|F F F F F F|E E E E|
++-+-+-+-+D+-+-+-+-+-+-+-+-+-+
+|G G G G|. . . . . .|J J J J|
++       + +-+-+-+-+-+       +
+|G G G G|.|I I I I I|J J c J|
++       + +         +       +
+|G G G GD.|I I I I IDJ J J J|
++       + +         +       +
+|G c G G|.|I c I I I|J J J J~
++       + +         +       +
+|G G G G|.DI I I I I|J J J J|
++       + +-+-+-+-+-+       +
+|G G G G|. . . . . .|J J J J|
++-+-+-+-+D+-+-+-+-+-+-+D+-+-+
+|L L L L|T T T T T T|Q Q Q Q|
++       +           +       +
+|L L L L|T T T T T TDQ Q Q Q|
++       +           +       +
+|L L L LDT T T T T T|Q Q Q Q|
++       +           +       +
+|L L L L|T T T T T T|Q Q Q Q|
++-+-+-+-+-+-+-+D+-+-+-+-+-+-+

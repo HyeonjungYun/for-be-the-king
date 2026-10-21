@@ -8,7 +8,7 @@
  * Floor layout data — design/gdd/level-map.md · design/levels/floor-1.md.
  *
  * Plain structs, no UObject: the same model feeds the rule checker (S1LevelRules), the graybox builder and the
- * exporter, and the automation tests run it headless against the golden fixture tools/level/floor1.json.
+ * exporter, and the automation tests run it headless against the golden fixture Tools/level/floor1.json.
  *
  * Units are METRES on the floor plane. Origin = floor centre, +X = north (up on screen), +Y = east.
  */
@@ -94,7 +94,7 @@ struct S1_API FS1LevelLayout
 	FString					BossHouse;
 
 	/**
-	 * The island coast (2026-10-11 map expansion, tools/level/gen_island.py) - a polygon in metres, clockwise from north.
+	 * The island coast (2026-10-11 map expansion, Tools/level/gen_island.py) - a polygon in metres, clockwise from north.
 	 * Empty = the old 280 m square. Every boundary rule measures to this line, and the builder raises the coast on it.
 	 */
 	TArray<FVector2D>		Outline;
@@ -102,7 +102,7 @@ struct S1_API FS1LevelLayout
 	/** Open-field chests the rules ask for ("open_chest_count") - 0 = the limit's default (12). */
 	int32					OpenChestCount = 0;
 
-	/** Parses the tools/level/floor1.json format. */
+	/** Parses the Tools/level/floor1.json format. */
 	bool ParseJson(const FString& Json, FString& OutError);
 
 	/** Square fallback half size when there is no outline (registry floor_size 280 m). */

@@ -1,0 +1,29 @@
++-+-+-+-+-+D+-+-+-+-+-+-+-+-+
+|Y Y Y Y Y Y Y Y Y Y Y Y Y Y|
++                           +
+|Y Y Y Y Y Y Y Y Y Y Y Y Y Y|
++                           +
+|Y Y Y Y Y Y Y Y c Y Y Y Y Y|
++                           +
+|Y Y Y Y Y Y Y Y Y Y Y Y Y Y|
++-+D+-+-+-+~+~+-+-+-+-+D+-+-+
+|W W W W|H H H H H H|E E E E|
++       +           +       +
+|W W W W|H H H H H H|E E E E|
++       +-+-+-+-+D+-+       +
+|W W W W|M M M M M M|E E c E|
++       +           +       +
+|W c W W|M M M c M M|E E E E|
++       +           +       +
+|W W W W|M M M M M M|E E E E~
++       +           +       +
+|W W W W|M M M M M M|E E E E|
++-+D+-+-+-+D+-+-+-+-+-+D+-+-+
+|K K K K K K K K|S S S S S S|
++               +           +
+|K K K K K K K K|S S S S S S|
++               +           +
+|K K K K K K K KDS S S S S S|
++               +           +
+|K K K K K K K K|S S S S S S|
++-+-+-+-+-+-+D+-+-+-+-+-+-+-+

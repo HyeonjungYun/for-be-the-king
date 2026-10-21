@@ -15,7 +15,7 @@
 --    서버를 FBTK_ENTRY_FROM_DB=1 로 띄울 것 — 아니면 봇 120명이 층마다 5곳에 몰려 이전 측정과 비교가 안 된다.
 --
 -- 사용법 (PowerShell)
---    Get-Content .\Server\Tools\reset_bots.sql |
+--    Get-Content .\Tools\db\reset_bots.sql |
 --        & "C:\mysql-8.0.46-winx64\bin\mysql.exe" -u root -p -D forbetheking
 
 USE forbetheking;

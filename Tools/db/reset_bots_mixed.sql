@@ -15,7 +15,7 @@
 --  (1 · 2 단계 회귀 때는 망치 1006 · 단검 1042 · 너클 1058 · 스태프 1068 이었다 - 그 효과는 다른 무기 · 클라 실기동이 덮는다)
 --
 -- 사용법 (PowerShell) - 서버를 끈 상태에서만 (아이템 행은 게임 서버 밖에서 바꾸지 않는다는 규칙의 측정 전용 예외)
---    Get-Content .\Server\Tools\reset_bots_mixed.sql |
+--    Get-Content .\Tools\db\reset_bots_mixed.sql |
 --        & "C:\mysql-8.0.46-winx64\bin\mysql.exe" -u root -p -D forbetheking
 
 USE forbetheking;

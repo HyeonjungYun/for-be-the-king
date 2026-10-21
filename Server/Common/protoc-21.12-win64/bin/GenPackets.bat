@@ -1,6 +1,6 @@
 pushd %~dp0
 
-XCOPY /Y /I "../../../Tools/PacketGenerator/Templates" "./Templates"
+XCOPY /Y /I "../../../../Tools/codegen/PacketGenerator/Templates" "./Templates"
 
 protoc.exe -I=./ --cpp_out=./ ./Enum.proto
 IF ERRORLEVEL 1 ( echo. & echo *** Enum.proto 컴파일 실패 - 위 에러를 고치세요 *** & PAUSE & EXIT /B 1 )

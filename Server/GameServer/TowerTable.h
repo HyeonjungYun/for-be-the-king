@@ -4,7 +4,7 @@
 	TowerTable
 --------------*/
 
-// Server/Data/towers.csv — 층의 탈출 타워 (레벨 빌더 내보내기, tools/level/promote_export.py 로 옮긴다).
+// Server/Data/towers.csv — 층의 탈출 타워 (레벨 빌더 내보내기, Tools/level/promote_export.py 로 옮긴다).
 //   tower_id,floor_id,x,y     id 는 Ta · Tb · Tc · Td, 좌표 cm (섬 1층은 4개 - 2026-10-11)
 // 몬스터 자리 검증(monster-ai.md F8 — 타워에서 35 m) · 탈출 게이지(escape-timer.md)가 읽는다.
 // 파일이 없으면 타워 0개로 돈다 - 레벨이 아직 없는 층과 같다.
