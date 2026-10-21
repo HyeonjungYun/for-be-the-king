@@ -17,4 +17,5 @@ void IocpEvent::Init()
 	OVERLAPPED::InternalHigh = 0;
 	OVERLAPPED::Offset = 0;
 	OVERLAPPED::OffsetHigh = 0;
+	errorCode = 0;
 }

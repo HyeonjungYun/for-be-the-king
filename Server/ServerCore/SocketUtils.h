@@ -24,6 +24,9 @@ public:
 	static bool SetRecvBufferSize(SOCKET socket, int32 size);
 	static bool SetSendBufferSize(SOCKET socket, int32 size);
 	static bool SetTcpNoDelay(SOCKET socket, bool flag);
+
+	// TCP keepalive - idleMs 동안 조용하면 intervalMs 간격으로 탐침을 보낸다 (SIO_KEEPALIVE_VALS). 죽은 상대를 OS 가 끊어 준다 (2026-10-21)
+	static bool SetKeepAlive(SOCKET socket, uint32 idleMs, uint32 intervalMs);
 	static bool SetUpdateAcceptSocket(SOCKET socket, SOCKET listenSocket);
 
 	static bool Bind(SOCKET socket, NetAddress netAddr);

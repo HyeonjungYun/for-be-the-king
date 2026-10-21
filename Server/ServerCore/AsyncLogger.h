@@ -86,10 +86,14 @@ AsyncLogger& GetLogger();
 
 // LOG_LINE << a << b << '\n';  - 문장 하나가 한 덩어리로 큐에 들어간다.
 // 여러 문장으로 한 이벤트를 찍을 때는 객체를 직접 둔다: LogLine out; out << ...; (블록이 끝날 때 나간다)
+//
+// 머리 (2026-10-21): "2026-10-21 14:03:22.123 I 05 " = 날짜 시각.ms · 수준(I 정보 · E 표준 오류) · 스레드 번호(LThreadId, 2자리).
+// 예전엔 시각도 수준도 스레드도 없어 "언제 · 어느 워커에서" 를 알 수 없었다. 한 LogLine 이 여러 줄이면 머리는 첫 줄에만 붙는다.
+// 줄 머리에 '[' 를 기대하는 스크립트는 '^\[' 대신 '\[' 로 (하네스 3개 고침)
 class LogLine
 {
 public:
-	explicit LogLine(bool toStderr = false) : _toStderr(toStderr) {}
+	explicit LogLine(bool toStderr = false) : _toStderr(toStderr) { WritePrefix(); }
 	~LogLine() { GetLogger().Push(std::move(_stream).str(), _toStderr); }
 
 	LogLine(const LogLine&) = delete;
@@ -110,6 +114,8 @@ public:
 	}
 
 private:
+	void				WritePrefix();
+
 	std::ostringstream	_stream;
 	bool				_toStderr;
 };

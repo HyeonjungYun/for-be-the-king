@@ -3,6 +3,7 @@
 #include "CoreTLS.h"
 #include "CoreGlobal.h"
 #include "GlobalQueue.h"
+#include "Utils.h"
 
 /*------------------
 	ThreadManager
@@ -56,7 +57,7 @@ void ThreadManager::DoGlobalQueueWork()
 {
 	while (true)
 	{
-		uint64 now = ::GetTickCount64();
+		const uint64 now = Utils::NowMilliseconds();
 		if (now > LEndTickCount)
 			break;
 
@@ -70,7 +71,7 @@ void ThreadManager::DoGlobalQueueWork()
 
 void ThreadManager::DistributeReservedJobs()
 {
-	const uint64 now = ::GetTickCount64();
+	const uint64 now = Utils::NowMilliseconds();
 
 	GJobTimer->Distribute(now);
 }

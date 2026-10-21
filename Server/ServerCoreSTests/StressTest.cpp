@@ -4,6 +4,7 @@
 #include "JobQueue.h"
 #include "GlobalQueue.h"
 #include "CoreTLS.h"
+#include "Utils.h"
 
 namespace
 {
@@ -12,8 +13,8 @@ namespace
 
 	// 워커 스레드가 아니므로 타임슬라이스를 넉넉히 잡아 준다.
 	// 이걸 안 하면 JobQueue::Execute 가 LEndTickCount 를 넘겼다고 판단해
-	// 곧바로 GlobalQueue 로 넘겨 버린다.
-	void GiveGenerousTimeSlice() { LEndTickCount = ::GetTickCount64() + 60000; }
+	// 곧바로 GlobalQueue 로 넘겨 버린다. 시계는 JobQueue 와 같은 Utils::NowMilliseconds (2026-10-21)
+	void GiveGenerousTimeSlice() { LEndTickCount = Utils::NowMilliseconds() + 60000; }
 }
 
 /*---------------

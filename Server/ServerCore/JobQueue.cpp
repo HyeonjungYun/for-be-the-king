@@ -123,7 +123,7 @@ void JobQueue::Execute()
 			return;
 		}
 
-		const uint64 now = ::GetTickCount64();
+		const uint64 now = Utils::NowMilliseconds();
 		if (now >= LEndTickCount)
 		{
 			LCurrentJobQueue = nullptr;

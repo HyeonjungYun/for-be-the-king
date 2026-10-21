@@ -4,6 +4,7 @@
 #include "JobQueue.h"
 #include "GlobalQueue.h"
 #include "CoreTLS.h"
+#include "Utils.h"
 
 namespace
 {
@@ -27,7 +28,7 @@ namespace
 	// StressTest.cpp 와 같은 이유다. 워커 스레드가 아니라 LEndTickCount 가 0이므로,
 	// 손대지 않으면 JobQueue::Execute 가 타임슬라이스를 넘겼다고 보고
 	// 남은 일감을 GlobalQueue 로 넘겨 버린다 — 테스트에서는 아무도 그것을 꺼내지 않는다.
-	void GiveGenerousTimeSlice() { LEndTickCount = ::GetTickCount64() + 60000; }
+	void GiveGenerousTimeSlice() { LEndTickCount = Utils::NowMilliseconds() + 60000; }
 
 	/** GlobalQueue 로 밀려난 잔여 일감을 마저 실행한다 */
 	void DrainGlobalQueue()
@@ -49,7 +50,7 @@ TEST(JobTimer, 기한_전에는_배분하지_않는다)
 	JobTimer timer;
 	auto queue = make_shared<CountingQueue>();
 
-	const uint64 now = ::GetTickCount64();
+	const uint64 now = Utils::NowMilliseconds();
 	timer.Reserve(10000, queue, MakeCountingJob(queue));
 
 	timer.Distribute(now);
@@ -68,8 +69,8 @@ TEST(JobTimer, 기한이_지나면_배분한다)
 
 	timer.Reserve(0, queue, MakeCountingJob(queue));
 
-	// Reserve 는 GetTickCount64() 기준으로 기한을 잡으므로 넉넉히 앞선 시각을 준다
-	timer.Distribute(::GetTickCount64() + 1000);
+	// Reserve 는 Utils::NowMilliseconds() 기준으로 기한을 잡으므로 넉넉히 앞선 시각을 준다 (2026-10-21 GetTickCount64 → steady_clock)
+	timer.Distribute(Utils::NowMilliseconds() + 1000);
 
 	// TD-008 (2026-10-18) - 배분하는 스레드가 그 자리에서 돌지 않는다. GlobalQueue 로 넘겼다가 워커(여기선 Drain)가 돈다
 	EXPECT_EQ(queue->executed.load(), 0);
@@ -88,7 +89,7 @@ TEST(JobTimer, 기한이_지난_것만_배분한다)
 	timer.Reserve(0, queue, MakeCountingJob(queue));
 	timer.Reserve(100000, queue, MakeCountingJob(queue));
 
-	timer.Distribute(::GetTickCount64() + 1000);
+	timer.Distribute(Utils::NowMilliseconds() + 1000);
 	DrainGlobalQueue();
 
 	// 먼 미래로 예약한 하나는 남아 있어야 한다
@@ -112,7 +113,7 @@ TEST(JobTimer, 같은_배분에서_기한이_이른_것부터_실행된다)
 	timer.Reserve(100, queue, make_shared<Job>([&order]() { order.push_back(100); }));
 	timer.Reserve(300, queue, make_shared<Job>([&order]() { order.push_back(300); }));
 
-	timer.Distribute(::GetTickCount64() + 1000);
+	timer.Distribute(Utils::NowMilliseconds() + 1000);
 	DrainGlobalQueue();
 
 	ASSERT_EQ(order.size(), 3u);
@@ -134,7 +135,7 @@ TEST(JobTimer, owner가_사라졌으면_건너뛴다)
 	}
 	// queue 가 파괴됐다. weak_ptr 은 만료되고 Job 은 실행되지 않아야 한다
 
-	timer.Distribute(::GetTickCount64() + 1000);
+	timer.Distribute(Utils::NowMilliseconds() + 1000);
 
 	EXPECT_EQ(executed.load(), 0);
 }
@@ -150,7 +151,7 @@ TEST(JobTimer, Clear하면_남은_예약이_사라진다)
 		timer.Reserve(0, queue, MakeCountingJob(queue));
 
 	timer.Clear();
-	timer.Distribute(::GetTickCount64() + 1000);
+	timer.Distribute(Utils::NowMilliseconds() + 1000);
 
 	EXPECT_EQ(queue->executed.load(), 0);
 }
@@ -161,7 +162,7 @@ TEST(JobTimer, 빈_타이머를_배분해도_안전하다)
 
 	JobTimer timer;
 
-	timer.Distribute(::GetTickCount64());
+	timer.Distribute(Utils::NowMilliseconds());
 	timer.Clear();
 
 	SUCCEED();
@@ -189,7 +190,7 @@ TEST(Stress, JobTimer_동시_Reserve와_Distribute가_일감을_잃지_않는다
 				for (int32 i = 0; i < PER_THREAD; i++)
 				{
 					timer.Reserve(0, queue, MakeCountingJob(queue));
-					timer.Distribute(::GetTickCount64() + 1000);
+					timer.Distribute(Utils::NowMilliseconds() + 1000);
 				}
 			});
 	}
@@ -199,7 +200,7 @@ TEST(Stress, JobTimer_동시_Reserve와_Distribute가_일감을_잃지_않는다
 
 	// _distributing 경합에 밀려 타이머에 남은 것을 마지막에 비운다
 	GiveGenerousTimeSlice();
-	timer.Distribute(::GetTickCount64() + 1000);
+	timer.Distribute(Utils::NowMilliseconds() + 1000);
 
 	DrainGlobalQueue();
 

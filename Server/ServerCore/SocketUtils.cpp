@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "SocketUtils.h"
+#include <mstcpip.h>		// tcp_keepalive · SIO_KEEPALIVE_VALS
 
 /*----------------
 	SocketUtils
@@ -63,8 +64,19 @@ bool SocketUtils::SetSendBufferSize(SOCKET socket, int32 size)
 
 bool SocketUtils::SetTcpNoDelay(SOCKET socket, bool flag)
 {
-	// TCP_NODELAY 는 IPPROTO_TCP 단계다 - SOL_SOCKET 이면 같은 값(1)인 SO_DEBUG 를 켠다. 지금은 부르는 곳 없음
+	// TCP_NODELAY 는 IPPROTO_TCP 단계다 - SOL_SOCKET 이면 같은 값(1)인 SO_DEBUG 를 켠다. Session::ProcessConnect 가 모든 세션에 켠다 (2026-10-21)
 	return SetSockOpt(socket, IPPROTO_TCP, TCP_NODELAY, flag);
+}
+
+bool SocketUtils::SetKeepAlive(SOCKET socket, uint32 idleMs, uint32 intervalMs)
+{
+	tcp_keepalive option;
+	option.onoff = 1;
+	option.keepalivetime = idleMs;
+	option.keepaliveinterval = intervalMs;
+
+	DWORD bytes = 0;
+	return SOCKET_ERROR != ::WSAIoctl(socket, SIO_KEEPALIVE_VALS, &option, sizeof(option), nullptr, 0, OUT &bytes, nullptr, nullptr);
 }
 
 // ListenSocket의 특성을 ClientSocket에 그대로 적용

@@ -111,6 +111,26 @@ void AsyncLogger::WriteToStd(const std::string& text, bool toStderr)
 	::fflush(stream);
 }
 
+/*------------
+	LogLine
+-------------*/
+
+void LogLine::WritePrefix()
+{
+	const auto now = std::chrono::system_clock::now();
+	const time_t seconds = std::chrono::system_clock::to_time_t(now);
+	const int32 millis = static_cast<int32>(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000);
+
+	tm local = {};
+	::localtime_s(&local, &seconds);
+
+	char head[40];
+	::snprintf(head, sizeof(head), "%04d-%02d-%02d %02d:%02d:%02d.%03d %c %02u ",
+		local.tm_year + 1900, local.tm_mon + 1, local.tm_mday, local.tm_hour, local.tm_min, local.tm_sec, millis,
+		_toStderr ? 'E' : 'I', LThreadId % 100);
+	_stream << head;
+}
+
 AsyncLogger& GetLogger()
 {
 	// 일부러 해제하지 않는다 - 종료 중에 다른 전역 객체의 소멸자가 로그를 찍어도 죽은 객체를 건드리지 않게.

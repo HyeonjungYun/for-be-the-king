@@ -1,7 +1,10 @@
 ﻿#include "pch.h"
 #include "ServerStats.h"
 #include "Utils.h"
+#include "DBJobQueue.h"
 #include <psapi.h>
+#include <filesystem>
+#include <share.h>
 
 #pragma comment(lib, "psapi.lib")
 
@@ -45,6 +48,52 @@ void ServerStats::RecordFlush(uint64 micros)
 	while (micros > prevMax && _flushMaxUs.compare_exchange_weak(prevMax, micros) == false)
 	{
 	}
+}
+
+void ServerStats::RecordTimerLate(uint64 lateMs)
+{
+	const uint64 lateUs = lateMs * 1000;
+	for (int32 i = 0; i < BUCKET_COUNT; i++)
+	{
+		if (lateUs <= BUCKET_UPPER_US[i])
+		{
+			_timerLateBuckets[i].fetch_add(1);
+			break;
+		}
+	}
+
+	_timerLateCount.fetch_add(1);
+
+	uint64 prevMax = _timerLateMaxUs.load();
+	while (lateUs > prevMax && _timerLateMaxUs.compare_exchange_weak(prevMax, lateUs) == false)
+	{
+	}
+}
+
+bool ServerStats::EnableCsv(const string& dir)
+{
+	error_code ec;
+	filesystem::create_directories(dir, ec);
+
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	char name[64];
+	::snprintf(name, sizeof(name), "stats-%04d%02d%02d-%02d%02d%02d.csv", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+	const string path = dir + "\\" + name;
+
+	lock_guard<mutex> guard(_csvLock);
+	if (_csv != nullptr)
+		::fclose(_csv);
+
+	// 쓰기만 막고 읽기는 열어 둔다 - 서버가 도는 동안 Get-Content · 그래프 도구가 꼬리를 읽을 수 있게 (fopen 은 읽기도 막았다)
+	_csv = ::_fsopen(path.c_str(), "w", _SH_DENYWR);
+	if (_csv == nullptr)
+		return false;
+
+	::fputs("seq,time,sessions,flush_n,flush_p95_us,flush_p99_us,flush_max_us,timer_n,timer_p95_us,timer_max_us,"
+		"recv_mbps,sent_mbps,per_client_kbps,move_reject,commit_mb,workingset_mb,db_pending,db_delayed\n", _csv);
+	::fflush(_csv);
+	return true;
 }
 
 uint64 ServerStats::PercentileUpperUs(const uint64* buckets, uint64 total, double p)
@@ -115,6 +164,19 @@ void ServerStats::Dump(int32 sessionCount)
 
 	const uint64 p95 = PercentileUpperUs(buckets, flushTotal, 0.95);
 	const uint64 p99 = PercentileUpperUs(buckets, flushTotal, 0.99);
+
+	// 타이머 지연 (JobTimer::Distribute) - 예약보다 늦게 나눈 시간
+	uint64 timerBuckets[BUCKET_COUNT];
+	for (int32 i = 0; i < BUCKET_COUNT; i++)
+		timerBuckets[i] = _timerLateBuckets[i].exchange(0);
+	const uint64 timerTotal = _timerLateCount.exchange(0);
+	const uint64 timerMax = _timerLateMaxUs.exchange(0);
+	const uint64 timerP95 = PercentileUpperUs(timerBuckets, timerTotal, 0.95);
+
+	// DB 큐 - "지금 DB 가 밀렸나" 에 답하는 줄 (예전엔 GetPendingCount 가 있어도 아무도 찍지 않았다)
+	const int32 dbPending = GDBQueue.GetPendingCount();
+	const int32 dbDelayed = GDBQueue.GetDelayedCount();
+	const string extra = (_extraLine != nullptr) ? _extraLine() : string();
 
 	double recvMbps = 0.0;
 	double sentMbps = 0.0;
@@ -208,6 +270,11 @@ void ServerStats::Dump(int32 sessionCount)
 		<< " p99<=" << p99 << "us " << Verdict(p99 <= 33000)
 		<< " max=" << flushMax << "us " << Verdict(flushMax <= 100000) << "\n";
 
+	// 타이머가 예약보다 늦은 시간 - 33 ms 배치 주기의 흔들림. 33 ms 넘게 늦으면 Flush 한 번을 통째로 건너뛴 것이다
+	out << " timer late   n=" << timerTotal << " p95<=" << timerP95 << "us max=" << timerMax << "us (informational)\n";
+
+	out << " db queue     pending=" << dbPending << " delayed=" << dbDelayed << (extra.empty() ? "" : "  ") << extra << '\n';
+
 	out << " SV-3 move    reject=" << moveRejects << " " << Verdict(moveRejects == 0)
 		<< "  blocked=" << moveBlocked << " (hard CC, informational)"
 		<< "  wall=" << moveWallRejects << " (bots ignore walls, informational)\n";
@@ -233,4 +300,16 @@ void ServerStats::Dump(int32 sessionCount)
 		<< "  workingset=" << memMB << " MB\n";
 
 	out << "==========================================================\n\n";
+
+	// CSV 한 행 - 그래프 · 비교용 (EnableCsv). 사람이 읽는 블록과 같은 값
+	lock_guard<mutex> guard(_csvLock);
+	if (_csv != nullptr)
+	{
+		SYSTEMTIME st;
+		::GetLocalTime(&st);
+		::fprintf(_csv, "%llu,%02d:%02d:%02d,%d,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%.3f,%.3f,%.1f,%llu,%.1f,%.1f,%d,%d\n",
+			++_dumpSeq, st.wHour, st.wMinute, st.wSecond, sessionCount, flushTotal, p95, p99, flushMax, timerTotal, timerP95, timerMax,
+			recvMbps, sentMbps, perClientKbps, moveRejects, commitMB, memMB, dbPending, dbDelayed);
+		::fflush(_csv);
+	}
 }

@@ -48,6 +48,16 @@ public:
 	void			AddFowSends(uint64 shared, uint64 custom) { _fowShared.fetch_add(shared); _fowCustom.fetch_add(custom); }
 	void			AddFowUpdateUs(uint64 us) { _fowUpdateUs.fetch_add(us); uint64 m = _fowUpdateMaxUs.load(); while (us > m && _fowUpdateMaxUs.compare_exchange_weak(m, us) == false) {} }
 
+	// 잡 타이머가 예약 시각보다 늦게 분배한 시간 (ms) - 33 ms Flush 의 흔들림 (JobTimer::Distribute, 2026-10-21)
+	void			RecordTimerLate(uint64 lateMs);
+
+	// 콘텐츠가 Dump 에 덧붙이는 줄 (진행 중인 런 끝 저장 수 등). ServerCore 는 그 값을 모른다
+	using ExtraLineFn = function<string()>;
+	void			SetExtraLine(ExtraLineFn fn) { _extraLine = move(fn); }
+
+	// Dump 마다 한 행을 CSV 로도 남긴다 - <dir>\stats-<boot>.csv. 사람이 읽는 블록은 그대로. 실패하면 false (서버는 돈다)
+	bool			EnableCsv(const string& dir);
+
 	void			Dump(int32 sessionCount);
 
 	static uint64	PercentileUpperUs(const uint64* buckets, uint64 total, double p);
@@ -85,6 +95,17 @@ private:
 	atomic<uint64>	_sentByPacket[PACKET_ID_LIMIT];
 	PacketNameFn	_packetName = nullptr;
 	vector<uint16>	_itemPackets;
+
+	// 타이머 지연 - Flush 와 같은 11 버킷(µs 로 환산) · 최대
+	atomic<uint64>	_timerLateBuckets[BUCKET_COUNT];
+	atomic<uint64>	_timerLateCount = 0;
+	atomic<uint64>	_timerLateMaxUs = 0;
+
+	ExtraLineFn		_extraLine;
+
+	mutex			_csvLock;
+	FILE*			_csv = nullptr;
+	uint64			_dumpSeq = 0;
 
 	uint64			_lastDumpUs = 0;
 };

@@ -30,6 +30,7 @@ bool IocpCore::Dispatch(uint32 timeoutMs)
 
 	if (::GetQueuedCompletionStatus(_iocpHandle, OUT &numOfBytes, OUT &key, OUT reinterpret_cast<LPOVERLAPPED*>(&iocpEvent), timeoutMs))
 	{
+		iocpEvent->errorCode = 0;
 		IocpObjectRef iocpObject = iocpEvent->owner;
 		iocpObject->Dispatch(iocpEvent, numOfBytes);
 	}
@@ -47,6 +48,8 @@ bool IocpCore::Dispatch(uint32 timeoutMs)
 		if (errCode == WAIT_TIMEOUT)
 			return false;
 
+		// 실패한 완료 - 이벤트에 오류를 실어 보낸다. Recv · Send 는 numOfBytes 0 으로 끊기고, Connect 는 ProcessConnect 가 이 값을 본다
+		iocpEvent->errorCode = errCode;
 		IocpObjectRef iocpObject = iocpEvent->owner;
 		iocpObject->Dispatch(iocpEvent, numOfBytes);
 	}

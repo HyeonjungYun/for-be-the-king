@@ -13,6 +13,9 @@
 
 namespace DBError
 {
+	// 자주 보는 번호에 이름을 - 숫자 1062 가 코드 두 곳에 그대로 있었다 (2026-10-21). mysqld_error.h 의 ER_DUP_ENTRY 와 같은 값
+	constexpr uint32 DUP_ENTRY = 1062;
+
 	enum class Kind : uint8
 	{
 		ConnectionLost,

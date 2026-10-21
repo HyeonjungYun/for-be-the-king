@@ -26,6 +26,10 @@ public:
 public:
 	EventType		eventType;
 	IocpObjectRef	owner;
+
+	// 완료가 실패로 돌아왔을 때의 WSA 오류 (IocpCore::Dispatch 가 채운다, 0 = 성공). 예전엔 실패한 ConnectEx 완료도
+	// ProcessConnect 가 성공으로 처리해 "연결됨" 이 됐다 (2026-10-21)
+	int32			errorCode = 0;
 };
 
 /*----------------

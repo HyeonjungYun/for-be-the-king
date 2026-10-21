@@ -87,10 +87,17 @@ void Session::Disconnect(const WCHAR* cause)
 	if (_connected.exchange(false) == false)
 		return;
 
-	// TEMP
 	LOG_LINE << "Disconnect : " << ToNarrow(cause) << '\n';
 
-	RegisterDisconnect();
+	// DisconnectEx 가 그 자리에서 실패하면 Disconnect 완료가 영영 오지 않는다 - 예전엔 그대로 돌아가 OnDisconnected · ReleaseSession 이
+	// 불리지 않았고, 세션과 계정이 관리자에 남아 서버를 다시 켤 때까지 "already online" 이었다. 소켓을 닫고 정리는 직접 한다 (2026-10-21).
+	// 닫힌 소켓의 대기 중 수신은 오류 완료로 돌아와 ProcessRecv → Disconnect 를 다시 부르지만 _connected 가 이미 false 라 아무 일도 없다
+	if (RegisterDisconnect() == false)
+	{
+		LOG_LINE << "[SESSION] DisconnectEx failed err=" << ::WSAGetLastError() << " - closing the socket and releasing the session directly\n";
+		SocketUtils::Close(_socket);
+		ProcessDisconnect();
+	}
 }
 
 HANDLE Session::GetHandle()
@@ -237,9 +244,21 @@ void Session::RegisterSend()
 		if (errorCode != WSA_IO_PENDING)
 		{
 			HandleError(errorCode);
+
+			// 보내지 못한 바이트는 대기량에서 뺀다 - 예전엔 그대로 남아 WSASend 가 실패할 때마다 대기량이 부풀었고,
+			// 끊기지 않는 오류가 쌓이면 멀쩡한 세션이 "send queue full" 로 끊겼다 (2026-10-21)
+			int64 failedBytes = 0;
+			for (const SendBufferRef& sendBuffer : _sendEvent.sendBuffers)
+				failedBytes += sendBuffer->WriteSize();
+
 			_sendEvent.owner = nullptr; // RELEASE_REF
 			_sendEvent.sendBuffers.clear(); // RELEASE_REF
-			_sendRegistered.store(false);
+
+			{
+				WRITE_LOCK;
+				_pendingSendBytes -= failedBytes;
+				_sendRegistered.store(false);
+			}
 		}
 	}
 }
@@ -247,6 +266,21 @@ void Session::RegisterSend()
 void Session::ProcessConnect()
 {
 	_connectEvent.owner = nullptr; // RELEASE_REF
+
+	// ConnectEx 가 실패로 완료됐다 (클라 · 봇 경로) - 예전엔 여기서 연결됐다고 표시하고 수신까지 걸었다
+	if (_connectEvent.errorCode != 0)
+	{
+		LOG_LINE << "[SESSION] connect failed err=" << _connectEvent.errorCode << '\n';
+		return;
+	}
+
+	// 소켓 옵션 - 받는 쪽(Accept) · 거는 쪽(Connect) 모두 여기를 지난다 (2026-10-21)
+	//  TCP_NODELAY  : 33 ms 배치 뒤에 나가는 작은 패킷(보정 · 아이템 결과 · 게이지)이 Nagle 과 지연 ACK 에 묶이지 않게
+	//  keepalive    : 선이 뽑힌 상대를 약 40 s 안에 알아차린다 (Session.h KEEPALIVE_*)
+	if (SocketUtils::SetTcpNoDelay(_socket, true) == false)
+		LOG_LINE << "[SESSION] TCP_NODELAY failed err=" << ::WSAGetLastError() << '\n';
+	if (SocketUtils::SetKeepAlive(_socket, KEEPALIVE_IDLE_MS, KEEPALIVE_INTERVAL_MS) == false)
+		LOG_LINE << "[SESSION] keepalive failed err=" << ::WSAGetLastError() << '\n';
 
 	_connected.store(true);
 

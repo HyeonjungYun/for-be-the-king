@@ -21,6 +21,11 @@ class Session : public IocpObject
 		BUFFER_SIZE = 0x10000, // 64KB
 	};
 
+	// 죽은 상대를 TCP 층에서 알아차리는 시간 - keepalive 를 10 s 쉬고 3 s 간격으로 보낸다 (Windows 는 10 번 보내고 끊는다 → 약 40 s).
+	// 예전엔 keepalive 가 없어 선이 뽑힌 클라를 송신 상한(8 MB, 약 10 분)이 찰 때까지 몰랐다 (2026-10-21)
+	static constexpr uint32	KEEPALIVE_IDLE_MS = 10'000;
+	static constexpr uint32	KEEPALIVE_INTERVAL_MS = 3'000;
+
 public:
 	Session();
 	virtual ~Session();
@@ -64,8 +69,8 @@ private:
 protected:
 						/* 컨텐츠 코드에서 재정의 */
 	virtual void		OnConnected() { }
-	virtual int32		OnRecv(BYTE* buffer, int32 len) { return len; }
-	virtual void		OnSend(int32 len) { }
+	virtual int32		OnRecv(BYTE* /*buffer*/, int32 len) { return len; }
+	virtual void		OnSend(int32 /*len*/) { }
 	virtual void		OnDisconnected() { }
 
 private:
@@ -115,6 +120,6 @@ public:
 	PacketSessionRef	GetPacketSessionRef() { return static_pointer_cast<PacketSession>(shared_from_this()); }
 
 protected:
-	virtual int32		OnRecv(BYTE* buffer, int32 len) sealed;
-	virtual void		OnRecvPacket(BYTE* buffer, int32 len) abstract;
+	virtual int32		OnRecv(BYTE* buffer, int32 len) final;
+	virtual void		OnRecvPacket(BYTE* buffer, int32 len) = 0;
 };

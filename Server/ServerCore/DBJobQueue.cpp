@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "DBJobQueue.h"
 #include "DBError.h"
+#include "ThreadManager.h"
 
 DBConnectionPool GDBPool;
 DBJobQueue GDBQueue;
@@ -114,6 +115,8 @@ void DBJobQueue::WorkerLoop()
 {
 	// 스레드마다 커넥션 하나를 점유. 작업마다 빌리고 돌려주면 락 경합이 생기지만
 	// 스레드 수와 커넥션 수가 같으면 그럴 이유가 없다.
+
+	ThreadManager::InitTLS();		// 로그 머리의 스레드 번호 (LThreadId) - 예전엔 DB 워커가 전부 0 이었다 (2026-10-21)
 
 	DBConnection* connection = _pool->Pop();
 	if (connection == nullptr)

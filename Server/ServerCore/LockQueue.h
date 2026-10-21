@@ -39,6 +39,12 @@ public:
 		_items = queue<T>();
 	}
 
+	size_t Size()
+	{
+		WRITE_LOCK;
+		return _items.size();
+	}
+
 private:
 	USE_LOCK;
 	queue<T> _items;
