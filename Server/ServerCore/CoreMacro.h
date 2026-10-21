@@ -40,3 +40,20 @@
 		__analysis_assume(expr);	\
 	}								\
 }
+
+// 불변식 검사 - 디버그 빌드는 그 자리에서 크래시, 릴리스 빌드는 호출 지점마다 처음 한 번만 표준 오류에 남기고 계속 간다.
+// "오늘은 모든 호출자가 지킨다" 로만 지켜지던 규약(예: Room::DealDamage 는 KillBatch 가 열린 동안만)을 코드로 적는 용도 (2026-10-21)
+#ifdef _DEBUG
+#define ASSERT_DEBUG(expr, msg)		ASSERT_CRASH(expr)
+#else
+#define ASSERT_DEBUG(expr, msg)																						\
+	do																												\
+	{																												\
+		if (!(expr))																								\
+		{																											\
+			static std::atomic<bool> s_assertReported{ false };														\
+			if (s_assertReported.exchange(true) == false)															\
+				LogLine(true) << "[ASSERT] " << msg << " - " << __FUNCTION__ << " (" << __FILE__ << ":" << __LINE__ << ")\n";	\
+		}																											\
+	} while (0)
+#endif
