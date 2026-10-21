@@ -67,7 +67,7 @@ namespace
 		if (player == nullptr)
 			return false;
 		RoomRef room = player->room.load().lock();
-		return room != nullptr && room->_kind == RoomKind::PveCoop && room->_partyId == partyId;		// 만들 때 정한 값 - 읽기만
+		return room != nullptr && room->Kind() == RoomKind::PveCoop && room->PartyId() == partyId;		// 만들 때 정한 값 - 읽기만
 	}
 
 	// PvP 층 방 (던전 파티 R2) - 세션의 플레이어가 지금 있는 World 방. 아니면 nullptr
@@ -79,7 +79,7 @@ namespace
 		if (player == nullptr)
 			return nullptr;
 		RoomRef room = player->room.load().lock();
-		return (room != nullptr && room->_kind == RoomKind::World) ? room : nullptr;
+		return (room != nullptr && room->Kind() == RoomKind::World) ? room : nullptr;
 	}
 
 	Protocol::PartyMemberState StateOf(const PartyMemberEntry& m, const GameSessionRef& session)
@@ -524,7 +524,7 @@ PartyManager::CoopEnter PartyManager::BeginCoopEnter(const GameSessionRef& reque
 
 		// 파티장이 연다 - 팀 = 파티 id (그 런 동안 바뀌지 않는다, D6)
 		out.room = GInstances.Create(RoomKind::PveCoop, floorId, out.partyId, out.partyId);
-		_book.BindInstance(out.partyId, out.room->_instanceId);
+		_book.BindInstance(out.partyId, out.room->InstanceId());
 
 		for (const PartyMemberEntry& m : party->members)
 		{
@@ -539,7 +539,7 @@ PartyManager::CoopEnter PartyManager::BeginCoopEnter(const GameSessionRef& reque
 		GameSessionRef member = GSessionManager.FindByCharacter(memberId);
 		if (member == nullptr || member->place.load() != SessionPlace::BaseCamp || IsBusy(memberId))
 			continue;
-		if (GInstances.ReserveJoin(out.room->_instanceId) == nullptr)
+		if (GInstances.ReserveJoin(out.room->InstanceId()) == nullptr)
 			break;
 		out.pulls.push_back(member);
 	}

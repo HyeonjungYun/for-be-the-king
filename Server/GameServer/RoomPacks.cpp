@@ -16,7 +16,6 @@
 
 namespace
 {
-	constexpr float		PI_F = 3.14159265f;
 	constexpr float		MONSTER_Z = 100.f;			// monster_spawns.csv 와 같은 높이
 	constexpr float		TEST_ROUTE_HALF_CM = 1000.f;	// /t pack - 내 둘레 20 m 네모
 

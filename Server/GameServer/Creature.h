@@ -45,6 +45,17 @@ struct SkillSlot
 	uint64						cooldownEndUs = 0;
 };
 
+// 결속된 패시브 스킬이면 그 정의, 아니면 nullptr. "bindState != BOUND || skillId == 0 → continue · Find · kind != Passive → continue" 가
+// Room*.cpp 16 곳에 복붙돼 있었다 (TD-011, 2026-10-21). 쿨다운 · 무기 조건 같은 추가 검사는 부르는 쪽이 한다
+inline const SkillDef* BoundPassiveOf(const SkillSlot& slot)
+{
+	if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
+		return nullptr;
+
+	const SkillDef* def = SkillTable::Find(slot.skillId);
+	return (def != nullptr && def->kind == SkillKind::Passive) ? def : nullptr;
+}
+
 class Creature : public Object
 {
 public:
@@ -289,4 +300,15 @@ template<typename T>
 shared_ptr<Creature> AsCreature(const shared_ptr<T>& object)
 {
 	return (object != nullptr && object->IsCreature()) ? static_pointer_cast<Creature>(object) : nullptr;
+}
+
+// 결속된 패시브마다 fn(slotIndex, SkillSlot&, const SkillDef&) - 슬롯 순서대로 (BoundPassiveOf 의 순회판, TD-011)
+template<typename Fn>
+void ForEachBoundPassive(Creature& owner, Fn&& fn)
+{
+	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
+	{
+		if (const SkillDef* def = BoundPassiveOf(owner.skillSlots[i]))
+			fn(i, owner.skillSlots[i], *def);
+	}
 }

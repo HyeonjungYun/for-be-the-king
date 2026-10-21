@@ -1144,6 +1144,7 @@ bool SkillTable::Parse(const string& skillsCsv, const string& effectsCsv, const 
 			e.param = row[c[18]];
 			if (e.param == "none")
 				e.param.clear();
+			ParseParam(e);
 
 			// 피해 효과가 hits 0 으로 들어오면 "한 번" 으로 - 다른 효과는 hits 를 쓰지 않는다
 			if (e.type == SkillEffectType::Damage && e.hits == 0)
@@ -1171,6 +1172,77 @@ const SkillDef* SkillTable::Find(uint32 skillId)
 		return nullptr;
 
 	return &it->second;
+}
+
+void SkillTable::ParseParam(SkillEffect& e)
+{
+	const string& p = e.param;
+
+	e.recastShape = SkillEffect::RecastShape::None;
+	e.recastAngleDeg = 0.f;
+	e.recastRadiusCm = 0.f;
+	e.flagSide = e.flagFar = e.flagNoStun = e.flagStill = e.isPuddle = false;
+	e.selector = SkillEffect::Selector::None;
+	e.selectorValue.clear();
+	e.selectorSkillId = 0;
+
+	if (p.empty())
+		return;
+
+	// "shape:cone:<각>:<반경>" · "shape:circle:<반경>" - 재입력의 판정 모양 (찌르고 베기 1118). 모양을 못 읽으면 None (원래 모양 그대로)
+	if (p.rfind("shape:", 0) == 0)
+	{
+		vector<string> parts;
+		size_t from = 0;
+		for (size_t at = p.find(':'); ; at = p.find(':', from))
+		{
+			parts.push_back(p.substr(from, at == string::npos ? string::npos : at - from));
+			if (at == string::npos)
+				break;
+			from = at + 1;
+		}
+
+		if (parts.size() >= 4 && parts[1] == "cone")
+		{
+			e.recastShape = SkillEffect::RecastShape::Cone;
+			e.recastAngleDeg = static_cast<float>(::atof(parts[2].c_str()));
+			e.recastRadiusCm = static_cast<float>(::atof(parts[3].c_str()));
+		}
+		else if (parts.size() >= 3 && parts[1] == "circle")
+		{
+			e.recastShape = SkillEffect::RecastShape::Circle;
+			e.recastRadiusCm = static_cast<float>(::atof(parts[2].c_str()));
+		}
+	}
+
+	// 꼬리표 - "side+nostun" 처럼 붙여 쓴다 (Room::ApplyTargetEffect 가 적중마다 find 로 보던 것)
+	e.flagSide = (p.find("side") != string::npos);
+	e.flagFar = (p.find("far") != string::npos);
+	e.flagNoStun = (p.find("nostun") != string::npos);
+	e.flagStill = (p.find(";still") != string::npos);
+	e.isPuddle = (p == "puddle");
+
+	// damage_mod 선택자 - ";still" 같은 꼬리는 뺀 머리만 (RoomSkills3 TakeStillBonus 와 같은 자르기)
+	const string head = p.substr(0, p.find(';'));
+	if (head.rfind("tag:", 0) == 0)
+	{
+		e.selector = SkillEffect::Selector::Tag;
+		e.selectorValue = head.substr(4);
+	}
+	else if (head.rfind("elem:", 0) == 0)
+	{
+		e.selector = SkillEffect::Selector::Elem;
+		e.selectorValue = head.substr(5);
+	}
+	else if (head.rfind("skill:", 0) == 0)
+	{
+		e.selector = SkillEffect::Selector::Skill;
+		e.selectorSkillId = static_cast<uint32>(::strtoul(head.c_str() + 6, nullptr, 10));
+	}
+	else if (head == "range")
+	{
+		e.selector = SkillEffect::Selector::Range;
+	}
 }
 
 // 🔴 테스트 픽스처 - 2026-10-10 로스터 이전의 네 스킬. 실제 데이터는 Load 가 읽는다

@@ -789,7 +789,7 @@ namespace
 				if (LoadPlayerItems(conn, player, OUT ownedRows) == false)
 				{
 					LOG_LINE << "[CAMP] item load failed - char=" << player->objectInfo->object_id() << '\n';
-					GInstances.ReleaseJoin(room->_instanceId);
+					GInstances.ReleaseJoin(room->InstanceId());
 					return;
 				}
 				room->DoAsync(&Room::HandleEnterPlayer, player);
@@ -862,7 +862,7 @@ namespace
 					LOG_LINE << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << '\n';
 
 					if (room->IsInstance())
-						GInstances.ReleaseJoin(room->_instanceId);
+						GInstances.ReleaseJoin(room->InstanceId());
 					gameSession->Disconnect(L"item load failed");
 					return;
 				}
@@ -1026,7 +1026,7 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 		SessionPlace memberPlace = SessionPlace::BaseCamp;
 		if (member->characters.empty() || member->place.compare_exchange_strong(memberPlace, SessionPlace::Entering) == false)
 		{
-			GInstances.ReleaseJoin(room->_instanceId);
+			GInstances.ReleaseJoin(room->InstanceId());
 			continue;
 		}
 

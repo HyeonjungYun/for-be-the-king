@@ -208,6 +208,22 @@ struct SkillEffect
 	float					radiusCm = 0.f;
 	string					param;
 
+	// ── param 을 로드 때 한 번 해석한 것 (SkillTable::ParseParam, 2026-10-21) - 발동 · 적중마다 문자열을 가르지 않는다. 원문은 param 그대로 ──
+	enum class RecastShape : uint8 { None = 0, Cone, Circle };
+	enum class Selector : uint8 { None = 0, Tag, Elem, Skill, Range };
+
+	RecastShape				recastShape = RecastShape::None;	// requires=recast 효과의 "shape:cone:<각>:<반경>" · "shape:circle:<반경>" (Room::FireSkill)
+	float					recastAngleDeg = 0.f;
+	float					recastRadiusCm = 0.f;
+	bool					flagSide = false;					// knockback "side" - 날아가는 경로의 옆으로 (질풍노도)
+	bool					flagFar = false;					// knockback "far" - 시야 반경만큼 · 벽 충돌 피해 (저 멀리)
+	bool					flagNoStun = false;					// knockback "nostun" - 벽에 부딪혀도 기절 없음
+	bool					flagStill = false;					// damage_mod ";still" - 건곤일척 (움직이면 사라진다)
+	bool					isPuddle = false;					// zone "puddle" - 명경지수
+	Selector				selector = Selector::None;			// damage_mod 선택자 tag:<태그> · elem:<속성> · skill:<id> · range (";still" 같은 꼬리는 뺀 머리)
+	string					selectorValue;						// tag · elem 의 값
+	uint32					selectorSkillId = 0;				// skill:<id>
+
 	// 피해 종류 - 물리 계수만 있으면 물리, 아니면 마법 (S3: 항마다 따로 완화)
 	Protocol::DamageType	DamageType() const { return (adRatio > 0.f && apRatio <= 0.f) ? Protocol::DAMAGE_TYPE_PHYSICAL : Protocol::DAMAGE_TYPE_MAGIC; }
 };
@@ -302,6 +318,9 @@ public:
 
 	static const SkillDef*	Find(uint32 skillId);
 	static const SkillRules& Rules() { return s_rules; }
+
+	// e.param 을 해석해 e 의 파생 필드(recastShape · flag* · isPuddle · selector)를 채운다. Parse 가 효과마다 부른다 - 테스트가 직접 불러 검사한다
+	static void				ParseParam(SkillEffect& e);
 
 	static const unordered_map<uint32, SkillDef>& All() { return s_defs; }
 

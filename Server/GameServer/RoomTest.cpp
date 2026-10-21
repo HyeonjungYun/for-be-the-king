@@ -146,7 +146,7 @@ void Room::TestSpawnDummies(uint64 playerId, uint32 monsterTypeId, int32 count, 
 	const float py = player->posInfo->y();
 	if (std::isfinite(x) == false || std::isfinite(y) == false || (x == 0.f && y == 0.f))
 	{
-		const float yawRad = player->posInfo->yaw() * 3.14159265f / 180.f;
+		const float yawRad = player->posInfo->yaw() * PI_F / 180.f;
 		x = px + ::cosf(yawRad) * DUMMY_DEFAULT_AHEAD_CM;
 		y = py + ::sinf(yawRad) * DUMMY_DEFAULT_AHEAD_CM;
 	}
@@ -160,7 +160,7 @@ void Room::TestSpawnDummies(uint64 playerId, uint32 monsterTypeId, int32 count, 
 		float wantY = y;
 		if (count > 1)
 		{
-			const float a = 2.f * 3.14159265f * static_cast<float>(i) / static_cast<float>(count);
+			const float a = 2.f * PI_F * static_cast<float>(i) / static_cast<float>(count);
 			wantX += ::cosf(a) * DUMMY_RING_CM;
 			wantY += ::sinf(a) * DUMMY_RING_CM;
 		}
@@ -177,7 +177,7 @@ void Room::TestSpawnDummies(uint64 playerId, uint32 monsterTypeId, int32 count, 
 		spawn->x = freeX;
 		spawn->y = freeY;
 		spawn->z = player->posInfo->z();
-		spawn->yaw = ::atan2f(py - freeY, px - freeX) * 180.f / 3.14159265f;		// 나를 보고 선다
+		spawn->yaw = ::atan2f(py - freeY, px - freeX) * 180.f / PI_F;		// 나를 보고 선다
 
 		const uint64 id = GNextMonsterId.fetch_add(1);
 		MonsterRef monster = make_shared<Monster>(id, *type, *spawn);

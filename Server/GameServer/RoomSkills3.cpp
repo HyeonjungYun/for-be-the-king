@@ -13,7 +13,6 @@
 
 namespace
 {
-	constexpr float		PI_F = 3.14159265f;
 	constexpr float		STILL_TOLERANCE_CM = 30.f;		// 건곤일척 - 이만큼은 움직여도 제자리 (회전 · 보정 떨림)
 	constexpr uint32	PATH_PAINT_GRACE_MS = 250;		// 열화 - 돌진이 끝난 뒤 늦게 도착하는 C_MOVE 를 기다린다
 	constexpr float		PATH_JUMP_CM = 700.f;			// 열화 - 한 번에 이보다 멀리 튀면 걸어간 길이 아니다 (보정 · 순간이동)
@@ -22,11 +21,6 @@ namespace
 	constexpr float		DASH_SLASH_ANGLE_DEG = 60.f;	// 일보일검 - 질주 끝의 횡베기 각 (사용자 2026-10-11 "60도")
 	constexpr uint32	DASH_SLASH_LAG_MS = 60;			// 일보일검 - 질주가 끝나고 베기까지
 	constexpr uint32	SPECIAL_BASIC_VISUAL_MS = 300;	// 사방 베기 · 횡베기 연출
-
-	bool IsEnemyCreature(const ObjectRef& object)
-	{
-		return object->IsPlayer() || object->IsMonster() || object->IsDecoy();
-	}
 
 	// from 에서 aim 쪽 단위 벡터. aim 이 발밑이면(또는 0,0 = 조준 없음) 바라보는 방향
 	void DirToward(const CreatureRef& c, float fromX, float fromY, float aimX, float aimY, OUT float& dirX, OUT float& dirY)
@@ -101,8 +95,7 @@ void Room::UpdatePendingSelfCcs(uint64 nowUs)
 		const PendingSelfCc due = _pendingSelfCcs[i];
 		_pendingSelfCcs.erase(_pendingSelfCcs.begin() + i);
 
-		auto it = _objects.find(due.casterId);
-		CreatureRef caster = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
+		CreatureRef caster = FindCreature(due.casterId);
 		if (caster == nullptr || caster->IsAlive() == false)
 			continue;
 
@@ -155,8 +148,7 @@ void Room::UpdatePathPainters(uint64 nowUs)
 	{
 		PathPainter& p = _pathPainters[i];
 
-		auto it = _objects.find(p.casterId);
-		CreatureRef caster = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
+		CreatureRef caster = FindCreature(p.casterId);
 		const SkillDef* def = SkillTable::Find(p.skillId);
 		if (caster == nullptr || caster->IsAlive() == false || def == nullptr || p.effectIndex >= def->effects.size())
 		{
@@ -675,13 +667,11 @@ void Room::UpdateSlams(uint64 nowUs)
 		const PendingSlam s = _pendingSlams[i];
 		_pendingSlams.erase(_pendingSlams.begin() + i);
 
-		auto targetIt = _objects.find(s.targetId);
-		CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
+		CreatureRef target = FindCreature(s.targetId);
 		if (target == nullptr || target->IsAlive() == false)
 			continue;
 
-		auto casterIt = _objects.find(s.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
+		CreatureRef caster = FindCreature(s.casterId);
 
 		// 벽 기절 (skill_rules wall_stun_ms, 저항이 깎는다)
 		ApplyCc(s.targetId, s.casterId, Protocol::CC_TYPE_STUN, SkillTable::Rules().wallStunMs, 0.f);

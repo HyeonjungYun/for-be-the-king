@@ -7,15 +7,11 @@ atomic<bool> GMonstersOn = true;
 RoomRef InstanceManager::Create(RoomKind kind, uint32 floorId, uint64 partyId, uint64 teamId)
 {
 	RoomRef room = make_shared<Room>();
-	room->_floorId = floorId;
-	room->_kind = kind;
-	room->_partyId = partyId;
-	room->_teamId = teamId;
 
 	{
 		WRITE_LOCK;
 		const uint64 instanceId = _nextId++;
-		room->_instanceId = instanceId;
+		room->InitIdentity(floorId, kind, instanceId, partyId, teamId);		// 만들 때 한 번 - 이후 읽기만 (Room 의 신원 필드는 private, 2026-10-21)
 		_rooms[instanceId] = Entry{ room, 1 };		// 만든 사람의 입장 예약
 		_created++;
 	}
