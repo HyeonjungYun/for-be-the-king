@@ -11,6 +11,7 @@
 #include "BotLoadoutTable.h"
 #include "Economy.h"
 #include "DBError.h"
+#include "DBStatement.h"
 #include <thread>
 
 atomic<uint64> GNextInstanceId = 1;
@@ -118,7 +119,7 @@ namespace
 
 		::snprintf(query, sizeof(query), "%s characters SET gold = gold - %llu WHERE character_id = %llu AND gold >= %llu",
 			lenient ? "UPDATE IGNORE" : "UPDATE", loss, characterId, loss);
-		if (conn->Excute(query) == false)
+		if (conn->Execute(query) == false)
 			return false;
 		LOG_LINE << "[GOLD] " << tag << " loss char=" << characterId << " -" << loss << " (" << pct << "% of " << gold << ")\n";
 		return true;
@@ -133,7 +134,7 @@ namespace
 				continue;
 			const string update = string(lenient ? "UPDATE IGNORE" : "UPDATE") + " item_instances SET stack_count = "
 				+ to_string(max<uint32>(e.stackCount, 1)) + " WHERE instance_id = " + to_string(e.instanceId) + ownerFilter;
-			if (conn->Excute(update.c_str()) == false)
+			if (conn->Execute(update.c_str()) == false)
 				return false;
 		}
 		return true;
@@ -163,16 +164,20 @@ namespace
 	// 🔴 2026-10-08 리뷰: 예전엔 파일로 남긴 저장(재시도에 들어간 것)만 표시했다 - 첫 시도의 COMMIT 이 DB 에선 됐는데 응답을 잃으면
 	//    (연결 끊김 → 일시 실패) 표시 없이 재시도가 돌아 탈출 골드 · 만료 골드가 두 번 들어갔다. 이제 id 는 큐에 넣을 때 정하고 늘 표시한다.
 	//    맨 앞인 이유: 앞선 시도가 커밋됐으면 상태가 이미 바뀌어 엄격 단계의 쓰기가 "어긋남" 으로 영구 실패하기 전에 알아야 한다
-	MarkResult MarkApplied(DBConnection* conn, const string& journalId, const char* kind, uint64 characterId)
+	// 기록 id 는 바인딩으로 (2026-10-21, prepared statement) - 영문 · 숫자 · '-' 뿐이지만 문자열이 SQL 에 닿는 자리는 전부 같은 길로
+	MarkResult MarkApplied(DBConnection* conn, const string& journalId, const char* kind, uint64 characterId, OUT uint32& errorNo)
 	{
-		const string insert = "INSERT INTO applied_commits (journal_id, character_id, kind) VALUES ('" + conn->Escape(journalId) + "', "
-			+ to_string(characterId) + ", '" + kind + "')";
-
-		if (conn->Excute(insert.c_str()))
+		DBStatement insert(*conn, "INSERT INTO applied_commits (journal_id, character_id, kind) VALUES (?, ?, ?)");
+		if (insert.BindString(journalId).BindUInt64(characterId).BindString(kind).Execute())
+		{
+			errorNo = 0;
 			return MarkResult::Marked;
+		}
+
+		errorNo = insert.ErrorNo();
 
 		// 이미 있다 = 이 기록은 전에 커밋됐다 (커밋 뒤 파일을 지우기 전에 서버가 꺼졌다). 지금 트랜잭션은 버리고 성공으로 친다 - 두 번 적용하지 않는다
-		if (conn->GetLastErrorNo() == DBError::DUP_ENTRY)
+		if (errorNo == DBError::DUP_ENTRY)
 			return MarkResult::AlreadyApplied;
 
 		return MarkResult::Failed;
@@ -185,7 +190,8 @@ namespace
 		if (journalId.empty())
 			return true;
 
-		switch (MarkApplied(conn, journalId, kind, characterId))
+		uint32 errorNo = 0;
+		switch (MarkApplied(conn, journalId, kind, characterId, OUT errorNo))
 		{
 		case MarkResult::Marked:
 			return true;
@@ -196,7 +202,10 @@ namespace
 			return false;
 		case MarkResult::Failed:
 		default:
-			result = RollbackAndClassify(conn);
+			// 문장(statement)의 오류 번호로 분류한다 - Rollback 이 커넥션의 번호를 덮어쓰기 전에 (RollbackAndClassify 와 같은 규약)
+			t_commitErrno = errorNo;
+			conn->Rollback();
+			result = CommitRetry::FromMysqlError(errorNo);
 			return false;
 		}
 	}
@@ -207,9 +216,9 @@ namespace
 		if (journalId.empty())
 			return;
 
-		const string del = "DELETE FROM applied_commits WHERE journal_id = '" + conn->Escape(journalId) + "'";
-		if (conn->Excute(del.c_str()) == false)
-			LOG_LINE << "[JOURNAL] cannot clear applied mark " << journalId << " err=" << conn->GetLastErrorNo() << " (boot will clear it)\n";
+		DBStatement del(*conn, "DELETE FROM applied_commits WHERE journal_id = ?");
+		if (del.BindString(journalId).Execute() == false)
+			LOG_LINE << "[JOURNAL] cannot clear applied mark " << journalId << " err=" << del.ErrorNo() << " (boot will clear it)\n";
 	}
 
 	// 검증 전용 (FBTK_FAKE_ACK_LOSS=N) - 처음 N 번의 커밋은 DB 에선 됐는데 응답을 잃은 것처럼 연결 끊김으로 돌려준다.
@@ -352,7 +361,7 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 			+ ", slot = 0 WHERE instance_id IN (" + JoinIds(carriedIds) + ")" + mineOrUnowned;
 
 		// 바뀐 행 수로는 셀 수 없다 - 원래 내 소지품(값이 그대로인 행)은 MySQL 이 0 으로 센다. 어긋남은 아래 소유 개수 확인이 본다
-		if (conn->Excute(update.c_str()) == false)
+		if (conn->Execute(update.c_str()) == false)
 			return RollbackAndClassify(conn);
 	}
 
@@ -376,14 +385,14 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 			+ ", bag_id = NULL, state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ", slot = " + to_string(i + 1)
 			+ " WHERE instance_id = " + to_string(e.instanceId) + mineOrUnowned;
 
-		if (conn->Excute(update.c_str()) == false)
+		if (conn->Execute(update.c_str()) == false)
 			return RollbackAndClassify(conn);
 	}
 
 	if (newValues.empty() == false)
 	{
 		const string insert = InsertItemsSql(mode) + newValues;
-		if (conn->Excute(insert.c_str()) == false)
+		if (conn->Execute(insert.c_str()) == false)
 			return RollbackAndClassify(conn);
 	}
 
@@ -395,7 +404,7 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 	{
 		// 버린 · 합친 행은 내 것이거나 주인 없는(가방) 것뿐이다 - 위 옮기기와 같은 조건 (2026-10-17 리뷰)
 		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")" + mineOrUnowned;
-		if (conn->Excute(del.c_str()) == false)
+		if (conn->Execute(del.c_str()) == false)
 			return RollbackAndClassify(conn);
 	}
 
@@ -404,7 +413,7 @@ CommitOutcome TryCommitEscape(DBConnection* conn, const EscapeSnapshot& snap, Co
 	{
 		::snprintf(query, sizeof(query), "%s characters SET gold = LEAST(gold + %llu, %llu) WHERE character_id = %llu",
 			lenient ? "UPDATE IGNORE" : "UPDATE", snap.gold, GOLD_CAP, characterId);
-		if (conn->Excute(query) == false)
+		if (conn->Execute(query) == false)
 			return RollbackAndClassify(conn);
 	}
 
@@ -507,7 +516,7 @@ bool PurgeExpiredBags(DBConnection* conn)
 {
 	// 만료된 가방 + PVE 인스턴스의 가방 (floor_id >= 1000, InstanceRules::INSTANCE_BAG_FLOOR_BASE) - 인스턴스는 재시작을 넘지 않는다.
 	// 기록 재처리(ReplayCommitJournal)가 이보다 먼저라 재처리된 PVE 사망 가방도 여기서 지워진다 (ADR-0014 D10)
-	if (conn->Excute(
+	if (conn->Execute(
 		"DELETE FROM item_instances WHERE bag_id IN"
 		"(SELECT bag_id FROM bags WHERE expires_at <= NOW() OR floor_id >= 1000)") == false)
 	{
@@ -516,7 +525,7 @@ bool PurgeExpiredBags(DBConnection* conn)
 	}
 
 	const uint64 removedItems = conn->GetAffectedRows();
-	if (conn->Excute("DELETE FROM bags WHERE expires_at <= NOW() OR floor_id >= 1000") == false)
+	if (conn->Execute("DELETE FROM bags WHERE expires_at <= NOW() OR floor_id >= 1000") == false)
 	{
 		LOG_LINE << "[BOOT] purge bags failed: " << conn->GetError() << '\n';
 		return false;
@@ -524,7 +533,7 @@ bool PurgeExpiredBags(DBConnection* conn)
 
 	const uint64 removeBags = conn->GetAffectedRows();
 
-	if (conn->Excute("DELETE FROM item_instances WHERE bag_id IS NOT NULL AND bag_id NOT IN (SELECT bag_id FROM bags)") == false)
+	if (conn->Execute("DELETE FROM item_instances WHERE bag_id IS NOT NULL AND bag_id NOT IN (SELECT bag_id FROM bags)") == false)
 	{
 		LOG_LINE << "[BOOT] purge orphan items failed: " << conn->GetError() << '\n';
 		return false;
@@ -753,13 +762,13 @@ bool DeleteExpiredBags(DBConnection* conn, const vector<uint64>& bagIds, const v
 	{
 		// 그 가방들에 든 행만 - id 가 어긋나도 남의 소지품을 지우지 않는다 (2026-10-17 리뷰)
 		const string delItems = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(instanceIds) + ") AND bag_id IN (" + JoinIds(bagIds) + ")";
-		ok = conn->Excute(delItems.c_str());
+		ok = conn->Execute(delItems.c_str());
 	}
 
 	if (ok)
 	{
 		const string delBags = "DELETE FROM bags WHERE bag_id IN (" + JoinIds(bagIds) + ")";
-		ok = conn->Excute(delBags.c_str());
+		ok = conn->Execute(delBags.c_str());
 	}
 
 	if (ok && conn->Commit())
@@ -813,7 +822,7 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		"VALUES (%llu, %u, %f, %f, %f, NOW() + INTERVAL %llu SECOND)",
 		snap.bagId, snap.floorId, snap.x, snap.y, snap.z, BAG_LIFETIME_US / 1'000'000);
 
-	if (conn->Excute(insert) == false)
+	if (conn->Execute(insert) == false)
 		return RollbackAndClassify(conn);
 
 	if (existingIds.empty() == false)
@@ -827,7 +836,7 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 			+ ", state = " + to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG))
 			+ ", slot = 0, level = 0 WHERE instance_id IN (" + JoinIds(existingIds) + ")" + mineOrUnowned;
 
-		if (conn->Excute(update.c_str()) == false)
+		if (conn->Execute(update.c_str()) == false)
 			return RollbackAndClassify(conn);
 
 		if (conn->GetAffectedRows() != existingIds.size())
@@ -849,7 +858,7 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 	if (newValues.empty() == false)
 	{
 		const string insertItems = InsertItemsSql(mode) + newValues;
-		if (conn->Excute(insertItems.c_str()) == false)
+		if (conn->Execute(insertItems.c_str()) == false)
 			return RollbackAndClassify(conn);
 	}
 
@@ -863,7 +872,7 @@ CommitOutcome TryCommitDeath(DBConnection* conn, DeathSnapshot& snap, CommitMode
 		// 내 것 또는 주인 없는 것만 - 탈출 커밋과 같은 조건 (2026-10-17 리뷰)
 		const string del = "DELETE FROM item_instances WHERE instance_id IN (" + JoinIds(snap.droppedIds) + ")"
 			+ " AND (owner_character_id IS NULL OR owner_character_id = " + to_string(snap.characterId) + ")";
-		if (conn->Excute(del.c_str()) == false)
+		if (conn->Execute(del.c_str()) == false)
 			return RollbackAndClassify(conn);
 
 		if (conn->GetAffectedRows() != snap.droppedIds.size())
@@ -1078,7 +1087,7 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_EQUIPPED)) + ","
 			+ to_string(static_cast<int32>(Protocol::ITEM_STATE_IN_BAG)) + ")";
 
-		if (conn->Excute(del.c_str()) == false)
+		if (conn->Execute(del.c_str()) == false)
 			return RollbackAndClassify(conn);
 
 		if (conn->GetAffectedRows() != snap.rowIds.size())
@@ -1093,7 +1102,7 @@ CommitOutcome TryCommitExpiry(DBConnection* conn, const ExpirySnapshot& snap, Co
 	{
 		::snprintf(query, sizeof(query), "%s characters SET gold = LEAST(gold + %llu, %llu) WHERE character_id = %llu",
 			lenient ? "UPDATE IGNORE" : "UPDATE", snap.goldKept, GOLD_CAP, snap.characterId);
-		if (conn->Excute(query) == false)
+		if (conn->Execute(query) == false)
 			return RollbackAndClassify(conn);
 	}
 
@@ -1259,7 +1268,7 @@ void QueueCommit(JournalEntry journal,
 bool EnsureCommitJournalTable(DBConnection* conn)
 {
 	// Server/Tools/schema_commit_journal.sql 과 같은 정의 - 표가 있으면 아무 일도 하지 않는다
-	if (conn->Excute(
+	if (conn->Execute(
 		"CREATE TABLE IF NOT EXISTS applied_commits ("
 		" journal_id   VARCHAR(64)     NOT NULL,"
 		" character_id BIGINT UNSIGNED NOT NULL,"
@@ -1325,9 +1334,16 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 	{
 		// 커밋은 됐는데 파일을 지우기 전에 꺼졌다 - 두 번 적용하지 않는다
 		uint64 marked = 0;
-		const string check = "SELECT COUNT(*) FROM applied_commits WHERE journal_id = '" + conn->Escape(entry.id) + "'";
-		if (QueryScalar(conn, check.c_str(), OUT marked) == false)
-			return false;
+		{
+			DBStatement check(*conn, "SELECT COUNT(*) FROM applied_commits WHERE journal_id = ?");
+			vector<string> row;
+			if (check.BindString(entry.id).Query() == false || check.Fetch(OUT row) == false || row.empty())
+			{
+				LOG_LINE << "[BOOT] query failed: " << check.Error() << '\n';
+				return false;
+			}
+			marked = ::strtoull(row[0].c_str(), nullptr, 10);
+		}
 
 		if (marked > 0)
 		{
@@ -1396,7 +1412,7 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 		clear += ")";
 	}
 
-	if (conn->Excute(clear.c_str()) == false)
+	if (conn->Execute(clear.c_str()) == false)
 	{
 		LOG_LINE << "[BOOT] cannot clear applied_commits: " << conn->GetError() << '\n';
 		return false;
@@ -1409,37 +1425,37 @@ bool ReplayCommitJournal(DBConnection* conn, const string& dir)
 
 bool DeathCommitTracker::TryBegin(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return _pending.insert(characterId).second;
 }
 
 void DeathCommitTracker::End(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	_pending.erase(characterId);
 }
 
 bool DeathCommitTracker::IsPending(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return _pending.find(characterId) != _pending.end();
 }
 
 int32 DeathCommitTracker::Count()
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return static_cast<int32>(_pending.size());
 }
 
 void DetachedBodies::Add(uint64 characterId, PlayerRef body)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	_bodies[characterId] = body;
 }
 
 PlayerRef DetachedBodies::TryTake(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	auto findIt = _bodies.find(characterId);
 	if (findIt == _bodies.end())
 		return nullptr;
@@ -1451,7 +1467,7 @@ PlayerRef DetachedBodies::TryTake(uint64 characterId)
 
 bool DetachedBodies::Contains(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return _bodies.find(characterId) != _bodies.end();
 }
 

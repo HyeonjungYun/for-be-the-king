@@ -58,7 +58,7 @@ EquipStatTotals EquipStats::Compute(const vector<WornItem>& worn, int32 nakedMax
 	out.armor			= BaseStats::ARMOR + RoundStat(sum(ItemStat::Armor));
 	out.magicResist		= BaseStats::MAGIC_RESIST + RoundStat(sum(ItemStat::MagicResist));
 	out.critChance		= std::clamp(BaseStats::CRIT_CHANCE + sum(ItemStat::CritChance), 0.f, CRIT_CHANCE_MAX);
-	out.critMultiplier	= std::clamp(BaseStats::CRIT_MULITPLIER + sum(ItemStat::CritMultiplierBonus), CRIT_MULTIPLIER_MIN, CRIT_MULTIPLIER_MAX);
+	out.critMultiplier	= std::clamp(BaseStats::CRIT_MULTIPLIER + sum(ItemStat::CritMultiplierBonus), CRIT_MULTIPLIER_MIN, CRIT_MULTIPLIER_MAX);
 	out.percentAsBonus	= sum(ItemStat::PercentAsBonus);
 	out.percentMsBonus	= sum(ItemStat::PercentMsBonus);
 	out.resistance		= std::clamp(BaseStats::RESISTANCE + sum(ItemStat::Resistance), 0.f, RESISTANCE_MAX);

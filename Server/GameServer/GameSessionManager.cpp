@@ -31,7 +31,7 @@ namespace
 
 bool GameSessionManager::Add(GameSessionRef session, const string& ip)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 
 	const int32 limit = MaxConnPerIp();
 	if (limit > 0 && ip.empty() == false && IsLoopback(ip) == false)
@@ -49,7 +49,7 @@ bool GameSessionManager::Add(GameSessionRef session, const string& ip)
 
 void GameSessionManager::Remove(GameSessionRef session)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	_sessions.erase(session);
 
 	auto it = _ipOf.find(session.get());
@@ -64,7 +64,7 @@ void GameSessionManager::Remove(GameSessionRef session)
 
 int32 GameSessionManager::ConnectionsFrom(const string& ip)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	auto it = _perIp.find(ip);
 	return (it != _perIp.end()) ? it->second : 0;
 }
@@ -73,7 +73,7 @@ int32 GameSessionManager::DropUnauthenticated(uint64 nowUs, uint64 timeoutUs)
 {
 	vector<GameSessionRef> idle;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 		for (const GameSessionRef& session : _sessions)
 		{
 			const uint64 since = session->connectedAtUs.load();
@@ -93,7 +93,7 @@ int32 GameSessionManager::DisconnectAll(const WCHAR* cause, const function<void(
 {
 	vector<GameSessionRef> all;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 		all.assign(_sessions.begin(), _sessions.end());
 	}
 
@@ -114,7 +114,7 @@ int32 GameSessionManager::DropIdle(uint64 nowUs, uint64 timeoutUs)
 
 	vector<GameSessionRef> idle;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 		for (const GameSessionRef& session : _sessions)
 		{
 			const uint64 last = session->lastRecvUs.load();
@@ -133,7 +133,7 @@ int32 GameSessionManager::DropIdle(uint64 nowUs, uint64 timeoutUs)
 
 GameSessionRef GameSessionManager::FindByCharacter(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	for (const GameSessionRef& session : _sessions)
 	{
 		// accountId 가 0 이 아니면 로그인 작업이 characters 를 다 채운 뒤다 (accountId 를 마지막에 쓴다)
@@ -154,7 +154,7 @@ GameSessionRef GameSessionManager::FindByName(const string& name)
 	if (name.empty())
 		return nullptr;
 
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	for (const GameSessionRef& session : _sessions)
 	{
 		if (session->accountId.load() == 0)
@@ -171,7 +171,7 @@ GameSessionRef GameSessionManager::FindByName(const string& name)
 
 GameSessionRef GameSessionManager::FindInBaseCamp(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	for (const GameSessionRef& session : _sessions)
 	{
 		// place 를 먼저 본다 - 로그인 작업이 characters 를 채운 뒤에 place 를 BaseCamp 로 바꾸므로(atomic),

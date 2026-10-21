@@ -9,7 +9,7 @@ RoomRef InstanceManager::Create(RoomKind kind, uint32 floorId, uint64 partyId, u
 	RoomRef room = make_shared<Room>();
 
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 		const uint64 instanceId = _nextId++;
 		room->InitIdentity(floorId, kind, instanceId, partyId, teamId);		// 만들 때 한 번 - 이후 읽기만 (Room 의 신원 필드는 private, 2026-10-21)
 		_rooms[instanceId] = Entry{ room, 1 };		// 만든 사람의 입장 예약
@@ -24,7 +24,7 @@ RoomRef InstanceManager::Create(RoomKind kind, uint32 floorId, uint64 partyId, u
 
 RoomRef InstanceManager::ReserveJoin(uint64 instanceId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	auto it = _rooms.find(instanceId);
 	if (it == _rooms.end())
 		return nullptr;
@@ -35,7 +35,7 @@ RoomRef InstanceManager::ReserveJoin(uint64 instanceId)
 
 void InstanceManager::ReleaseJoin(uint64 instanceId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	auto it = _rooms.find(instanceId);
 	if (it != _rooms.end() && it->second.pendingJoins > 0)
 		it->second.pendingJoins--;
@@ -43,7 +43,7 @@ void InstanceManager::ReleaseJoin(uint64 instanceId)
 
 bool InstanceManager::TryRetire(uint64 instanceId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	auto it = _rooms.find(instanceId);
 	if (it == _rooms.end())
 		return true;		// 이미 빠졌다
@@ -56,12 +56,26 @@ bool InstanceManager::TryRetire(uint64 instanceId)
 
 int32 InstanceManager::LiveCount()
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return static_cast<int32>(_rooms.size());
 }
 
 uint64 InstanceManager::CreatedCount()
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return _created;
+}
+
+void InstanceManager::ForEachRoom(const function<void(const RoomRef&)>& fn)
+{
+	vector<RoomRef> rooms;
+	{
+		WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
+		rooms.reserve(_rooms.size());
+		for (const auto& [instanceId, entry] : _rooms)
+			rooms.push_back(entry.room);
+	}
+
+	for (const RoomRef& room : rooms)
+		fn(room);
 }

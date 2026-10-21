@@ -35,7 +35,7 @@ struct EquipStatTotals
 	int32					armor = BaseStats::ARMOR;
 	int32					magicResist = BaseStats::MAGIC_RESIST;
 	float					critChance = BaseStats::CRIT_CHANCE;
-	float					critMultiplier = BaseStats::CRIT_MULITPLIER;
+	float					critMultiplier = BaseStats::CRIT_MULTIPLIER;
 	float					percentAsBonus = 0.f;
 	float					percentMsBonus = 0.f;
 	float					resistance = BaseStats::RESISTANCE;

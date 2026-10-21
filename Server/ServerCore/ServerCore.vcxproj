@@ -179,6 +179,8 @@
     <ClInclude Include="JobQueue.h" />
     <ClInclude Include="JobTimer.h" />
     <ClInclude Include="AsyncLogger.h" />
+    <ClInclude Include="LockOrder.h" />
+    <ClInclude Include="DBStatement.h" />
     <ClInclude Include="Listener.h" />
     <ClInclude Include="LockQueue.h" />
     <ClInclude Include="NetAddress.h" />
@@ -210,6 +212,8 @@
     <ClCompile Include="JobQueue.cpp" />
     <ClCompile Include="JobTimer.cpp" />
     <ClCompile Include="AsyncLogger.cpp" />
+    <ClCompile Include="LockOrder.cpp" />
+    <ClCompile Include="DBStatement.cpp" />
     <ClCompile Include="Listener.cpp" />
     <ClCompile Include="LockQueue.cpp" />
     <ClCompile Include="NetAddress.cpp" />

@@ -1,4 +1,5 @@
 ﻿#include "pch.h"
+#include "DBStatement.h"
 #include "Room.h"
 #include "Player.h"
 #include "GameSession.h"
@@ -63,12 +64,15 @@ void Room::ReportCheat(const CreatureRef& creature, Violation violation, uint64 
 			if (accountId != 0)
 			{
 				char query[512];
-				const string safeDetail = conn->Escape(summary.substr(0, 250));
-				::snprintf(query, sizeof(query),
-					"INSERT INTO cheat_strikes (account_id, character_id, score, detail) VALUES (%llu, %llu, %.2f, '%s')",
-					accountId, characterId, score, safeDetail.c_str());
-				if (conn->Excute(query) == false)
-					LOG_LINE << "[CHEAT] strike insert failed - account=" << accountId << " err=" << conn->GetError() << '\n';
+
+				// 요약 문자열은 바인딩으로 (2026-10-21, prepared statement). score 는 FLOAT 열 - 소수 둘째 자리까지를 문자열로 넘기면 서버가 바꾼다
+				{
+					char scoreText[32];
+					::snprintf(scoreText, sizeof(scoreText), "%.2f", score);
+					DBStatement insert(*conn, "INSERT INTO cheat_strikes (account_id, character_id, score, detail) VALUES (?, ?, ?, ?)");
+					if (insert.BindUInt64(accountId).BindUInt64(characterId).BindString(scoreText).BindString(summary.substr(0, 250)).Execute() == false)
+						LOG_LINE << "[CHEAT] strike insert failed - account=" << accountId << " err=" << insert.ErrorNo() << " " << insert.Error() << '\n';
+				}
 
 				// 창 안의 strike 와 지금 시각 - 시계는 MySQL 하나 (인증 서버도 NOW() 로 비교한다)
 				::snprintf(query, sizeof(query),
@@ -92,7 +96,7 @@ void Room::ReportCheat(const CreatureRef& creature, Violation violation, uint64 
 				{
 					::snprintf(query, sizeof(query),
 						"UPDATE accounts SET banned_until = FROM_UNIXTIME(%llu) WHERE account_id = %llu", bannedUntil, accountId);
-					if (conn->Excute(query))
+					if (conn->Execute(query))
 					{
 						GCheatBans.fetch_add(1);
 						LOG_LINE << "[CHEAT] ban account=" << accountId << " strikes=" << strikes.size() << " in " << rules.banWindowHours

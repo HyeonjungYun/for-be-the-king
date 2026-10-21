@@ -24,7 +24,7 @@ public:
 	uint32			GetReconnectCount() const { return _reconnects; }
 
 	// INSERT, UPDATE, DELETE, DDL 결과셋이 없는 쿼리
-	bool			Excute(const char* query);
+	bool			Execute(const char* query);
 
 	//SELECT. 반환된 결과는 반드시 FreeResult 로 해제한다.
 	//nullptr 이면 실패이며 GetError 로 원인을 볼 수 있다.
@@ -47,6 +47,9 @@ public:
 	uint32			GetLastErrorNo() const;
 
 	bool			IsConnected() const { return _conn != nullptr; }
+
+	// prepared statement 용 (DBStatement) - 다른 데서 쓰지 말 것
+	MYSQL*			Raw() const { return _conn; }
 
 private:
 	bool			Open();

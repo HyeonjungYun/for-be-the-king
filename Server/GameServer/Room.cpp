@@ -7541,7 +7541,7 @@ void Room::SavePlayer(PlayerRef player)
 				"pos_z = %f, yaw = %f WHERE character_id = %llu",
 				hp, x, y, z, yaw, characterId);
 
-			conn->Excute(query);
+			conn->Execute(query);
 		});
 }
 

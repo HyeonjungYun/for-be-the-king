@@ -15,6 +15,7 @@
 #include "BaseCampTable.h"
 #include "Economy.h"
 #include "DBError.h"
+#include "DBStatement.h"
 #include <sstream>
 #include <thread>
 
@@ -425,7 +426,7 @@ namespace
 		{
 			::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = 0 WHERE instance_id = %llu",
 				static_cast<int32>(Protocol::ITEM_STATE_CARRIED), outgoing.instanceId);
-			ok = conn->Excute(query) && conn->GetAffectedRows() == 1;
+			ok = conn->Execute(query) && conn->GetAffectedRows() == 1;
 		}
 
 		if (ok)
@@ -441,7 +442,7 @@ namespace
 				::snprintf(query, sizeof(query), "UPDATE item_instances SET state = %d, slot = %d WHERE instance_id = %llu",
 					static_cast<int32>(target), targetSlot, instanceId);
 			
-			ok = conn->Excute(query) && conn->GetAffectedRows() == 1;
+			ok = conn->Execute(query) && conn->GetAffectedRows() == 1;
 		}
 
 		// 골드 - 매입은 더하고 강화는 뺀다 (같은 트랜잭션 · 캐릭터 행은 위에서 잠갔다). 상한 GOLD_CAP (ObjectUtils.h)
@@ -449,7 +450,7 @@ namespace
 		{
 			const uint64 newGold = (op == BaseCampOp::Sell) ? min<uint64>(gold + price, GOLD_CAP) : gold - price;
 			::snprintf(query, sizeof(query), "UPDATE characters SET gold = %llu WHERE character_id = %llu", newGold, ownerId);
-			ok = conn->Excute(query);
+			ok = conn->Execute(query);
 			goldAfter = static_cast<int64>(newGold);
 			LOG_LINE << "[GOLD] " << BaseCampOpName(op) << " char=" << ownerId << " item=" << instanceId << " type=" << e.itemTypeId
 				<< " count=" << e.stackCount << " " << (op == BaseCampOp::Sell ? "+" : "-") << price << " -> " << newGold << '\n';
@@ -601,30 +602,35 @@ namespace
 
 			// DB 에는 토큰의 SHA-256 만 있다 (2026-10-17 사용자 결정 · 로그인 OQ-2) - DB 가 새도 그 값으로는 로그인할 수 없다.
 			// 클라는 원래 토큰을 보내고, 인증 서버(AuthServer)도 저장할 때 같은 해시를 쓴다. migrate_hash_tokens.sql
-			const string safeToken = conn->Escape(Utils::Sha256Hex(token));
+			// 클라 문자열이 SQL 에 닿는 자리 - prepared statement 로 바인딩한다 (2026-10-21, Escape + 문자열 연결 대신)
+			const string tokenHash = Utils::Sha256Hex(token);
 
 			// 정지 여부도 같이 본다 (안티치트 2026-10-19 - accounts.banned_until). 시계는 MySQL 하나
 			char query[512];
-			::snprintf(query, sizeof(query),
-				"SELECT s.account_id, IFNULL(UNIX_TIMESTAMP(a.banned_until), 0), UNIX_TIMESTAMP(NOW()) "
-				"FROM login_sessions s JOIN accounts a ON a.account_id = s.account_id "
-				"WHERE s.token = '%s' AND s.expires_at > NOW()",
-				safeToken.c_str());
-
 			uint64 accountId = 0;
 			uint64 bannedUntil = 0;
 			uint64 dbNow = 0;
 
-			if (MYSQL_RES* result = conn->Query(query))
 			{
-				if (MYSQL_ROW row = ::mysql_fetch_row(result))
-				{
-					accountId = ::strtoull(row[0], nullptr, 10);
-					bannedUntil = row[1] ? ::strtoull(row[1], nullptr, 10) : 0;
-					dbNow = row[2] ? ::strtoull(row[2], nullptr, 10) : 0;
-				}
+				DBStatement select(*conn,
+					"SELECT s.account_id, IFNULL(UNIX_TIMESTAMP(a.banned_until), 0), UNIX_TIMESTAMP(NOW()) "
+					"FROM login_sessions s JOIN accounts a ON a.account_id = s.account_id "
+					"WHERE s.token = ? AND s.expires_at > NOW()");
 
-				conn->FreeResult(result);
+				vector<string> row;
+				if (select.BindString(tokenHash).Query())
+				{
+					if (select.Fetch(OUT row) && row.size() >= 3)
+					{
+						accountId = ::strtoull(row[0].c_str(), nullptr, 10);
+						bannedUntil = ::strtoull(row[1].c_str(), nullptr, 10);
+						dbNow = ::strtoull(row[2].c_str(), nullptr, 10);
+					}
+				}
+				else
+				{
+					LOG_LINE << "[LOGIN] token query failed err=" << select.ErrorNo() << " " << select.Error() << '\n';
+				}
 			}
 
 			// 정지된 계정 - 이유와 끝 시각을 알리고 끊는다. 인증 서버도 로그인에서 막지만, 이미 받은 토큰이 남아 있을 수 있다
@@ -1489,9 +1495,6 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 
 	GDBQueue.Push([gameSession, requestId, characterId, gold, reason](DBConnection* conn)
 		{
-			const string safeRequestId = conn->Escape(requestId);
-			const string safeReason = conn->Escape(reason);
-
 			Protocol::GrantResult result = Protocol::GRANT_DB_ERROR;
 			uint64 goldAfter = 0;
 
@@ -1532,14 +1535,11 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 				return;
 			}
 
-			::snprintf(query, sizeof(query),
-				"INSERT INTO reward_grants (request_id, character_id, gold, reason) "
-				"VALUES ('%s', %llu, %llu, '%s')",
-				safeRequestId.c_str(), characterId, gold, safeReason.c_str());
-
-			if (conn->Excute(query) == false)
+			// request_id · reason 은 클라 문자열 - 바인딩으로 (2026-10-21). request_id 가 PRIMARY KEY 라 재요청은 중복 키로 튕긴다
+			DBStatement insert(*conn, "INSERT INTO reward_grants (request_id, character_id, gold, reason) VALUES (?, ?, ?, ?)");
+			if (insert.BindString(requestId).BindUInt64(characterId).BindUInt64(gold).BindString(reason).Execute() == false)
 			{
-				const uint32 errorNo = conn->GetLastErrorNo();
+				const uint32 errorNo = insert.ErrorNo();
 				conn->Rollback();
 
 				// 중복 키 = 이미 처리된 요청 (request_id 가 PRIMARY KEY - 멱등의 전부)
@@ -1561,7 +1561,7 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 				}
 				else
 				{
-					LOG_LINE << "[GRANT] insert failed err=" << errorNo << " " << conn->GetError() << '\n';
+					LOG_LINE << "[GRANT] insert failed err=" << errorNo << " " << insert.Error() << '\n';
 					result = Protocol::GRANT_DB_ERROR;
 				}
 
@@ -1572,7 +1572,7 @@ bool Handle_C_GRANT_REWARD(PacketSessionRef& session, Protocol::C_GRANT_REWARD& 
 			// 잔액을 올린다 - 상한 GOLD_CAP (넘침 없이)
 			::snprintf(query, sizeof(query), "UPDATE characters SET gold = LEAST(gold + %llu, %llu) WHERE character_id = %llu", gold, GOLD_CAP, characterId);
 
-			if (conn->Excute(query) == false)
+			if (conn->Execute(query) == false)
 			{
 				LOG_LINE << "[GRANT] update failed err=" << conn->GetLastErrorNo() << " " << conn->GetError() << '\n';
 				conn->Rollback();

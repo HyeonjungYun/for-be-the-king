@@ -129,7 +129,7 @@ void PartyManager::Invite(const GameSessionRef& from, const string& targetName)
 	uint64 partyId = 0;
 	Snapshot snap;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		const uint64 fromParty = _book.PartyOf(fromId) != nullptr ? _book.PartyOf(fromId)->partyId : 0;
 		const SessionPlace fromPlace = from->place.load();
 
@@ -180,7 +180,7 @@ void PartyManager::FinishDungeonInvite(uint64 fromId, uint64 toId, bool visible,
 	uint64 partyId = 0;
 	Snapshot snap;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		const PartyEntry* mine = _book.PartyOf(fromId);
 		if (result == Protocol::PARTY_OK && target == nullptr)
 			result = Protocol::PARTY_NOT_FOUND;
@@ -230,7 +230,7 @@ void PartyManager::Respond(const GameSessionRef& to, uint64 partyId, bool accept
 	Snapshot joined;
 	bool dungeonParty = false;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		const PartyEntry* invitedTo = _book.Find(partyId);
 		dungeonParty = invitedTo != nullptr && invitedTo->dungeonRoom != 0;
 		const bool placeOk = dungeonParty ? (toRoomKey != 0 && invitedTo->dungeonRoom == toRoomKey)
@@ -295,7 +295,7 @@ void PartyManager::Leave(const GameSessionRef& by, uint64 who)
 	vector<string> victims;
 	uint64 dissolvedId = 0;		// 배신 뒤 혼자 남은 사람 - 파티를 풀고 팀 0 으로 (R5 "1 명이면 해산")
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		const PartyEntry* party = _book.PartyOf(who);
 		if (party != nullptr && party->dungeonRoom != 0)
 		{
@@ -365,7 +365,7 @@ void PartyManager::OnLogin(const GameSessionRef& session)
 
 	Snapshot snap;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		snap = TakeSnapshot(_book.OnLogin(characterId));
 	}
 	if (snap.party.partyId != 0)
@@ -379,7 +379,7 @@ void PartyManager::OnDisconnected(uint64 characterId, SessionPlace place)
 
 	Snapshot snap;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		// 던전에서 끊겼다 - 몸이 끊김 유예로 남는다. 인스턴스가 닫힐 때까지 "접속 끊김" 으로 둔다
 		if (place == SessionPlace::Dungeon || place == SessionPlace::Entering || place == SessionPlace::Escaping)
 			_book.SetInRun(characterId, true);
@@ -394,7 +394,7 @@ void PartyManager::NotifyChanged(uint64 characterId)
 	Snapshot snap;
 	bool dropped = false;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		const PartyEntry* party = _book.PartyOf(characterId);
 		if (party == nullptr)
 			return;
@@ -430,7 +430,7 @@ void PartyManager::OnInstanceClosed(uint64 partyId, uint64 instanceId)
 
 	Snapshot snap;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		_book.OnInstanceClosed(partyId, instanceId);
 		snap = TakeSnapshot(partyId);
 	}
@@ -442,7 +442,7 @@ void PartyManager::Tick(uint64 nowUs)
 {
 	vector<pair<uint64, uint64>> expired;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		_book.ExpireInvites(nowUs, OUT expired);
 	}
 
@@ -462,7 +462,7 @@ void PartyManager::SendNotice(uint64 characterId, Protocol::PartyResult result, 
 
 	Snapshot snap;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		const PartyEntry* party = _book.PartyOf(characterId);
 		snap = TakeSnapshot(party != nullptr ? party->partyId : 0);
 	}
@@ -481,7 +481,7 @@ PartyManager::CoopEnter PartyManager::BeginCoopEnter(const GameSessionRef& reque
 
 	vector<uint64> others;
 	{
-		WRITE_LOCK;
+		WRITE_LOCK_ORDERED(LockLevel::PARTY);
 		out.partyId = _book.EnsureParty(characterId, NameOf(requester));
 		const PartyEntry* party = _book.Find(out.partyId);
 
@@ -548,13 +548,13 @@ PartyManager::CoopEnter PartyManager::BeginCoopEnter(const GameSessionRef& reque
 
 size_t PartyManager::SizeOf(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::PARTY);
 	return _book.SizeOf(characterId);
 }
 
 uint64 PartyManager::PartyOf(uint64 characterId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::PARTY);
 	const PartyEntry* party = _book.PartyOf(characterId);
 	return party != nullptr ? party->partyId : 0;
 }

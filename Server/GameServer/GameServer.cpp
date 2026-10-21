@@ -144,7 +144,12 @@ namespace
 		service->CloseService();
 		GJobTimer->Stop();
 
-		// 2. 세션을 끊는다 - 끊기 직전에 S_KICK{SERVER_SHUTDOWN} 을 보내 클라가 이유를 보이게. 던전의 몸은 유예 몸이 되고(DB 없음),
+		// 2. 플레이어 저장 (위치 · 체력) - 세션을 끊기 전에, 각 방 큐에서 (Room::SaveAllPlayers → GDBQueue). 아래 DB drain 이 기다린다
+		for (int32 i = 0; i < FLOOR_COUNT; i++)
+			GRooms[i]->DoAsync(&Room::SaveAllPlayers);
+		GInstances.ForEachRoom([](const RoomRef& room) { room->DoAsync(&Room::SaveAllPlayers); });
+
+		// 3. 세션을 끊는다 - 끊기 직전에 S_KICK{SERVER_SHUTDOWN} 을 보내 클라가 이유를 보이게. 던전의 몸은 유예 몸이 되고(DB 없음),
 		//    베이스캠프 몸은 사라진다. 진행 중이던 런 끝 저장은 DB 큐에 그대로 있다
 		const int32 dropped = GSessionManager.DisconnectAll(L"server shutdown", [](const GameSessionRef& session)
 			{
@@ -153,15 +158,15 @@ namespace
 				session->Send(ServerPacketHandler::MakeSendBuffer(kickPkt));
 			});
 
-		// 3. 방 잡이 가라앉을 때까지 - 글로벌 큐가 비고 200 ms 그대로면 끝 (상한 2 s)
+		// 4. 방 잡이 가라앉을 때까지 - 글로벌 큐가 비고 200 ms 그대로면 끝 (상한 2 s)
 		int32 quiet = 0;
 		WaitUntil([&quiet]() { quiet = (GGlobalQueue->Size() == 0) ? quiet + 1 : 0; return quiet >= 4; }, 2'000);
 
-		// 4. DB 큐 - 남은 저장(사망 · 탈출 · 만료 · 안티치트)을 끝까지. 시간 안에 못 끝내도 런 끝 저장은 write-ahead 기록이 있어 다음 부팅이 끝낸다
+		// 5. DB 큐 - 남은 저장(위치 · 사망 · 탈출 · 만료 · 안티치트)을 끝까지. 시간 안에 못 끝내도 런 끝 저장은 write-ahead 기록이 있어 다음 부팅이 끝낸다
 		const bool drained = WaitUntil([]() { return GDBQueue.GetPendingCount() == 0 && GDBQueue.GetDelayedCount() == 0; }, drainMs);
 		GDBQueue.Shutdown();		// 남은 작업을 한 번씩 돌리고 워커를 합친다
 
-		// 5. IOCP 워커 종료 - Dispatch(10 ms) 에서 깨어나 깃발을 본다
+		// 6. IOCP 워커 종료 - Dispatch(10 ms) 에서 깨어나 깃발을 본다
 		GWorkersStop.store(true);
 		GThreadManager->Join();
 

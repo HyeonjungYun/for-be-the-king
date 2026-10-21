@@ -9,7 +9,7 @@ bool AccountManager::TryLogin(uint64 accountId, const shared_ptr<GameSession>& o
 	if (accountId == 0 || owner == nullptr)
 		return false;
 
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 
 	auto it = _accounts.find(accountId);
 	if (it != _accounts.end())
@@ -28,7 +28,7 @@ void AccountManager::LogOut(uint64 accountId, const GameSession* owner)
 	if (accountId == 0)
 		return;
 
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 
 	auto it = _accounts.find(accountId);
 	if (it == _accounts.end())
@@ -46,7 +46,7 @@ void AccountManager::LogOut(uint64 accountId, const GameSession* owner)
 
 shared_ptr<GameSession> AccountManager::FindOwner(uint64 accountId)
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 
 	auto it = _accounts.find(accountId);
 	return (it != _accounts.end()) ? it->second.lock() : nullptr;
@@ -54,6 +54,6 @@ shared_ptr<GameSession> AccountManager::FindOwner(uint64 accountId)
 
 int32 AccountManager::Count()
 {
-	WRITE_LOCK;
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
 	return static_cast<int32>(_accounts.size());
 }

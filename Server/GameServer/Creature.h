@@ -16,7 +16,7 @@ namespace BaseStats
 	constexpr int32		MAGIC_RESIST				= 0;
 	constexpr float		ATTACK_RANGE				= 150.f;
 	constexpr float		CRIT_CHANCE					= 0.f;
-	constexpr float		CRIT_MULITPLIER				= 1.75f;
+	constexpr float		CRIT_MULTIPLIER				= 1.75f;
 
 	const float			K_MITIGATION				= 100.f;
 	constexpr int32		MIN_DAMAGE					= 1;
@@ -130,7 +130,7 @@ public:
 	int32				magicResist		= BaseStats::MAGIC_RESIST;
 	float				attackRange		= BaseStats::ATTACK_RANGE;
 	float				critChance		= BaseStats::CRIT_CHANCE;
-	float				critMultiplier	= BaseStats::CRIT_MULITPLIER;
+	float				critMultiplier	= BaseStats::CRIT_MULTIPLIER;
 	Protocol::DamageType autoAttackType	= Protocol::DAMAGE_TYPE_PHYSICAL;	// 맨몸 · 몬스터는 물리. 플레이어는 무기가 정한다
 	bool				rangedAutoAttack = false;	// 활 · 스태프 - 평타가 투사체로 날아간다 (필중 · 날아가는 중 벽에 막힘). 2 단계에서 쓴다
 	float				outgoingDamagePct = 0.f;	// damage_pct 버프 합 - 평타 · 스킬 피해 × (1 + 이 값). 지속 피해는 걸 때 고정

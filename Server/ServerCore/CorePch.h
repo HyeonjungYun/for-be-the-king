@@ -39,6 +39,8 @@ using namespace std;
 #include "AsyncLogger.h"
 #define LOG_LINE	LogLine()
 
+#include "LockOrder.h"		// WRITE_LOCK_ORDERED(level) - 매니저 락 순서 검사 (2026-10-21)
+
 #include <winsock2.h>
 #include <mswsock.h>
 #include <ws2tcpip.h>

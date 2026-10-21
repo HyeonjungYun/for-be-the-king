@@ -21,6 +21,7 @@
 #include "Utils.h"
 #include "GameSession.h"
 #include "DBJobQueue.h"
+#include "LockLevels.h"
 
 USING_SHARED_PTR(GameSession);
 USING_SHARED_PTR(Player);

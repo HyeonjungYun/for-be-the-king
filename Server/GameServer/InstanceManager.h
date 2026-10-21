@@ -25,6 +25,9 @@ public:
 	int32	LiveCount();
 	uint64	CreatedCount();
 
+	// 정상 종료 (2026-10-21) - 살아 있는 인스턴스 전부에. 락 안에서 사본을 뜨고 락 밖에서 부른다 (fn 이 DoAsync 만 하게)
+	void	ForEachRoom(const function<void(const RoomRef&)>& fn);
+
 private:
 	USE_LOCK;
 

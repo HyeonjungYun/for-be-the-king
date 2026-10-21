@@ -248,7 +248,7 @@ TEST(DBConnection, 연결이_없으면_마지막_연결_시도의_오류를_준�
 	DBConnection conn;
 
 	EXPECT_FALSE(conn.Connect("127.0.0.1", 1, "nobody", "wrong", "nodb"));		// 포트 1 - 반드시 실패
-	EXPECT_FALSE(conn.Excute("SELECT 1"));
+	EXPECT_FALSE(conn.Execute("SELECT 1"));
 	EXPECT_NE(conn.GetLastErrorNo(), 0u);
 	EXPECT_GE(conn.GetLastErrorNo(), 2000u) << "클라이언트 연결 오류(2002 · 2003) - DBError 가 연결 끊김으로 본다";
 

@@ -67,7 +67,7 @@ void DBConnection::Close()
 	_conn = nullptr;
 }
 
-bool DBConnection::Excute(const char* query)
+bool DBConnection::Execute(const char* query)
 {
 	if (_conn == nullptr)
 		return false;
@@ -120,17 +120,17 @@ string DBConnection::Escape(const string& value) const
 
 bool DBConnection::BeginTransaction()
 {
-	return Excute("START TRANSACTION");
+	return Execute("START TRANSACTION");
 }
 
 bool DBConnection::Commit()
 {
-	return Excute("COMMIT");
+	return Execute("COMMIT");
 }
 
 bool DBConnection::Rollback()
 {
-	return Excute("ROLLBACK");
+	return Execute("ROLLBACK");
 }
 
 const char* DBConnection::GetError() const
