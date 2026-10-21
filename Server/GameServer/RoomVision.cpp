@@ -21,9 +21,10 @@ atomic<uint64> GFowLogViewer = 0;
 
 namespace
 {
+	// 시야의 대상 = 전투의 대상 (Room.h IsEnemyCreature - 예전엔 같은 본문이 네 파일에 있었다, TD-011)
 	bool IsFowSubject(const ObjectRef& object)
 	{
-		return object->IsPlayer() || object->IsMonster() || object->IsDecoy();
+		return IsEnemyCreature(object);
 	}
 
 	// 테스트 모드 FoW 끔의 이벤트 필터 반경 - 층(280 m)보다 크면 된다
@@ -123,22 +124,14 @@ bool Room::NearViewer(const PlayerRef& viewer, float x, float y, float extraCm) 
 float Room::VisionBonusOf(const CreatureRef& creature) const
 {
 	float bonus = 0.f;
-	for (int32 i = 0; i < SKILL_SLOT_COUNT; i++)
-	{
-		const SkillSlot& slot = creature->skillSlots[i];
-		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
-			continue;
-
-		const SkillDef* def = SkillTable::Find(slot.skillId);
-		if (def == nullptr || def->kind != SkillKind::Passive)
-			continue;
-
-		for (const SkillEffect& e : def->effects)
+	ForEachBoundPassive(*creature, [&](int32, SkillSlot&, const SkillDef& def)
 		{
-			if (e.type == SkillEffectType::Vision)
-				bonus += e.magnitude;
-		}
-	}
+			for (const SkillEffect& e : def.effects)
+			{
+				if (e.type == SkillEffectType::Vision)
+					bonus += e.magnitude;
+			}
+		});
 	return bonus;
 }
 

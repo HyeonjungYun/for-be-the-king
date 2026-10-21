@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "Creature.h"
 #include "SkillTable.h"
+#include "DamageMath.h"
 
 Creature::Creature()
 {
@@ -217,9 +218,8 @@ int32 Creature::TakeDamage(int32 amount)
 
 uint32 Creature::ComputeCcDurationMs(uint32 baseMs) const
 {
-	const float factor = 1.f - resistance * BaseStats::RESISTANCE_MAX_REDUCTION;
-
-	return static_cast<uint32>(baseMs * factor);
+	// 저항 × 최대 감소율을 [0, 1] 로 잘라 곱한다 - 1 을 넘는 저항이 오면 음수 float 를 uint32 로 캐스트하던 자리 (DamageMath, 2026-10-21)
+	return DamageMath::MitigatedMs(baseMs, resistance, BaseStats::RESISTANCE_MAX_REDUCTION);
 }
 
 void Creature::ApplyHardCc(Protocol::CcType type, uint64 nowUs, uint32 effectiveMs)

@@ -5,6 +5,7 @@
 #include "Decoy.h"
 #include "SkillTable.h"
 #include "SkillKinematics.h"
+#include "DamageMath.h"
 #include "WallTable.h"
 #include "BaseCampTable.h"
 #include "NavGrid.h"
@@ -16,9 +17,7 @@
 
 namespace
 {
-	constexpr float PI_F = 3.14159265f;
-
-	// 조준 방향 - 조준점이 발밑이면 바라보는 방향 (CollectSkillTargets 와 같은 규칙)
+	// 조준 방향 - 조준점이 발밑이면 바라보는 방향 (CollectSkillTargets 와 같은 규칙). PI_F · IsEnemyCreature 는 Room.h 공용 (TD-011)
 	void AimDir(const CreatureRef& caster, const SkillContext& ctx, OUT float& dirX, OUT float& dirY)
 	{
 		dirX = ctx.aimX - ctx.originX;
@@ -33,11 +32,6 @@ namespace
 		const float yawRad = caster->posInfo->yaw() * PI_F / 180.f;
 		dirX = ::cosf(yawRad);
 		dirY = ::sinf(yawRad);
-	}
-
-	bool IsEnemyCreature(const ObjectRef& object)
-	{
-		return object->IsPlayer() || object->IsMonster() || object->IsDecoy();
 	}
 }
 
@@ -145,15 +139,7 @@ void Room::RaiseWall(const CreatureRef& caster, const SkillDef& def, const Skill
 		c->posInfo->set_y(outY);
 		_dirtyMovers.insert(item.first);
 		if (PlayerRef p = AsPlayer(c))
-		{
-			Protocol::S_MOVE snap;
-			snap.set_correction(true);
-			snap.add_infos()->CopyFrom(*p->posInfo);
-			if (GameSessionRef session = p->session.lock())
-			{
-				SEND_PACKET(snap);
-			}
-		}
+			SendCorrection(p);
 		LOG_LINE << "[WALL] shove id=" << item.first << " -> (" << ::lroundf(outX) << "," << ::lroundf(outY) << ")" << '\n';
 	}
 
@@ -238,8 +224,9 @@ void Room::UpdateDynamicWalls(uint64 nowUs)
 
 void Room::StartVolley(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
-	// 발 수 = hits + per_level × 강화 레벨 (그림자 던지기 "아이템 레벨이 높을수록 단검 수가 늘어난다"). 상한 12
-	const uint32 count = (std::min)(12u, e.hits + static_cast<uint32>(e.perLevel * static_cast<float>(ctx.itemLevel)));
+	// 발 수 = hits + per_level × 강화 레벨 (그림자 던지기 "아이템 레벨이 높을수록 단검 수가 늘어난다"). 상한 12.
+	// 증가분이 음수면 더하지 않는다 (DamageMath - 음수 float → uint32 캐스트를 막는다, 2026-10-21)
+	const uint32 count = DamageMath::ScaledCount(e.hits, e.perLevel, ctx.itemLevel, 12u);
 
 	PendingVolley v;
 	v.casterId = ctx.casterId;
@@ -321,8 +308,7 @@ void Room::UpdateVolleys(uint64 nowUs)
 			continue;
 		}
 
-		auto casterIt = _objects.find(v.casterId);
-		CreatureRef caster = (casterIt != _objects.end()) ? AsCreature(casterIt->second) : nullptr;
+		CreatureRef caster = FindCreature(v.casterId);
 		const SkillDef* def = SkillTable::Find(v.skillId);
 
 		// 시전자가 사라졌거나 죽었거나 행동 불능이면 남은 발은 버린다
@@ -594,8 +580,7 @@ void Room::StartVisionArea(const CreatureRef& caster, const SkillDef& def, const
 void Room::MoveBehindTarget(const CreatureRef& caster, const SkillDef& def, const SkillEffect& e, const SkillContext& ctx, uint64 nowUs)
 {
 	PlayerRef player = AsPlayer(caster);
-	auto targetIt = _objects.find(ctx.targetId);
-	CreatureRef target = (targetIt != _objects.end()) ? AsCreature(targetIt->second) : nullptr;
+	CreatureRef target = FindCreature(ctx.targetId);
 	if (player == nullptr || target == nullptr || target->IsAlive() == false)
 		return;
 
@@ -616,14 +601,7 @@ void Room::MoveBehindTarget(const CreatureRef& caster, const SkillDef& def, cons
 	player->posInfo->set_y(outY);
 	player->posInfo->set_yaw(target->posInfo->yaw());		// 대상과 같은 쪽을 본다 = 등을 마주 본다
 	_dirtyMovers.insert(ctx.casterId);
-
-	Protocol::S_MOVE snap;
-	snap.set_correction(true);
-	snap.add_infos()->CopyFrom(*player->posInfo);
-	if (GameSessionRef session = player->session.lock())
-	{
-		SEND_PACKET(snap);
-	}
+	SendCorrection(player);
 
 	LOG_LINE << "[BEHIND] char=" << ctx.casterId << " -> " << ctx.targetId << " at=(" << ::lroundf(outX) << "," << ::lroundf(outY) << ")" << '\n';
 }

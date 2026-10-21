@@ -13,7 +13,6 @@
 
 namespace
 {
-	constexpr float		PI_F = 3.14159265f;
 	constexpr float		ANCHOR_MARK_RADIUS_CM = 60.f;		// 포르타 문 · 비창 자리 표시
 	constexpr float		NEAR_WALL_CM = 110.f;				// 벽 차기 - 중심에서 이 안에 벽면이 있으면 "붙어 있다" (캡슐 42 + 여유)
 	constexpr int32		WALL_PROBE_DIRS = 16;				// 벽 방향을 찾는 살
@@ -22,25 +21,9 @@ namespace
 	constexpr float		FOOTPRINT_MIN_STEP_CM = 40.f;		// 서 있던 자리는 한 번만 (같은 자리 발자국을 겹쳐 찍지 않는다)
 	constexpr float		FRONT_GUARD_COS = 0.5f;			// 철벽진 - 앞 120° (반각 60°)
 	constexpr uint32	LANDING_GRACE_MS = 80;				// 착지 충격 - 이동 시간 뒤 늦게 오는 C_MOVE 를 기다린다
-	constexpr float		ON_ARRIVE_STOP_CM = 90.f;			// 추격 - 클라 to_target 이 멈추는 거리 (S1MyPlayer StopShortCm 와 같다)
 	constexpr uint32	LANDING_VISUAL_MS = 400;
 
-	bool IsEnemyCreature(const ObjectRef& object)
-	{
-		return object->IsPlayer() || object->IsMonster() || object->IsDecoy();
-	}
-
-	// 보정 S_MOVE - 서버가 옮긴 자리를 본인 클라에 (블링크 · 그림자 밟기와 같은 길)
-	void SendCorrection(const PlayerRef& player)
-	{
-		Protocol::S_MOVE snap;
-		snap.set_correction(true);
-		snap.add_infos()->CopyFrom(*player->posInfo);
-		if (GameSessionRef session = player->session.lock())
-		{
-			SEND_PACKET(snap);
-		}
-	}
+	// PI_F · ARRIVE_STOP_CM · IsEnemyCreature 는 Room.h 공용, 보정 S_MOVE 는 Room::SendCorrection (TD-011, 2026-10-21)
 }
 
 // ── 비창 1138 · 포르타 1150 - 재입력으로 돌아갈 자리 ──
@@ -92,8 +75,7 @@ void Room::OnAnchorProjectileEnd(const Projectile& p)
 	if (anchor == nullptr || anchor->param != "projectile")
 		return;
 
-	auto it = _objects.find(p.casterId);
-	CreatureRef caster = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
+	CreatureRef caster = FindCreature(p.casterId);
 	const uint64 nowUs = Utils::NowMicroseconds();
 	if (caster == nullptr || caster->anchorSkillId != p.skillId || nowUs >= caster->anchorUntilUs)
 		return;
@@ -365,7 +347,7 @@ void Room::ScheduleCcOnArrive(const CreatureRef& caster, const SkillDef& def, co
 	{
 		const float dx = target->posInfo->x() - caster->posInfo->x();
 		const float dy = target->posInfo->y() - caster->posInfo->y();
-		const float dist = (std::clamp)(::sqrtf(dx * dx + dy * dy) - ON_ARRIVE_STOP_CM, 0.f, move->distCm * MoveDistScale(caster));
+		const float dist = (std::clamp)(::sqrtf(dx * dx + dy * dy) - ARRIVE_STOP_CM, 0.f, move->distCm * MoveDistScale(caster));
 		travelMs = SkillKinematics::TravelMs(dist, move->speedCms);
 	}
 
@@ -406,16 +388,11 @@ void Room::ScheduleLanding(const CreatureRef& caster, uint32 travelMs, uint64 no
 
 	// 착지 패시브가 있을 때만 - 없는 사람의 이동마다 예약을 쌓지 않는다
 	bool wants = false;
-	for (const SkillSlot& slot : caster->skillSlots)
-	{
-		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
-			continue;
-		const SkillDef* def = SkillTable::Find(slot.skillId);
-		if (def == nullptr || def->kind != SkillKind::Passive)
-			continue;
-		for (const SkillEffect& e : def->effects)
-			wants |= (e.condition == SkillRequire::OnMoveEnd);
-	}
+	ForEachBoundPassive(*caster, [&](int32, SkillSlot&, const SkillDef& def)
+		{
+			for (const SkillEffect& e : def.effects)
+				wants |= (e.condition == SkillRequire::OnMoveEnd);
+		});
 	if (wants == false)
 		return;
 
@@ -438,8 +415,7 @@ void Room::UpdateLandings(uint64 nowUs)
 		const PendingLanding due = _pendingLandings[i];
 		_pendingLandings.erase(_pendingLandings.begin() + i);
 
-		auto it = _objects.find(due.casterId);
-		CreatureRef owner = (it != _objects.end()) ? AsCreature(it->second) : nullptr;
+		CreatureRef owner = FindCreature(due.casterId);
 		if (owner == nullptr || owner->IsAlive() == false)
 			continue;
 
@@ -448,11 +424,8 @@ void Room::UpdateLandings(uint64 nowUs)
 
 		for (int32 s = 0; s < SKILL_SLOT_COUNT; s++)
 		{
-			const SkillSlot& slot = owner->skillSlots[s];
-			if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
-				continue;
-			const SkillDef* def = SkillTable::Find(slot.skillId);
-			if (def == nullptr || def->kind != SkillKind::Passive || MeetsWeaponRequirement(owner, *def) == false)
+			const SkillDef* def = BoundPassiveOf(owner->skillSlots[s]);
+			if (def == nullptr || MeetsWeaponRequirement(owner, *def) == false)
 				continue;
 
 			for (uint32 k = 0; k < def->effects.size(); k++)
@@ -500,11 +473,8 @@ void Room::TriggerSelfPassives(const CreatureRef& owner, SkillRequire condition,
 
 	for (int32 s = 0; s < SKILL_SLOT_COUNT; s++)
 	{
-		const SkillSlot& slot = owner->skillSlots[s];
-		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
-			continue;
-		const SkillDef* def = SkillTable::Find(slot.skillId);
-		if (def == nullptr || def->kind != SkillKind::Passive || MeetsWeaponRequirement(owner, *def) == false)
+		const SkillDef* def = BoundPassiveOf(owner->skillSlots[s]);
+		if (def == nullptr || MeetsWeaponRequirement(owner, *def) == false)
 			continue;
 
 		for (uint32 k = 0; k < def->effects.size(); k++)
@@ -529,11 +499,8 @@ void Room::TriggerStancePassives(const CreatureRef& owner, const string& element
 
 	for (int32 s = 0; s < SKILL_SLOT_COUNT; s++)
 	{
-		const SkillSlot& slot = owner->skillSlots[s];
-		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
-			continue;
-		const SkillDef* def = SkillTable::Find(slot.skillId);
-		if (def == nullptr || def->kind != SkillKind::Passive || MeetsWeaponRequirement(owner, *def) == false)
+		const SkillDef* def = BoundPassiveOf(owner->skillSlots[s]);
+		if (def == nullptr || MeetsWeaponRequirement(owner, *def) == false)
 			continue;
 
 		for (uint32 k = 0; k < def->effects.size(); k++)
@@ -574,10 +541,8 @@ void Room::TryLowHpEscape(const CreatureRef& victim, const CreatureRef& attacker
 	for (int32 s = 0; s < SKILL_SLOT_COUNT; s++)
 	{
 		SkillSlot& slot = player->skillSlots[s];
-		if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0 || nowUs < slot.cooldownEndUs)
-			continue;
-		const SkillDef* def = SkillTable::Find(slot.skillId);
-		if (def == nullptr || def->kind != SkillKind::Passive)
+		const SkillDef* def = BoundPassiveOf(slot);
+		if (def == nullptr || nowUs < slot.cooldownEndUs)
 			continue;
 
 		const SkillEffect* move = nullptr;
@@ -638,11 +603,8 @@ void Room::UpdateIdleCombat(uint64 nowUs)
 
 		for (int32 s = 0; s < SKILL_SLOT_COUNT; s++)
 		{
-			const SkillSlot& slot = player->skillSlots[s];
-			if (slot.bindState != Protocol::BIND_BOUND || slot.skillId == 0)
-				continue;
-			const SkillDef* def = SkillTable::Find(slot.skillId);
-			if (def == nullptr || def->kind != SkillKind::Passive)
+			const SkillDef* def = BoundPassiveOf(player->skillSlots[s]);
+			if (def == nullptr)
 				continue;
 
 			for (uint32 k = 0; k < def->effects.size(); k++)

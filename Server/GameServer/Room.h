@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "JobQueue.h"
+#include "Object.h"
 #include "SkillTable.h"
 #include "StatusEffects.h"
 #include "WallMap.h"
@@ -12,6 +13,19 @@
 #include <random>
 
 struct DeathSnapshot;
+
+// ── Room*.cpp 가 함께 쓰는 상수 · 헬퍼 (TD-011, 2026-10-21) - 예전엔 파일마다 PI_F · IsEnemyCreature · 멈춤 거리 상수를 따로 가졌다 ──
+constexpr float PI_F = 3.14159265f;
+
+// 대상 앞에서 멈추는 거리 - 클라 to_target 이동(S1MyPlayer StopShortCm)과 같아야 한다. 도약(leap_target) · 돌진 도착(arrive) · 추격 공용.
+// 예전엔 LEAP_TARGET_STOP_CM · ARRIVE_STOP_CM · ON_ARRIVE_STOP_CM 세 이름이 같은 90 을 들고 있었다
+constexpr float ARRIVE_STOP_CM = 90.f;
+
+// 전투 · 시야의 대상이 되는 생물 - 플레이어 · 몬스터 · 미끼 (가방 · 상자 · 투사체는 아니다)
+inline bool IsEnemyCreature(const ObjectRef& object)
+{
+	return object->IsPlayer() || object->IsMonster() || object->IsDecoy();
+}
 
 // 층의 탈출 타워 하나 (design/gdd/escape-timer.md § A · B)
 struct EscapeTowerState
@@ -140,6 +154,7 @@ struct Zone
 	vector<DotInstance>	dotTemplates;				// 스킬의 dot 효과 - 안에 있는 동안 틱마다 갱신 (중첩 아님)
 	uint32				dotDurationMs = 0;
 	string				param;
+	bool				isPuddle = false;			// 명경지수 (param puddle) - 로드 때 해석한 값 (SkillEffect::isPuddle). 틱마다 문자열 비교하지 않는다
 	uint64				groupId = 0;				// 같은 발동이 깐 장판 묶음 (열화 경로) - 한 틱에 한 대상은 묶음에서 한 번만 맞는다. 0 = 혼자
 	uint64				teamId = 0;					// 놓은 사람의 팀 - 시전자가 떠난 뒤에도 아군을 맞히지 않는다 (PVE 협동, ADR-0014)
 
@@ -292,8 +307,9 @@ public:
 	// PVE 인스턴스 (ADR-0014) - InstanceManager::Create 가 부른다. 레벨 · 몬스터 · 상자 · 타워를 그 층 그대로 들고, 4 루프를 돌린다
 	void	InitInstance();
 
-	// 던전 파티 · 배신 (party-betrayal-2026-10-12) - PartyManager 가 DoAsync 로 부른다. Key = 이 방의 식별자 (World 방은 서버가 사는 동안 산다)
-	uint64	Key() const { return reinterpret_cast<uint64>(this); }
+	// 던전 파티 · 배신 (party-betrayal-2026-10-12) - PartyManager 가 DoAsync 로 부른다. Key = 이 방의 식별자 (World 방은 서버가 사는 동안 산다).
+	// 프로세스 안 일련번호 - 예전엔 this 포인터였다 (방이 사라지고 같은 주소에 새 방이 생기면 PartyBook 이 옛 키로 새 방을 가리켰다, 2026-10-21)
+	uint64	Key() const { return _key; }
 	void	CheckPartyInvite(uint64 fromId, uint64 toId);
 	void	SetPartyTeam(uint64 partyId, vector<uint64> memberIds);
 	void	PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector<string> victimNames);
@@ -375,6 +391,11 @@ public:
 	void	FlushCombat();
 	void	FlushSpawns();
 
+	// 종료 경로 (2026-10-21) - 방의 모든 플레이어를 지금 저장한다 (UpdateSaves 와 같은 SavePlayer, 1 분 주기 · 틱당 2 명 상한 없이).
+	// 방 큐 안에서 돈다 - GameServer 가 접속을 닫은 뒤 room->DoAsync(&Room::SaveAllPlayers) 로 부른다. 타이머 · 방송 없음.
+	// 베이스캠프 방은 바로 돌아간다 (런 상태가 아니라 SavePlayer 도 저장하지 않는다)
+	void	SaveAllPlayers();
+
 	RoomRef	GetRoomRef();
 
 private:
@@ -384,7 +405,13 @@ private:
 private:
 	void	Broadcast(SendBufferRef sendBuffer, uint64 exceptId = 0);
 	void	Broadcast(SendBufferRef sendBuffer, const unordered_set<uint64>& exceptIds);
-	
+
+	// 방의 생물 (플레이어 · 몬스터 · 미끼) 하나 - 없거나 생물이 아니면 nullptr. "_objects.find → AsCreature : nullptr" 가 26 곳에 있었다 (TD-011)
+	CreatureRef	FindCreature(uint64 objectId) const;
+
+	// 보정 S_MOVE - 서버가 정한 자리를 본인 클라에만 (이동 거부 · 블링크 · 그림자 밟기 · 도발 끌림 · 벽 밀어내기 공용)
+	void	SendCorrection(const PlayerRef& player) const;
+
 	bool	CancelCast(const CreatureRef& caster);
 	void	SendEquipSync(const PlayerRef& player);
 	void	SendInventorySync(const PlayerRef& player);
@@ -523,6 +550,10 @@ private:
 	// 체력 0 이 된 순간 부른다. 전투 Flush 안이면 Flush 끝으로 미루고(동시 치사, KillBatch), 밖이면 바로 OnCreatureKilled
 	void	KillCreature(const CreatureRef& victim, const CreatureRef& instigator, uint64 instigatorId, uint64 nowUs);
 
+	// 열린 KillBatch 를 닫고 모인 사망을 기록 순서대로 처리한다 - FlushCombat 끝과 HandleMove 의 이동 스킬 해소 뒤 (2026-10-21).
+	// 예전엔 FlushCombat 에만 있어 HandleMove 경로의 사망은 동시 치사 규칙(TR-combat-022)을 받지 않았다
+	void	ProcessKillBatch(uint64 nowUs);
+
 	// 살아 있거나, 이번 전투 Flush 에 막 죽어 아직 자기 히트가 남은 쪽 (TR-combat-022)
 	bool	CanStillStrike(const CreatureRef& creature) const;
 
@@ -659,15 +690,22 @@ private:
 	bool	IsSprinting(const CreatureRef& creature) const;													// 전력 질주 - 공격 · 스킬 불가
 
 public:
-	uint32								_floorId = 0;
+	// 방의 신원 - 만들 때 한 번 정하고(InitIdentity) 이후 읽기만 한다. 예전엔 public 필드라 InstanceManager 가 방 큐 밖에서 직접 썼다 (2026-10-21)
+	void		InitIdentity(uint32 floorId, RoomKind kind, uint64 instanceId, uint64 partyId, uint64 teamId);
+	uint32		FloorId() const { return _floorId; }
+	RoomKind	Kind() const { return _kind; }
+	uint64		InstanceId() const { return _instanceId; }
+	uint64		PartyId() const { return _partyId; }
+	uint64		TeamId() const { return _teamId; }
 
-	// PVE 인스턴스 (ADR-0014) - 만들 때 한 번 정하고 이후 읽기만 한다. 층 방은 0 / World
-	RoomKind							_kind = RoomKind::World;
+private:
+	uint32								_floorId = 0;
+	RoomKind							_kind = RoomKind::World;	// PVE 인스턴스 (ADR-0014). 층 방은 World
 	uint64								_instanceId = 0;
 	uint64								_partyId = 0;			// 협동 인스턴스를 가진 파티 (솔로 = 0)
 	uint64								_teamId = 0;			// 들어오는 플레이어가 받는 팀 (협동 = 파티 id, 솔로 = 0)
+	uint64								_key = 0;				// Key() - 생성자가 프로세스 안 일련번호를 준다
 
-private:
 	// 인스턴스 수명 - 방 큐 안에서만
 	void	TryCloseInstance(uint64 nowUs);
 	void	CloseInstance();
