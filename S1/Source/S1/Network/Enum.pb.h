@@ -648,12 +648,14 @@ enum KickReason : int {
   KICK_REASON_NONE = 0,
   KICK_REASON_CHEAT_SUSPECT = 1,
   KICK_REASON_BANNED = 2,
+  KICK_REASON_DUPLICATE_LOGIN = 3,
+  KICK_REASON_SERVER_SHUTDOWN = 4,
   KickReason_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::min(),
   KickReason_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<int32_t>::max()
 };
 bool KickReason_IsValid(int value);
 constexpr KickReason KickReason_MIN = KICK_REASON_NONE;
-constexpr KickReason KickReason_MAX = KICK_REASON_BANNED;
+constexpr KickReason KickReason_MAX = KICK_REASON_SERVER_SHUTDOWN;
 constexpr int KickReason_ARRAYSIZE = KickReason_MAX + 1;
 
 const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* KickReason_descriptor();

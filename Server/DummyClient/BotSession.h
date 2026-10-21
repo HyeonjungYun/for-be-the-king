@@ -118,6 +118,7 @@ public:
 	float				destY = 0.f;
 
 	uint64				nextAttackAtUs = 0;
+	uint64				nextHeartbeatUs = 0;		// 틱 스레드 전용 - 5 s 마다 C_HEARTBEAT (2026-10-21). 서 있는 봇도 살아 있어야 한다 (서버 유휴 끊기 30 s)
 
 	uint64				nextSkillAtUs = 0;
 	uint64				castUnitlUs = 0;
@@ -202,6 +203,7 @@ public:
 };
 
 constexpr float					BOT_SLOW_CAP = 0.4f;
+constexpr uint64				HEARTBEAT_INTERVAL_US = 5'000'000;		// UE 클라와 같다 (US1GameInstance::SendHeartbeat)
 constexpr float					DASH_SPEED = 1200.f;
 constexpr float					DASH_DIST = 400.f;
 constexpr uint64				DASH_DURATION_US = static_cast<uint64>(DASH_DIST / DASH_SPEED * 1'000'000.0);

@@ -341,6 +341,15 @@ void US1LoginSubsystem::HandleKicked(int32 Reason, uint64 BannedUntil)
 		const int64 Minutes = FMath::Max<int64>(1, (static_cast<int64>(BannedUntil) - NowUnix + 59) / 60);
 		Shown = FText::Format(Text(TEXT("login.error.suspended")), FText::AsNumber(Minutes));
 	}
+	else if (Reason == 3 /*KICK_REASON_DUPLICATE_LOGIN*/)
+	{
+		// 같은 계정이 다른 곳에서 로그인했다 - 이 연결이 밀려났다 (2026-10-21 kick-old)
+		Shown = Text(TEXT("login.error.duplicate_login"));
+	}
+	else if (Reason == 4 /*KICK_REASON_SERVER_SHUTDOWN*/)
+	{
+		Shown = Text(TEXT("login.error.server_shutdown"));
+	}
 	else
 	{
 		Shown = Text(TEXT("login.error.kicked"));

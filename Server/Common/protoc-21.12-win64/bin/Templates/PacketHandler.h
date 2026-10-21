@@ -5,7 +5,9 @@
 #include "S1.h"
 #endif
 
-using PacketHandlerFunc = std::function<bool(PacketSessionRef&, BYTE*, int32)>;
+// Plain function pointers (2026-10-21) - the registered handlers are captureless lambdas. The table used to be
+// 65,536 std::function objects (about 4 MB and a heap-free but heavier call); now it is 512 KB
+using PacketHandlerFunc = bool (*)(PacketSessionRef&, BYTE*, int32);
 extern PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 enum : uint16

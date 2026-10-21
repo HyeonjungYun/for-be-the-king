@@ -441,6 +441,15 @@ static void TickBots(float deltaTime)
 
 	for (BotSessionRef& bot : snapshot)
 	{
+		// 하트비트 (2026-10-21) - 로그인 전에도 보낸다 (서버가 로그인 전에 받는 둘 중 하나). 서버는 30 s 침묵한 로그인 연결을 끊는다
+		if (nowUs >= bot->nextHeartbeatUs)
+		{
+			bot->nextHeartbeatUs = nowUs + HEARTBEAT_INTERVAL_US;
+			Protocol::C_HEARTBEAT heartbeat;
+			heartbeat.set_client_ms(nowUs / 1000);
+			bot->Send(ClientPacketHandler::MakeSendBuffer(heartbeat));
+		}
+
 		// 협동 - 번호로 나눈 첫 봇이 아직 안 들어온 묶음 봇을 초대한다 (로그인 순서가 섞여 NOT_FOUND 면 2 s 뒤 다시)
 		if (runMode == Protocol::RUN_MODE_PVE_COOP && bot->inGame.load() == false)
 		{

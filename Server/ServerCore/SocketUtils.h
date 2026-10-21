@@ -35,8 +35,10 @@ public:
 	static void Close(SOCKET& socket);
 };
 
+// 🔴 BOOL · int 옵션은 int32 로 넘길 것 - bool(1 바이트)을 넘기면 Winsock 이 성공을 돌려주면서 값을 적용하지 않는다 (2026-10-21)
 template<typename T>
 static inline bool SetSockOpt(SOCKET socket, int32 level, int32 optName, T optVal)
 {
+	static_assert(std::is_same_v<T, bool> == false, "pass an int32 (0 / 1) - a 1-byte bool is silently ignored by setsockopt");
 	return SOCKET_ERROR != ::setsockopt(socket, level, optName, reinterpret_cast<char*>(&optVal), sizeof(T));
 }

@@ -41,7 +41,7 @@ struct ServerConfig
 	bool		botLoadouts = false;			// FBTK_BOT_LOADOUTS - bot_ 캐릭터 무작위 빌드 (실행 묶음 AddBots)
 	uint64		disconnectGraceUs = 180'000'000;	// FBTK_DISCONNECT_GRACE_MS - 끊긴 몸이 던전에 남는 시간
 	uint64		routeSeed = 0;					// FBTK_ROUTE_SEED - 0 = 부팅 시각 (순찰 길이 부팅마다 다르다)
-	uint64		idleTimeoutUs = 0;				// FBTK_IDLE_TIMEOUT_MS - 로그인한 연결이 아무 패킷도 안 보내면 끊는다. 0 = 끔 (클라 하트비트가 붙으면 기본값을 켠다)
+	uint64		idleTimeoutUs = 30'000'000;		// FBTK_IDLE_TIMEOUT_MS - 로그인한 연결이 아무 패킷도 안 보내면 끊는다 (클라 · 봇은 5 s 마다 C_HEARTBEAT). 0 = 끔
 	uint32		shutdownDrainMs = 10'000;		// FBTK_SHUTDOWN_DRAIN_MS - Ctrl+C 뒤 DB 큐를 기다리는 상한 (창 닫기는 2.5 s 고정)
 
 #if FBTK_TEST_HOOKS

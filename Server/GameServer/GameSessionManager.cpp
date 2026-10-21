@@ -89,7 +89,7 @@ int32 GameSessionManager::DropUnauthenticated(uint64 nowUs, uint64 timeoutUs)
 	return static_cast<int32>(idle.size());
 }
 
-int32 GameSessionManager::DisconnectAll(const WCHAR* cause)
+int32 GameSessionManager::DisconnectAll(const WCHAR* cause, const function<void(const GameSessionRef&)>& before)
 {
 	vector<GameSessionRef> all;
 	{
@@ -99,8 +99,36 @@ int32 GameSessionManager::DisconnectAll(const WCHAR* cause)
 
 	// 락 밖에서 끊는다 (DropUnauthenticated 와 같은 이유)
 	for (const GameSessionRef& session : all)
+	{
+		if (before != nullptr)
+			before(session);
 		session->Disconnect(cause);
+	}
 	return static_cast<int32>(all.size());
+}
+
+int32 GameSessionManager::DropIdle(uint64 nowUs, uint64 timeoutUs)
+{
+	if (timeoutUs == 0)
+		return 0;
+
+	vector<GameSessionRef> idle;
+	{
+		WRITE_LOCK;
+		for (const GameSessionRef& session : _sessions)
+		{
+			const uint64 last = session->lastRecvUs.load();
+			if (session->accountId.load() != 0 && last != 0 && nowUs > last + timeoutUs)
+				idle.push_back(session);
+		}
+	}
+
+	for (const GameSessionRef& session : idle)
+	{
+		LOG_LINE << "[RATE] idle timeout - account=" << session->accountId.load() << " silent for " << (nowUs - session->lastRecvUs.load()) / 1000 << "ms\n";
+		session->Disconnect(L"idle timeout");
+	}
+	return static_cast<int32>(idle.size());
 }
 
 GameSessionRef GameSessionManager::FindByCharacter(uint64 characterId)

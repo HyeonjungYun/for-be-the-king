@@ -89,6 +89,16 @@ bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt)
 	return true;
 }
 
+// 하트비트 응답 (2026-10-21) - 봇은 왕복 시간을 쓰지 않는다. 100 ms 가 넘는 왕복만 한 줄 (서버가 밀리는 신호)
+bool Handle_S_HEARTBEAT(PacketSessionRef& session, Protocol::S_HEARTBEAT& pkt)
+{
+	auto bot = static_pointer_cast<BotSession>(session);
+	const uint64 nowMs = Utils::NowMicroseconds() / 1000;
+	if (pkt.client_ms() != 0 && nowMs > pkt.client_ms() + 100)
+		LOG_LINE << "[BOT HB] idx=" << bot->botIndex << " rtt=" << (nowMs - pkt.client_ms()) << "ms\n";
+	return true;
+}
+
 bool Handle_S_PARTY_BETRAYED(PacketSessionRef& session, Protocol::S_PARTY_BETRAYED& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);

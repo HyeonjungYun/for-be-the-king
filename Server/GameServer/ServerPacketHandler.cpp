@@ -516,6 +516,14 @@ bool Handle_INVALID(PacketSessionRef& session, BYTE* buffer, int32 len)
 	return false;
 }
 
+namespace
+{
+	// 같은 계정이 다른 연결에 붙어 있을 때 - 옛 연결을 끊고 이만큼 뒤에 로그인을 한 번 더 시도한다 (옛 연결의 OnDisconnected 가 계정을 놓을 시간)
+	constexpr uint32 DUPLICATE_LOGIN_RETRY_MS = 500;
+
+	void RunLoginJob(DBConnection* conn, const GameSessionRef& gameSession, const string& token, uint64 queuedUs, int32 attempt);
+}
+
 bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 {
 	auto gameSession = static_pointer_cast<GameSession>(session);
@@ -557,8 +565,23 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 	}
 
 	const uint64 queuedUs = Utils::NowMicroseconds();
-	GDBQueue.Push([gameSession, token, queuedUs](DBConnection* conn)
-		{
+	GDBQueue.Push([gameSession, token, queuedUs](DBConnection* conn) { RunLoginJob(conn, gameSession, token, queuedUs, 0); });
+
+	return true;
+}
+
+namespace
+{
+	// 로그인 DB 작업 - 토큰 조회 · 정지 검사 · 계정 점유 · 캐릭터 목록 · S_LOGIN. attempt 1 = 중복 로그인으로 옛 연결을 끊은 뒤의 재시도
+	void RunLoginJob(DBConnection* conn, const GameSessionRef& gameSession, const string& token, uint64 queuedUs, int32 attempt)
+	{
+			// 재시도 사이에 이 연결이 끊겼다 - 할 일이 없다
+			if (attempt > 0 && gameSession->IsConnected() == false)
+			{
+				gameSession->loginStarted.store(false);
+				return;
+			}
+
 			// 로그인 지연 계측 (2026-10-18 - roadmap "Handle_C_LOGIN 왕복 지연"): DB 큐에서 기다린 시간 · 질의 두 개 시간
 			const uint64 startUs = Utils::NowMicroseconds();
 			struct TimingLine
@@ -617,9 +640,27 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 				gameSession->Disconnect(L"account suspended");
 				return;
 			}
-			if (accountId != 0 && GAccountManager.TryLogin(accountId) == false)
+			if (accountId != 0 && GAccountManager.TryLogin(accountId, gameSession) == false)
 			{
-				LOG_LINE << "[LOGIN] already online - account=" << accountId << '\n';
+				// 같은 계정이 다른 연결에 붙어 있다 (2026-10-21 kick-old). 예전엔 새 로그인을 거절했다 - 선이 뽑힌 옛 연결을 서버가
+				// 알아차릴 때까지 그 사람이 못 들어왔다. 이제 옛 연결에 S_KICK{DUPLICATE_LOGIN} 을 보내고 끊은 뒤, 잠깐 뒤 한 번 더 시도한다.
+				// 던전에 있던 몸은 옛 연결의 HandleDisconnect 가 유예 몸으로 남기고, 새 연결의 C_ENTER_GAME 이 그 몸에 다시 붙는다 (재접속과 같은 길)
+				if (attempt == 0)
+				{
+					if (GameSessionRef older = GAccountManager.FindOwner(accountId); older != nullptr && older != gameSession)
+					{
+						LOG_LINE << "[LOGIN] duplicate - kicking the older connection account=" << accountId << '\n';
+						Protocol::S_KICK kickPkt;
+						kickPkt.set_reason(Protocol::KICK_REASON_DUPLICATE_LOGIN);
+						older->Send(ServerPacketHandler::MakeSendBuffer(kickPkt));
+						older->Disconnect(L"duplicate login");
+					}
+
+					GDBQueue.PushAfter(DUPLICATE_LOGIN_RETRY_MS, [gameSession, token, queuedUs](DBConnection* next) { RunLoginJob(next, gameSession, token, queuedUs, 1); });
+					return;
+				}
+
+				LOG_LINE << "[LOGIN] already online - account=" << accountId << " (older connection did not release it in " << DUPLICATE_LOGIN_RETRY_MS << " ms)\n";
 				accountId = 0;
 			}
 
@@ -684,7 +725,7 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 
 				if (loaded == false)
 				{
-					GAccountManager.LogOut(accountId);
+					GAccountManager.LogOut(accountId, gameSession.get());
 					accountId = 0;
 					loginPkt.clear_characters();
 				}
@@ -702,7 +743,7 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 						if (const uint64 abandoned = gameSession->accountId.exchange(0); abandoned != 0)
 						{
 							LOG_LINE << "[LOGIN] connection closed while logging in - released account=" << abandoned << '\n';
-							GAccountManager.LogOut(abandoned);
+							GAccountManager.LogOut(abandoned, gameSession.get());
 						}
 						return;
 					}
@@ -727,8 +768,18 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 				// 런 중에 끊겼던 파티원이 돌아왔다 - 파티 상태를 다시 보낸다 (PVE 협동, ADR-0014)
 				GParties.OnLogin(gameSession);
 			}
-		});
+	}
+}
 
+// 하트비트 (2026-10-21) - 로그인 전에도 받는다 (GameSession::AllowedBeforeLogin). 받은 시각은 OnRecvPacket 이 lastRecvUs 에 적는다
+bool Handle_C_HEARTBEAT(PacketSessionRef& session, Protocol::C_HEARTBEAT& pkt)
+{
+	Protocol::S_HEARTBEAT reply;
+	reply.set_client_ms(pkt.client_ms());
+	reply.set_server_ms(Utils::NowMilliseconds());
+
+	SEND_PACKET_DECLARATION(reply);
+	session->Send(sendBuffer);
 	return true;
 }
 

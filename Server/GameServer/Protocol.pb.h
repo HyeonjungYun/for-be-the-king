@@ -72,6 +72,9 @@ extern C_EQUIPDefaultTypeInternal _C_EQUIP_default_instance_;
 class C_GRANT_REWARD;
 struct C_GRANT_REWARDDefaultTypeInternal;
 extern C_GRANT_REWARDDefaultTypeInternal _C_GRANT_REWARD_default_instance_;
+class C_HEARTBEAT;
+struct C_HEARTBEATDefaultTypeInternal;
+extern C_HEARTBEATDefaultTypeInternal _C_HEARTBEAT_default_instance_;
 class C_LEAVE_GAME;
 struct C_LEAVE_GAMEDefaultTypeInternal;
 extern C_LEAVE_GAMEDefaultTypeInternal _C_LEAVE_GAME_default_instance_;
@@ -150,6 +153,9 @@ extern S_ESCAPE_GAUGEDefaultTypeInternal _S_ESCAPE_GAUGE_default_instance_;
 class S_GRANT_REWARD;
 struct S_GRANT_REWARDDefaultTypeInternal;
 extern S_GRANT_REWARDDefaultTypeInternal _S_GRANT_REWARD_default_instance_;
+class S_HEARTBEAT;
+struct S_HEARTBEATDefaultTypeInternal;
+extern S_HEARTBEATDefaultTypeInternal _S_HEARTBEAT_default_instance_;
 class S_INVENTORY_SYNC;
 struct S_INVENTORY_SYNCDefaultTypeInternal;
 extern S_INVENTORY_SYNCDefaultTypeInternal _S_INVENTORY_SYNC_default_instance_;
@@ -217,6 +223,7 @@ template<> ::Protocol::C_ENHANCE* Arena::CreateMaybeMessage<::Protocol::C_ENHANC
 template<> ::Protocol::C_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::C_ENTER_GAME>(Arena*);
 template<> ::Protocol::C_EQUIP* Arena::CreateMaybeMessage<::Protocol::C_EQUIP>(Arena*);
 template<> ::Protocol::C_GRANT_REWARD* Arena::CreateMaybeMessage<::Protocol::C_GRANT_REWARD>(Arena*);
+template<> ::Protocol::C_HEARTBEAT* Arena::CreateMaybeMessage<::Protocol::C_HEARTBEAT>(Arena*);
 template<> ::Protocol::C_LEAVE_GAME* Arena::CreateMaybeMessage<::Protocol::C_LEAVE_GAME>(Arena*);
 template<> ::Protocol::C_LOGIN* Arena::CreateMaybeMessage<::Protocol::C_LOGIN>(Arena*);
 template<> ::Protocol::C_LOOT* Arena::CreateMaybeMessage<::Protocol::C_LOOT>(Arena*);
@@ -243,6 +250,7 @@ template<> ::Protocol::S_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::S_ENT
 template<> ::Protocol::S_EQUIP_SYNC* Arena::CreateMaybeMessage<::Protocol::S_EQUIP_SYNC>(Arena*);
 template<> ::Protocol::S_ESCAPE_GAUGE* Arena::CreateMaybeMessage<::Protocol::S_ESCAPE_GAUGE>(Arena*);
 template<> ::Protocol::S_GRANT_REWARD* Arena::CreateMaybeMessage<::Protocol::S_GRANT_REWARD>(Arena*);
+template<> ::Protocol::S_HEARTBEAT* Arena::CreateMaybeMessage<::Protocol::S_HEARTBEAT>(Arena*);
 template<> ::Protocol::S_INVENTORY_SYNC* Arena::CreateMaybeMessage<::Protocol::S_INVENTORY_SYNC>(Arena*);
 template<> ::Protocol::S_ITEM_RESULT* Arena::CreateMaybeMessage<::Protocol::S_ITEM_RESULT>(Arena*);
 template<> ::Protocol::S_KICK* Arena::CreateMaybeMessage<::Protocol::S_KICK>(Arena*);
@@ -9172,6 +9180,313 @@ class S_KICK final :
   union { Impl_ _impl_; };
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class C_HEARTBEAT final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_HEARTBEAT) */ {
+ public:
+  inline C_HEARTBEAT() : C_HEARTBEAT(nullptr) {}
+  ~C_HEARTBEAT() override;
+  explicit PROTOBUF_CONSTEXPR C_HEARTBEAT(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_HEARTBEAT(const C_HEARTBEAT& from);
+  C_HEARTBEAT(C_HEARTBEAT&& from) noexcept
+    : C_HEARTBEAT() {
+    *this = ::std::move(from);
+  }
+
+  inline C_HEARTBEAT& operator=(const C_HEARTBEAT& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_HEARTBEAT& operator=(C_HEARTBEAT&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_HEARTBEAT& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_HEARTBEAT* internal_default_instance() {
+    return reinterpret_cast<const C_HEARTBEAT*>(
+               &_C_HEARTBEAT_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    53;
+
+  friend void swap(C_HEARTBEAT& a, C_HEARTBEAT& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_HEARTBEAT* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_HEARTBEAT* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  C_HEARTBEAT* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<C_HEARTBEAT>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const C_HEARTBEAT& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const C_HEARTBEAT& from) {
+    C_HEARTBEAT::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_HEARTBEAT* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_HEARTBEAT";
+  }
+  protected:
+  explicit C_HEARTBEAT(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kClientMsFieldNumber = 1,
+  };
+  // uint64 client_ms = 1;
+  void clear_client_ms();
+  uint64_t client_ms() const;
+  void set_client_ms(uint64_t value);
+  private:
+  uint64_t _internal_client_ms() const;
+  void _internal_set_client_ms(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_HEARTBEAT)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t client_ms_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_HEARTBEAT final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_HEARTBEAT) */ {
+ public:
+  inline S_HEARTBEAT() : S_HEARTBEAT(nullptr) {}
+  ~S_HEARTBEAT() override;
+  explicit PROTOBUF_CONSTEXPR S_HEARTBEAT(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_HEARTBEAT(const S_HEARTBEAT& from);
+  S_HEARTBEAT(S_HEARTBEAT&& from) noexcept
+    : S_HEARTBEAT() {
+    *this = ::std::move(from);
+  }
+
+  inline S_HEARTBEAT& operator=(const S_HEARTBEAT& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_HEARTBEAT& operator=(S_HEARTBEAT&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_HEARTBEAT& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_HEARTBEAT* internal_default_instance() {
+    return reinterpret_cast<const S_HEARTBEAT*>(
+               &_S_HEARTBEAT_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    54;
+
+  friend void swap(S_HEARTBEAT& a, S_HEARTBEAT& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_HEARTBEAT* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_HEARTBEAT* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  S_HEARTBEAT* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<S_HEARTBEAT>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const S_HEARTBEAT& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const S_HEARTBEAT& from) {
+    S_HEARTBEAT::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_HEARTBEAT* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_HEARTBEAT";
+  }
+  protected:
+  explicit S_HEARTBEAT(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kClientMsFieldNumber = 1,
+    kServerMsFieldNumber = 2,
+  };
+  // uint64 client_ms = 1;
+  void clear_client_ms();
+  uint64_t client_ms() const;
+  void set_client_ms(uint64_t value);
+  private:
+  uint64_t _internal_client_ms() const;
+  void _internal_set_client_ms(uint64_t value);
+  public:
+
+  // uint64 server_ms = 2;
+  void clear_server_ms();
+  uint64_t server_ms() const;
+  void set_server_ms(uint64_t value);
+  private:
+  uint64_t _internal_server_ms() const;
+  void _internal_set_server_ms(uint64_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_HEARTBEAT)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    uint64_t client_ms_;
+    uint64_t server_ms_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -12975,9 +13290,81 @@ inline void S_KICK::set_banned_until(uint64_t value) {
   // @@protoc_insertion_point(field_set:Protocol.S_KICK.banned_until)
 }
 
+// -------------------------------------------------------------------
+
+// C_HEARTBEAT
+
+// uint64 client_ms = 1;
+inline void C_HEARTBEAT::clear_client_ms() {
+  _impl_.client_ms_ = uint64_t{0u};
+}
+inline uint64_t C_HEARTBEAT::_internal_client_ms() const {
+  return _impl_.client_ms_;
+}
+inline uint64_t C_HEARTBEAT::client_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_HEARTBEAT.client_ms)
+  return _internal_client_ms();
+}
+inline void C_HEARTBEAT::_internal_set_client_ms(uint64_t value) {
+  
+  _impl_.client_ms_ = value;
+}
+inline void C_HEARTBEAT::set_client_ms(uint64_t value) {
+  _internal_set_client_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_HEARTBEAT.client_ms)
+}
+
+// -------------------------------------------------------------------
+
+// S_HEARTBEAT
+
+// uint64 client_ms = 1;
+inline void S_HEARTBEAT::clear_client_ms() {
+  _impl_.client_ms_ = uint64_t{0u};
+}
+inline uint64_t S_HEARTBEAT::_internal_client_ms() const {
+  return _impl_.client_ms_;
+}
+inline uint64_t S_HEARTBEAT::client_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_HEARTBEAT.client_ms)
+  return _internal_client_ms();
+}
+inline void S_HEARTBEAT::_internal_set_client_ms(uint64_t value) {
+  
+  _impl_.client_ms_ = value;
+}
+inline void S_HEARTBEAT::set_client_ms(uint64_t value) {
+  _internal_set_client_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_HEARTBEAT.client_ms)
+}
+
+// uint64 server_ms = 2;
+inline void S_HEARTBEAT::clear_server_ms() {
+  _impl_.server_ms_ = uint64_t{0u};
+}
+inline uint64_t S_HEARTBEAT::_internal_server_ms() const {
+  return _impl_.server_ms_;
+}
+inline uint64_t S_HEARTBEAT::server_ms() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_HEARTBEAT.server_ms)
+  return _internal_server_ms();
+}
+inline void S_HEARTBEAT::_internal_set_server_ms(uint64_t value) {
+  
+  _impl_.server_ms_ = value;
+}
+inline void S_HEARTBEAT::set_server_ms(uint64_t value) {
+  _internal_set_server_ms(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_HEARTBEAT.server_ms)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

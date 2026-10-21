@@ -13,6 +13,7 @@
 #include "Game/Skill/S1ProjectileSubsystem.h"
 #include "Game/Party/S1PartySubsystem.h"
 #include "S1MyPlayer.h"
+#include "TimerManager.h"
 
 
 void US1GameInstance::Shutdown()
@@ -33,6 +34,9 @@ bool US1GameInstance::ConnectToGameServerWithToken(const FString& Token)
 {
 	Socket = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(TEXT("Stream"), TEXT("Client Socket"));
 
+	// TCP_NODELAY (2026-10-21) - 30 Hz 의 작은 C_MOVE 가 Nagle 에 묶여 RTT 단위로 뭉쳐 가지 않게. 서버도 모든 세션에 켠다 (Session::ProcessConnect)
+	Socket->SetNoDelay(true);
+
 	// 서버 쪽 주소 받아오기
 	FIPv4Address Ip;
 	FIPv4Address::Parse(IpAddress, Ip);
@@ -52,6 +56,9 @@ bool US1GameInstance::ConnectToGameServerWithToken(const FString& Token)
 		// Session
 		GameServerSession = MakeShared<PacketSession>(Socket);
 		GameServerSession->Run();
+
+		// 하트비트 (2026-10-21) - 연결이 살아 있는 동안 5 s 마다. 서버는 30 s 침묵한 로그인 연결을 끊는다
+		GetTimerManager().SetTimer(HeartbeatTimer, this, &US1GameInstance::SendHeartbeat, HeartbeatIntervalSec, true, HeartbeatIntervalSec);
 
 		// 로그인 화면의 토큰 (ADR-0011). 비어 있으면 명령줄 · ini 의 개발 토큰
 		{
@@ -74,6 +81,8 @@ bool US1GameInstance::ConnectToGameServerWithToken(const FString& Token)
 
 void US1GameInstance::DisconnectFromGameServer()
 {
+	GetTimerManager().ClearTimer(HeartbeatTimer);
+
 	if (Socket == nullptr)
 		return;
 
@@ -109,6 +118,25 @@ void US1GameInstance::SendPacket(SendBufferRef SendBuffer)
 		return;
 
 	GameServerSession->SendPacket(SendBuffer);
+}
+
+void US1GameInstance::SendHeartbeat()
+{
+	if (Socket == nullptr || GameServerSession == nullptr)
+		return;
+
+	Protocol::C_HEARTBEAT Pkt;
+	Pkt.set_client_ms(static_cast<uint64>(FPlatformTime::Seconds() * 1000.0));
+	SendPacket(ClientPacketHandler::MakeSendBuffer(Pkt));
+}
+
+void US1GameInstance::HandleHeartbeat(const Protocol::S_HEARTBEAT& Pkt)
+{
+	const uint64 NowMs = static_cast<uint64>(FPlatformTime::Seconds() * 1000.0);
+	if (Pkt.client_ms() != 0 && NowMs >= Pkt.client_ms())
+		LastRttMs = static_cast<float>(NowMs - Pkt.client_ms());
+
+	UE_LOG(LogTemp, Verbose, TEXT("[HB] rtt=%.0fms server_ms=%llu"), LastRttMs, Pkt.server_ms());
 }
 
 FString US1GameInstance::ResolveLoginToken() const

@@ -38,8 +38,18 @@ public:
 
 	void SendPacket(SendBufferRef SendBuffer);
 
+	/**
+	 * Heartbeat (2026-10-21). C_HEARTBEAT every HeartbeatIntervalSec while connected - the server closes a logged-in
+	 * connection that stays silent for 30 s (a player standing still sends nothing else). The reply gives LastRttMs.
+	 */
+	void SendHeartbeat();
+	void HandleHeartbeat(const Protocol::S_HEARTBEAT& Pkt);
+	float LastRttMs = 0.f;
+	static constexpr float HeartbeatIntervalSec = 5.f;
+
 private:
 	FString ResolveLoginToken() const;
+	FTimerHandle HeartbeatTimer;
 
 public:
 	void HandleSpawn(const Protocol::ObjectInfo& PlayerInfo, bool IsMine);

@@ -54,8 +54,17 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt)
 {
 	// 안티치트 (2026-10-19) - 서버가 곧 연결을 닫는다. 이유를 보여 주고 로그인 화면으로 (S1LoginSubsystem::HandleKicked)
+	// 2026-10-21: 중복 로그인(DUPLICATE_LOGIN) · 서버 종료(SERVER_SHUTDOWN) 도 같은 길 - 문구만 다르다
 	if (US1LoginSubsystem* Login = US1LoginSubsystem::Get())
 		Login->HandleKicked(static_cast<int32>(pkt.reason()), pkt.banned_until());
+	return true;
+}
+
+bool Handle_S_HEARTBEAT(PacketSessionRef& session, Protocol::S_HEARTBEAT& pkt)
+{
+	// 하트비트 응답 (2026-10-21) - 왕복 시간만 기록한다 (US1GameInstance::LastRttMs)
+	if (auto* GameInstance = Cast<US1GameInstance>(GWorld->GetGameInstance()))
+		GameInstance->HandleHeartbeat(pkt);
 	return true;
 }
 

@@ -1,7 +1,6 @@
 ﻿#include "pch.h"
 #include "ServerStats.h"
 #include "Utils.h"
-#include "DBJobQueue.h"
 #include <psapi.h>
 #include <filesystem>
 #include <share.h>
@@ -173,9 +172,11 @@ void ServerStats::Dump(int32 sessionCount)
 	const uint64 timerMax = _timerLateMaxUs.exchange(0);
 	const uint64 timerP95 = PercentileUpperUs(timerBuckets, timerTotal, 0.95);
 
-	// DB 큐 - "지금 DB 가 밀렸나" 에 답하는 줄 (예전엔 GetPendingCount 가 있어도 아무도 찍지 않았다)
-	const int32 dbPending = GDBQueue.GetPendingCount();
-	const int32 dbDelayed = GDBQueue.GetDelayedCount();
+	// DB 큐 - "지금 DB 가 밀렸나" 에 답하는 줄 (예전엔 GetPendingCount 가 있어도 아무도 찍지 않았다). 값은 부팅이 넣은 probe 가 준다
+	int32 dbPending = 0;
+	int32 dbDelayed = 0;
+	if (_dbQueueProbe != nullptr)
+		_dbQueueProbe(OUT dbPending, OUT dbDelayed);
 	const string extra = (_extraLine != nullptr) ? _extraLine() : string();
 
 	double recvMbps = 0.0;

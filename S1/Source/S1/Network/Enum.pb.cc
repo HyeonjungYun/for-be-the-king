@@ -98,13 +98,15 @@ const char descriptor_table_protodef_Enum_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
   "_NO_KICK_IN_RUN\020\r\022\023\n\017PARTY_LONE_PATH\020\016*`"
   "\n\020PartyMemberState\022\031\n\025PARTY_MEMBER_BASEC"
   "AMP\020\000\022\027\n\023PARTY_MEMBER_IN_RUN\020\001\022\030\n\024PARTY_"
-  "MEMBER_OFFLINE\020\002*Y\n\nKickReason\022\024\n\020KICK_R"
-  "EASON_NONE\020\000\022\035\n\031KICK_REASON_CHEAT_SUSPEC"
-  "T\020\001\022\026\n\022KICK_REASON_BANNED\020\002b\006proto3"
+  "MEMBER_OFFLINE\020\002*\233\001\n\nKickReason\022\024\n\020KICK_"
+  "REASON_NONE\020\000\022\035\n\031KICK_REASON_CHEAT_SUSPE"
+  "CT\020\001\022\026\n\022KICK_REASON_BANNED\020\002\022\037\n\033KICK_REA"
+  "SON_DUPLICATE_LOGIN\020\003\022\037\n\033KICK_REASON_SER"
+  "VER_SHUTDOWN\020\004b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_Enum_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_Enum_2eproto = {
-    false, false, 2875, descriptor_table_protodef_Enum_2eproto,
+    false, false, 2942, descriptor_table_protodef_Enum_2eproto,
     "Enum.proto",
     &descriptor_table_Enum_2eproto_once, nullptr, 0, 0,
     schemas, file_default_instances, TableStruct_Enum_2eproto::offsets,
@@ -493,6 +495,8 @@ bool KickReason_IsValid(int value) {
     case 0:
     case 1:
     case 2:
+    case 3:
+    case 4:
       return true;
     default:
       return false;

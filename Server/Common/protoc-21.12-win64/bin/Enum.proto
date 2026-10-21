@@ -212,4 +212,6 @@ enum KickReason
 	KICK_REASON_NONE = 0;
 	KICK_REASON_CHEAT_SUSPECT = 1;	// too many rejected actions in a short time (CheatGuard kick score)
 	KICK_REASON_BANNED = 2;			// the account is suspended until banned_until
+	KICK_REASON_DUPLICATE_LOGIN = 3;	// the same account logged in from another connection - this older one is closed (2026-10-21)
+	KICK_REASON_SERVER_SHUTDOWN = 4;	// the server is shutting down cleanly (2026-10-21)
 }

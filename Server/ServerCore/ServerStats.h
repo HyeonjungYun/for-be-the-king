@@ -55,6 +55,11 @@ public:
 	using ExtraLineFn = function<string()>;
 	void			SetExtraLine(ExtraLineFn fn) { _extraLine = move(fn); }
 
+	// DB 큐 깊이를 묻는 함수 - 서버 부팅이 넣는다 (GDBQueue). 통계가 DB 모듈을 직접 참조하면 DB 를 안 쓰는 실행 파일(DummyClient)까지
+	// libmysql 을 링크해야 한다 (2026-10-21 - 실제로 LNK2001 이 났다)
+	using DbQueueProbeFn = function<void(int32& pending, int32& delayed)>;
+	void			SetDbQueueProbe(DbQueueProbeFn fn) { _dbQueueProbe = move(fn); }
+
 	// Dump 마다 한 행을 CSV 로도 남긴다 - <dir>\stats-<boot>.csv. 사람이 읽는 블록은 그대로. 실패하면 false (서버는 돈다)
 	bool			EnableCsv(const string& dir);
 
@@ -102,6 +107,7 @@ private:
 	atomic<uint64>	_timerLateMaxUs = 0;
 
 	ExtraLineFn		_extraLine;
+	DbQueueProbeFn	_dbQueueProbe;
 
 	mutex			_csvLock;
 	FILE*			_csv = nullptr;

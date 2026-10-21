@@ -350,3 +350,17 @@ message S_KICK
 	KickReason reason = 1;
 	uint64 banned_until = 2;
 }
+
+// Keep-alive (2026-10-21). The client sends one every 5 s; the server echoes client_ms and adds its own clock.
+// Allowed before login. A logged-in connection that sends nothing for FBTK_IDLE_TIMEOUT_MS is closed (GameSessionManager::DropIdle) -
+// TCP keepalive catches a dead host, this catches a hung client whose TCP stack still answers
+message C_HEARTBEAT
+{
+	uint64 client_ms = 1;
+}
+
+message S_HEARTBEAT
+{
+	uint64 client_ms = 1;			// echoed - the client computes the round trip
+	uint64 server_ms = 2;			// the server's steady clock (ms) - informational
+}

@@ -5,7 +5,9 @@
 #include "S1.h"
 #endif
 
-using PacketHandlerFunc = std::function<bool(PacketSessionRef&, BYTE*, int32)>;
+// Plain function pointers (2026-10-21) - the registered handlers are captureless lambdas. The table used to be
+// 65,536 std::function objects (about 4 MB and a heap-free but heavier call); now it is 512 KB
+using PacketHandlerFunc = bool (*)(PacketSessionRef&, BYTE*, int32);
 extern PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
 enum : uint16
@@ -63,6 +65,8 @@ enum : uint16
 	PKT_S_PARTY_BETRAYED = 1050,
 	PKT_C_SELL = 1051,
 	PKT_S_KICK = 1052,
+	PKT_C_HEARTBEAT = 1053,
+	PKT_S_HEARTBEAT = 1054,
 };
 
 // Custom Handlers
@@ -87,6 +91,7 @@ bool Handle_C_PARTY_RESPONSE(PacketSessionRef& session, Protocol::C_PARTY_RESPON
 bool Handle_C_PARTY_LEAVE(PacketSessionRef& session, Protocol::C_PARTY_LEAVE& pkt);
 bool Handle_C_ENHANCE(PacketSessionRef& session, Protocol::C_ENHANCE& pkt);
 bool Handle_C_SELL(PacketSessionRef& session, Protocol::C_SELL& pkt);
+bool Handle_C_HEARTBEAT(PacketSessionRef& session, Protocol::C_HEARTBEAT& pkt);
 
 class ServerPacketHandler
 {
@@ -115,6 +120,7 @@ public:
 		GPacketHandler[PKT_C_PARTY_LEAVE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_PARTY_LEAVE>(Handle_C_PARTY_LEAVE, session, buffer, len); };
 		GPacketHandler[PKT_C_ENHANCE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_ENHANCE>(Handle_C_ENHANCE, session, buffer, len); };
 		GPacketHandler[PKT_C_SELL] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_SELL>(Handle_C_SELL, session, buffer, len); };
+		GPacketHandler[PKT_C_HEARTBEAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::C_HEARTBEAT>(Handle_C_HEARTBEAT, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -155,6 +161,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::S_WEAPON_CHANGE& pkt) { return MakeSendBuffer(pkt, PKT_S_WEAPON_CHANGE); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_PARTY_BETRAYED& pkt) { return MakeSendBuffer(pkt, PKT_S_PARTY_BETRAYED); }
 	static SendBufferRef MakeSendBuffer(Protocol::S_KICK& pkt) { return MakeSendBuffer(pkt, PKT_S_KICK); }
+	static SendBufferRef MakeSendBuffer(Protocol::S_HEARTBEAT& pkt) { return MakeSendBuffer(pkt, PKT_S_HEARTBEAT); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

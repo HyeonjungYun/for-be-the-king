@@ -49,7 +49,9 @@ bool SocketUtils::SetLinger(SOCKET socket, uint16 onoff, uint16 linger)
 
 bool SocketUtils::SetReuseAddress(SOCKET socket, bool flag)
 {
-	return SetSockOpt(socket, SOL_SOCKET, SO_REUSEADDR, flag);
+	// BOOL 옵션은 4 바이트로 - bool(1 바이트)을 넘기면 setsockopt 는 성공을 돌려주면서 값은 적용되지 않았다 (2026-10-21 SessionOptionsTest 로 발견)
+	const int32 value = flag ? 1 : 0;
+	return SetSockOpt(socket, SOL_SOCKET, SO_REUSEADDR, value);
 }
 
 bool SocketUtils::SetRecvBufferSize(SOCKET socket, int32 size)
@@ -64,12 +66,19 @@ bool SocketUtils::SetSendBufferSize(SOCKET socket, int32 size)
 
 bool SocketUtils::SetTcpNoDelay(SOCKET socket, bool flag)
 {
-	// TCP_NODELAY 는 IPPROTO_TCP 단계다 - SOL_SOCKET 이면 같은 값(1)인 SO_DEBUG 를 켠다. Session::ProcessConnect 가 모든 세션에 켠다 (2026-10-21)
-	return SetSockOpt(socket, IPPROTO_TCP, TCP_NODELAY, flag);
+	// TCP_NODELAY 는 IPPROTO_TCP 단계다 - SOL_SOCKET 이면 같은 값(1)인 SO_DEBUG 를 켠다. Session::ProcessConnect 가 모든 세션에 켠다 (2026-10-21).
+	// 값은 4 바이트 BOOL 로 (bool 1 바이트는 조용히 무시됐다)
+	const int32 value = flag ? 1 : 0;
+	return SetSockOpt(socket, IPPROTO_TCP, TCP_NODELAY, value);
 }
 
 bool SocketUtils::SetKeepAlive(SOCKET socket, uint32 idleMs, uint32 intervalMs)
 {
+	// SO_KEEPALIVE 를 켜고(getsockopt 로 확인 가능), 주기는 SIO_KEEPALIVE_VALS 로 (기본 2 시간 / 1 초 → idleMs / intervalMs)
+	const int32 on = 1;
+	if (SetSockOpt(socket, SOL_SOCKET, SO_KEEPALIVE, on) == false)
+		return false;
+
 	tcp_keepalive option;
 	option.onoff = 1;
 	option.keepalivetime = idleMs;

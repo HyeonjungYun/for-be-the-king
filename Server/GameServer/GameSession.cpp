@@ -102,7 +102,7 @@ void GameSession::OnDisconnected()
 	const uint64 characterId = (accountId.load() != 0 && characters.empty() == false) ? characters[0].object_info().object_id() : 0;
 	GParties.OnDisconnected(characterId, place.load());
 
-	GAccountManager.LogOut(accountId.exchange(0));
+	GAccountManager.LogOut(accountId.exchange(0), this);		// 주인이 나일 때만 - 중복 로그인으로 밀려난 옛 연결이 새 연결의 계정을 풀지 않게
 
 	PlayerRef leavingPlayer = player.load();
 
@@ -132,6 +132,7 @@ bool GameSession::AllowedBeforeLogin(uint16 packetId)
 	switch (packetId)
 	{
 	case PKT_C_LOGIN:
+	case PKT_C_HEARTBEAT:
 		return true;
 	default:
 		return false;

@@ -144,8 +144,14 @@ namespace
 		service->CloseService();
 		GJobTimer->Stop();
 
-		// 2. 세션을 끊는다 - 던전의 몸은 유예 몸이 되고(DB 없음), 베이스캠프 몸은 사라진다. 진행 중이던 런 끝 저장은 DB 큐에 그대로 있다
-		const int32 dropped = GSessionManager.DisconnectAll(L"server shutdown");
+		// 2. 세션을 끊는다 - 끊기 직전에 S_KICK{SERVER_SHUTDOWN} 을 보내 클라가 이유를 보이게. 던전의 몸은 유예 몸이 되고(DB 없음),
+		//    베이스캠프 몸은 사라진다. 진행 중이던 런 끝 저장은 DB 큐에 그대로 있다
+		const int32 dropped = GSessionManager.DisconnectAll(L"server shutdown", [](const GameSessionRef& session)
+			{
+				Protocol::S_KICK kickPkt;
+				kickPkt.set_reason(Protocol::KICK_REASON_SERVER_SHUTDOWN);
+				session->Send(ServerPacketHandler::MakeSendBuffer(kickPkt));
+			});
 
 		// 3. 방 잡이 가라앉을 때까지 - 글로벌 큐가 비고 200 ms 그대로면 끝 (상한 2 s)
 		int32 quiet = 0;
@@ -204,7 +210,8 @@ int main()
 	GStats.SetItemPackets({ STAT_ID_BAG_SPAWN, STAT_ID_BAG_DESPAWN, PKT_S_BAG_CONTENTS,
 		PKT_S_ITEM_RESULT, PKT_S_INVENTORY_SYNC, PKT_S_EQUIP_SYNC });
 
-	// Dump 의 db queue 줄에 콘텐츠 값 - 진행 중인 사망 저장 · 살아 있는 인스턴스
+	// Dump 의 db queue 줄 - 큐 깊이는 여기서 넣는다 (ServerStats 는 DB 모듈을 모른다), 콘텐츠 값은 진행 중인 사망 저장 · 살아 있는 인스턴스
+	GStats.SetDbQueueProbe([](int32& pending, int32& delayed) { pending = GDBQueue.GetPendingCount(); delayed = GDBQueue.GetDelayedCount(); });
 	GStats.SetExtraLine([]() { return "death_commits=" + to_string(GDeathCommits.Count()) + " instances=" + to_string(GInstances.LiveCount()); });
 
 	// 통계 CSV - 사람이 읽는 블록과 같은 값을 행으로 (그래프 · 전후 비교). 못 열어도 서버는 돈다
@@ -687,6 +694,10 @@ int main()
 		// 로그인하지 않은 채 붙어 있는 연결 (2026-10-17 사용자 결정 - 10 초)
 		if (const int32 dropped = GSessionManager.DropUnauthenticated(nowUs, GameSession::LOGIN_TIMEOUT_US); dropped > 0)
 			LOG_LINE << "[RATE] login timeout - dropped " << dropped << " unauthenticated connection(s)\n";
+
+		// 로그인한 뒤 아무 패킷도 없는 연결 (2026-10-21) - 하트비트가 5 s 마다 오므로 30 s 침묵은 멈춘 클라다
+		if (const int32 dropped = GSessionManager.DropIdle(nowUs, config.idleTimeoutUs); dropped > 0)
+			LOG_LINE << "[RATE] idle timeout - dropped " << dropped << " silent connection(s)\n";
 
 		// PVE (ADR-0014) - 살아 있는 인스턴스 수 · 지금까지 만든 수 · 파티 초대 만료 (30 s, 10 s 단위로 알린다)
 		GParties.Tick(nowUs);
