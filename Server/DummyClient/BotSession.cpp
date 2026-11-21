@@ -1,6 +1,7 @@
 ﻿#include "pch.h"
 #include "ClientPacketHandler.h"
 #include "BotSession.h"
+#include "ScaleBots.h"
 
 void BotSession::OnConnected()
 {
@@ -62,5 +63,6 @@ void BotSession::OnDisconnected()
 		}
 	}
 
-	LOG_LINE << "[BOT] disconnected id=" << objectId.load() << '\n';
+	if (ScaleBots::GOn.load() == false)
+		LOG_LINE << "[BOT] disconnected id=" << objectId.load() << '\n';
 }

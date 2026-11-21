@@ -3,6 +3,7 @@
 #include "BufferReader.h"
 #include "BotSession.h"
 #include "BotAiDriver.h"
+#include "ScaleBots.h"
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX + 1];
 
@@ -17,8 +18,27 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
 
 	if (pkt.success() == false || pkt.characters_size() == 0)
 	{
-		LOG_LINE << "[BOT] login failed idx=" << bot->botIndex << " - reconnecting" << '\n';
+		if (ScaleBots::GOn.load())
+			ScaleBots::CountLoginFail();
+		else
+			LOG_LINE << "[BOT] login failed idx=" << bot->botIndex << " - reconnecting" << '\n';
 		bot->Disconnect(L"login failed");
+		return true;
+	}
+
+	bot->loggedIn.store(true);
+
+	// -scale (2026-11-21) - 로그인하면 바로 PvP 층으로. 거절 · 무응답 재시도는 ScaleBots 틱이 맡는다
+	if (ScaleBots::GOn.load())
+	{
+		bot->characterId.store(pkt.characters(0).object_info().object_id());
+		Protocol::C_ENTER_GAME enter;
+		enter.set_playerindex(0);
+		enter.set_floor_id(bot->floorId);
+		enter.set_entry_point_id(0);
+		enter.set_mode(Protocol::RUN_MODE_PVP);
+		bot->scaleEnterSentUs = Utils::NowMicroseconds();
+		bot->Send(ClientPacketHandler::MakeSendBuffer(enter));
 		return true;
 	}
 
@@ -84,6 +104,11 @@ bool Handle_S_PARTY_INVITED(PacketSessionRef& session, Protocol::S_PARTY_INVITED
 bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);
+	if (ScaleBots::GOn.load())
+	{
+		ScaleBots::CountKick(pkt.reason());
+		return true;
+	}
 	LOG_LINE << "[BOT KICK] idx=" << bot->botIndex << " char=" << bot->characterId.load() << " reason=" << Protocol::KickReason_Name(pkt.reason())
 		<< " banned_until=" << pkt.banned_until() << '\n';
 	return true;
@@ -93,6 +118,17 @@ bool Handle_S_KICK(PacketSessionRef& session, Protocol::S_KICK& pkt)
 bool Handle_S_HEARTBEAT(PacketSessionRef& session, Protocol::S_HEARTBEAT& pkt)
 {
 	auto bot = static_pointer_cast<BotSession>(session);
+
+	// -scale (2026-11-21) - µs 시계로 왕복을 재고, 다음 하트비트에 실어 서버도 모은다
+	if (pkt.client_us() != 0)
+	{
+		const uint64 nowUs = Utils::NowMicroseconds();
+		const uint64 rttUs = (nowUs > pkt.client_us()) ? nowUs - pkt.client_us() : 0;
+		ScaleBots::RecordRtt(rttUs);
+		bot->lastRttUs.store(static_cast<uint32>((std::min)(rttUs, static_cast<uint64>(UINT32_MAX))));
+		return true;
+	}
+
 	const uint64 nowMs = Utils::NowMicroseconds() / 1000;
 	if (pkt.client_ms() != 0 && nowMs > pkt.client_ms() + 100)
 		LOG_LINE << "[BOT HB] idx=" << bot->botIndex << " rtt=" << (nowMs - pkt.client_ms()) << "ms\n";
@@ -171,6 +207,14 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 
 	if (pkt.success() == false)
 	{
+		// -scale - 끊지 않고 잠깐 뒤 다시 (사망 커밋 중 · 서버 상한 · 인스턴스 상한)
+		if (ScaleBots::GOn.load())
+		{
+			ScaleBots::CountEnterReject();
+			bot->reenterAtUs.store(Utils::NowMicroseconds() + 3'000'000);
+			return true;
+		}
+
 		// 협동 - 끊지 않고 베이스캠프에서 파티를 기다린다 (파티 상태가 다음 입장을 정한다)
 		if (GRunMode.load() == Protocol::RUN_MODE_PVE_COOP)
 		{
@@ -215,6 +259,26 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 	bot->enteredAtUs = Utils::NowMicroseconds();
 	bot->pvpInviteSent = false;
 	bot->betraySent = false;
+
+	// -scale - 새 판: 입장 지점 둘레를 걷는다. 본 것은 잊는다
+	if (ScaleBots::GOn.load())
+	{
+		{
+			lock_guard<mutex> guard(bot->itemLock);
+			bot->ai.creatures.clear();
+		}
+		bot->anchorX = bot->x;
+		bot->anchorY = bot->y;
+		bot->channel = pkt.channel();
+		bot->diedAtUs.store(0);
+		bot->scaleLeaveSentUs = 0;
+		bot->scaleEnterSentUs = 0;
+		bot->reenterAtUs.store(0);
+		bot->alive.store(true);
+		bot->inGame.store(true);
+		ScaleBots::CountEnter();
+		return true;
+	}
 
 	// -ai 감각 - 새 판: 내 체력 · 런 시간 · 무기, 본 것은 잊는다
 	if (BotAiDriver::GAi.load())
@@ -272,6 +336,13 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 	auto bot = static_pointer_cast<BotSession>(session);
 	bot->inGame.store(false);
 
+	if (ScaleBots::GOn.load())
+	{
+		if (bot->reenterAtUs.load() == 0)
+			bot->reenterAtUs.store(Utils::NowMicroseconds() + 2'000'000);
+		return true;
+	}
+
 	LOG_LINE << "[BOT LEAVE] char=" << bot->objectId.load() << " reason=" << pkt.reason() << " gold_kept=" << pkt.gold_kept()
 		<< " destroyed=" << pkt.items_destroyed() << '\n';
 	if (pkt.reason() == Protocol::RUN_END_ESCAPED)
@@ -302,7 +373,7 @@ bool Handle_S_LEAVE_GAME(PacketSessionRef& session, Protocol::S_LEAVE_GAME& pkt)
 
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 {
-	const bool ai = BotAiDriver::GAi.load();
+	const bool ai = BotAiDriver::GAi.load() || ScaleBots::GOn.load();		// -scale 도 생물을 안다 (가장 가까운 상대)
 	if (GItemBehavior.load() == false && GMonsterPull.load() == false && ai == false)
 		return true;
 
@@ -336,7 +407,7 @@ bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 
 bool Handle_S_DESPAWN(PacketSessionRef& session, Protocol::S_DESPAWN& pkt)
 {
-	if (GItemBehavior.load() == false && GMonsterPull.load() == false && BotAiDriver::GAi.load() == false)
+	if (GItemBehavior.load() == false && GMonsterPull.load() == false && BotAiDriver::GAi.load() == false && ScaleBots::GOn.load() == false)
 		return true;
 
 	auto bot = static_pointer_cast<BotSession>(session);
@@ -369,8 +440,8 @@ bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
 				it->second = { info.x(), info.y() };
 		}
 	}
-	// -ai 감각 - 아는 생물의 자리
-	if (BotAiDriver::GAi.load() && pkt.correction() == false)
+	// -ai 감각 - 아는 생물의 자리 (-scale 도)
+	if ((BotAiDriver::GAi.load() || ScaleBots::GOn.load()) && pkt.correction() == false)
 	{
 		lock_guard<mutex> guard(bot->itemLock);
 		for (const Protocol::PosInfo& info : pkt.infos())
@@ -397,7 +468,8 @@ bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
 		bot->destX = bot->x;
 		bot->destY = bot->y;
 
-		LOG_LINE << "[BOT SNAPBACK] id=" << bot->objectId.load() << " -> (" << bot->x << ", " << bot->y << ")" << '\n';
+		if (ScaleBots::GOn.load() == false)
+			LOG_LINE << "[BOT SNAPBACK] id=" << bot->objectId.load() << " -> (" << bot->x << ", " << bot->y << ")" << '\n';
 	}
 
 	return true;
@@ -570,7 +642,7 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 
 	for (const Protocol::DiedInfo& info : pkt.deaths())
 	{
-		if (BotAiDriver::GAi.load())
+		if (BotAiDriver::GAi.load() || ScaleBots::GOn.load())
 		{
 			lock_guard<mutex> guard(bot->itemLock);
 			bot->ai.creatures.erase(info.victim_id());
@@ -591,6 +663,14 @@ bool Handle_S_DIED(PacketSessionRef& session, Protocol::S_DIED& pkt)
 			continue;
 
 		bot->alive.store(false);
+
+		// -scale - 끊지 않는다. 틱이 잠깐 뒤 C_LEAVE_GAME 을 보내고 다시 들어간다
+		if (ScaleBots::GOn.load())
+		{
+			bot->diedAtUs.store(Utils::NowMicroseconds());
+			ScaleBots::CountDeath();
+			continue;
+		}
 
 		LOG_LINE << "[BOT DIED] id=" << bot->objectId.load()
 			<< " by=" << info.instigator_id() << " cause=" << info.cause() << '\n';

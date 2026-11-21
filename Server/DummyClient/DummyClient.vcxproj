@@ -150,6 +150,9 @@
   <ItemGroup>
     <ClCompile Include="BotPath.cpp" />
     <ClCompile Include="BotSession.cpp" />
+    <ClCompile Include="ScaleBots.cpp" />
+    <ClCompile Include="LobbyClient.cpp" />
+    <ClCompile Include="..\GameServer\SamplingProfiler.cpp" />
     <ClCompile Include="..\GameServer\WallMap.cpp" />
     <ClCompile Include="..\BotAI\BotBrain.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
@@ -178,6 +181,8 @@
   <ItemGroup>
     <ClInclude Include="BotPath.h" />
     <ClInclude Include="BotSession.h" />
+    <ClInclude Include="ScaleBots.h" />
+    <ClInclude Include="LobbyClient.h" />
     <ClInclude Include="ClientPacketHandler.h" />
     <ClInclude Include="Enum.pb.h" />
     <ClInclude Include="pch.h" />

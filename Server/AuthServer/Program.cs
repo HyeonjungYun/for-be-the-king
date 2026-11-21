@@ -42,6 +42,7 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy("auth", context => Auth.PerIpWindow(context, settings.CredentialPermitPerMinute));
     options.AddPolicy("characters", context => Auth.PerIpWindow(context, settings.CharacterPermitPerMinute));
+    options.AddPolicy("lobby", context => Auth.PerIpWindow(context, 600));
 });
 
 var app = builder.Build();
@@ -173,12 +174,41 @@ app.MapPost("/auth/login", async (Credentials body, MySqlDataSource db) =>
 
     await tx.CommitAsync();
 
+    // 방 배정 (2026-11-22 동접 1만 2 단계) - 가장 여유 있는 게임 서버. 등록부가 비었거나(표가 없는 옛 DB · 서버 하나) 못 읽으면 null -
+    // 클라는 설정 파일의 주소를 그대로 쓴다
+    var server = Lobby.Pick(await Lobby.LiveAsync(conn), 1);
+
     return Results.Ok(new
     {
         token,
-        expires_in_seconds = settings.TokenLifetimeMinutes * 60
+        expires_in_seconds = settings.TokenLifetimeMinutes * 60,
+        game_server = server == null ? null : new { host = server.Host, port = server.Port, server_id = server.ServerId }
     });
 }).RequireRateLimiting("auth");
+
+// ── 방 배정 (2026-11-22 동접 1만 2 단계 - docs/server-scaling-10k.md § 5) ──────────────
+// 게임 서버마다 5 초에 한 번 game_servers 에 인원을 적는다 (GameServer Cluster.cpp). 15 초 넘게 소식 없는 서버는 뺀다.
+app.MapGet("/lobby/servers", async (MySqlDataSource db) =>
+{
+    await using var conn = await db.OpenConnectionAsync();
+    var live = await Lobby.LiveAsync(conn);
+    return Results.Ok(new
+    {
+        servers = live.Select(s => new { server_id = s.ServerId, host = s.Host, port = s.Port, admin_port = s.AdminPort, ccu = s.Ccu,
+            max_sessions = s.MaxSessions, channels = s.Channels, age_sec = s.AgeSec }),
+        total_ccu = live.Sum(s => s.Ccu)
+    });
+}).RequireRateLimiting("lobby");
+
+// 인원 count 명을 어느 서버로 보낼까 - 부하 시험 봇은 인증을 거치지 않으므로 이것만 묻는다 (DummyClient -assign)
+app.MapGet("/lobby/assign", async (int? count, MySqlDataSource db) =>
+{
+    await using var conn = await db.OpenConnectionAsync();
+    var server = Lobby.Pick(await Lobby.LiveAsync(conn), Math.Clamp(count ?? 1, 1, 20_000));
+    return server == null
+        ? Results.Problem("no live game server", statusCode: StatusCodes.Status503ServiceUnavailable)
+        : Results.Ok(new { host = server.Host, port = server.Port, server_id = server.ServerId });
+}).RequireRateLimiting("lobby");
 
 // 이 계정의 캐릭터 목록. 0개면 클라가 이름 입력 화면(L2)을 띄운다
 app.MapGet("/auth/characters", async (HttpRequest request, MySqlDataSource db) =>
@@ -272,6 +302,55 @@ app.MapPost("/auth/characters", async (HttpRequest request, NewCharacter body, M
 app.Run();
 
 record Credentials(string? Username, string? Password);
+
+// 방 배정 - 등록부(game_servers) 를 읽고 가장 여유 있는 서버를 고른다 (2026-11-22)
+static class Lobby
+{
+    public sealed record ServerRow(uint ServerId, string Host, uint Port, uint AdminPort, int Ccu, int MaxSessions, int Channels, int AgeSec);
+
+    // 등록부의 인원은 5 초마다라 그 사이에 같은 서버로 몰린다 - 이 프로세스가 최근 10 초에 보낸 수를 더해서 본다
+    static readonly object Gate = new();
+    static readonly List<(uint ServerId, int Count, DateTime At)> Recent = new();
+
+    public static async Task<List<ServerRow>> LiveAsync(MySqlConnection conn)
+    {
+        var rows = new List<ServerRow>();
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT server_id, host, port, admin_port, ccu, max_sessions, channels, TIMESTAMPDIFF(SECOND, updated_at, NOW()) " +
+                              "FROM game_servers WHERE status = 'up' AND updated_at > NOW() - INTERVAL 15 SECOND ORDER BY server_id";
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                rows.Add(new ServerRow(reader.GetUInt32(0), reader.GetString(1), reader.GetUInt32(2), reader.GetUInt32(3),
+                    reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6), reader.GetInt32(7)));
+        }
+        catch (MySqlException)
+        {
+            // 표가 없는 옛 DB - 배정 없이 (클라는 설정 주소)
+        }
+        return rows;
+    }
+
+    public static ServerRow? Pick(List<ServerRow> live, int count)
+    {
+        if (live.Count == 0)
+            return null;
+        lock (Gate)
+        {
+            var now = DateTime.UtcNow;
+            Recent.RemoveAll(r => (now - r.At).TotalSeconds > 10);
+            int Pending(uint id) => Recent.Where(r => r.ServerId == id).Sum(r => r.Count);
+            double Load(ServerRow s) => (s.Ccu + Pending(s.ServerId)) / (double)Math.Max(1, s.MaxSessions > 0 ? s.MaxSessions : 10_000);
+
+            // 자리가 남는 서버 중 가장 한가한 곳. 다 찼으면 그래도 가장 한가한 곳 (그 서버가 SERVER_FULL 로 답한다)
+            var fits = live.Where(s => s.MaxSessions == 0 || s.Ccu + Pending(s.ServerId) + count <= s.MaxSessions).ToList();
+            var pick = (fits.Count > 0 ? fits : live).OrderBy(Load).ThenBy(s => s.ServerId).First();
+            Recent.Add((pick.ServerId, count, now));
+            return pick;
+        }
+    }
+}
 record NewCharacter(string? Name);
 
 // appsettings.json "Auth" - 기본값이 곧 quick-spec 의 기본값이다

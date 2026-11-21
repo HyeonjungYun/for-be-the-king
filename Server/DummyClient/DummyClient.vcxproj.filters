@@ -36,6 +36,15 @@
     <ClCompile Include="BotSession.cpp">
       <Filter>Main</Filter>
     </ClCompile>
+    <ClCompile Include="ScaleBots.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
+    <ClCompile Include="LobbyClient.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
+    <ClCompile Include="..\GameServer\SamplingProfiler.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -57,6 +66,12 @@
       <Filter>Main</Filter>
     </ClInclude>
     <ClInclude Include="BotSession.h">
+      <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="ScaleBots.h">
+      <Filter>Main</Filter>
+    </ClInclude>
+    <ClInclude Include="LobbyClient.h">
       <Filter>Main</Filter>
     </ClInclude>
   </ItemGroup>

@@ -8,6 +8,9 @@
 #include "BotSession.h"
 #include "BotPath.h"
 #include "BotAiDriver.h"
+#include "ScaleBots.h"
+#include "LobbyClient.h"
+#include "../GameServer/SamplingProfiler.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -967,6 +970,11 @@ int main(int argc, char* argv[])
 
 	int32 botCount = 1;
 	int32 grantUnique = 0;
+	int32 ioThreads = 0;		// 0 = 모드 기본 (-scale 4 · 그 밖 2)
+	int32 recvKb = 0;			// 0 = 모드 기본 (-scale 16 KB 에서 시작해 커진다 · 그 밖 예전 640 KB)
+	ScaleBots::Options scaleOptions;
+	string assignUrl;			// -assign http://127.0.0.1:8080 - 인증 서버의 방 배정에 붙을 게임 서버를 묻는다 (2026-11-22)
+	wstring serverHost = L"127.0.0.1";
 
 	for (int i = 1; i < argc - 1; i++)
 	{
@@ -1004,6 +1012,29 @@ int main(int argc, char* argv[])
 			GBotBase = (std::max)(0, ::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-port") == 0)
 			GServerPort = static_cast<uint16>((std::clamp)(::atoi(argv[i + 1]), 1, 65535));
+		else if (::strcmp(argv[i], "-ticks") == 0)
+			scaleOptions.tickThreads = (std::clamp)(::atoi(argv[i + 1]), 1, 32);
+		else if (::strcmp(argv[i], "-connrate") == 0)
+			scaleOptions.connectPerSec = (std::clamp)(::atoi(argv[i + 1]), 1, 100000);
+		else if (::strcmp(argv[i], "-assign") == 0)
+			assignUrl = argv[i + 1];
+		else if (::strcmp(argv[i], "-srcip") == 0)
+		{
+			wstring ip;
+			for (const char* c = argv[i + 1]; *c != '\0'; ++c)
+				ip.push_back(static_cast<wchar_t>(*c));
+			Session::SetConnectBindAddress(ip);
+		}
+		else if (::strcmp(argv[i], "-wander") == 0)
+			scaleOptions.wanderCm = static_cast<float>((std::clamp)(::atoi(argv[i + 1]), 100, 50000));
+		else if (::strcmp(argv[i], "-movehz") == 0)
+			scaleOptions.moveHz = (std::clamp)(::atoi(argv[i + 1]), 1, 30);
+		else if (::strcmp(argv[i], "-hb") == 0)
+			scaleOptions.heartbeatMs = (std::clamp)(::atoi(argv[i + 1]), 100, 60000);
+		else if (::strcmp(argv[i], "-io") == 0)
+			ioThreads = (std::clamp)(::atoi(argv[i + 1]), 1, 32);
+		else if (::strcmp(argv[i], "-recvkb") == 0)
+			recvKb = (std::clamp)(::atoi(argv[i + 1]), 1, 640);
 		else if (::strcmp(argv[i], "-floor") == 0)
 			GForceFloor.store(::atoi(argv[i + 1]));
 		else if (::strcmp(argv[i], "-mode") == 0)
@@ -1063,7 +1094,23 @@ int main(int argc, char* argv[])
 			GHoldOnReject.store(true);
 		else if (::strcmp(argv[i], "-allyfire") == 0)
 			GAllyFire.store(true);
+		else if (::strcmp(argv[i], "-scale") == 0)
+			ScaleBots::GOn.store(true);
+		else if (::strcmp(argv[i], "-scalepeace") == 0)
+			scaleOptions.combat = false;
+		else if (::strcmp(argv[i], "-profile") == 0)
+			SamplingProfiler::Start(".\\..\\..\\Logs\\metrics", 2);		// 봇 프로세스 CPU 가 어디에 쓰이나 (2026-11-22)
+		else if (::strcmp(argv[i], "-noskip") == 0)
+			Session::SetSkipCompletionOnSuccess(false);
 	}
+
+	// 수신 버퍼 (2026-11-21) - 세션마다 처음 크기. 큰 스냅샷이 오면 RecvBuffer 가 키운다
+	if (recvKb == 0 && ScaleBots::GOn.load())
+		recvKb = 16;
+	if (recvKb > 0)
+		Session::ConfigureRecvBuffer(recvKb * 1024 <= 0x10000 ? recvKb * 1024 : 0x10000, recvKb * 1024 <= 0x10000 ? 1 : (recvKb * 1024 + 0xFFFF) / 0x10000);
+	if (ioThreads == 0)
+		ioThreads = ScaleBots::GOn.load() ? 4 : 2;
 
 	GBurstStartUs = Utils::NowMicroseconds();
 
@@ -1129,6 +1176,64 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
+	// -scale (2026-11-21 동접 1만) - 접속을 나눠 걸고 틱 스레드 여러 개로 돌린다. 기존 모드 경로는 타지 않는다
+	if (ScaleBots::GOn.load())
+	{
+		scaleOptions.botCount = botCount;
+
+		// 방 배정 (2026-11-22 동접 1만 2 단계) - 이 프로세스의 봇 전원을 어느 게임 서버로 보낼지 인증 서버에 묻는다
+		if (assignUrl.empty() == false)
+		{
+			LobbyClient::Assignment a;
+			string error;
+			for (int32 attempt = 0; attempt < 30 && LobbyClient::Assign(assignUrl, botCount, OUT a, OUT error) == false; attempt++)
+			{
+				LOG_LINE << "[SCALE] lobby assign failed - " << error << " (retrying)\n";
+				this_thread::sleep_for(chrono::seconds(1));
+			}
+			if (a.port == 0)
+			{
+				LOG_LINE << "[SCALE] lobby assign gave up\n";
+				return 1;
+			}
+			serverHost.clear();
+			for (char c : a.host)
+				serverHost.push_back(static_cast<wchar_t>(c));
+			GServerPort = a.port;
+			LOG_LINE << "[SCALE] lobby assigned server_id=" << a.serverId << " " << a.host << ":" << a.port << " for " << botCount << " bot(s)\n";
+		}
+		{
+			lock_guard<mutex> guard(GBotsLock);
+			GFreeBotIndices.clear();
+			GFreeBotIndices.reserve(botCount);
+			for (int32 i = botCount; i >= 1; i--)
+				GFreeBotIndices.push_back(static_cast<uint32>(GBotBase + i));
+		}
+
+		LOG_LINE << "[SCALE] launching " << botCount << " bot(s) port=" << GServerPort << " base=" << GBotBase << " ticks=" << scaleOptions.tickThreads
+			<< " io=" << ioThreads << " connrate=" << scaleOptions.connectPerSec << "/s hb=" << scaleOptions.heartbeatMs << "ms movehz=" << scaleOptions.moveHz << " wander=" << scaleOptions.wanderCm / 100.f << "m" << " recv=" << Session::RecvBufferInitialBytes() / 1024 << "KB"
+			<< (scaleOptions.combat ? " combat" : " peace") << '\n';
+
+		::timeBeginPeriod(1);
+		ClientPacketHandler::Init();
+
+		ClientServiceRef scaleService = make_shared<ClientService>(NetAddress(serverHost, GServerPort), make_shared<IocpCore>(),
+			[]() { return make_shared<BotSession>(); }, 0);
+		ASSERT_CRASH(scaleService->Start());
+
+		for (int32 i = 0; i < ioThreads; i++)
+		{
+			GThreadManager->Launch([scaleService]()
+				{
+					while (true)
+						scaleService->GetIocpCore()->Dispatch();
+				});
+		}
+
+		ScaleBots::Run(scaleService, scaleOptions);
+		return 0;
+	}
+
 	LOG_LINE << "[BOT] launching " << botCount << " bot(s)"
 		<< (GItemBehavior.load() ? " - items ON (open bags, loot, equip, escape + re-enter)" : " - items OFF")
 		<< (GNoClientMs.load() ? " - client_ms OFF" : " - client_ms ON")
@@ -1162,7 +1267,7 @@ int main(int argc, char* argv[])
 
 	ASSERT_CRASH(service->Start());
 
-	for (int32 i = 0; i < 2; i++)
+	for (int32 i = 0; i < ioThreads; i++)
 	{
 		GThreadManager->Launch([service]()
 			{

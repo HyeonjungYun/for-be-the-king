@@ -192,6 +192,24 @@ public:
 	bool											campEnterSent = false;	// -campenter: 한 번만
 	bool											lateInviteSent = false;	// -lateinvite: 파티장이 한 번만
 
+	// -scale (2026-11-21 동접 1만, ScaleBots.cpp) - 가벼운 대량 봇. 틱 스레드 전용 (diedAtUs · lastRttUs 만 패킷 스레드가 쓴다)
+	float											anchorX = 0.f;			// 입장 지점 - 이 둘레를 배회한다
+	float											anchorY = 0.f;
+	uint64											scaleNextHbUs = 0;
+	uint64											scaleNextAttackUs = 0;
+	uint64											scaleNextSkillUs = 0;
+	uint64											scaleLeaveSentUs = 0;	// 죽은 뒤 C_LEAVE_GAME 을 보낸 시각. 0 = 아직
+	uint64											scaleEnterSentUs = 0;	// 마지막 C_ENTER_GAME 시각 (거절 · 무응답 재시도)
+	atomic<uint64>									diedAtUs = 0;
+	atomic<uint32>									lastRttUs = 0;			// 지난 하트비트 왕복 - 다음 하트비트에 실어 서버가 모은다
+	atomic<bool>									loggedIn = false;
+	uint32											channel = 0;			// 서버가 넣어 준 PvP 채널 (S_ENTER_GAME)
+	bool											scaleWasMoving = false;	// 지난 틱에 걸었다 - 멈춘 틱에 IDLE 을 한 번 보낸다
+	bool											scaleFighting = false;	// 국면 - 싸우기 / 돌아다니기
+	uint64											scalePhaseUntilUs = 0;
+	uint64											scaleLastMoveSentUs = 0;
+	bool											scaleLegClear = false;	// 지금 배회 다리(자리 → 목표)를 검사했다 - 걸음마다 다시 보지 않는다
+
 	bool			IsPartyMember(uint64 characterId)
 	{
 		lock_guard<mutex> guard(partyLock);
