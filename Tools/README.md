@@ -7,6 +7,7 @@
 |---|---|---|
 | `verify/` | **서버 검증 툴** — 서버를 열기 전에 정적 검사 · 빌드 + 테스트 · DB 스키마 · 격리 부팅 스모크 | `.\Tools\verify\verify-server.ps1` |
 | `ServerMonitor/` | **디버깅 툴** (C# WPF) — 접속자 · 플레이어별 로그 · 태그 필터 · 맵 · 지표 · 관리 명령 · 지난 로그 | `dotnet run --project Tools\ServerMonitor` |
+| `loadtest/` | **동접 부하 시험** (2026-11-21) — 봇 수천~1만 · 서버 여러 대 · 방 배정. 결과 `docs/server-scaling-10k.md` | `.\Tools\loadtest\run-scale.ps1 -Bots 2000` |
 | `ci/` | GitHub Actions — 원본은 `ci/workflows/*.yml`, `.github/workflows/` 는 사본 | `.\Tools\ci\sync-workflows.ps1` (`-Check`) |
 | `db/` | 스키마 · 이전 · 시드 SQL · `setup_db.ps1` · 로그인/기본 장비 시험 스크립트 | `.\Tools\db\setup_db.ps1 -Password …` |
 | `codegen/` | PacketGenerator (`.proto` → 패킷 핸들러). `Server/Common/protoc-21.12-win64/bin/GenPackets.bat` 이 템플릿을 여기서 가져간다 | `GenPackets.bat` |

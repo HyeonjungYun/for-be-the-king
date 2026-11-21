@@ -20,12 +20,13 @@
 | `kick` | `id` · `reason` | `result` |
 | `unban` | `account` 또는 `name` | `result` |
 | `notice` | `text` | `result` |
+| `cluster` | | `cluster` — 등록부(`game_servers`)의 서버들 (2026-11-22 동접 1만 2 단계) |
 | `ping` | | `pong` |
 
 ## 서버 → 클라이언트 (`t`)
 
 ```jsonc
-{"t":"hello","ok":true,"pid":1234,"port":7777,"boot":"2026-10-21 20:00:00","dataDir":"C:\\...\\Server\\Data","tags":["connect", ...]}
+{"t":"hello","ok":true,"pid":1234,"server_id":1,"port":7777,"boot":"2026-10-21 20:00:00","dataDir":"C:\\...\\Server\\Data","tags":["connect", ...]}
 {"t":"ev","seq":42,"ts":"2026-10-21 20:01:40.313","lv":"I","th":8,"tag":"combat","sub":"skill_fire","a":[128],"tg":[171],"acc":0,"room":"w0","src":"log","msg":"[SKILL FIRE] caster=128 ..."}
 {"t":"ev", ..., "src":"ev","sub":"damage","a":[128],"tg":[171],"d":{"dmg":37,"hp":120,"mhp":559,"crit":0,"skill":1007},"msg":"128 → 171 피해 37 (120/559)"}
 {"t":"players","list":[{"id":128,"name":"bot_1","acc":12,"room":"w0","state":"room","hp":540,"mhp":559,"x":0,"y":0,"bot":true,"party":0}]}
@@ -37,7 +38,10 @@
                                {"id":3000000212,"k":"bag","x":..,"y":..,"open":0,"chest":1},
                                {"id":77,"k":"zone","x":..,"y":..,"r":250},{"id":88,"k":"proj","x":..,"y":..},
                                {"id":0,"k":"tower","x":..,"y":..,"n":"Ta","gauge":350}]}
-{"t":"metrics","m":{"sessions":31,"flush_p95_us":500,"flush_p99_us":1000,"flush_max_us":6900,"recv_mbps":0.3,"sent_mbps":2.1,"commit_mb":93,"db_pending":0,"rooms":4,"instances":0}}
+{"t":"metrics","m":{"sessions":31,"flush_p95_us":500,"flush_p99_us":1000,"flush_max_us":6900,"recv_mbps":0.3,"sent_mbps":2.1,"commit_mb":93,"db_pending":0,"rooms":4,"instances":0,
+                     "jobwait_p95_us":1000,"jobwait_p99_us":2000,"jobwait_max_us":7000,"rtt_n":5000,"rtt_p50_us":250,"rtt_p95_us":4000,"rtt_p99_us":8000,"rtt_max_us":9000,
+                     "channels":170,"login_queue":0,"server_id":1}}
+{"t":"cluster","self":1,"servers":[{"id":1,"host":"127.0.0.1","port":7821,"admin_port":7822,"ccu":5000,"max":12000,"channels":170,"status":"up","age":3,"uptime":99}]}
 {"t":"result","op":"kick","ok":true,"msg":"..."}
 {"t":"error","msg":"..."}
 ```
@@ -45,4 +49,5 @@
 - **태그 13 종** (`Server/Data/event_tags.csv` — 로그 줄머리 + 핵심어 → 태그 · 하위 종류): `connect` 접속 · `move` 이동 · `combat` 전투 · `status` 상태이상 ·
   `item` 아이템 · `storage` 창고 · `economy` 경제 · `party` 파티 · `escape` 탈출 · `cheat` 안티치트 · `monster` 몬스터 · `db` DB 커밋 · `system` 시스템
 - `src` — `log` 는 서버 텍스트 로그 한 줄을 구조화한 것 (`a` · `tg` 는 줄 안의 `char=` · `caster=` · `victim=` 같은 키에서. `id=` 는 다른 행위자 키가 없을 때만 행위자 — 장판 · 투사체 id 를 걸러낸다), `ev` 는 텍스트 로그가 없는 사건을 서버가 직접 낸 것 (피해 · CC · 관리 명령)
+- `jobwait_*` = 잡이 큐에 들어가 실행되기까지 기다린 시간, `rtt_*` = 클라가 다음 `C_HEARTBEAT.last_rtt_us` 로 알려 준 왕복 (하트비트는 방 큐를 거쳐 답한다). 둘 다 10 초 창 (docs/server-scaling-10k.md § 1)
 - 같은 내용이 `Logs/events/events-<부팅 시각>.jsonl` 에 `t` 없이 한 줄씩 남는다 — ServerMonitor 의 "지난 로그 열기" 가 이 파일을 읽는다

@@ -27,7 +27,8 @@ Tools\ServerMonitor\bin\Release\net10.0-windows\ServerMonitor.exe
 | **로그** 탭 | 구조화 이벤트 로그. **태그 13 종** 토글 (접속 · 이동 · 전투 · 상태이상 · 아이템 · 창고 · 경제 · 파티 · 탈출 · 안티치트 · 몬스터 · DB 커밋 · 시스템) + 하위 종류 · 검색 · 오류만 |
 | | **선택한 플레이어만** — 그 인원이 *행위자* 인 줄만, 또는 *관련 전부* (행위자 · 대상 · 계정) |
 | **맵** 탭 | 방 하나의 현황 (5 Hz) — 층 지형 · 플레이어/봇 · 몬스터(상태 색) · 가방/상자 · 장판/투사체 · 사망 지점 · 순찰 길 · 타워 게이지. 휠 확대 · 끌어서 이동 · 클릭 선택 · 따라가기 · 시야 원 |
-| **지표** 탭 | 동접 · Room 플러시 P95/P99/max · 커밋 메모리 · 송수신 · DB 큐 (10 초 통계. 점선 = 예산 P95 16.6 · P99 33 · max 100 ms · 512 MB — `Tools/verify/thresholds.json` 과 같은 값을 코드에 적어 두었다) |
+| **클러스터** 탭 (2026-11-22) | 등록부(`game_servers`)의 게임 서버들 — 서버마다 접속자 · 채널 · 상태(살아 있음 · 내려감 · 소식 없음) · 갱신 시각, **합계 접속자** |
+| **지표** 탭 | **클라가 잰 왕복 RTT p99 · 방 큐 대기 p99** (2026-11-22, 점선 100 ms · 50 ms) · 동접 · Room 플러시 P95/P99/max · 커밋 메모리 · 송수신 · DB 큐 (10 초 통계. 점선 = 예산 P95 16.6 · P99 33 · max 100 ms · 512 MB — `Tools/verify/thresholds.json` 과 같은 값을 코드에 적어 두었다) |
 | 오른쪽 **상세** | 선택한 플레이어 — 계정 · 위치 · 체력 · 런 골드 · 파티 · 시야 · 안티치트 점수 · 장비 · 스킬 칸 · 쿨다운 · 소지품 |
 | 오른쪽 **관리 명령** | 강제 종료 (사유는 이벤트 로그에 남는다) · 정지 해제 (strike 도 지운다) · 전체 공지 (던전 HUD 8 초) |
 
@@ -41,8 +42,11 @@ Tools\ServerMonitor\bin\Release\net10.0-windows\ServerMonitor.exe
 ```
 --info <admin.json>  --port N  --connect
 --open <events.jsonl>
---tab log|map|metrics  --select <이름|id>  --tag combat,status
+--tab log|map|metrics|cluster  --select <이름|id>  --tag combat,status
 --shot <png> [--shot-after 초]     # 창을 PNG 로 남기고 끝낸다 (포그라운드 불필요)
+--tour [--tour-after 60] [--record <폴더> --record-fps 8]
+                                    # 둘러보기 - 클러스터 → 지표 → 로그 → 플레이어 → 맵 → 클러스터, 장면마다 자막.
+                                    # --record 면 프레임을 PNG 로 (ffmpeg 로 영상). 동접 1만 시연 영상이 이것이다 (2026-11-22)
 ```
 
 ## 알려진 한계

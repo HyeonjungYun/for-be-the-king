@@ -44,7 +44,9 @@ public sealed class Sparkline : FrameworkElement
         double top = 24, bottom = ActualHeight - 6, left = 6, right = ActualWidth - 6;
         double max = Math.Max(_values.Max(), Limit ?? 0) * 1.15;
         if (max <= 0) max = 1;
-        double X(int i) => left + (right - left) * i / (Capacity - 1.0);
+        // 가로 폭 = 쌓인 점 수 (최소 12) - 앱을 연 지 얼마 안 되면 점 몇 개가 오른쪽 끝에 뭉쳐 보였다 (2026-11-22)
+        int span = Math.Min(Capacity, Math.Max(12, _values.Count));
+        double X(int i) => left + (right - left) * i / (span - 1.0);
         double Y(double v) => bottom - (bottom - top) * v / max;
         if (Limit is { } lim)
         {
@@ -52,7 +54,7 @@ public sealed class Sparkline : FrameworkElement
             dc.DrawLine(dash, new Point(left, Y(lim)), new Point(right, Y(lim)));
         }
         var geo = new StreamGeometry();
-        int offset = Capacity - _values.Count;
+        int offset = span - _values.Count;
         using (var ctx = geo.Open())
         {
             ctx.BeginFigure(new Point(X(offset), Y(_values[0])), false, false);

@@ -87,7 +87,11 @@ check('rooms', rooms is not None and len(rooms) > 0, str(rooms)[:300])
 check('metrics', metrics is not None and 'flush_p95_us' in metrics, str(metrics)[:200])
 
 in_room = [p for p in (players or []) if p.get('room')]
-target = in_room[0] if in_room else None
+# the check is "events can be attributed to a player" - pick an in-room player who appears in the backlog. The first one in the list
+# may simply not have acted yet when the probe runs (~20 s after boot): 2026-11-22 smoke picked char 30, whose first action came later
+mentioned = {i for e in events for i in e.get('a', []) + e.get('tg', [])}
+active = [p for p in in_room if p['id'] in mentioned]
+target = (active or in_room or [None])[0]
 if target:
     c.send({'op': 'player', 'id': target['id']})
     p = c.wait('player')

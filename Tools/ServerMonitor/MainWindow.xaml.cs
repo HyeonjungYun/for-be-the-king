@@ -22,7 +22,7 @@ public partial class MainWindow : Window
     string? _dataDir;
     readonly List<EventRecord> _all = new();
     readonly ObservableCollection<EventRecord> _shown = new();
-    readonly ObservableCollection<PlayerRow> _players = new();
+    ObservableCollection<PlayerRow> _players = new();
     readonly List<PlayerRow> _allPlayers = new();
     readonly Dictionary<long, string> _names = new();
     readonly Dictionary<string, ToggleButton> _tagButtons = new();
@@ -111,7 +111,7 @@ public partial class MainWindow : Window
         }
         if (Arg("--tab") is { } tab)
         {
-            Tabs.SelectedIndex = tab switch { "map" => 1, "metrics" => 2, _ => 0 };
+            Tabs.SelectedIndex = tab switch { "map" => 1, "metrics" => 2, "cluster" => 3, _ => 0 };
             if (tab == "map" && _selectedId != 0)
             {
                 OnShowOnMap(this, new RoutedEventArgs());
@@ -119,6 +119,14 @@ public partial class MainWindow : Window
                 Map.Follow = true;
             }
         }
+        // 둘러보기 녹화 (2026-11-22 동접 1만 시연 영상) - 정해진 순서로 탭을 돌며 자막을 띄우고, --record 면 프레임을 PNG 로 남긴다
+        if (args.Contains("--tour"))
+        {
+            double D(string name, double fallback) => double.TryParse(Arg(name), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : fallback;
+            await RunTour(Arg("--record"), (int)D("--record-fps", 8), D("--tour-after", 60));
+            return;
+        }
+
         if (Arg("--shot") is { } shot)
         {
             double after = double.TryParse(Arg("--shot-after"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : 3;
@@ -126,6 +134,64 @@ public partial class MainWindow : Window
             SaveShot(shot);
             Close();
         }
+    }
+
+    async Task RunTour(string? recordDir, int fps, double afterSec)
+    {
+        TourCaption.Text = "지표가 쌓이는 중…";
+        TourBanner.Visibility = Visibility.Visible;
+        await Task.Delay(TimeSpan.FromSeconds(afterSec));		// 10 초 지표 꺾은선이 몇 점 쌓이게
+
+        DispatcherTimer? rec = null;
+        int frame = 0;
+        if (recordDir != null)
+        {
+            Directory.CreateDirectory(recordDir);
+            rec = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, fps)) };
+            rec.Tick += (_, _) => SaveShot(Path.Combine(recordDir, $"f{++frame:D5}.png"));
+            rec.Start();
+        }
+
+        async Task Scene(string caption, double sec, Action? act = null)
+        {
+            TourCaption.Text = caption;
+            act?.Invoke();
+            await Task.Delay(TimeSpan.FromSeconds(sec));
+        }
+
+        // 사람이 가장 많은 방의 첫 플레이어
+        PlayerRow? pick = _allPlayers.Where(p => p.Room.Length > 0).GroupBy(p => p.Room).OrderByDescending(g => g.Count()).FirstOrDefault()?.FirstOrDefault();
+
+        await Scene("① 클러스터 — 게임 서버 여러 대 · 인증 서버의 방 배정이 나눈 동시 접속자 합계", 9, () => Tabs.SelectedIndex = 3);
+        await Scene("② 지표 — 클라가 잰 왕복(RTT) p99 · 방 큐 대기 p99 · 동접 · 메모리 (점선 = 기준)", 11, () => Tabs.SelectedIndex = 2);
+        await Scene("③ 이벤트 로그 — 태그 13 종 · 이 서버 접속자 전원의 실시간 이벤트", 8, () =>
+        {
+            Tabs.SelectedIndex = 0;
+            OnlySelectedBox.IsChecked = false;
+            Rebuild();
+        });
+        if (pick != null)
+        {
+            await Scene($"④ 플레이어 한 명 ({pick.Name}, 채널 {pick.Room}) — 상세 · 그 사람이 행위자 · 대상인 로그만", 10, () =>
+            {
+                PlayersList.SelectedItem = _players.FirstOrDefault(p => p.Id == pick.Id);
+                Select(pick.Id);
+                PlayersList.ScrollIntoView(PlayersList.SelectedItem);
+                OnlySelectedBox.IsChecked = true;
+                Rebuild();
+            });
+            await Scene($"⑤ 맵 — 그 플레이어가 있는 30 명 채널 ({pick.Room}) 을 따라가며", 14, () =>
+            {
+                OnShowOnMap(this, new RoutedEventArgs());
+                FollowBox.IsChecked = true;
+                Map.Follow = true;
+            });
+        }
+        await Scene("⑥ 다시 클러스터 — 동시 접속 유지 · 지연 기준 안", 7, () => Tabs.SelectedIndex = 3);
+
+        rec?.Stop();
+        TourBanner.Visibility = Visibility.Collapsed;
+        Close();
     }
 
     void SaveShot(string path)
@@ -234,9 +300,11 @@ public partial class MainWindow : Window
         _mapRoom = "";
         _lastSeq = 0;
         Map.Clear(offline ? "지난 로그에는 맵 장면이 없다 - 맵 · 지표는 실시간 연결에서만" : "방을 고르면 맵이 나온다");
-        foreach (var s in new[] { SparkSessions, SparkP95, SparkP99, SparkMax, SparkMem, SparkSent, SparkRecv, SparkDb })
+        foreach (var s in new[] { SparkRtt, SparkJobWait, SparkSessions, SparkP95, SparkP99, SparkMax, SparkMem, SparkSent, SparkRecv, SparkDb })
             s.Reset();
         SparkP95.Limit = 16.6; SparkP99.Limit = 33; SparkMax.Limit = 100; SparkMem.Limit = 512;
+        SparkRtt.Limit = 100; SparkJobWait.Limit = 50;		// 지연 판정 기준 (docs/server-scaling-10k.md § 1)
+        ClusterList.Items.Clear();
         UpdateTagCounts();
     }
 
@@ -267,6 +335,7 @@ public partial class MainWindow : Window
                     case "rooms": OnRooms(root); break;
                     case "map": OnMap(root); break;
                     case "metrics": OnMetrics(root); break;
+                    case "cluster": OnCluster(root); break;
                     case "result": OnResult(root); break;
                     case "error":
                         StatusText.Text = "서버 오류 - " + (root.TryGetProperty("msg", out var m) ? m.GetString() : "?");
@@ -284,13 +353,14 @@ public partial class MainWindow : Window
     {
         StatusDot.Fill = Brushes.LimeGreen;
         string S(string k) => root.TryGetProperty(k, out var v) ? v.ToString() : "";
-        ServerInfoText.Text = $"GameServer pid {S("pid")} · 게임 포트 {S("port")} · 부팅 {S("boot")}";
+        ServerInfoText.Text = $"GameServer #{S("server_id")} · pid {S("pid")} · 게임 포트 {S("port")} · 부팅 {S("boot")}";
         _dataDir = AdminClient.FindDataDir(S("dataDir"));
         StatusText.Text = "인증됨 - 최근 이벤트를 받는 중";
         _client!.Send(new { op = "events", backlog = 20000 });
         _client.Send(new { op = "players" });
         _client.Send(new { op = "rooms" });
         _client.Send(new { op = "metrics" });
+        _client.Send(new { op = "cluster" });
     }
 
     void Refresh()
@@ -304,6 +374,8 @@ public partial class MainWindow : Window
             _client.Send(new { op = "rooms" });
         if (_selectedId != 0)
             _client.Send(new { op = "player", id = _selectedId });
+        if (_tick % 2 == 1)
+            _client.Send(new { op = "cluster" });
         StatusText.Text = $"연결됨 · 이벤트 {_all.Count:N0} (보이는 것 {_shown.Count:N0}) · 접속자 {_allPlayers.Count} · 받은 양 {Interlocked.Read(ref _client.BytesReceived) / 1024.0 / 1024.0:0.0} MB";
     }
 
@@ -426,16 +498,20 @@ public partial class MainWindow : Window
         if (!root.TryGetProperty("list", out var list))
             return;
         var seen = new HashSet<long>();
+        // 접속자 수천 명 (2026-11-22 동접 1만) - 예전엔 줄마다 목록을 처음부터 찾아(FirstOrDefault) 5,000 명이면 2 초마다 2,500 만 번 비교했다
+        var byId = new Dictionary<long, PlayerRow>(_allPlayers.Count);
+        foreach (var r in _allPlayers)
+            byId[r.Id] = r;
         foreach (var p in list.EnumerateArray())
         {
             long id = p.GetProperty("id").GetInt64();
             if (id == 0 || !seen.Add(id))
                 continue;
-            var row = _allPlayers.FirstOrDefault(r => r.Id == id);
-            if (row == null)
+            if (byId.TryGetValue(id, out var row) == false)
             {
                 row = new PlayerRow { Id = id };
                 _allPlayers.Add(row);
+                byId[id] = row;
             }
             row.Name = p.GetProperty("name").GetString() ?? "";
             row.Account = p.GetProperty("acc").GetInt64();
@@ -466,9 +542,9 @@ public partial class MainWindow : Window
         if (wanted.SequenceEqual(_players))
             return;
         var selected = _selectedId;
-        _players.Clear();
-        foreach (var p in wanted)
-            _players.Add(p);
+        // 한 번에 갈아 끼운다 - 줄마다 Add 하면 5,000 번 변경 알림이 나가 목록이 그만큼 다시 그려졌다
+        _players = new ObservableCollection<PlayerRow>(wanted);
+        PlayersList.ItemsSource = _players;
         if (selected != 0 && _players.FirstOrDefault(p => p.Id == selected) is { } keep)
             PlayersList.SelectedItem = keep;
     }
@@ -666,6 +742,8 @@ public partial class MainWindow : Window
             return;
         }
         double D(string k) => m.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
+        SparkRtt.Add(D("rtt_p99_us") / 1000);
+        SparkJobWait.Add(D("jobwait_p99_us") / 1000);
         SparkSessions.Add(D("sessions"));
         SparkP95.Add(D("flush_p95_us") / 1000);
         SparkP99.Add(D("flush_p99_us") / 1000);
@@ -674,8 +752,40 @@ public partial class MainWindow : Window
         SparkSent.Add(D("sent_mbps"));
         SparkRecv.Add(D("recv_mbps"));
         SparkDb.Add(D("db_pending") + D("db_delayed"));
-        MetricsText.Text = $"#{D("seq"):0} · 세션 {D("sessions"):0} · 인스턴스 {D("instances"):0} · 플러시 {D("flush_n"):0} 회 · 이동 거부 {D("move_reject"):0} · "
-            + $"클라당 {D("per_client_kbps"):0.0} kbps · 워킹셋 {D("workingset_mb"):0} MB · 이벤트 누계 {D("events"):N0}  (10 초마다 갱신, 점선 = 기준)";
+        MetricsText.Text = $"#{D("seq"):0} · 서버 {D("server_id"):0} · 세션 {D("sessions"):N0} · 채널 {D("channels"):0} · 동적 방 {D("instances"):0} · 로그인 대기 {D("login_queue"):0} · "
+            + $"RTT p50 {D("rtt_p50_us") / 1000:0.0} / p99 {D("rtt_p99_us") / 1000:0.0} / max {D("rtt_max_us") / 1000:0.0} ms (표본 {D("rtt_n"):N0}) · 방 큐 대기 p99 {D("jobwait_p99_us") / 1000:0.0} ms · "
+            + $"이동 거부 {D("move_reject"):0} · 클라당 {D("per_client_kbps"):0.0} kbps · 이벤트 누계 {D("events"):N0}  (10 초마다 갱신, 점선 = 기준)";
+    }
+
+    // ───────────── 클러스터 (2026-11-22) ─────────────
+
+    public sealed record ClusterRow(long Id, string Address, long Ccu, long Max, long Channels, string State, long Age, long Uptime, long AdminPort, bool Self)
+    {
+        public string CcuText => Max > 0 ? $"{Ccu:N0} / {Max:N0}" : $"{Ccu:N0}";
+        public string AgeText => $"{Age} 초 전";
+        public string UptimeText => Uptime >= 60 ? $"{Uptime / 60} 분 {Uptime % 60} 초" : $"{Uptime} 초";
+    }
+
+    void OnCluster(JsonElement root)
+    {
+        long L(JsonElement o, string k) => o.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : 0;
+        string S(JsonElement o, string k) => o.TryGetProperty(k, out var v) ? v.GetString() ?? "" : "";
+        long self = L(root, "self");
+        var rows = new List<ClusterRow>();
+        foreach (var s in root.GetProperty("servers").EnumerateArray())
+        {
+            var age = L(s, "age");
+            var status = S(s, "status");
+            var alive = status == "up" && age <= 15;
+            rows.Add(new ClusterRow(L(s, "id"), $"{S(s, "host")}:{L(s, "port")}", L(s, "ccu"), L(s, "max"), L(s, "channels"),
+                alive ? (L(s, "id") == self ? "● 이 서버" : "● 살아 있음") : (status == "down" ? "○ 내려감" : "× 소식 없음"), age, L(s, "uptime"), L(s, "admin_port"), L(s, "id") == self));
+        }
+        ClusterList.Items.Clear();
+        foreach (var r in rows)
+            ClusterList.Items.Add(r);
+        var live = rows.Where(r => r.State.StartsWith("●")).ToList();
+        ClusterTitle.Text = rows.Count == 0 ? "등록부가 비었다 (서버 하나 · 표가 없는 옛 DB)"
+            : $"게임 서버 {live.Count} 대 살아 있음 · 합계 접속자 {live.Sum(r => r.Ccu):N0} 명 · 채널 {live.Sum(r => r.Channels):N0} 개";
     }
 
     // ───────────── 관리 명령 ─────────────

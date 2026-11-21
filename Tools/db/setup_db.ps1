@@ -39,6 +39,7 @@ $files = @(
     'migrate_hash_tokens.sql',     # 토큰 해시 저장 - schema_migrations 표시로 한 번만
     'migrate_anticheat.sql',       # accounts.banned_until · cheat_strikes (안티치트 2026-10-19)
     'migrate_equip_slot_unique.sql', # 착용 칸 유일 인덱스 (2026-10-21 리뷰 후속)
+    'schema_cluster.sql',          # game_servers · online_accounts - 서버 여러 대 (2026-11-22 동접 1만 2 단계)
     'schema_app_user.sql'          # 전용 DB 계정 fbtk_app - 두 서버가 root 대신 쓴다 (2026-10-21). 비밀번호는 -Password 와 같다
 )
 if (-not $NoSeed) {

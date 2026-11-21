@@ -172,9 +172,9 @@
                 <ListView x:Name="PlayersList" SelectionChanged="OnPlayerSelected" SelectionMode="Single">
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="이름" Width="96" DisplayMemberBinding="{Binding Name}"/>
-                            <GridViewColumn Header="상태" Width="64" DisplayMemberBinding="{Binding StateText}"/>
-                            <GridViewColumn Header="방" Width="40" DisplayMemberBinding="{Binding Room}"/>
+                            <GridViewColumn Header="이름" Width="86" DisplayMemberBinding="{Binding Name}"/>
+                            <GridViewColumn Header="상태" Width="52" DisplayMemberBinding="{Binding StateText}"/>
+                            <GridViewColumn Header="방" Width="62" DisplayMemberBinding="{Binding Room}"/>
                             <GridViewColumn Header="체력" Width="66" DisplayMemberBinding="{Binding HpText}"/>
                         </GridView>
                     </ListView.View>
@@ -262,7 +262,9 @@
                 <TabItem Header="지표">
                     <DockPanel Margin="6">
                         <TextBlock x:Name="MetricsText" DockPanel.Dock="Top" Margin="2,0,0,8" FontFamily="Consolas" TextWrapping="Wrap"/>
-                        <UniformGrid Columns="2" Rows="4">
+                        <UniformGrid Columns="2" Rows="5">
+                            <local:Sparkline x:Name="SparkRtt" Title="클라 왕복 RTT p99 (방 큐를 거친 하트비트)" Unit="ms" Margin="4"/>
+                            <local:Sparkline x:Name="SparkJobWait" Title="방 큐 대기 p99" Unit="ms" Margin="4"/>
                             <local:Sparkline x:Name="SparkSessions" Title="동접 (세션)" Margin="4"/>
                             <local:Sparkline x:Name="SparkP95" Title="Room 플러시 P95" Unit="ms" Margin="4"/>
                             <local:Sparkline x:Name="SparkP99" Title="Room 플러시 P99" Unit="ms" Margin="4"/>
@@ -272,6 +274,28 @@
                             <local:Sparkline x:Name="SparkRecv" Title="수신" Unit="Mbps" Margin="4"/>
                             <local:Sparkline x:Name="SparkDb" Title="DB 큐 (대기 + 지연)" Margin="4"/>
                         </UniformGrid>
+                    </DockPanel>
+                </TabItem>
+                <!-- 클러스터 (2026-11-22 동접 1만 2 단계) - 등록부(game_servers) 의 서버들 -->
+                <TabItem Header="클러스터">
+                    <DockPanel Margin="6">
+                        <TextBlock x:Name="ClusterTitle" DockPanel.Dock="Top" FontSize="20" FontWeight="Bold" Margin="2,0,0,8" Text="(등록부를 기다리는 중)"/>
+                        <TextBlock DockPanel.Dock="Bottom" Margin="2,6,0,0" Foreground="#9E9E9E" TextWrapping="Wrap"
+                                   Text="게임 서버마다 5 초에 한 번 등록부(MySQL game_servers)에 인원을 적는다. 인증 서버의 방 배정(/lobby/assign)이 가장 여유 있는 서버로 보낸다. 15 초 넘게 소식이 없으면 죽은 서버로 본다."/>
+                        <ListView x:Name="ClusterList" FontSize="14">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="서버" Width="70" DisplayMemberBinding="{Binding Id}"/>
+                                    <GridViewColumn Header="주소" Width="160" DisplayMemberBinding="{Binding Address}"/>
+                                    <GridViewColumn Header="접속자" Width="110" DisplayMemberBinding="{Binding CcuText}"/>
+                                    <GridViewColumn Header="채널" Width="70" DisplayMemberBinding="{Binding Channels}"/>
+                                    <GridViewColumn Header="상태" Width="90" DisplayMemberBinding="{Binding State}"/>
+                                    <GridViewColumn Header="갱신" Width="90" DisplayMemberBinding="{Binding AgeText}"/>
+                                    <GridViewColumn Header="가동" Width="100" DisplayMemberBinding="{Binding UptimeText}"/>
+                                    <GridViewColumn Header="관리 포트" Width="90" DisplayMemberBinding="{Binding AdminPort}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
                     </DockPanel>
                 </TabItem>
             </TabControl>
@@ -312,6 +336,12 @@
                 </StackPanel>
             </ScrollViewer>
         </Grid>
+
+        <!-- 둘러보기 자막 (tour 모드, 2026-11-22 시연 영상) -->
+        <Border x:Name="TourBanner" Grid.Row="1" Visibility="Collapsed" Panel.ZIndex="10" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,34" Background="#E01E2A38" BorderBrush="#4FC3F7" BorderThickness="1" CornerRadius="6" Padding="18,8" IsHitTestVisible="False">
+            <TextBlock x:Name="TourCaption" FontSize="20" FontWeight="Bold" Foreground="White"/>
+        </Border>
 
         <Border Grid.Row="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,3">
             <TextBlock x:Name="StatusText" Foreground="#BDBDBD" Text="연결 안 됨 - 서버를 띄운 뒤 [연결] 또는 [지난 로그 열기]"/>

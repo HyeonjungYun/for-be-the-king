@@ -30,7 +30,8 @@ def scan(path, rx):
         lit = m.group(1)
         line = text.count('\n', 0, m.start()) + 1
         where = f'{os.path.relpath(path, repo).replace(os.sep, "/")}:{line}'
-        names = [t for t in TABLE.findall(lit)]
+        # "ON DUPLICATE KEY UPDATE col = ..." is an upsert clause, not a table - it read `account_id` as a table (2026-11-22)
+        names = [t for t in TABLE.findall(re.sub(r'ON\s+DUPLICATE\s+KEY\s+UPDATE.*', '', lit))]
         lead = SET_LEAD.match(lit)
         if lead:
             names.append(lead.group(1))
