@@ -84,6 +84,7 @@ public:
 	vector<string>	Recent(size_t count);		// 최근 count 줄 (오래된 것부터)
 
 	void	Flush();
+	void	SetCoalesceMs(uint32 ms);		// 쓰기 스레드 묶어 쓰기 (AsyncLogger::SetCoalesceMs, 2026-11-21)
 	uint64	Count() const { return _seq.load(); }		// 지금까지 낸 이벤트 수
 
 	static constexpr size_t RING_CAPACITY = 20'000;

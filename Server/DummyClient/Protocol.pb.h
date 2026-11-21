@@ -902,6 +902,7 @@ class S_ENTER_GAME final :
     kSuccessFieldNumber = 1,
     kRunRemainingMsFieldNumber = 3,
     kModeFieldNumber = 4,
+    kChannelFieldNumber = 5,
   };
   // .Protocol.ObjectInfo player = 2;
   bool has_player() const;
@@ -948,6 +949,15 @@ class S_ENTER_GAME final :
   void _internal_set_mode(::Protocol::RunMode value);
   public:
 
+  // uint32 channel = 5;
+  void clear_channel();
+  uint32_t channel() const;
+  void set_channel(uint32_t value);
+  private:
+  uint32_t _internal_channel() const;
+  void _internal_set_channel(uint32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_ENTER_GAME)
  private:
   class _Internal;
@@ -960,6 +970,7 @@ class S_ENTER_GAME final :
     bool success_;
     uint32_t run_remaining_ms_;
     int mode_;
+    uint32_t channel_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -9304,6 +9315,8 @@ class C_HEARTBEAT final :
 
   enum : int {
     kClientMsFieldNumber = 1,
+    kClientUsFieldNumber = 2,
+    kLastRttUsFieldNumber = 3,
   };
   // uint64 client_ms = 1;
   void clear_client_ms();
@@ -9312,6 +9325,24 @@ class C_HEARTBEAT final :
   private:
   uint64_t _internal_client_ms() const;
   void _internal_set_client_ms(uint64_t value);
+  public:
+
+  // uint64 client_us = 2;
+  void clear_client_us();
+  uint64_t client_us() const;
+  void set_client_us(uint64_t value);
+  private:
+  uint64_t _internal_client_us() const;
+  void _internal_set_client_us(uint64_t value);
+  public:
+
+  // uint32 last_rtt_us = 3;
+  void clear_last_rtt_us();
+  uint32_t last_rtt_us() const;
+  void set_last_rtt_us(uint32_t value);
+  private:
+  uint32_t _internal_last_rtt_us() const;
+  void _internal_set_last_rtt_us(uint32_t value);
   public:
 
   // @@protoc_insertion_point(class_scope:Protocol.C_HEARTBEAT)
@@ -9323,6 +9354,8 @@ class C_HEARTBEAT final :
   typedef void DestructorSkippable_;
   struct Impl_ {
     uint64_t client_ms_;
+    uint64_t client_us_;
+    uint32_t last_rtt_us_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -9453,6 +9486,7 @@ class S_HEARTBEAT final :
   enum : int {
     kClientMsFieldNumber = 1,
     kServerMsFieldNumber = 2,
+    kClientUsFieldNumber = 3,
   };
   // uint64 client_ms = 1;
   void clear_client_ms();
@@ -9472,6 +9506,15 @@ class S_HEARTBEAT final :
   void _internal_set_server_ms(uint64_t value);
   public:
 
+  // uint64 client_us = 3;
+  void clear_client_us();
+  uint64_t client_us() const;
+  void set_client_us(uint64_t value);
+  private:
+  uint64_t _internal_client_us() const;
+  void _internal_set_client_us(uint64_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_HEARTBEAT)
  private:
   class _Internal;
@@ -9482,6 +9525,7 @@ class S_HEARTBEAT final :
   struct Impl_ {
     uint64_t client_ms_;
     uint64_t server_ms_;
+    uint64_t client_us_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -9840,6 +9884,26 @@ inline void S_ENTER_GAME::_internal_set_mode(::Protocol::RunMode value) {
 inline void S_ENTER_GAME::set_mode(::Protocol::RunMode value) {
   _internal_set_mode(value);
   // @@protoc_insertion_point(field_set:Protocol.S_ENTER_GAME.mode)
+}
+
+// uint32 channel = 5;
+inline void S_ENTER_GAME::clear_channel() {
+  _impl_.channel_ = 0u;
+}
+inline uint32_t S_ENTER_GAME::_internal_channel() const {
+  return _impl_.channel_;
+}
+inline uint32_t S_ENTER_GAME::channel() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ENTER_GAME.channel)
+  return _internal_channel();
+}
+inline void S_ENTER_GAME::_internal_set_channel(uint32_t value) {
+  
+  _impl_.channel_ = value;
+}
+inline void S_ENTER_GAME::set_channel(uint32_t value) {
+  _internal_set_channel(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ENTER_GAME.channel)
 }
 
 // -------------------------------------------------------------------
@@ -13314,6 +13378,46 @@ inline void C_HEARTBEAT::set_client_ms(uint64_t value) {
   // @@protoc_insertion_point(field_set:Protocol.C_HEARTBEAT.client_ms)
 }
 
+// uint64 client_us = 2;
+inline void C_HEARTBEAT::clear_client_us() {
+  _impl_.client_us_ = uint64_t{0u};
+}
+inline uint64_t C_HEARTBEAT::_internal_client_us() const {
+  return _impl_.client_us_;
+}
+inline uint64_t C_HEARTBEAT::client_us() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_HEARTBEAT.client_us)
+  return _internal_client_us();
+}
+inline void C_HEARTBEAT::_internal_set_client_us(uint64_t value) {
+  
+  _impl_.client_us_ = value;
+}
+inline void C_HEARTBEAT::set_client_us(uint64_t value) {
+  _internal_set_client_us(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_HEARTBEAT.client_us)
+}
+
+// uint32 last_rtt_us = 3;
+inline void C_HEARTBEAT::clear_last_rtt_us() {
+  _impl_.last_rtt_us_ = 0u;
+}
+inline uint32_t C_HEARTBEAT::_internal_last_rtt_us() const {
+  return _impl_.last_rtt_us_;
+}
+inline uint32_t C_HEARTBEAT::last_rtt_us() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_HEARTBEAT.last_rtt_us)
+  return _internal_last_rtt_us();
+}
+inline void C_HEARTBEAT::_internal_set_last_rtt_us(uint32_t value) {
+  
+  _impl_.last_rtt_us_ = value;
+}
+inline void C_HEARTBEAT::set_last_rtt_us(uint32_t value) {
+  _internal_set_last_rtt_us(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_HEARTBEAT.last_rtt_us)
+}
+
 // -------------------------------------------------------------------
 
 // S_HEARTBEAT
@@ -13356,6 +13460,26 @@ inline void S_HEARTBEAT::_internal_set_server_ms(uint64_t value) {
 inline void S_HEARTBEAT::set_server_ms(uint64_t value) {
   _internal_set_server_ms(value);
   // @@protoc_insertion_point(field_set:Protocol.S_HEARTBEAT.server_ms)
+}
+
+// uint64 client_us = 3;
+inline void S_HEARTBEAT::clear_client_us() {
+  _impl_.client_us_ = uint64_t{0u};
+}
+inline uint64_t S_HEARTBEAT::_internal_client_us() const {
+  return _impl_.client_us_;
+}
+inline uint64_t S_HEARTBEAT::client_us() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_HEARTBEAT.client_us)
+  return _internal_client_us();
+}
+inline void S_HEARTBEAT::_internal_set_client_us(uint64_t value) {
+  
+  _impl_.client_us_ = value;
+}
+inline void S_HEARTBEAT::set_client_us(uint64_t value) {
+  _internal_set_client_us(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_HEARTBEAT.client_us)
 }
 
 #ifdef __GNUC__

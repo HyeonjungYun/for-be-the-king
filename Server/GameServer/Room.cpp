@@ -31,9 +31,6 @@
 namespace
 {
 	// 이동 예산 상수(VALIDATION_MARGIN · MAX_BUDGET_SEC)는 MovementValidator.h MoveRules 로 옮겼다 (2026-10-21)
-	constexpr uint64	MOVE_FLUSH_MS = 33;
-	constexpr uint64	COMBAT_FLUSH_MS = 33;
-	constexpr uint64	SPAWN_FLUSH_MS = 33;
 	constexpr int32		CC_STATE_TICKS = 30;
 
 	constexpr float		CAST_MOVE_EPSILON = 1.f;
@@ -246,6 +243,9 @@ static RoomRef MakeFloorRoom(uint32 floorId)
 	return room;
 }
 
+atomic<uint32> GFastTickMs = 33;
+atomic<uint32> GMonsterMoveEvery = 1;
+
 RoomRef GRooms[FLOOR_COUNT] =
 {
 	MakeFloorRoom(0),
@@ -319,13 +319,14 @@ Room::~Room()
 {
 }
 
-void Room::InitIdentity(uint32 floorId, RoomKind kind, uint64 instanceId, uint64 partyId, uint64 teamId)
+void Room::InitIdentity(uint32 floorId, RoomKind kind, uint64 instanceId, uint64 partyId, uint64 teamId, uint32 channel)
 {
 	_floorId = floorId;
 	_kind = kind;
 	_instanceId = instanceId;
 	_partyId = partyId;
 	_teamId = teamId;
+	_channel = channel;
 }
 
 // ── PVE 인스턴스 (ADR-0014) ──────────────────────────────────────────────
@@ -356,16 +357,24 @@ void Room::InitInstance()
 		chests++;
 	}
 
-	LOG_LINE << "[INST] create " << Tag() << " kind=" << (_kind == RoomKind::PveSolo ? "solo" : "coop") << " floor=" << _floorId
+	LOG_LINE << "[INST] create " << Tag() << " kind=" << (IsChannel() ? "pvp-channel" : _kind == RoomKind::PveSolo ? "solo" : "coop") << " floor=" << _floorId
 		<< " party=" << _partyId << " monsters=" << _monsters.size() << " chests=" << chests << " live=" << GInstances.LiveCount() << '\n';
 }
 
 void Room::StartLoops()
 {
 	DoAsync(&Room::UpdateTick);
-	DoAsync(&Room::FlushMoves);
-	DoAsync(&Room::FlushCombat);
-	DoAsync(&Room::FlushSpawns);
+	DoAsync(&Room::FastTick);
+}
+
+void Room::FastTick()
+{
+	if (_closing)
+		return;
+	FlushMoves();
+	FlushCombat();
+	FlushSpawns();
+	DoTimer(GFastTickMs.load(memory_order_relaxed), &Room::FastTick);
 }
 
 Protocol::RunMode Room::RunModeOf() const
@@ -383,6 +392,8 @@ string Room::Tag() const
 {
 	if (IsBaseCamp())
 		return "b" + to_string(_instanceId);
+	if (IsChannel())
+		return "w" + to_string(_floorId) + "-" + to_string(_channel);		// 채널 2.. (채널 1 은 예전 그대로 "w0")
 	return IsInstance() ? "i" + to_string(_instanceId) : "w" + to_string(_floorId);
 }
 
@@ -429,7 +440,21 @@ void Room::TryCloseInstance(uint64 nowUs)
 			players++;
 	}
 
-	switch (InstanceRules::JudgeClose(players, _pendingDeathCommits, _emptySinceUs, nowUs))
+	// 채널 - 가방(사망 가방)이 남아 있으면 닫지 않는다: 층 가방이라 남의 몫이다. 비어도 60 s 기다린다 (다시 차는 틈)
+	if (IsChannel())
+	{
+		for (const auto& [bagId, bag] : _bags)
+		{
+			if (bag->IsChest() == false)
+			{
+				_emptySinceUs = 0;
+				return;
+			}
+		}
+	}
+
+	switch (InstanceRules::JudgeClose(players, _pendingDeathCommits, _emptySinceUs, nowUs,
+		IsChannel() ? InstanceRules::CHANNEL_EMPTY_GRACE_US : InstanceRules::EMPTY_GRACE_US))
 	{
 	case InstanceRules::CloseVerdict::Keep:
 		if (players > 0)
@@ -471,7 +496,7 @@ void Room::CloseInstance()
 		GDBQueue.Push([bagIds, instanceIds](DBConnection* conn)
 			{
 				DeleteExpiredBags(conn, bagIds, instanceIds);
-			});
+			}, DBPriority::Low);
 	}
 
 	// 전역 몬스터 수를 맞춘다 - 살아 있던 것만 (죽은 것은 죽을 때 뺐다)
@@ -490,6 +515,7 @@ void Room::CloseInstance()
 	_packs.clear();
 	_dummySpawns.clear();
 	_objects.clear();
+	_playerCount.store(0);
 	_bags.clear();
 	_projectiles.clear();
 	_zones.clear();
@@ -609,8 +635,8 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		}
 		LogStats(player, "enter");
 
-		// PVE 인스턴스 (ADR-0014) - 팀은 들어오는 순간 정해지고 그 런 동안 그대로다(D6). 한 캐릭터는 한 인스턴스에 한 번(D3)
-		if (IsInstance())
+		// PVE 인스턴스 (ADR-0014) - 팀은 들어오는 순간 정해지고 그 런 동안 그대로다(D6). 한 캐릭터는 한 인스턴스에 한 번(D3). 채널은 층 방 규칙
+		if (IsInstance() && IsChannel() == false)
 		{
 			player->teamId = _teamId;
 			_enteredOnce.insert(player->objectInfo->object_id());
@@ -658,6 +684,7 @@ bool Room::EnterRoom(ObjectRef object, bool randPos)
 		Protocol::S_ENTER_GAME enterGamePkt;
 		enterGamePkt.set_success(true);
 		enterGamePkt.set_mode(RunModeOf());
+		enterGamePkt.set_channel(Channel());
 		if (IsBaseCamp() == false)
 			enterGamePkt.set_run_remaining_ms(static_cast<uint32>(EscapeConfig::Get().runLimitUs / 1000));
 
@@ -758,7 +785,7 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 	struct JoinRelease
 	{
 		Room* room;
-		~JoinRelease() { if (room->IsInstance()) GInstances.ReleaseJoin(room->InstanceId()); }
+		~JoinRelease() { GInstances.ReleaseJoinOf(*room); }		// 채널 1 (층 방) 의 예약도 (2026-11-21)
 	} release{ this };
 
 	// 적재하는 사이에 끊겼다 - 런이 시작되기 전이라 몸을 남기지 않는다.
@@ -779,8 +806,8 @@ bool Room::HandleEnterPlayer(PlayerRef player)
 	if (IsInstance())
 	{
 		if (_closing)
-			return RefuseInstanceJoin(player, "closed", Protocol::PARTY_NO_INSTANCE);
-		if (_enteredOnce.contains(player->objectInfo->object_id()))
+			return RefuseInstanceJoin(player, "closed", IsChannel() ? Protocol::PARTY_OK : Protocol::PARTY_NO_INSTANCE);
+		if (IsChannel() == false && _enteredOnce.contains(player->objectInfo->object_id()))
 			return RefuseInstanceJoin(player, "already entered once", Protocol::PARTY_ALREADY_ENTERED);
 	}
 
@@ -885,7 +912,7 @@ void Room::HandleMove(Protocol::C_MOVE pkt)
 		const uint64 dueUs = Utils::NowMicroseconds();
 		const SkillDef* castDef = SkillTable::Find(player->castSkillId);
 
-		if (castDef != nullptr && castDef->HasMovement() && player->castEndAtUs <= dueUs + COMBAT_FLUSH_MS * 1000)
+		if (castDef != nullptr && castDef->HasMovement() && player->castEndAtUs <= dueUs + static_cast<uint64>(GFastTickMs.load(memory_order_relaxed)) * 1000)
 		{
 			const float beforeX = player->posInfo->x();
 			const float beforeY = player->posInfo->y();
@@ -2736,7 +2763,8 @@ void Room::BeginDeathCommit(const CreatureRef& victim)
 	DeathSnapshot snap;
 	snap.characterId = characterId;
 	// PVE 인스턴스의 가방 행은 floor_id = 1000 + 층 - 재시작하면 부팅이 지운다. 공용 층(PvP)에 되살아나지 않는다 (ADR-0014 D10)
-	snap.floorId = IsInstance() ? InstanceRules::INSTANCE_BAG_FLOOR_BASE + _floorId : _floorId;
+	// 채널(2026-11-21)은 층 가방 - 재시작하면 채널 1(층 방)에 되살아난다
+	snap.floorId = (IsInstance() && IsChannel() == false) ? InstanceRules::INSTANCE_BAG_FLOOR_BASE + _floorId : _floorId;
 	snap.x = player->posInfo->x();
 	snap.y = player->posInfo->y();
 	snap.z = player->posInfo->z();
@@ -2827,7 +2855,7 @@ void Room::OnBagCreated(DeathSnapshot snap, bool ok)
 		vector<uint64> instanceIds;
 		for (const ItemEntry& e : snap.items)
 			instanceIds.push_back(e.instanceId);
-		GDBQueue.Push([bagIds, instanceIds](DBConnection* conn) { DeleteExpiredBags(conn, bagIds, instanceIds); });
+		GDBQueue.Push([bagIds, instanceIds](DBConnection* conn) { DeleteExpiredBags(conn, bagIds, instanceIds); }, DBPriority::Low);
 		LOG_LINE << "[INST] death bag after close " << Tag() << " - deleted bag=" << snap.bagId << '\n';
 		return;
 	}
@@ -3040,6 +3068,7 @@ void Room::HandleReattach(GameSessionRef session, PlayerRef body)
 	// 마감은 그대로 - 끊긴 동안에도 시간은 흘렀다 (escape-timer.md Core Rule 14)
 	enterPkt.set_run_remaining_ms(static_cast<uint32>(EscapeLogic::RemainingUs(body->runDeadlineUs, nowUs) / 1000));
 	enterPkt.set_mode(RunModeOf());		// 다시 붙은 방의 모드 - 클라가 재접속 뒤에도 PVE 인지 안다 (ADR-0014)
+	enterPkt.set_channel(Channel());
 	SEND_PACKET_DECLARATION(enterPkt);
 	session->Send(sendBuffer);
 
@@ -3150,30 +3179,71 @@ void Room::FlushMoves()
 		vector<MoveItem> infos;
 		infos.reserve(_dirtyMovers.size());
 
+		// 몬스터 이동은 N 틱에 한 번 (FBTK_MONSTER_MOVE_EVERY, 기본 1 = 매 틱. 2026-11-21 동접 1만). 몬스터는 순찰 길 · 추격을 따라
+		// 매끄럽게 움직여 클라가 보간하기 쉽다 - 그 사이 틱에는 담지 않고 다음 틱으로 넘긴다 (자리는 그때 최신 값이 나간다)
+		const uint32 monsterEvery = GMonsterMoveEvery.load(memory_order_relaxed);
+		const bool holdMonsters = monsterEvery > 1 && (++_moveTick % monsterEvery) != 0;
+		vector<uint64> held;
+
 		for (uint64 objectId : _dirtyMovers)
 		{
 			auto findIt = _objects.find(objectId);
 			if (findIt == _objects.end())
 				continue;
 
+			if (holdMonsters && findIt->second->objectInfo->creature_type() == Protocol::CREATE_TYPE_MONSTER)
+			{
+				held.push_back(objectId);
+				continue;
+			}
+
 			infos.push_back({ findIt->second->posInfo, findIt->second->IsCreature() });
 		}
 
 		_dirtyMovers.clear();
+		for (uint64 objectId : held)
+			_dirtyMovers.insert(objectId);
 
-		// 받는 사람마다 아는 생물의 이동만 (FoW). 내 것도 실린다 - 클라는 보정이 아닌 내 이동을 무시한다.
-		// 판정은 CanSee 와 같다: id 0 은 아니다 · FoW 꺼짐 · 나 · 아는 생물 · 생물이 아닌 것(가방 · 상자)은 보인다
-		const bool fow = Vision::Enabled();
-		SendListVisible<Protocol::S_MOVE>(infos,
-			[](Protocol::S_MOVE& pkt, const MoveItem& item) { pkt.add_infos()->CopyFrom(*item.info); },
-			[fow](const PlayerRef& viewer, const MoveItem& item)
-			{
-				const uint64 id = item.info->object_id();
-				return id != 0 && (fow == false || item.creature == false || id == viewer->objectInfo->object_id() || viewer->fowKnown.contains(id));
-			});
+		// 받는 사람마다 아는 생물의 이동만 (FoW). 판정은 CanSee 와 같다: id 0 은 아니다 · FoW 꺼짐 · 나 · 아는 생물 · 생물이 아닌 것(가방 · 상자)은 보인다.
+		// 내 것도 실린다(받는 사람 모두가 같은 버퍼를 쓰게) - 클라는 보정이 아닌 내 이동을 무시한다. 그래서 **보이는 것이 나뿐이면 보내지 않는다**
+		// (2026-11-21) - 예전엔 혼자 걷는 플레이어마다 자기 자리 하나짜리 S_MOVE 가 매 틱 나갔다
+		if (infos.empty() == false)
+		{
+			const bool fow = Vision::Enabled();
+			vector<uint32> kept;
+			kept.reserve(infos.size());
+			auto addInfo = [](Protocol::S_MOVE& pkt, const MoveItem& item) { pkt.add_infos()->CopyFrom(*item.info); };
+
+			SendVisible(static_cast<int32>(infos.size()),
+				[&](const PlayerRef& viewer)
+				{
+					kept.clear();
+					const uint64 self = viewer->objectInfo->object_id();
+					bool other = false;
+					for (uint32 i = 0; i < static_cast<uint32>(infos.size()); i++)
+					{
+						const uint64 id = infos[i].info->object_id();
+						if (id != 0 && (fow == false || infos[i].creature == false || id == self || viewer->fowKnown.contains(id)))
+						{
+							kept.push_back(i);
+							other = other || (id != self);
+						}
+					}
+					return other ? static_cast<int32>(kept.size()) : 0;
+				},
+				[&]() { Protocol::S_MOVE pkt; for (const MoveItem& item : infos) addInfo(pkt, item); return ServerPacketHandler::MakeSendBuffer(pkt); },
+				[&](const PlayerRef&)
+				{
+					thread_local Protocol::S_MOVE mine;
+					mine.Clear();
+					for (uint32 i : kept)
+						addInfo(mine, infos[i]);
+					return ServerPacketHandler::MakeSendBuffer(mine);
+				});
+		}
 	}
 
-	DoTimer(MOVE_FLUSH_MS, &Room::FlushMoves);
+	// 다시 걸기는 FastTick 이 (2026-11-21)
 }
 
 void Room::FlushCombat()
@@ -3385,7 +3455,7 @@ void Room::FlushCombat()
 		FlushCcState(nowUs);
 	}
 
-	DoTimer(COMBAT_FLUSH_MS, &Room::FlushCombat);
+	// 다시 걸기는 FastTick 이 (2026-11-21)
 }
 
 void Room::FlushSpawns()
@@ -3503,7 +3573,7 @@ void Room::FlushSpawns()
 			}
 		}
 	}
-	DoTimer(SPAWN_FLUSH_MS, &Room::FlushSpawns);
+	// 다시 걸기는 FastTick 이 (2026-11-21)
 }
 
 RoomRef Room::GetRoomRef()
@@ -3535,6 +3605,8 @@ bool Room::AddObject(ObjectRef object)
 		return false;
 
 	_objects.insert(make_pair(object->objectInfo->object_id(), object));
+	if (AsPlayer(object) != nullptr)
+		_playerCount.fetch_add(1, memory_order_relaxed);
 
 	object->room.store(GetRoomRef());
 
@@ -3549,6 +3621,8 @@ bool Room::RemoveObject(uint64 objectId)
 		return false;
 
 	it->second->room.store(weak_ptr<Room>());
+	if (AsPlayer(it->second) != nullptr)
+		_playerCount.fetch_sub(1, memory_order_relaxed);
 	_objects.erase(it);
 	ForgetObject(objectId);
 	_trailBuffPushedUs.erase(objectId);		// 월드 방은 영원히 산다 - 핏자국을 밟은 적 있는 사람마다 한 칸씩 쌓였다 (2026-10-17 리뷰)
@@ -7218,7 +7292,7 @@ void Room::StepTaunts(uint64 nowUs)
 
 	const SkillRules& rules = SkillTable::Rules();
 	const WallMap& walls = Walls();
-	constexpr float STEP_SEC = MOVE_FLUSH_MS / 1000.f;		// FlushMoves 간격 - 틱마다 같은 거리
+	const float STEP_SEC = GFastTickMs.load(memory_order_relaxed) / 1000.f;		// FastTick 간격 - 틱마다 같은 거리
 
 	for (uint64 targetId : _ccTargets)
 	{
@@ -7568,7 +7642,7 @@ void Room::SavePlayer(PlayerRef player)
 				hp, x, y, z, yaw, characterId);
 
 			conn->Execute(query);
-		});
+		}, DBPriority::Low);		// 1 분 주기 위치 저장 - 늦어도 된다 (2026-11-22)
 }
 
 void Room::UpdateSaves(uint64 nowUs)
@@ -7648,7 +7722,7 @@ void Room::UpdateBagExpiry(uint64 nowUs)
 	GDBQueue.Push([bagIds, instanceIds](DBConnection* conn)
 		{
 			DeleteExpiredBags(conn, bagIds, instanceIds);
-		});
+		}, DBPriority::Low);
 }
 
 void Room::UpdateChests(uint64 nowUs)

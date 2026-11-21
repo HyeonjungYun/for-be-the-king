@@ -17,6 +17,9 @@ namespace InstanceRules
 	// 마지막 사람이 나간 뒤 이만큼 비어 있으면 닫는다 - 사망 퇴장 · 탈출 직후 합류 요청이 오는 틈
 	constexpr uint64 EMPTY_GRACE_US = 3'000'000;
 
+	// PvP 채널 2.. (2026-11-21 동접 1만) - 비면 이만큼 기다렸다 닫는다. 인원이 오르내릴 때 채널을 열고 닫기를 반복하지 않게
+	constexpr uint64 CHANNEL_EMPTY_GRACE_US = 60'000'000;
+
 	enum class CloseVerdict : uint8
 	{
 		Keep,			// 사람이 있거나 사망 커밋이 남았다 - 그대로

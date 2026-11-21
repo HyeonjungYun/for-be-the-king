@@ -315,6 +315,11 @@ public:
 	void	PartyBetrayal(uint64 who, uint64 partyId, string betrayerName, vector<string> victimNames);
 	void	StartLoops();
 	bool	IsInstance() const { return _instanceId != 0; }
+	// PvP 층 채널 2.. (2026-11-21 동접 1만) - 등록부의 World 방. 층 방(채널 1)과 규칙이 같다: 다시 들어올 수 있고, 팀이 없고, 가방은 층 가방
+	bool	IsChannel() const { return _kind == RoomKind::World && _instanceId != 0; }
+	uint32	Channel() const { return _kind != RoomKind::World ? 0 : (_instanceId == 0 ? 1 : _channel); }
+	// 방 안 플레이어 몸 수 (살았든 죽었든 끊겼든) - 아무 스레드. 채널 고르기 (InstanceManager::PickWorld)
+	int32	PlayerCount() const { return _playerCount.load(memory_order_relaxed); }
 	Protocol::RunMode RunModeOf() const;
 	string	Tag() const;									// 로그용 - 층 방 "w0" · 인스턴스 "i17"
 
@@ -396,6 +401,9 @@ public:
 	void	FlushMoves();
 	void	FlushCombat();
 	void	FlushSpawns();
+	// 33 ms 한 번에 FlushMoves → FlushCombat → FlushSpawns (2026-11-21 동접 1만). 예전엔 셋이 따로 타이머를 걸어 같은 플레이어에게
+	// 33 ms 마다 WSASend 가 세 번 나갔고, 방마다 초당 타이머 예약이 90 번이었다. 이제 한 잡이라 송신도 한 번으로 묶인다
+	void	FastTick();
 
 	// 종료 경로 (2026-10-21) - 방의 모든 플레이어를 지금 저장한다 (UpdateSaves 와 같은 SavePlayer, 1 분 주기 · 틱당 2 명 상한 없이).
 	// 방 큐 안에서 돈다 - GameServer 가 접속을 닫은 뒤 room->DoAsync(&Room::SaveAllPlayers) 로 부른다. 타이머 · 방송 없음.
@@ -697,7 +705,7 @@ private:
 
 public:
 	// 방의 신원 - 만들 때 한 번 정하고(InitIdentity) 이후 읽기만 한다. 예전엔 public 필드라 InstanceManager 가 방 큐 밖에서 직접 썼다 (2026-10-21)
-	void		InitIdentity(uint32 floorId, RoomKind kind, uint64 instanceId, uint64 partyId, uint64 teamId);
+	void		InitIdentity(uint32 floorId, RoomKind kind, uint64 instanceId, uint64 partyId, uint64 teamId, uint32 channel = 0);
 	uint32		FloorId() const { return _floorId; }
 	RoomKind	Kind() const { return _kind; }
 	uint64		InstanceId() const { return _instanceId; }
@@ -711,6 +719,8 @@ private:
 	uint64								_partyId = 0;			// 협동 인스턴스를 가진 파티 (솔로 = 0)
 	uint64								_teamId = 0;			// 들어오는 플레이어가 받는 팀 (협동 = 파티 id, 솔로 = 0)
 	uint64								_key = 0;				// Key() - 생성자가 프로세스 안 일련번호를 준다
+	uint32								_channel = 0;			// Channel() - 채널 2.. 만 (층 방은 1)
+	atomic<int32>						_playerCount = 0;		// AddObject · RemoveObject 가 센다 (방 큐 안) - 밖에서는 읽기만
 
 	// 인스턴스 수명 - 방 큐 안에서만
 	void	TryCloseInstance(uint64 nowUs);
@@ -760,7 +770,8 @@ private:
 	vector<MonsterSlot>					_monsterSlots;
 	vector<unique_ptr<PackSlot>>		_packs;				// 무리 - 주소가 바뀌지 않게 unique_ptr (Monster::spawn 이 안을 가리킨다)
 	uint32								_pathBudget = 0;	// 이번 걸음에 남은 길 계산 수 (§ K - StepMonsters 가 채운다)
-	uint32								_audienceTick = 0;	// AC-3 계측 - FlushMoves 30 번(≈ 1 초)에 한 번 표본
+	uint32								_audienceTick = 0;
+	uint32								_moveTick = 0;		// FlushMoves 횟수 - 몬스터 이동 솎기 (GMonsterMoveEvery)	// AC-3 계측 - FlushMoves 30 번(≈ 1 초)에 한 번 표본
 	static constexpr uint32				AUDIENCE_SAMPLE_EVERY = 30;
 	unordered_map<uint64, shared_ptr<MonsterSpawnDef>>	_dummySpawns;	// 테스트 모드 더미의 자리 - Monster::spawn 이 가리킨다. 몬스터를 지울 때 함께
 	vector<BrainPlayer>					_brainPlayers;		// 판단 틱마다 다시 채운다 - 몬스터마다 _objects 를 훑지 않게
@@ -853,5 +864,12 @@ constexpr SpawnPoint FLOOR_SPAWN[FLOOR_COUNT] =
 };
 
 extern RoomRef GRooms[FLOOR_COUNT];
+
+// 방 빠른 틱 주기 (ms) - 이동 방송 · 전투 해소 · 스폰 (FastTick). FBTK_TICK_MS, 기본 33 (30 Hz). 2026-11-21 동접 1만:
+// 한 PC 에서 봇과 서버를 같이 돌리면 패킷 수(WSASend)가 CPU 를 먼저 다 쓴다 - 대규모 MMO 처럼 방송 주기를 낮춰 수용 인원을 늘리는 손잡이
+extern atomic<uint32> GFastTickMs;
+
+// 몬스터 이동 방송을 빠른 틱 N 번에 한 번 (FBTK_MONSTER_MOVE_EVERY, 기본 1 = 매 틱). 2026-11-21 동접 1만
+extern atomic<uint32> GMonsterMoveEvery;
 
 RoomRef GetRoomForFloor(uint32 floorId);

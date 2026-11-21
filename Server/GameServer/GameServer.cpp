@@ -6,6 +6,8 @@
 #include "GameSession.h"
 #include "GameSessionManager.h"
 #include <tchar.h>
+#include <timeapi.h>
+#pragma comment(lib, "winmm.lib")
 #include "Job.h"
 #include "Room.h"
 #include "ServerStats.h"
@@ -17,6 +19,8 @@
 #include "StarterKitTable.h"
 #include "BotLoadoutTable.h"
 #include "EventLog.h"
+#include "SamplingProfiler.h"
+#include "Cluster.h"
 #include "CsvTable.h"
 #include "AdminServer.h"
 #include "WallTable.h"
@@ -165,11 +169,14 @@ namespace
 		int32 quiet = 0;
 		WaitUntil([&quiet]() { quiet = (GGlobalQueue->Size() == 0) ? quiet + 1 : 0; return quiet >= 4; }, 2'000);
 
+		// 등록부에서 내려가고 이 서버의 접속 줄을 지운다 (2026-11-22) - 아래 DB 큐 비우기가 끝까지 돌린다
+		Cluster::Shutdown();
+
 		// 5. DB 큐 - 남은 저장(위치 · 사망 · 탈출 · 만료 · 안티치트)을 끝까지. 시간 안에 못 끝내도 런 끝 저장은 write-ahead 기록이 있어 다음 부팅이 끝낸다
 		const bool drained = WaitUntil([]() { return GDBQueue.GetPendingCount() == 0 && GDBQueue.GetDelayedCount() == 0; }, drainMs);
 		GDBQueue.Shutdown();		// 남은 작업을 한 번씩 돌리고 워커를 합친다
 
-		// 6. IOCP 워커 종료 - Dispatch(10 ms) 에서 깨어나 깃발을 본다
+		// 6. IOCP 워커 · 타이머 스레드 종료 - Dispatch(50 ms) · 타이머(최대 5 ms) 에서 깨어나 깃발을 본다
 		GWorkersStop.store(true);
 		GThreadManager->Join();
 
@@ -177,6 +184,7 @@ namespace
 			<< " took=" << (Utils::NowMicroseconds() - startUs) / 1000 << "ms\n";
 		GetLogger().Flush();
 		GAdmin.Stop();
+		SamplingProfiler::Stop();
 		GEvents.Flush();
 		GShutdownDone.store(true);
 	}
@@ -189,16 +197,46 @@ void DoWorkerJob(ServerServiceRef& service)
 		const uint64 nowMs = Utils::NowMilliseconds();
 		LEndTickCount = nowMs + WORKER_TICK;
 
-		// 네트워크 입출력 처리 -> 인게임 로직까지 (패킷 핸들러에 의해).
-		// 대기는 가장 이른 타이머까지만 (최대 10 ms) - 늘 10 ms 를 자면 33 ms Flush 예약이 그만큼 늦게 분배됐다 (2026-10-21)
-		service->GetIocpCore()->Dispatch(GJobTimer->MsUntilNext(nowMs, 10));
-
-		// 예약된 일감 처리
-		ThreadManager::DistributeReservedJobs();
+		// 네트워크 입출력 처리 -> 인게임 로직까지 (패킷 핸들러에 의해). 일이 없으면 잔다 - 글로벌 큐에 방이 들어오면 PostWake 가 깨운다.
+		// 타이머 분배는 전용 스레드 하나가 한다 (DoTimerJob, 2026-11-21). 예전엔 워커 전원이 가장 이른 타이머까지(최대 10 ms) 자고 깨어나
+		// 각자 분배 · 글로벌 큐를 들여다봤다 - 방이 수백 개면 워커가 쉬지 않고 깨어 봇 4,000 프로파일의 57 % 가 그 대기 · 깨어남이었다
+		service->GetIocpCore()->Dispatch(50);
 
 		// 글로벌 큐
 		ThreadManager::DoGlobalQueueWork();
 	}
+}
+
+// 타이머 분배 전용 (2026-11-21) - 가장 이른 예약까지 고해상도 타이머로 자고 깨어나 나눈다. 나눈 잡은 방 큐 → 글로벌 큐 → PostWake 로 워커에게
+void DoTimerJob()
+{
+	HANDLE timer = ::CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+	if (timer == nullptr)
+		::timeBeginPeriod(1);		// 고해상도 타이머가 없는 옛 Windows - Sleep 분해능을 1 ms 로
+
+	while (GWorkersStop.load() == false)
+	{
+		const uint64 nowMs = Utils::NowMilliseconds();
+		const uint32 waitMs = GJobTimer->MsUntilNext(nowMs, 5);
+		if (waitMs > 0)
+		{
+			if (timer != nullptr)
+			{
+				LARGE_INTEGER due;
+				due.QuadPart = -static_cast<LONGLONG>(waitMs) * 10'000;		// 100 ns 단위, 음수 = 지금부터
+				::SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE);
+				::WaitForSingleObject(timer, INFINITE);
+			}
+			else
+			{
+				::Sleep(waitMs);
+			}
+		}
+		ThreadManager::DistributeReservedJobs();
+	}
+
+	if (timer != nullptr)
+		::CloseHandle(timer);
 }
 
 int main(int argc, char* argv[])
@@ -234,6 +272,38 @@ int main(int argc, char* argv[])
 	LOG_LINE << "[BOOT] crash dumps -> " << config.crashDir << '\n';
 	config.LogSummary();
 
+	// 샘플링 프로파일러 (2026-11-21, SamplingProfiler.h) - FBTK_PROFILE=1 일 때만. 결과는 metrics 폴더의 profile-*.txt
+	{
+		string on, ms;
+		if (ServerConfig::ReadEnv("FBTK_PROFILE", on) && on == "1" && validateOnly == false)
+		{
+			const uint32 intervalMs = ServerConfig::ReadEnv("FBTK_PROFILE_MS", ms) ? static_cast<uint32>(::atoi(ms.c_str())) : 2u;
+			const string dir = config.metricsDir.empty() ? config.dataDir + "\\..\\Logs\\metrics" : config.metricsDir;
+			if (SamplingProfiler::Start(dir, intervalMs))
+				LOG_LINE << "[PROFILE] sampling every " << intervalMs << "ms -> " << dir << "\\profile-*.txt\n";
+		}
+	}
+
+	// 수용량 (2026-11-21 동접 1만 - docs/server-scaling-10k.md) - 세션을 만들기 전에
+	GRoomCap.store(config.roomCap);
+	GLoginInflight.store(config.loginInflight);
+	{
+		string skip;
+		if (ServerConfig::ReadEnv("FBTK_IOCP_SKIP", skip) && skip == "0")
+		{
+			Session::SetSkipCompletionOnSuccess(false);		// 즉시 완료 건너뛰기 끔 - 비교 · 비상용 (2026-11-21)
+			LOG_LINE << "[CONFIG] FBTK_IOCP_SKIP=0 - every I/O completes through the port (old behaviour)\n";
+		}
+	}
+	GetLogger().SetCoalesceMs(5);		// 로그 쓰기 스레드 - 5 ms 마다 묶어 쓴다 (줄마다 깨우지 않는다)
+	GEvents.SetCoalesceMs(5);
+	GFastTickMs.store(static_cast<uint32>(config.tickMs));
+	GMonsterMoveEvery.store(static_cast<uint32>(config.monsterMoveEvery));
+	GInstances.SetMaxRooms(config.maxInstances);
+	GSessionManager.SetMaxSessions(config.maxSessions);
+	Session::ConfigureRecvBuffer(config.recvBufferKb * 1024 <= 0x10000 ? config.recvBufferKb * 1024 : 0x10000,
+		config.recvBufferKb * 1024 <= 0x10000 ? 1 : (config.recvBufferKb * 1024 + 0xFFFF) / 0x10000);
+
 	ServerPacketHandler::Init();
 
 	// G2 · SV-5 - 아이템 이벤트가 만드는 송신량을 따로 본다. 가방 · 상자의 생성 · 소멸은 가상 칸으로 센다
@@ -243,7 +313,9 @@ int main(int argc, char* argv[])
 
 	// Dump 의 db queue 줄 - 큐 깊이는 여기서 넣는다 (ServerStats 는 DB 모듈을 모른다), 콘텐츠 값은 진행 중인 사망 저장 · 살아 있는 인스턴스
 	GStats.SetDbQueueProbe([](int32& pending, int32& delayed) { pending = GDBQueue.GetPendingCount(); delayed = GDBQueue.GetDelayedCount(); });
-	GStats.SetExtraLine([]() { return "death_commits=" + to_string(GDeathCommits.Count()) + " instances=" + to_string(GInstances.LiveCount()); });
+	GStats.SetExtraLine([]() { return "death_commits=" + to_string(GDeathCommits.Count()) + " instances=" + to_string(GInstances.LiveCount())
+		+ " channels=" + to_string(GInstances.ChannelCount(0)) + "/" + to_string(GInstances.ChannelCount(1)) + "/" + to_string(GInstances.ChannelCount(2)) + "/" + to_string(GInstances.ChannelCount(3))
+		+ " login_queue=" + to_string(LoginQueueWaiting()); });
 
 	// 통계 CSV - 사람이 읽는 블록과 같은 값을 행으로 (그래프 · 전후 비교). 못 열어도 서버는 돈다
 	if (config.metricsDir.empty() == false && validateOnly == false)
@@ -662,6 +734,18 @@ int main(int argc, char* argv[])
 		// 재처리가 만든 사망 가방은 아직 만료 전이라 정리에 걸리지 않고, LoadLiveBags 가 월드에 되살린다
 		const bool ok = EnsureCommitJournalTable(conn) && RestoreIdCounters(conn) && ReplayCommitJournal(conn, GCommitJournalDir)
 			&& PurgeExpiredBags(conn) && ValidateItemRows(conn) && LoadLiveBags(conn);
+
+		// 서버 여러 대 (2026-11-22) - 등록부에 올리고 지난번 이 서버가 남긴 접속 줄을 지운다. 실패해도 혼자 도는 서버로 연다
+		Cluster::Config cluster;
+		cluster.serverId = config.serverId;
+		cluster.host = config.publicHost;
+		cluster.port = config.port;
+		cluster.adminPort = config.adminPort;
+		cluster.maxSessions = config.maxSessions;
+		cluster.enabled = config.clusterOn;
+		Cluster::Init(cluster);
+		Cluster::Boot(conn);
+
 		GDBPool.Push(conn);
 
 		if (ok == false)
@@ -692,7 +776,7 @@ int main(int argc, char* argv[])
 		NetAddress(bindAddress, config.port),
 		make_shared<IocpCore>(),
 		[=]() { return make_shared<GameSession>(); },
-		100);
+		config.acceptPosts);		// 미리 걸어 두는 AcceptEx 수 (예전 100 고정, 2026-11-21)
 
 	ASSERT_CRASH(service->Start());
 	LOG_LINE << "[BOOT] listen port=" << config.port << " - accepting clients (bind=" << config.bindAddress << ")\n";
@@ -712,6 +796,9 @@ int main(int argc, char* argv[])
 			LOG_LINE << "[ADMIN] off - " << error << '\n';
 	}		// 검증 체크리스트 E1 이 찾는 줄 (2026-10-12)
 
+	// 글로벌 큐에 방이 들어오면 자는 워커 하나를 깨운다 (2026-11-21)
+	GGlobalQueue->SetWaker([iocp = service->GetIocpCore()]() { iocp->PostWake(); });
+
 	for (int32 i = 0; i < config.workerThreads; i++)
 	{
 		GThreadManager->Launch([&service]()
@@ -719,13 +806,11 @@ int main(int argc, char* argv[])
 				DoWorkerJob(service);
 			});
 	}
+	GThreadManager->Launch([]() { DoTimerJob(); });
 
 	for (int32 i = 0; i < FLOOR_COUNT; i++)
 	{
-		GRooms[i]->DoAsync(&Room::UpdateTick);
-		GRooms[i]->DoAsync(&Room::FlushMoves);
-		GRooms[i]->DoAsync(&Room::FlushCombat);
-		GRooms[i]->DoAsync(&Room::FlushSpawns);
+		GRooms[i]->StartLoops();		// UpdateTick 100 ms + FastTick 33 ms (이동 · 전투 · 스폰, 2026-11-21)
 	}
 
 	// 주 루프 - 10 초마다 통계 · 정리. 종료 신호가 오면 빠져나와 RunShutdown
@@ -737,6 +822,11 @@ int main(int argc, char* argv[])
 		this_thread::sleep_for(chrono::milliseconds(100));
 
 		const uint64 nowUs = Utils::NowMicroseconds();
+
+		// 서버 여러 대 - 등록부 갱신(5 s) · 다른 서버의 끊기 부탁 확인(1 s). DB 큐로 보낸다
+		Cluster::Tick(nowUs, service->GetCurrentSessionCount(),
+			GInstances.ChannelCount(0) + GInstances.ChannelCount(1) + GInstances.ChannelCount(2) + GInstances.ChannelCount(3));
+
 		if (nowUs - lastHousekeepingUs < HOUSEKEEPING_US)
 			continue;
 		lastHousekeepingUs = nowUs;

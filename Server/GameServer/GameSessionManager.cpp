@@ -29,22 +29,32 @@ namespace
 	}
 }
 
-bool GameSessionManager::Add(GameSessionRef session, const string& ip)
+GameSessionManager::AddResult GameSessionManager::Add(GameSessionRef session, const string& ip)
 {
 	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
+
+	// 동시 연결 상한 (2026-11-21) - 넘으면 받지 않는다. 메모리 · 방 수가 상한 안에 머물게 (docs/server-scaling-10k.md § 2-3)
+	if (_maxSessions > 0 && static_cast<int32>(_sessions.size()) >= _maxSessions)
+		return AddResult::ServerFull;
 
 	const int32 limit = MaxConnPerIp();
 	if (limit > 0 && ip.empty() == false && IsLoopback(ip) == false)
 	{
 		int32& count = _perIp[ip];
 		if (count >= limit)
-			return false;
+			return AddResult::TooManyFromIp;
 		count++;
 		_ipOf[session.get()] = ip;
 	}
 
 	_sessions.insert(session);
-	return true;
+	return AddResult::Ok;
+}
+
+int32 GameSessionManager::Count()
+{
+	WRITE_LOCK_ORDERED(LockLevel::REGISTRY);
+	return static_cast<int32>(_sessions.size());
 }
 
 void GameSessionManager::Remove(GameSessionRef session)

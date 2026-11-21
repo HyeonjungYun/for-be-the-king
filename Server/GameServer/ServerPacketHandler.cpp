@@ -16,6 +16,8 @@
 #include "Economy.h"
 #include "DBError.h"
 #include "DBStatement.h"
+#include "ServerStats.h"
+#include "Cluster.h"
 #include <sstream>
 #include <thread>
 
@@ -526,6 +528,60 @@ namespace
 	constexpr uint32 DUPLICATE_LOGIN_RETRY_MS = 500;
 
 	void RunLoginJob(DBConnection* conn, const GameSessionRef& gameSession, const string& token, uint64 queuedUs, int32 attempt);
+
+	// 서버 사이 중복 로그인 재시도 (Cluster.h, 2026-11-22) - attempt 가 이 값 이상이면 서버 사이 재시도 회차
+	constexpr int32		CLUSTER_RETRY_BASE = 10;
+	constexpr int32		CLUSTER_RETRY_MAX = 5;
+	constexpr uint32	CLUSTER_RETRY_MS = 1'000;
+
+	// 로그인 대기열 (FBTK_LOGIN_INFLIGHT, 2026-11-21 동접 1만 - docs/server-scaling-10k.md § 2-3). DB 로 동시에 보내는 로그인을 상한까지만 두고
+	// 나머지는 여기서 순서대로 기다린다 - 접속 폭주 때 DB 큐가 로그인으로 가득 차 런 끝 저장(사망 · 탈출)이 뒤로 밀리지 않게.
+	// 기다리는 동안 끊긴 연결은 DB 를 건드리지 않고 건너뛴다
+	namespace LoginGate
+	{
+		int32 Waiting();
+		mutex								lock;
+		deque<function<void(DBConnection*)>>	waiting;
+		int32								inflight = 0;
+
+		void Release();
+
+		void Submit(function<void(DBConnection*)> job)
+		{
+			const int32 cap = GLoginInflight.load();
+			{
+				lock_guard<mutex> guard(lock);
+				if (cap > 0 && inflight >= cap)
+				{
+					waiting.push_back(move(job));
+					return;
+				}
+				inflight++;
+			}
+			GDBQueue.Push([job = move(job)](DBConnection* conn) { job(conn); Release(); });
+		}
+
+		int32 Waiting()
+		{
+			lock_guard<mutex> guard(lock);
+			return static_cast<int32>(waiting.size());
+		}
+
+		void Release()
+		{
+			function<void(DBConnection*)> next;
+			{
+				lock_guard<mutex> guard(lock);
+				inflight--;
+				if (waiting.empty())
+					return;
+				next = move(waiting.front());
+				waiting.pop_front();
+				inflight++;
+			}
+			GDBQueue.Push([next = move(next)](DBConnection* conn) { next(conn); Release(); });
+		}
+	}
 }
 
 bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
@@ -569,7 +625,15 @@ bool Handle_C_LOGIN(PacketSessionRef& session, Protocol::C_LOGIN& pkt)
 	}
 
 	const uint64 queuedUs = Utils::NowMicroseconds();
-	GDBQueue.Push([gameSession, token, queuedUs](DBConnection* conn) { RunLoginJob(conn, gameSession, token, queuedUs, 0); });
+	LoginGate::Submit([gameSession, token, queuedUs](DBConnection* conn)
+		{
+			if (gameSession->IsConnected() == false)		// 대기열에서 기다리는 사이 끊겼다
+			{
+				gameSession->loginStarted.store(false);
+				return;
+			}
+			RunLoginJob(conn, gameSession, token, queuedUs, 0);
+		});
 
 	return true;
 }
@@ -670,6 +734,24 @@ namespace
 				}
 
 				LOG_LINE << "[LOGIN] already online - account=" << accountId << " (older connection did not release it in " << DUPLICATE_LOGIN_RETRY_MS << " ms)\n";
+				accountId = 0;
+			}
+
+			// 서버 여러 대 (2026-11-22 - Cluster.h) - 이 계정이 다른 서버에 붙어 있으면 그 서버에 끊기를 부탁하고 1 초 뒤 다시.
+			// attempt 10.. = 서버 사이 재시도 (5 번까지 - 그 서버는 1 초마다 부탁을 본다). 넘으면 실패로 답한다
+			if (accountId != 0 && Cluster::ClaimAccount(conn, accountId, 0) == Cluster::Claim::OtherServer)
+			{
+				GAccountManager.LogOut(accountId, gameSession.get());
+				const int32 clusterTry = (attempt >= CLUSTER_RETRY_BASE) ? attempt - CLUSTER_RETRY_BASE + 1 : 1;
+				if (clusterTry <= CLUSTER_RETRY_MAX)
+				{
+					GDBQueue.PushAfter(CLUSTER_RETRY_MS, [gameSession, token, queuedUs, clusterTry](DBConnection* next)
+						{
+							RunLoginJob(next, gameSession, token, queuedUs, CLUSTER_RETRY_BASE + clusterTry);
+						});
+					return;
+				}
+				LOG_LINE << "[LOGIN] online on another server - gave up after " << CLUSTER_RETRY_MAX << " tries. account=" << accountId << '\n';
 				accountId = 0;
 			}
 
@@ -786,9 +868,29 @@ namespace
 // 하트비트 (2026-10-21) - 로그인 전에도 받는다 (GameSession::AllowedBeforeLogin). 받은 시각은 OnRecvPacket 이 lastRecvUs 에 적는다
 bool Handle_C_HEARTBEAT(PacketSessionRef& session, Protocol::C_HEARTBEAT& pkt)
 {
+	// 클라가 잰 지난 왕복 (2026-11-21 동접 1만) - 서버 전체 지연 분포로 모은다. 0 = 아직 없음 (UE 클라 · 첫 하트비트)
+	if (pkt.last_rtt_us() != 0)
+		GStats.RecordClientRtt(pkt.last_rtt_us());
+
 	Protocol::S_HEARTBEAT reply;
 	reply.set_client_ms(pkt.client_ms());
+	reply.set_client_us(pkt.client_us());
 	reply.set_server_ms(Utils::NowMilliseconds());
+
+	// 방에 있으면 방 큐를 거쳐 답한다 - 그래야 왕복에 "방이 밀린 시간" 이 들어간다. 예전엔 IOCP 스레드에서 바로 답해 방 지연이 안 보였다
+	auto gameSession = static_pointer_cast<GameSession>(session);
+	if (PlayerRef player = gameSession->player.load())
+	{
+		if (RoomRef room = player->room.load().lock())
+		{
+			room->DoAsync([gameSession, reply]() mutable
+				{
+					SEND_PACKET_DECLARATION(reply);
+					gameSession->Send(sendBuffer);
+				});
+			return true;
+		}
+	}
 
 	SEND_PACKET_DECLARATION(reply);
 	session->Send(sendBuffer);
@@ -858,6 +960,8 @@ namespace
 		DropCampBody(session);
 
 		RoomRef room = GInstances.Create(RoomKind::BaseCamp, 0, 0, 0);
+		if (room == nullptr)
+			return reject("room limit (FBTK_MAX_INSTANCES)");		// 2026-11-21 - 동적 방 상한
 		PlayerRef player = ObjectUtils::CreatePlayer(session, characterId);
 		player->nakedMaxHp = (character.max_hp() > 0) ? character.max_hp() : BaseStats::MAX_HP;
 		player->maxHp = player->nakedMaxHp;
@@ -950,8 +1054,7 @@ namespace
 				{
 					LOG_LINE << "[ENTER] item load failed - char=" << player->objectInfo->object_id() << '\n';
 
-					if (room->IsInstance())
-						GInstances.ReleaseJoin(room->InstanceId());
+					GInstances.ReleaseJoinOf(*room);		// 인스턴스 · 채널 · 층 방 예약 모두 (2026-11-21)
 					gameSession->Disconnect(L"item load failed");
 					return;
 				}
@@ -1069,6 +1172,11 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 			return true;
 		}
 		room = GInstances.Create(RoomKind::PveSolo, floorId, 0, 0);
+		if (room == nullptr)
+		{
+			RejectEnter(gameSession, "room limit (FBTK_MAX_INSTANCES)", characterId);
+			return true;
+		}
 		break;
 
 	case Protocol::RUN_MODE_PVE_COOP:
@@ -1090,11 +1198,17 @@ bool Handle_C_ENTER_GAME(PacketSessionRef& session, Protocol::C_ENTER_GAME& pkt)
 			RejectEnter(gameSession, "party of 2+ asked for PvP", characterId, Protocol::PARTY_COOP_ONLY);
 			return true;
 		}
-		room = GetRoomForFloor(floorId);
+		// PvP 층 - 채널을 고른다 (2026-11-21 동접 1만). 차 있으면 같은 층의 다음 채널, 다 찼으면 새 채널. 입장 예약을 쥔다
+		room = GInstances.PickWorld(floorId, GRoomCap.load());
+		if (room == nullptr)
+		{
+			RejectEnter(gameSession, "no channel (FBTK_MAX_INSTANCES)", characterId);
+			return true;
+		}
 		break;
 	}
 
-	if (room->IsInstance())
+	if (room->IsInstance() && room->IsChannel() == false)
 		LOG_LINE << "[INST] enter char=" << characterId << " room=" << room->Tag() << " pulls=" << pulls.size() << '\n';
 
 	// 데려가는 멤버는 파티장과 같은 지점에 - [무작위] 면 여기서 한 번 뽑아 모두에게 준다 (둘레 고리로 펼쳐진다, AC-EP-04)
@@ -1834,3 +1948,6 @@ bool Handle_C_BAG_OPEN(PacketSessionRef& session, Protocol::C_BAG_OPEN& pkt)
 	room->DoAsync(&Room::HandleBagOpen, gameSession, pkt.bag_id());
 	return true;
 }
+
+// 로그인 대기열에서 기다리는 수 - 10 초 통계 줄 (GameServer.cpp SetExtraLine)
+int32 LoginQueueWaiting() { return LoginGate::Waiting(); }

@@ -164,6 +164,8 @@
     <ClCompile Include="StarterKitTable.cpp" />
     <ClCompile Include="BotLoadoutTable.cpp" />
     <ClCompile Include="EventLog.cpp" />
+    <ClCompile Include="SamplingProfiler.cpp" />
+    <ClCompile Include="Cluster.cpp" />
     <ClCompile Include="AdminServer.cpp" />
     <ClCompile Include="RoomAdmin.cpp" />
     <ClCompile Include="WallMap.cpp" />
@@ -239,6 +241,8 @@
     <ClInclude Include="StarterKitTable.h" />
     <ClInclude Include="BotLoadoutTable.h" />
     <ClInclude Include="EventLog.h" />
+    <ClInclude Include="SamplingProfiler.h" />
+    <ClInclude Include="Cluster.h" />
     <ClInclude Include="AdminServer.h" />
     <ClInclude Include="MoveClock.h" />
     <ClInclude Include="FloorBounds.h" />

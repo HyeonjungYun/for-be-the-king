@@ -6,6 +6,7 @@
 #include "Room.h"
 #include "AccountManager.h"
 #include "PartyManager.h"
+#include "Cluster.h"
 
 void GameSession::OnConnected()
 {
@@ -16,10 +17,30 @@ void GameSession::OnConnected()
 	for (wchar_t c : GetAddress().GetIpAddress())
 		ip.push_back(static_cast<char>(c < 128 ? c : '?'));
 
-	if (GSessionManager.Add(static_pointer_cast<GameSession>(shared_from_this()), ip) == false)
+	switch (GSessionManager.Add(static_pointer_cast<GameSession>(shared_from_this()), ip))
 	{
+	case GameSessionManager::AddResult::Ok:
+		break;
+
+	case GameSessionManager::AddResult::TooManyFromIp:
 		LOG_LINE << "[RATE] too many connections from " << ip << " - refused\n";
 		Disconnect(L"too many connections from this address");
+		break;
+
+	case GameSessionManager::AddResult::ServerFull:
+	{
+		// 동시 연결 상한 (FBTK_MAX_SESSIONS, 2026-11-21) - 이유를 알리고 끊는다. 클라는 "서버가 가득 찼습니다"
+		static atomic<uint64> s_fullCount = 0;
+		const uint64 n = ++s_fullCount;
+		if (n <= 5 || n % 1000 == 0)
+			LOG_LINE << "[CAPACITY] server full - refused " << ip << " (total refused " << n << ")\n";
+		Protocol::S_KICK kickPkt;
+		kickPkt.set_reason(Protocol::KICK_REASON_SERVER_FULL);
+		SEND_PACKET_DECLARATION(kickPkt);
+		Send(sendBuffer);
+		Disconnect(L"server full");
+		break;
+	}
 	}
 }
 
@@ -103,7 +124,9 @@ void GameSession::OnDisconnected()
 	LOG_LINE << "[DISCONNECT] begin char=" << characterId << " account=" << accountId.load() << " place=" << static_cast<int32>(place.load()) << '\n';
 	GParties.OnDisconnected(characterId, place.load());
 
-	GAccountManager.LogOut(accountId.exchange(0), this);		// 주인이 나일 때만 - 중복 로그인으로 밀려난 옛 연결이 새 연결의 계정을 풀지 않게
+	const uint64 leavingAccount = accountId.exchange(0);
+	GAccountManager.LogOut(leavingAccount, this);		// 주인이 나일 때만 - 중복 로그인으로 밀려난 옛 연결이 새 연결의 계정을 풀지 않게
+	Cluster::ReleaseAccount(leavingAccount);			// 서버 여러 대 - 접속 계정 표에서 (그 사이 다시 붙었으면 지우지 않는다, 2026-11-22)
 
 	PlayerRef leavingPlayer = player.load();
 

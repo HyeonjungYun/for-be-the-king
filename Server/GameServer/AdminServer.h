@@ -50,6 +50,7 @@ private:
 	string	MetricsJson();
 	string	Kick(uint64 characterId, const string& reason);
 	string	Notice(const string& text);
+	void	ClusterList(const ClientRef& client);		// 등록부 - 서버 여러 대 (2026-11-22)
 	void	Unban(const ClientRef& client, uint64 accountId, const string& name);
 
 	AdminConfig				_config;

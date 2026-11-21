@@ -427,6 +427,12 @@ void EventLog::Emit(const char* tag, const char* sub, vector<uint64> actors, vec
 	_writer->Push(EventFormat::ToJson(e, _seq.fetch_add(1) + 1, "ev", data) + "\n");
 }
 
+void EventLog::SetCoalesceMs(uint32 ms)
+{
+	if (_writer != nullptr)
+		_writer->SetCoalesceMs(ms);
+}
+
 void EventLog::SetSubscriber(Subscriber subscriber)
 {
 	std::lock_guard<std::mutex> guard(_ringLock);

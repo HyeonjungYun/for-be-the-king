@@ -49,6 +49,21 @@ struct ServerConfig
 	uint64		idleTimeoutUs = 30'000'000;		// FBTK_IDLE_TIMEOUT_MS - 로그인한 연결이 아무 패킷도 안 보내면 끊는다 (클라 · 봇은 5 s 마다 C_HEARTBEAT). 0 = 끔
 	uint32		shutdownDrainMs = 10'000;		// FBTK_SHUTDOWN_DRAIN_MS - Ctrl+C 뒤 DB 큐를 기다리는 상한 (창 닫기는 2.5 s 고정)
 
+	// ── 수용량 (2026-11-21 동접 1만 - docs/server-scaling-10k.md) ──
+	int32		roomCap = 30;					// FBTK_ROOM_CAP - PvP 층 방(채널) 하나의 인원. 차면 같은 층의 새 채널을 연다. 0 = 예전처럼 층마다 방 하나
+	int32		maxSessions = 12'000;			// FBTK_MAX_SESSIONS - 동시 연결 상한. 넘으면 S_KICK{SERVER_FULL} 후 끊는다. 0 = 끔
+	int32		maxInstances = 3'000;			// FBTK_MAX_INSTANCES - PVE · 베이스캠프 · 채널 방을 합한 동적 방 상한. 넘으면 입장 거절. 0 = 끔
+	int32		recvBufferKb = 4;				// FBTK_RECV_BUFFER_KB - 세션 수신 버퍼 처음 크기 (모자라면 커진다). 예전 고정 640 KB
+	int32		acceptPosts = 256;				// FBTK_ACCEPT_POSTS - 미리 걸어 두는 AcceptEx 수 (예전 100 고정). 접속이 몰릴 때 대기열
+	// ── 서버 여러 대 (2026-11-22 동접 1만 2 단계 - Cluster.h) ──
+	uint32		serverId = 1;					// FBTK_SERVER_ID - 등록부 · 접속 계정 표의 이 서버 번호
+	string		publicHost = "127.0.0.1";		// FBTK_PUBLIC_HOST - 클라가 붙을 주소 (방 배정이 알려 준다)
+	bool		clusterOn = true;				// FBTK_CLUSTER=0 이면 등록부 · 계정 표를 쓰지 않는다 (표가 없는 옛 DB)
+
+	int32		monsterMoveEvery = 1;			// FBTK_MONSTER_MOVE_EVERY - 몬스터 이동은 빠른 틱 N 번에 한 번 방송 (1 = 매 틱)
+	int32		tickMs = 33;					// FBTK_TICK_MS - 방 빠른 틱(이동 방송 · 전투 해소) 주기. 33 = 30 Hz (기본 · 설계값), 50 = 20 Hz, 66 = 15 Hz
+	int32		loginInflight = 64;				// FBTK_LOGIN_INFLIGHT - DB 로 동시에 보내는 로그인 수. 나머지는 서버 안 대기열에서 순서대로. 0 = 끔
+
 #if FBTK_TEST_HOOKS
 	// ── 시험 전용 훅 - 검증 하네스가 고장 · 지연 · 디버그 명령을 주입한다. 배포 빌드에는 없다 ──
 	struct Hooks

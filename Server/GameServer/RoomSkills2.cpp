@@ -409,7 +409,7 @@ void Room::StepClones(uint64 nowUs)
 		return;
 
 	const WallMap& walls = Walls();
-	const float dtSec = 0.033f;		// FlushMoves 주기 (MOVE_FLUSH_MS) - 분신은 정확한 시계가 필요 없다
+	const float dtSec = GFastTickMs.load(memory_order_relaxed) / 1000.f;		// FastTick 주기 - 분신은 정확한 시계가 필요 없다
 
 	const vector<uint64> ids(_clones.begin(), _clones.end());
 	for (uint64 id : ids)

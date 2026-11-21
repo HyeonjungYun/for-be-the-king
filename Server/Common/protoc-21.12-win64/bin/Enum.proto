@@ -214,4 +214,5 @@ enum KickReason
 	KICK_REASON_BANNED = 2;			// the account is suspended until banned_until
 	KICK_REASON_DUPLICATE_LOGIN = 3;	// the same account logged in from another connection - this older one is closed (2026-10-21)
 	KICK_REASON_SERVER_SHUTDOWN = 4;	// the server is shutting down cleanly (2026-10-21)
+	KICK_REASON_SERVER_FULL = 5;		// the server is at its concurrent-user limit (FBTK_MAX_SESSIONS) - try again later (2026-11-21)
 }

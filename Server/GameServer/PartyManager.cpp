@@ -524,6 +524,11 @@ PartyManager::CoopEnter PartyManager::BeginCoopEnter(const GameSessionRef& reque
 
 		// 파티장이 연다 - 팀 = 파티 id (그 런 동안 바뀌지 않는다, D6)
 		out.room = GInstances.Create(RoomKind::PveCoop, floorId, out.partyId, out.partyId);
+		if (out.room == nullptr)
+		{
+			out.result = Protocol::PARTY_NO_INSTANCE;		// 동적 방 상한 (FBTK_MAX_INSTANCES, 2026-11-21)
+			return out;
+		}
 		_book.BindInstance(out.partyId, out.room->InstanceId());
 
 		for (const PartyMemberEntry& m : party->members)

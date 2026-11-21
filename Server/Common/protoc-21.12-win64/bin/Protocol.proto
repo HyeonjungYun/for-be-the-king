@@ -30,6 +30,7 @@ message S_ENTER_GAME
 	ObjectInfo player = 2;
 	uint32 run_remaining_ms = 3;	// stay timer left, also on reattach. 0 = unknown (escape-timer.md Core Rule 15)
 	RunMode mode = 4;				// the mode of the room I am in - also on reattach
+	uint32 channel = 5;				// PvP floor channel I was placed in (1 = first). 0 = not a PvP floor room (2026-11-21)
 }
 
 message C_LEAVE_GAME
@@ -357,10 +358,13 @@ message S_KICK
 message C_HEARTBEAT
 {
 	uint64 client_ms = 1;
+	uint64 client_us = 2;			// 2026-11-21 - microsecond clock for loopback RTT (bots). 0 = not sent
+	uint32 last_rtt_us = 3;			// the client's previous measured round trip - the server aggregates it (latency gate). 0 = none yet
 }
 
 message S_HEARTBEAT
 {
 	uint64 client_ms = 1;			// echoed - the client computes the round trip
 	uint64 server_ms = 2;			// the server's steady clock (ms) - informational
+	uint64 client_us = 3;			// echoed C_HEARTBEAT.client_us (2026-11-21)
 }

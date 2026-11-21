@@ -10,7 +10,12 @@ public:
 	// IP 당 연결 수 상한 (보안 점검 H2 마지막 조각, 2026-10-18) - 넘으면 false (부르는 쪽이 끊는다). 루프백(127.x)은 봇 · 개발용이라 세지 않는다.
 	// 상한 = FBTK_MAX_CONN_PER_IP (기본 MAX_CONN_PER_IP_DEFAULT, 0 = 끔)
 	static constexpr int32	MAX_CONN_PER_IP_DEFAULT = 16;
-	bool Add(GameSessionRef session, const string& ip);
+
+	// 결과 - Ok 가 아니면 부르는 쪽이 끊는다. ServerFull = 동시 연결 상한 (FBTK_MAX_SESSIONS, 2026-11-21 동접 1만)
+	enum class AddResult : uint8 { Ok, TooManyFromIp, ServerFull };
+	AddResult Add(GameSessionRef session, const string& ip);
+	void SetMaxSessions(int32 maxSessions) { _maxSessions = maxSessions; }
+	int32 Count();
 	void Remove(GameSessionRef session);
 	int32 ConnectionsFrom(const string& ip);
 
@@ -38,6 +43,7 @@ public:
 
 private:
 	USE_LOCK;
+	int32 _maxSessions = 0;		// 0 = 상한 없음 - 부팅이 한 번 정한다
 	set<GameSessionRef> _sessions;
 	unordered_map<GameSession*, string>	_ipOf;		// 센 연결만 (루프백 제외)
 	unordered_map<string, int32>		_perIp;

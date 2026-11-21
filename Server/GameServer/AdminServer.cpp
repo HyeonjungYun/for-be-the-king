@@ -11,6 +11,7 @@
 #include "DBJobQueue.h"
 #include "DBConnection.h"
 #include "DBStatement.h"
+#include "Cluster.h"
 #include <bcrypt.h>
 #include <deque>
 #include <fstream>
@@ -346,7 +347,7 @@ void AdminServer::HandleLine(const ClientRef& c, const string& line)
 			for (size_t i = 0; i < size(EventFormat::TAGS); i++)
 				tags += string(i ? "," : "") + "\"" + EventFormat::TAGS[i] + "\"";
 			tags += "]";
-			Send(c, "{\"t\":\"hello\",\"ok\":true,\"pid\":" + to_string(::GetCurrentProcessId()) + ",\"port\":" + to_string(_config.gamePort)
+			Send(c, "{\"t\":\"hello\",\"ok\":true,\"pid\":" + to_string(::GetCurrentProcessId()) + ",\"server_id\":" + to_string(Cluster::ServerId()) + ",\"port\":" + to_string(_config.gamePort)
 				+ ",\"admin_port\":" + to_string(_config.port) + ",\"boot\":\"" + _boot + "\",\"dataDir\":\"" + JsonEscape(_config.dataDir) + "\""
 				+ ",\"eventsFile\":\"" + JsonEscape(GEvents.FilePath()) + "\",\"tags\":" + tags + "}");
 			LOG_LINE << "[ADMIN] client authenticated - " << AdminJson::GetString(line, "client") << '\n';
@@ -394,6 +395,8 @@ void AdminServer::HandleLine(const ClientRef& c, const string& line)
 	}
 	else if (op == "kick")
 		Send(c, Kick(static_cast<uint64>(AdminJson::GetInt(line, "id")), AdminJson::GetString(line, "reason")));
+	else if (op == "cluster")
+		ClusterList(c);
 	else if (op == "unban")
 		Unban(c, static_cast<uint64>(AdminJson::GetInt(line, "account")), AdminJson::GetString(line, "name"));
 	else if (op == "notice")
@@ -509,13 +512,19 @@ string AdminServer::PlayerJson(uint64 characterId)
 string AdminServer::MetricsJson()
 {
 	const ServerStats::Snapshot s = GStats.GetSnapshot();
-	char buf[640];
+	const int32 channels = GInstances.ChannelCount(0) + GInstances.ChannelCount(1) + GInstances.ChannelCount(2) + GInstances.ChannelCount(3);
+	char buf[1024];
+	// 지연 (2026-11-21 동접 1만) - 잡 대기 · 클라가 잰 왕복 P50/P95/P99/max · 채널 수 · 로그인 대기열 · 서버 번호
 	::snprintf(buf, sizeof(buf),
 		"{\"t\":\"metrics\",\"m\":{\"seq\":%llu,\"sessions\":%d,\"flush_n\":%llu,\"flush_p95_us\":%llu,\"flush_p99_us\":%llu,\"flush_max_us\":%llu,"
 		"\"recv_mbps\":%.3f,\"sent_mbps\":%.3f,\"per_client_kbps\":%.1f,\"move_reject\":%llu,\"commit_mb\":%.1f,\"workingset_mb\":%.1f,"
-		"\"db_pending\":%d,\"db_delayed\":%d,\"instances\":%d,\"events\":%llu}}",
+		"\"db_pending\":%d,\"db_delayed\":%d,\"instances\":%d,\"events\":%llu,"
+		"\"jobwait_p95_us\":%llu,\"jobwait_p99_us\":%llu,\"jobwait_max_us\":%llu,\"rtt_n\":%llu,\"rtt_p50_us\":%llu,\"rtt_p95_us\":%llu,\"rtt_p99_us\":%llu,\"rtt_max_us\":%llu,"
+		"\"channels\":%d,\"login_queue\":%d,\"server_id\":%u}}",
 		s.seq, s.sessions, s.flushCount, s.flushP95Us, s.flushP99Us, s.flushMaxUs, s.recvMbps, s.sentMbps, s.perClientKbps, s.moveRejects,
-		s.commitMB, s.workingSetMB, s.dbPending, s.dbDelayed, GInstances.LiveCount(), static_cast<unsigned long long>(GEvents.Count()));
+		s.commitMB, s.workingSetMB, s.dbPending, s.dbDelayed, GInstances.LiveCount(), static_cast<unsigned long long>(GEvents.Count()),
+		s.jobWaitP95Us, s.jobWaitP99Us, s.jobWaitMaxUs, s.rttCount, s.rttP50Us, s.rttP95Us, s.rttP99Us, s.rttMaxUs,
+		channels, LoginQueueWaiting(), Cluster::ServerId());
 	return buf;
 }
 
@@ -550,6 +559,32 @@ string AdminServer::Notice(const string& text)
 	}
 	LOG_LINE << "[ADMIN] notice sent=" << sent << " text=\"" << text << "\"\n";
 	return Result("notice", true, "공지를 " + to_string(sent) + " 명에게 보냈다");
+}
+
+// 서버 여러 대 (2026-11-22) - 등록부(game_servers) 를 읽어 그대로 (DB 큐). 표가 없으면 빈 목록
+void AdminServer::ClusterList(const ClientRef& client)
+{
+	weak_ptr<Client> weak = client;
+	GDBQueue.Push([this, weak](DBConnection* conn)
+		{
+			ClientRef c = weak.lock();
+			if (c == nullptr)
+				return;
+			string list;
+			MYSQL_RES* res = conn->Query("SELECT server_id, host, port, admin_port, ccu, max_sessions, channels, status, "
+				"TIMESTAMPDIFF(SECOND, updated_at, NOW()), TIMESTAMPDIFF(SECOND, started_at, NOW()) FROM game_servers ORDER BY server_id");
+			if (res != nullptr)
+			{
+				while (MYSQL_ROW row = ::mysql_fetch_row(res))
+				{
+					list += string(list.empty() ? "" : ",") + "{\"id\":" + row[0] + ",\"host\":\"" + JsonEscape(row[1] ? row[1] : "") + "\",\"port\":" + row[2]
+						+ ",\"admin_port\":" + row[3] + ",\"ccu\":" + row[4] + ",\"max\":" + row[5] + ",\"channels\":" + row[6]
+						+ ",\"status\":\"" + JsonEscape(row[7] ? row[7] : "") + "\",\"age\":" + (row[8] ? row[8] : "0") + ",\"uptime\":" + (row[9] ? row[9] : "0") + "}";
+				}
+				conn->FreeResult(res);
+			}
+			Send(c, "{\"t\":\"cluster\",\"self\":" + to_string(Cluster::ServerId()) + ",\"servers\":[" + list + "]}");
+		});
 }
 
 void AdminServer::Unban(const ClientRef& client, uint64 accountId, const string& name)

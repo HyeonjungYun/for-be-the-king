@@ -118,6 +118,18 @@ ServerConfig ServerConfig::FromEnv()
 	c.idleTimeoutUs = EnvU64("FBTK_IDLE_TIMEOUT_MS", c.idleTimeoutUs / 1000) * 1000;
 	c.shutdownDrainMs = EnvU32("FBTK_SHUTDOWN_DRAIN_MS", c.shutdownDrainMs);
 
+	c.roomCap = (std::clamp)(EnvI32("FBTK_ROOM_CAP", c.roomCap), 0, 10'000);
+	c.maxSessions = (std::clamp)(EnvI32("FBTK_MAX_SESSIONS", c.maxSessions), 0, 1'000'000);
+	c.maxInstances = (std::clamp)(EnvI32("FBTK_MAX_INSTANCES", c.maxInstances), 0, 1'000'000);
+	c.recvBufferKb = (std::clamp)(EnvI32("FBTK_RECV_BUFFER_KB", c.recvBufferKb), 1, 640);
+	c.acceptPosts = (std::clamp)(EnvI32("FBTK_ACCEPT_POSTS", c.acceptPosts), 1, 4'096);
+	c.loginInflight = (std::clamp)(EnvI32("FBTK_LOGIN_INFLIGHT", c.loginInflight), 0, 100'000);
+	c.tickMs = (std::clamp)(EnvI32("FBTK_TICK_MS", c.tickMs), 16, 200);
+	c.monsterMoveEvery = (std::clamp)(EnvI32("FBTK_MONSTER_MOVE_EVERY", c.monsterMoveEvery), 1, 10);
+	c.serverId = (std::max)(1u, EnvU32("FBTK_SERVER_ID", c.serverId));
+	c.publicHost = EnvStr("FBTK_PUBLIC_HOST", c.publicHost);
+	c.clusterOn = EnvOffSwitch("FBTK_CLUSTER", true);
+
 #if FBTK_TEST_HOOKS
 	c.hooks.failDeathCommit = EnvOnSwitch("FBTK_FAIL_DEATH_COMMIT");
 	c.hooks.deathCommitDelayMs = EnvU32("FBTK_DEATH_COMMIT_DELAY_MS", 0);
@@ -155,6 +167,13 @@ void ServerConfig::LogSummary() const
 		<< " bot_regear=" << (botRegear ? 1 : 0) << " bot_loadouts=" << (botLoadouts ? 1 : 0)
 		<< " disconnect_grace=" << disconnectGraceUs / 1000 << "ms idle_timeout=" << idleTimeoutUs / 1000 << "ms shutdown_drain=" << shutdownDrainMs << "ms"
 		<< " route_seed=" << (routeSeed != 0 ? to_string(routeSeed) : string("boot-time")) << '\n';
+	LOG_LINE << "[CONFIG] capacity room_cap=" << (roomCap == 0 ? string("off (one room per floor)") : to_string(roomCap))
+		<< " max_sessions=" << (maxSessions == 0 ? string("off") : to_string(maxSessions))
+		<< " max_instances=" << (maxInstances == 0 ? string("off") : to_string(maxInstances))
+		<< " recv_buffer=" << recvBufferKb << "KB accept_posts=" << acceptPosts
+		<< " login_inflight=" << (loginInflight == 0 ? string("off") : to_string(loginInflight))
+		<< " tick=" << tickMs << "ms (" << 1000 / tickMs << " Hz) monster_move_every=" << monsterMoveEvery << '\n';
+	LOG_LINE << "[CONFIG] cluster " << (clusterOn ? "on" : "OFF") << " server_id=" << serverId << " public_host=" << publicHost << '\n';
 	LOG_LINE << "[CONFIG] journal=" << journalDir << " metrics=" << (metricsDir.empty() ? string("off") : metricsDir) << " crash=" << crashDir << '\n';
 	LOG_LINE << "[CONFIG] events=" << (eventsDir.empty() ? string("off (admin port only)") : eventsDir)
 		<< " admin=" << (adminPort == 0 ? string("off") : "127.0.0.1:" + to_string(adminPort) + " info=" + adminFile) << '\n';

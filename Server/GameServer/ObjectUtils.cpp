@@ -1227,7 +1227,7 @@ namespace
 		if (DBError::IsConnectionLost(err) || conn->IsConnected() == false)
 			conn->Reconnect();
 
-		GDBQueue.PushAfter(step.delayMs, [task](DBConnection* next) { RunCommit(task, next); });
+		GDBQueue.PushAfter(step.delayMs, [task](DBConnection* next) { RunCommit(task, next); }, DBPriority::High);
 	}
 
 	CommitOutcome AttemptJournal(DBConnection* conn, JournalEntry& entry, CommitMode mode)
@@ -1262,7 +1262,7 @@ void QueueCommit(JournalEntry journal,
 	// write-ahead - 큐에 들어가기 전에 디스크에 있다. 여기서 못 썼으면 RunCommit 의 재시도 경로가 다시 시도한다
 	WriteJournalOnce(task, /*ahead*/ true);
 
-	GDBQueue.Push([task](DBConnection* conn) { RunCommit(task, conn); });
+	GDBQueue.Push([task](DBConnection* conn) { RunCommit(task, conn); }, DBPriority::High);		// 런 끝 저장 - 로그인 폭주 뒤에 줄 서지 않게 (2026-11-22)
 }
 
 bool EnsureCommitJournalTable(DBConnection* conn)
