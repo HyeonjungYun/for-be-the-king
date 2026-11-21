@@ -168,6 +168,24 @@ void US1LoginSubsystem::RequestLogin(const FString& Username, const FString& Pas
 			// 🔴 The token is a password for the next 60 minutes - never logged (ADR-0011 R-6)
 			Token = NewToken;
 			UE_LOG(LogTemp, Log, TEXT("[LOGIN] auth ok"));
+
+			// 방 배정 (2026-11-22 동접 1만 2 단계) - 인증 서버가 가장 여유 있는 게임 서버를 골라 준다. 없으면(서버 하나 · 옛 인증 서버) 설정 주소 그대로
+			const TSharedPtr<FJsonObject>* Server = nullptr;
+			if (Json->TryGetObjectField(TEXT("game_server"), Server) && Server != nullptr && Server->IsValid())
+			{
+				FString Host;
+				int32 AssignedPort = 0;
+				if ((*Server)->TryGetStringField(TEXT("host"), Host) && (*Server)->TryGetNumberField(TEXT("port"), AssignedPort)
+					&& AssignedPort > 0 && AssignedPort <= MAX_int16)
+				{
+					if (US1GameInstance* GameInstance = Cast<US1GameInstance>(GetGameInstance()))
+					{
+						GameInstance->IpAddress = Host;
+						GameInstance->Port = static_cast<int16>(AssignedPort);
+						UE_LOG(LogTemp, Log, TEXT("[LOGIN] lobby assigned %s:%d"), *Host, AssignedPort);
+					}
+				}
+			}
 			RequestCharacters();
 		});
 }
@@ -349,6 +367,11 @@ void US1LoginSubsystem::HandleKicked(int32 Reason, uint64 BannedUntil)
 	else if (Reason == 4 /*KICK_REASON_SERVER_SHUTDOWN*/)
 	{
 		Shown = Text(TEXT("login.error.server_shutdown"));
+	}
+	else if (Reason == 5 /*KICK_REASON_SERVER_FULL*/)
+	{
+		// 서버 동시 접속 상한 (FBTK_MAX_SESSIONS, 2026-11-22) - 잠시 뒤 다시
+		Shown = Text(TEXT("login.error.server_full"));
 	}
 	else
 	{
