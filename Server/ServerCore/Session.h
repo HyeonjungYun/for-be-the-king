@@ -30,9 +30,25 @@ public:
 	Session();
 	virtual ~Session();
 
+	// 이 프로세스에서 새로 만드는 세션의 수신 버퍼 처음 크기 = bufferSize × bufferCount (2026-11-21 동접 1만).
+	// 기본은 예전 그대로 64 KB × 10. 모자라면 RecvBuffer 가 키우고 비면 되돌린다. 세션을 만들기 전(부팅)에 한 번 부른다
+	static void			ConfigureRecvBuffer(int32 bufferSize, int32 bufferCount);
+
+	// FILE_SKIP_COMPLETION_PORT_ON_SUCCESS (2026-11-21 동접 1만 - docs/server-scaling-10k.md § 2-6). 켜면 그 자리에서 끝난
+	// WSASend · WSARecv · DisconnectEx 는 IOCP 완료를 만들지 않고 부른 스레드가 바로 마무리한다 - 루프백에서는 거의 모든 송신이 그렇다.
+	// 커널 왕복(완료 넣기 → GQCS 로 꺼내기)이 I/O 마다 하나 준다. 기본 켬. 레이어드 LSP 가 있는 옛 환경이면 끈다 (FBTK_IOCP_SKIP=0)
+	static void			SetSkipCompletionOnSuccess(bool on) { s_skipCompletion = on; }
+
+	// 거는 쪽(클라 · 봇) 소켓의 출발 주소 - 비면 아무 주소(예전 그대로). 한 PC 부하 시험에서 봇 프로세스마다 127.0.0.N 을 다르게 줘
+	// 직전 시험의 TIME_WAIT(같은 주소 · 포트 쌍, Windows 기본 120 s)에 새 접속이 걸려 멈추지 않게 한다 (2026-11-22)
+	static void			SetConnectBindAddress(const wstring& ip) { s_connectBindIp = ip; }
+	static int32		RecvBufferInitialBytes() { return s_recvBufferSize * s_recvBufferCount; }
+
 public:
 						/* 외부에서 사용 */
 	void				Send(SendBufferRef sendBuffer);
+	// LSendBatch 로 미뤄 둔 송신 등록을 지금 건다 (JobQueue::Execute 가 잡 묶음 끝에). Send 가 _sendRegistered 를 잡아 둔 상태에서만 부른다
+	void				FlushDeferredSend() { RegisterSend(); }
 	bool				Connect();
 	void				Disconnect(const WCHAR* cause);
 
@@ -55,7 +71,8 @@ private:
 private:
 						/* 전송 관련 */
 	bool				RegisterConnect();
-	bool				RegisterDisconnect();
+	enum class DisconnectStart : uint8 { Pending, Done, Failed };
+	DisconnectStart		RegisterDisconnect();
 	void				RegisterRecv();
 	void				RegisterSend();
 
@@ -63,6 +80,10 @@ private:
 	void				ProcessDisconnect();
 	void				ProcessRecv(int32 numOfBytes);
 	void				ProcessSend(int32 numOfBytes);
+
+	// 완료 하나를 마무리한다 - IOCP 완료(Process*)와 그 자리 완료(Register* 안 루프)가 같이 쓴다. true = 다시 걸어야 한다
+	bool				CompleteRecv(int32 numOfBytes);
+	bool				CompleteSend(int32 numOfBytes);
 
 	void				HandleError(int32 errorCode);
 
@@ -74,6 +95,12 @@ protected:
 	virtual void		OnDisconnected() { }
 
 private:
+	static inline bool	s_skipCompletion = true;
+	static inline wstring	s_connectBindIp;
+	bool				_skipCompletion = false;		// 이 소켓에 켜졌다 (ProcessConnect)
+	static inline int32	s_recvBufferSize = BUFFER_SIZE;
+	static inline int32	s_recvBufferCount = 10;
+
 	weak_ptr<Service>	_service;
 	SOCKET				_socket = INVALID_SOCKET;
 	NetAddress			_netAddress = {};

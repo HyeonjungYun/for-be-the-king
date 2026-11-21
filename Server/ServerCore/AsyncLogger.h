@@ -52,6 +52,10 @@ public:
 	// 넣는 쪽(Room 잡)이 그동안 멈추지 않는지 보는 데 쓴다 (FBTK_LOG_STALL_MS, roadmap.md § 0-11)
 	void		SetTestStall(uint32 stallMs, uint32 periodMs) { _stallMs.store(stallMs); _stallPeriodMs.store(periodMs); }
 
+	// 쓰기 스레드가 묶음 하나를 쓴 뒤 이만큼 쉬었다 다음 묶음을 모은다 (2026-11-21 동접 1만). 0 = 줄이 오자마자 (기본 · 테스트).
+	// 줄마다 쓰기 스레드를 깨우면 문맥 전환이 그만큼 일어난다 - 봇 4,000 프로파일에서 서버 CPU 샘플의 약 20 % 가 이 깨우기였다
+	void		SetCoalesceMs(uint32 ms) { _coalesceMs.store(ms); }
+
 private:
 	void		Run();
 	static void	WriteToStd(const std::string& text, bool toStderr);
@@ -78,6 +82,7 @@ private:
 	uint64					_droppedReported = 0;	// 쓰기 스레드 전용
 
 	std::atomic<uint32>		_stallMs = 0;
+	std::atomic<uint32>		_coalesceMs = 0;
 	std::atomic<uint32>		_stallPeriodMs = 0;
 	uint64					_nextStallTick = 0;		// 쓰기 스레드 전용
 

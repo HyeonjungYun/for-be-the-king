@@ -51,6 +51,12 @@ public:
 	// 잡 타이머가 예약 시각보다 늦게 분배한 시간 (ms) - 33 ms Flush 의 흔들림 (JobTimer::Distribute, 2026-10-21)
 	void			RecordTimerLate(uint64 lateMs);
 
+	// 지연 지표 (2026-11-21 동접 1만 - docs/server-scaling-10k.md § 1).
+	//   job wait   = 잡이 큐에 들어간 뒤 실행되기까지 (JobQueue::Execute). 방이 밀리면 패킷 처리가 늦는 시간 그대로
+	//   client rtt = 클라가 C_HEARTBEAT 로 알려 준 왕복 시간. 하트비트는 방 큐를 거쳐 답하므로 방 지연이 들어 있다
+	void			RecordJobWait(uint64 micros) { _jobWait.Record(micros); }
+	void			RecordClientRtt(uint64 micros) { _clientRtt.Record(micros); }
+
 	// 콘텐츠가 Dump 에 덧붙이는 줄 (진행 중인 런 끝 저장 수 등). ServerCore 는 그 값을 모른다
 	using ExtraLineFn = function<string()>;
 	void			SetExtraLine(ExtraLineFn fn) { _extraLine = move(fn); }
@@ -82,6 +88,15 @@ public:
 		double	workingSetMB = 0.0;
 		int32	dbPending = 0;
 		int32	dbDelayed = 0;
+		uint64	jobWaitCount = 0;
+		uint64	jobWaitP95Us = 0;
+		uint64	jobWaitP99Us = 0;
+		uint64	jobWaitMaxUs = 0;
+		uint64	rttCount = 0;
+		uint64	rttP50Us = 0;
+		uint64	rttP95Us = 0;
+		uint64	rttP99Us = 0;
+		uint64	rttMaxUs = 0;
 		string	extra;
 	};
 	Snapshot		GetSnapshot() const;
@@ -95,7 +110,34 @@ public:
 public:
 	static const uint64 BUCKET_UPPER_US[BUCKET_COUNT];
 
+	// 지연 분포 하나 - Flush 버킷보다 넓게 (1 s 까지). 아무 스레드에서 Record, Dump 가 Drain (구간 값)
+	struct Histogram
+	{
+		static constexpr int32	COUNT = 15;
+		static constexpr uint64	UPPER_US[COUNT] = { 250, 500, 1000, 2000, 4000, 8000, 16600, 33000, 50000, 100000, 200000, 500000, 1000000, 5000000, UINT64_MAX };
+
+		atomic<uint64>	buckets[COUNT] = {};
+		atomic<uint64>	count = 0;
+		atomic<uint64>	maxUs = 0;
+
+		void	Record(uint64 micros);
+
+		struct Drained
+		{
+			uint64	count = 0;
+			uint64	maxUs = 0;
+			uint64	p50Us = 0;
+			uint64	p95Us = 0;
+			uint64	p99Us = 0;
+		};
+		// 구간 값을 꺼내고 0 으로 - 백분위는 그 버킷의 위 경계 (마지막 칸이면 최대값)
+		Drained	Drain();
+	};
+
 private:
+	Histogram		_jobWait;
+	Histogram		_clientRtt;
+
 	atomic<uint64>	_flushBuckets[BUCKET_COUNT];
 	atomic<uint64>	_flushCount = 0;
 	atomic<uint64>	_flushMaxUs = 0;

@@ -22,9 +22,15 @@ namespace
 	Session
 ---------------*/
 
-Session::Session() : _recvBuffer(BUFFER_SIZE)
+Session::Session() : _recvBuffer(s_recvBufferSize, s_recvBufferCount)
 {
 	_socket = SocketUtils::CreateSocket();
+}
+
+void Session::ConfigureRecvBuffer(int32 bufferSize, int32 bufferCount)
+{
+	s_recvBufferSize = (max)(256, (min)(bufferSize, static_cast<int32>(BUFFER_SIZE)));
+	s_recvBufferCount = (max)(1, (min)(bufferCount, 10));
 }
 
 Session::~Session()
@@ -74,7 +80,14 @@ void Session::Send(SendBufferRef sendBuffer)
 	}
 
 	if (registerSend)
-		RegisterSend();
+	{
+		// 방 잡 묶음 안이면 미룬다 - 같은 묶음에서 이 세션에 가는 패킷(이동 · 전투 · 스폰 · 하트비트 답)을 WSASend 한 번으로 (2026-11-21).
+		// 예전엔 패킷마다 바로 WSASend 를 걸어, 봇 2,000 프로파일에서 서버 CPU 의 37 % 가 WSASend 커널 호출이었다
+		if (LSendBatch != nullptr)
+			LSendBatch->push_back(GetSessionRef());
+		else
+			RegisterSend();
+	}
 }
 
 bool Session::Connect()
@@ -92,11 +105,18 @@ void Session::Disconnect(const WCHAR* cause)
 	// DisconnectEx 가 그 자리에서 실패하면 Disconnect 완료가 영영 오지 않는다 - 예전엔 그대로 돌아가 OnDisconnected · ReleaseSession 이
 	// 불리지 않았고, 세션과 계정이 관리자에 남아 서버를 다시 켤 때까지 "already online" 이었다. 소켓을 닫고 정리는 직접 한다 (2026-10-21).
 	// 닫힌 소켓의 대기 중 수신은 오류 완료로 돌아와 ProcessRecv → Disconnect 를 다시 부르지만 _connected 가 이미 false 라 아무 일도 없다
-	if (RegisterDisconnect() == false)
+	switch (RegisterDisconnect())
 	{
+	case DisconnectStart::Pending:
+		break;
+	case DisconnectStart::Done:
+		ProcessDisconnect();		// 그 자리에서 끝났다 - 완료가 오지 않는다 (FILE_SKIP_COMPLETION_PORT_ON_SUCCESS)
+		break;
+	case DisconnectStart::Failed:
 		LOG_LINE << "[SESSION] DisconnectEx failed err=" << ::WSAGetLastError() << " - closing the socket and releasing the session directly\n";
 		SocketUtils::Close(_socket);
 		ProcessDisconnect();
+		break;
 	}
 }
 
@@ -137,8 +157,15 @@ bool Session::RegisterConnect()
 	if (SocketUtils::SetReuseAddress(_socket, true) == false)
 		return false;
 
-	if (SocketUtils::BindAnyAddress(_socket, 0/*남는거*/) == false)
+	if (s_connectBindIp.empty())
+	{
+		if (SocketUtils::BindAnyAddress(_socket, 0/*남는거*/) == false)
+			return false;
+	}
+	else if (SocketUtils::Bind(_socket, NetAddress(s_connectBindIp, 0)) == false)
+	{
 		return false;
+	}
 
 	_connectEvent.Init();
 	_connectEvent.owner = shared_from_this(); // ADD_REF
@@ -158,7 +185,7 @@ bool Session::RegisterConnect()
 	return true;
 }
 
-bool Session::RegisterDisconnect()
+Session::DisconnectStart Session::RegisterDisconnect()
 {
 	_disconnectEvent.Init();
 	_disconnectEvent.owner = shared_from_this(); // ADD_REF
@@ -169,15 +196,20 @@ bool Session::RegisterDisconnect()
 		if (errorCode != WSA_IO_PENDING)
 		{
 			_disconnectEvent.owner = nullptr; // RELEASE_REF
-			return false;
+			return DisconnectStart::Failed;
 		}
+		return DisconnectStart::Pending;
 	}
 
-	return true;
+	// 그 자리에서 끝났다 - 건너뛰기 모드면 완료가 오지 않으니 부른 쪽이 마무리한다
+	return _skipCompletion ? DisconnectStart::Done : DisconnectStart::Pending;
 }
 
 void Session::RegisterRecv()
 {
+	// 그 자리에서 끝난 수신(이미 받아 둔 데이터)은 여기서 처리하고 다시 건다 - 재귀 대신 반복 (2026-11-21)
+	while (true)
+	{
 	if (IsConnected() == false)
 		return;
 
@@ -200,11 +232,22 @@ void Session::RegisterRecv()
 			Disconnect(L"RegisterRecv");
 			_recvEvent.owner = nullptr; // RELEASE_REF
 		}
+		return;		// 대기 중 - 완료가 IOCP 로 온다
+	}
+
+	// 바로 끝났다. 건너뛰기 모드가 아니면 완료가 IOCP 로도 오므로 거기서 처리한다
+	if (_skipCompletion == false)
+		return;
+	if (CompleteRecv(static_cast<int32>(numOfBytes)) == false)
+		return;
 	}
 }
 
 void Session::RegisterSend()
 {
+	// 그 자리에서 끝난 송신(루프백은 거의 전부)은 여기서 마무리하고, 그 사이 쌓인 것이 있으면 다시 보낸다 - 재귀 대신 반복 (2026-11-21)
+	while (true)
+	{
 	// 🔴 호출자는 _sendRegistered 를 true 로 잡은 한 스레드다 (Send · ProcessSend) - _sendEvent 는 이 스레드만 만진다.
 	// 락은 큐를 비우는 동안만 잡는다. WSASend 는 락 밖 (TD-007)
 	if (IsConnected() == false)
@@ -260,6 +303,14 @@ void Session::RegisterSend()
 				_sendRegistered.store(false);
 			}
 		}
+		return;		// 대기 중 - 완료가 IOCP 로 온다 (또는 위에서 실패를 정리했다)
+	}
+
+	// 바로 끝났다. 건너뛰기 모드가 아니면 완료가 IOCP 로도 오므로 거기서 마무리한다
+	if (_skipCompletion == false)
+		return;
+	if (CompleteSend(static_cast<int32>(numOfBytes)) == false)
+		return;
 	}
 }
 
@@ -281,6 +332,10 @@ void Session::ProcessConnect()
 		LOG_LINE << "[SESSION] TCP_NODELAY failed err=" << ::WSAGetLastError() << '\n';
 	if (SocketUtils::SetKeepAlive(_socket, KEEPALIVE_IDLE_MS, KEEPALIVE_INTERVAL_MS) == false)
 		LOG_LINE << "[SESSION] keepalive failed err=" << ::WSAGetLastError() << '\n';
+
+	// 그 자리에서 끝난 I/O 는 IOCP 완료를 만들지 않는다 (SetSkipCompletionOnSuccess, 2026-11-21). 실패하면 예전 방식 그대로
+	if (s_skipCompletion)
+		_skipCompletion = (::SetFileCompletionNotificationModes(reinterpret_cast<HANDLE>(_socket), FILE_SKIP_COMPLETION_PORT_ON_SUCCESS) != FALSE);
 
 	_connected.store(true);
 
@@ -304,19 +359,25 @@ void Session::ProcessDisconnect()
 
 void Session::ProcessRecv(int32 numOfBytes)
 {
+	if (CompleteRecv(numOfBytes))
+		RegisterRecv();
+}
+
+bool Session::CompleteRecv(int32 numOfBytes)
+{
 	_recvEvent.owner = nullptr; // RELEASE_REF
 
 	if (numOfBytes == 0)
 	{
 		Disconnect(L"Recv 0");
-		return;
+		return false;
 	}
 	GStats.AddRecvBytes(numOfBytes);
 
 	if (_recvBuffer.OnWrite(numOfBytes) == false)
 	{
 		Disconnect(L"OnWrite Overflow");
-		return;
+		return false;
 	}
 
 	int32 dataSize = _recvBuffer.DataSize();
@@ -324,17 +385,21 @@ void Session::ProcessRecv(int32 numOfBytes)
 	if (processLen < 0 || dataSize < processLen || _recvBuffer.OnRead(processLen) == false)
 	{
 		Disconnect(L"OnRead Overflow");
-		return;
+		return false;
 	}
-	
+
 	// 커서 정리
 	_recvBuffer.Clean();
-
-	// 수신 등록
-	RegisterRecv();
+	return true;
 }
 
 void Session::ProcessSend(int32 numOfBytes)
+{
+	if (CompleteSend(numOfBytes))
+		RegisterSend();
+}
+
+bool Session::CompleteSend(int32 numOfBytes)
 {
 	_sendEvent.owner = nullptr; // RELEASE_REF
 	int64 completedBytes = 0;
@@ -344,8 +409,9 @@ void Session::ProcessSend(int32 numOfBytes)
 
 	if (numOfBytes == 0)
 	{
+		// 깃발을 내리지 않는다 - 끊긴 세션에 더 보내지 않게 (예전과 같다)
 		Disconnect(L"Send 0");
-		return;
+		return false;
 	}
 	GStats.AddSentBytes(numOfBytes);
 
@@ -365,8 +431,7 @@ void Session::ProcessSend(int32 numOfBytes)
 			more = true;
 	}
 
-	if (more)
-		RegisterSend();
+	return more;
 }
 
 void Session::HandleError(int32 errorCode)

@@ -255,3 +255,36 @@ TEST(DBConnection, 연결이_없으면_마지막_연결_시도의_오류를_준�
 	EXPECT_FALSE(conn.Reconnect()) << "같은 정보로 다시 - 여전히 실패";
 	EXPECT_EQ(conn.GetReconnectCount(), 1u);
 }
+
+// 2026-11-22 동접 1만 - 우선순위 줄 (DBPriority). 워커 하나가 막혀 있는 사이 쌓인 작업은 High → Normal → Low 순으로,
+// High · Normal 이 8 번 나가면 Low 가 한 번 끼어든다 (굶지 않게)
+TEST(DBJobQueue, 우선순위_줄은_높은_것부터_꺼내고_낮은_줄도_굶기지_않는다)
+{
+	OneWorker w;
+	mutex lock;
+	vector<char> order;
+	atomic<int32> done = 0;
+	atomic<bool> release = false;
+
+	// 첫 작업이 워커를 붙잡는 동안 나머지를 넣는다
+	w.queue.Push([&](DBConnection*) { while (release.load() == false) this_thread::sleep_for(chrono::milliseconds(1)); done.fetch_add(1); });
+	this_thread::sleep_for(chrono::milliseconds(50));
+
+	auto record = [&](char c) { lock_guard<mutex> g(lock); order.push_back(c); done.fetch_add(1); };
+	w.queue.Push([&](DBConnection*) { record('L'); }, DBPriority::Low);
+	for (int32 i = 0; i < 9; i++)
+		w.queue.Push([&](DBConnection*) { record('N'); }, DBPriority::Normal);
+	w.queue.Push([&](DBConnection*) { record('H'); }, DBPriority::High);
+
+	EXPECT_EQ(w.queue.GetPendingCount(), 11);
+	EXPECT_EQ(w.queue.GetPendingCount(DBPriority::High), 1);
+	EXPECT_EQ(w.queue.GetPendingCount(DBPriority::Low), 1);
+
+	release.store(true);
+	for (int32 i = 0; i < 200 && done.load() < 12; i++)
+		this_thread::sleep_for(chrono::milliseconds(10));
+
+	ASSERT_EQ(done.load(), 12);
+	// 붙잡은 작업도 High/Normal 로 세어 (1) → H(2) → N × 6 (8) → L → 남은 N × 3
+	EXPECT_EQ(string(order.begin(), order.end()), "HNNNNNNLNNN");
+}

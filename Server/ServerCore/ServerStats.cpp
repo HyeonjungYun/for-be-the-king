@@ -49,6 +49,58 @@ void ServerStats::RecordFlush(uint64 micros)
 	}
 }
 
+void ServerStats::Histogram::Record(uint64 micros)
+{
+	for (int32 i = 0; i < COUNT; i++)
+	{
+		if (micros <= UPPER_US[i])
+		{
+			buckets[i].fetch_add(1, memory_order_relaxed);
+			break;
+		}
+	}
+	count.fetch_add(1, memory_order_relaxed);
+
+	uint64 prevMax = maxUs.load(memory_order_relaxed);
+	while (micros > prevMax && maxUs.compare_exchange_weak(prevMax, micros) == false)
+	{
+	}
+}
+
+ServerStats::Histogram::Drained ServerStats::Histogram::Drain()
+{
+	Drained out;
+	uint64 snapshot[COUNT];
+	uint64 total = 0;
+	for (int32 i = 0; i < COUNT; i++)
+	{
+		snapshot[i] = buckets[i].exchange(0);
+		total += snapshot[i];
+	}
+	count.exchange(0);
+	out.count = total;
+	out.maxUs = maxUs.exchange(0);
+	if (total == 0)
+		return out;
+
+	auto percentile = [&](double p) -> uint64
+	{
+		const uint64 target = (max)(static_cast<uint64>(total * p), static_cast<uint64>(1));
+		uint64 acc = 0;
+		for (int32 i = 0; i < COUNT; i++)
+		{
+			acc += snapshot[i];
+			if (acc >= target)
+				return (min)(UPPER_US[i], out.maxUs);		// 위 경계가 실제 최대보다 크면 최대로
+		}
+		return out.maxUs;
+	};
+	out.p50Us = percentile(0.50);
+	out.p95Us = percentile(0.95);
+	out.p99Us = percentile(0.99);
+	return out;
+}
+
 void ServerStats::RecordTimerLate(uint64 lateMs)
 {
 	const uint64 lateUs = lateMs * 1000;
@@ -90,7 +142,8 @@ bool ServerStats::EnableCsv(const string& dir)
 		return false;
 
 	::fputs("seq,time,sessions,flush_n,flush_p95_us,flush_p99_us,flush_max_us,timer_n,timer_p95_us,timer_max_us,"
-		"recv_mbps,sent_mbps,per_client_kbps,move_reject,commit_mb,workingset_mb,db_pending,db_delayed\n", _csv);
+		"recv_mbps,sent_mbps,per_client_kbps,move_reject,commit_mb,workingset_mb,db_pending,db_delayed,"
+		"jobwait_p95_us,jobwait_p99_us,jobwait_max_us,rtt_n,rtt_p50_us,rtt_p95_us,rtt_p99_us,rtt_max_us\n", _csv);
 	::fflush(_csv);
 	return true;
 }
@@ -177,6 +230,10 @@ void ServerStats::Dump(int32 sessionCount)
 	const uint64 timerTotal = _timerLateCount.exchange(0);
 	const uint64 timerMax = _timerLateMaxUs.exchange(0);
 	const uint64 timerP95 = PercentileUpperUs(timerBuckets, timerTotal, 0.95);
+
+	// 지연 (2026-11-21) - 잡 대기 · 클라가 잰 왕복
+	const Histogram::Drained jobWait = _jobWait.Drain();
+	const Histogram::Drained rtt = _clientRtt.Drain();
 
 	// DB 큐 - "지금 DB 가 밀렸나" 에 답하는 줄 (예전엔 GetPendingCount 가 있어도 아무도 찍지 않았다). 값은 부팅이 넣은 probe 가 준다
 	int32 dbPending = 0;
@@ -280,6 +337,12 @@ void ServerStats::Dump(int32 sessionCount)
 	// 타이머가 예약보다 늦은 시간 - 33 ms 배치 주기의 흔들림. 33 ms 넘게 늦으면 Flush 한 번을 통째로 건너뛴 것이다
 	out << " timer late   n=" << timerTotal << " p95<=" << timerP95 << "us max=" << timerMax << "us (informational)\n";
 
+	// 지연 판정 (docs/server-scaling-10k.md § 1) - 잡 대기 P99 < 50 ms · 클라 RTT P99 < 100 ms (루프백 - 순수 서버 몫)
+	out << " latency      job_wait n=" << jobWait.count << " p95<=" << jobWait.p95Us << "us p99<=" << jobWait.p99Us << "us max=" << jobWait.maxUs << "us "
+		<< Verdict(jobWait.p99Us <= 50000)
+		<< "  client_rtt n=" << rtt.count << " p50<=" << rtt.p50Us << "us p95<=" << rtt.p95Us << "us p99<=" << rtt.p99Us << "us max=" << rtt.maxUs << "us "
+		<< Verdict(rtt.count == 0 || rtt.p99Us <= 100000) << '\n';
+
 	out << " db queue     pending=" << dbPending << " delayed=" << dbDelayed << (extra.empty() ? "" : "  ") << extra << '\n';
 
 	out << " SV-3 move    reject=" << moveRejects << " " << Verdict(moveRejects == 0)
@@ -324,6 +387,15 @@ void ServerStats::Dump(int32 sessionCount)
 		_snap.workingSetMB = memMB;
 		_snap.dbPending = dbPending;
 		_snap.dbDelayed = dbDelayed;
+		_snap.jobWaitCount = jobWait.count;
+		_snap.jobWaitP95Us = jobWait.p95Us;
+		_snap.jobWaitP99Us = jobWait.p99Us;
+		_snap.jobWaitMaxUs = jobWait.maxUs;
+		_snap.rttCount = rtt.count;
+		_snap.rttP50Us = rtt.p50Us;
+		_snap.rttP95Us = rtt.p95Us;
+		_snap.rttP99Us = rtt.p99Us;
+		_snap.rttMaxUs = rtt.maxUs;
 		_snap.extra = extra;
 	}
 
@@ -333,9 +405,10 @@ void ServerStats::Dump(int32 sessionCount)
 	{
 		SYSTEMTIME st;
 		::GetLocalTime(&st);
-		::fprintf(_csv, "%llu,%02d:%02d:%02d,%d,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%.3f,%.3f,%.1f,%llu,%.1f,%.1f,%d,%d\n",
+		::fprintf(_csv, "%llu,%02d:%02d:%02d,%d,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%.3f,%.3f,%.1f,%llu,%.1f,%.1f,%d,%d,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
 			++_dumpSeq, st.wHour, st.wMinute, st.wSecond, sessionCount, flushTotal, p95, p99, flushMax, timerTotal, timerP95, timerMax,
-			recvMbps, sentMbps, perClientKbps, moveRejects, commitMB, memMB, dbPending, dbDelayed);
+			recvMbps, sentMbps, perClientKbps, moveRejects, commitMB, memMB, dbPending, dbDelayed,
+			jobWait.p95Us, jobWait.p99Us, jobWait.maxUs, rtt.count, rtt.p50Us, rtt.p95Us, rtt.p99Us, rtt.maxUs);
 		::fflush(_csv);
 	}
 }

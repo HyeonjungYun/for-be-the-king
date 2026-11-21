@@ -109,6 +109,13 @@ void AsyncLogger::Run()
 
 		_drained.notify_all();
 		batch.clear();
+
+		// 묶어 쓰기 (SetCoalesceMs) - 잠깐 쉬는 동안 Push 는 큐에만 넣는다 (기다리는 스레드가 없어 notify 도 가볍다)
+		if (const uint32 coalesceMs = _coalesceMs.load(); coalesceMs > 0)
+		{
+			std::unique_lock<std::mutex> guard(_lock);
+			_wake.wait_for(guard, std::chrono::milliseconds(coalesceMs), [this]() { return _stop; });
+		}
 	}
 }
 

@@ -22,6 +22,11 @@ bool IocpCore::Register(IocpObjectRef iocpObject)
 	return ::CreateIoCompletionPort(iocpObject->GetHandle(), _iocpHandle, /*key*/0, 0);
 }
 
+void IocpCore::PostWake()
+{
+	::PostQueuedCompletionStatus(_iocpHandle, 0, 0, nullptr);
+}
+
 bool IocpCore::Dispatch(uint32 timeoutMs)
 {
 	DWORD numOfBytes = 0;
@@ -30,6 +35,8 @@ bool IocpCore::Dispatch(uint32 timeoutMs)
 
 	if (::GetQueuedCompletionStatus(_iocpHandle, OUT &numOfBytes, OUT &key, OUT reinterpret_cast<LPOVERLAPPED*>(&iocpEvent), timeoutMs))
 	{
+		if (iocpEvent == nullptr)
+			return true;		// PostWake - 부른 쪽이 글로벌 큐를 본다
 		iocpEvent->errorCode = 0;
 		IocpObjectRef iocpObject = iocpEvent->owner;
 		iocpObject->Dispatch(iocpEvent, numOfBytes);

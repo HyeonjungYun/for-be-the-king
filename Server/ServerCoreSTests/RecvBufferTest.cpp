@@ -72,3 +72,40 @@ TEST(RecvBuffer, FreeSize가_0인_상태를_만들_수_있다)
 	EXPECT_TRUE(buf.OnWrite(1000));
 	EXPECT_EQ(buf.FreeSize(), 0);
 }
+
+// 2026-11-21 (동접 1만) - 작게 시작한 버퍼가 큰 패킷을 만나면 커지고, 비면 처음 크기로 돌아간다
+TEST(RecvBuffer, 가득_찬_채로_Clean하면_키워서_다음_수신_자리를_만든다)
+{
+	RecvBuffer buf(100, 1);		// 처음 100 바이트 - 300 바이트짜리 패킷이 걸쳐 들어오는 중
+	EXPECT_TRUE(buf.OnWrite(100));
+	EXPECT_EQ(buf.FreeSize(), 0);
+
+	buf.Clean();
+	EXPECT_EQ(buf.Capacity(), 200);
+	EXPECT_EQ(buf.DataSize(), 100);		// 받은 조각은 그대로
+	EXPECT_EQ(buf.FreeSize(), 100);
+
+	EXPECT_TRUE(buf.OnWrite(100));
+	buf.Clean();
+	EXPECT_EQ(buf.Capacity(), 400);
+	EXPECT_TRUE(buf.OnWrite(100));		// 300 바이트가 다 들어왔다
+	EXPECT_TRUE(buf.OnRead(300));
+
+	buf.Clean();
+	EXPECT_EQ(buf.Capacity(), 100);		// 비었으니 처음 크기로
+	EXPECT_EQ(buf.FreeSize(), 100);
+}
+
+TEST(RecvBuffer, 여유가_넉넉하면_키우지_않고_상한을_넘지_않는다)
+{
+	RecvBuffer buf(100, 1);
+	EXPECT_TRUE(buf.OnWrite(60));
+	EXPECT_TRUE(buf.OnRead(10));
+	buf.Clean();							// 당기면 50 / 100 - 3/4 미만이라 그대로
+	EXPECT_EQ(buf.Capacity(), 100);
+
+	RecvBuffer big(RecvBuffer::MAX_CAPACITY, 1);
+	EXPECT_TRUE(big.OnWrite(RecvBuffer::MAX_CAPACITY));
+	big.Clean();
+	EXPECT_EQ(big.Capacity(), RecvBuffer::MAX_CAPACITY);		// 상한에서는 더 키우지 않는다
+}

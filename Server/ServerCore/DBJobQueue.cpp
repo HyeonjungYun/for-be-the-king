@@ -37,7 +37,8 @@ void DBJobQueue::Shutdown()
 		// 지연 작업은 기다리지 않는다 - 종료 신호가 와도 남은 작업은 처리한다는 규칙 그대로, 지금 한 번씩
 		while (_delayed.empty() == false)
 		{
-			_jobs.push(move(const_cast<DelayedJob&>(_delayed.top()).job));
+			DelayedJob& top = const_cast<DelayedJob&>(_delayed.top());
+			_jobs[static_cast<int32>(top.priority)].push(move(top.job));
 			_delayed.pop();
 		}
 	}
@@ -53,24 +54,24 @@ void DBJobQueue::Shutdown()
 	_threads.clear();
 }
 
-void DBJobQueue::Push(function<void(DBConnection*)> job)
+void DBJobQueue::Push(function<void(DBConnection*)> job, DBPriority priority)
 {
 	{
 		lock_guard<mutex> guard(_mutex);
 		if (_running == false)
 			return;
 
-		_jobs.push(move(job));
+		_jobs[static_cast<int32>(priority)].push(move(job));
 	}
 
 	_cv.notify_one();
 }
 
-void DBJobQueue::PushAfter(uint32 delayMs, function<void(DBConnection*)> job)
+void DBJobQueue::PushAfter(uint32 delayMs, function<void(DBConnection*)> job, DBPriority priority)
 {
 	if (delayMs == 0)
 	{
-		Push(move(job));
+		Push(move(job), priority);
 		return;
 	}
 
@@ -83,6 +84,7 @@ void DBJobQueue::PushAfter(uint32 delayMs, function<void(DBConnection*)> job)
 		delayed.due = chrono::steady_clock::now() + chrono::milliseconds(delayMs);
 		delayed.seq = _delayedSeq++;
 		delayed.job = move(job);
+		delayed.priority = priority;
 		_delayed.push(move(delayed));
 	}
 
@@ -93,7 +95,30 @@ void DBJobQueue::PushAfter(uint32 delayMs, function<void(DBConnection*)> job)
 int32 DBJobQueue::GetPendingCount()
 {
 	lock_guard<mutex> guard(_mutex);
-	return static_cast<int32>(_jobs.size());
+	return static_cast<int32>(_jobs[0].size() + _jobs[1].size() + _jobs[2].size());
+}
+
+int32 DBJobQueue::GetPendingCount(DBPriority priority)
+{
+	lock_guard<mutex> guard(_mutex);
+	return static_cast<int32>(_jobs[static_cast<int32>(priority)].size());
+}
+
+function<void(DBConnection*)> DBJobQueue::PopJobLocked()
+{
+	// Low 가 굶지 않게 - High · Normal 을 8 번 꺼냈고 Low 가 기다리면 Low 한 번
+	int32 lane = 2;
+	if (_jobs[2].empty() == false && (_sinceLow >= 8 || (_jobs[0].empty() && _jobs[1].empty())))
+		lane = 2;
+	else if (_jobs[0].empty() == false)
+		lane = 0;
+	else
+		lane = 1;
+
+	_sinceLow = (lane == 2) ? 0 : _sinceLow + 1;
+	function<void(DBConnection*)> job = move(_jobs[lane].front());
+	_jobs[lane].pop();
+	return job;
 }
 
 int32 DBJobQueue::GetDelayedCount()
@@ -106,7 +131,8 @@ void DBJobQueue::PromoteDueLocked(chrono::steady_clock::time_point now)
 {
 	while (_delayed.empty() == false && _delayed.top().due <= now)
 	{
-		_jobs.push(move(const_cast<DelayedJob&>(_delayed.top()).job));
+		DelayedJob& top = const_cast<DelayedJob&>(_delayed.top());
+		_jobs[static_cast<int32>(top.priority)].push(move(top.job));
 		_delayed.pop();
 	}
 }
@@ -138,7 +164,7 @@ void DBJobQueue::WorkerLoop()
 			{
 				PromoteDueLocked(chrono::steady_clock::now());
 
-				if (_running == false || _jobs.empty() == false)
+				if (_running == false || AnyJobLocked())
 					break;
 
 				if (_delayed.empty())
@@ -148,7 +174,7 @@ void DBJobQueue::WorkerLoop()
 			}
 
 			// 종료 신호가 와도 남은 작업은 처리한다.
-			if (_jobs.empty())
+			if (AnyJobLocked() == false)
 			{
 				if (_running == false)
 					break;
@@ -156,8 +182,7 @@ void DBJobQueue::WorkerLoop()
 				continue;
 			}
 
-			job = move(_jobs.front());
-			_jobs.pop();
+			job = PopJobLocked();
 		}
 
 		job(connection);

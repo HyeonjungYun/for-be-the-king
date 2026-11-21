@@ -29,6 +29,9 @@ public:
 		_callback();
 	}
 
+	// 큐에 들어간 시각 (µs) - JobQueue::Push 가 찍고 Execute 가 대기 시간을 잰다 (2026-11-21 동접 1만 - 지연 지표)
+	uint64	enqueuedUs = 0;
+
 private:
 	CallbackType _callback;
 };

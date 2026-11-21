@@ -11,6 +11,7 @@
 
 void JobQueue::Push(JobRef job, bool pushOnly)
 {
+	job->enqueuedUs = Utils::NowMicroseconds();
 	const int32 prevCount = _jobCount.fetch_add(1);
 	_jobs.Push(std::move(job)); // WRITE_LOCK
 
@@ -70,6 +71,15 @@ void JobQueue::Execute()
 	// 루프마다 새로 잡지 않는다 - clear 는 용량을 남긴다
 	vector<JobRef> jobs;
 
+	// 이 묶음에서 송신 등록을 미룬 세션 (Session::Send · CoreTLS LSendBatch, 2026-11-21) - 묶음이 끝나면 세션마다 WSASend 한 번
+	vector<SessionRef> sendBatch;
+	auto flushSends = [&sendBatch]()
+	{
+		for (const SessionRef& session : sendBatch)
+			session->FlushDeferredSend();
+		sendBatch.clear();
+	};
+
 	while (true)
 	{
 		jobs.clear();
@@ -84,10 +94,15 @@ void JobQueue::Execute()
 		uint64 slowestUs = 0;
 		const char* slowestTag = nullptr;
 
+		LSendBatch = &sendBatch;
 		for (int32 i = 0; i < jobCount; i++)
 		{
 			LJobTag = nullptr;
 			const uint64 jobStartUs = Utils::NowMicroseconds();
+
+			// 큐에서 기다린 시간 - 방이 밀리면 이 값이 곧 "서버 때문에 늦은" 시간이다 (타이머 잡은 분배된 순간부터)
+			if (jobs[i]->enqueuedUs != 0 && jobStartUs > jobs[i]->enqueuedUs)
+				GStats.RecordJobWait(jobStartUs - jobs[i]->enqueuedUs);
 
 			jobs[i]->Execute();
 
@@ -99,6 +114,8 @@ void JobQueue::Execute()
 			}
 		}
 		LJobTag = nullptr;
+		LSendBatch = nullptr;
+		flushSends();
 
 		if (jobCount > 0)
 		{
